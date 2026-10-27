@@ -61,16 +61,15 @@ describe('a typed cell of a joinery schedule (#446)', () => {
     expect(joineryCellText(replaced, windows.entries[0], 'name', 'model')).toBe('model');
   });
 
-  it('is empty text when the value is empty, and refuses a row that is measured, not typed', () => {
+  it('is empty text when the value is empty, and refuses a row the schedule has not', () => {
     const entry = windows.entries[0];
     expect(joineryCellText(setJoineryOverride(undefined, entry, 'u', '', ''), entry, 'u', '1.4')).toBe('');
-    expect(setJoineryOverride(undefined, entry, 'total', '9', '')).toEqual([]);
-    expect(setJoineryOverride(undefined, entry, 'size', '9', '')).toEqual([]);
+    expect(setJoineryOverride(undefined, entry, 'bogus', '9', '')).toEqual([]);
   });
 
-  it('is read back from a file: a damaged one or a measured row dropped, a repeat of a cell kept once', () => {
+  it('is read back from a file: a damaged one or an unknown row dropped, a repeat of a cell kept once', () => {
     expect(readJoineryOverrides([
-      { type: 'A', row: 'fire', value: 'one', about: 'a' }, { type: 'A', row: 'fire', value: 'two' }, { type: 'A', row: 'total', value: '9' },
+      { type: 'A', row: 'fire', value: 'one', about: 'a' }, { type: 'A', row: 'fire', value: 'two' }, { type: 'A', row: 'bogus', value: '9' },
       { type: '', row: 'fire', value: 'x' }, { type: 'B', row: 'fire' }, 7,
     ])).toEqual([{ type: 'A', row: 'fire', value: 'two', about: '' }]);
     expect(readJoineryOverrides([])).toBeUndefined();

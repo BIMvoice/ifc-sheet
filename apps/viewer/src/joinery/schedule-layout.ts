@@ -23,7 +23,7 @@ import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { PAD, pageTitle, isOverridableRow, joineryCellText, modelRowLabel, modelRowNumber, modelRowText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
+import { PAD, pageTitle, isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
 import { typeEntryId } from '@bimvoice/ifcsheet/project';
 
 // What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
@@ -120,12 +120,13 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const model: Record<string, () => TableRowSpec[]> = {
     name: () => [{ label: labels.name, value: (e) => e.name }],
     size: () => [{
-      label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
+      // A size measured from the geometry (the IFC states none, #485) is marked with ≈; the CSV and the XLSX keep the figures.
+      label: labels.size, value: (e) => `${e.measured ? '≈ ' : ''}${mm(e.width)} × ${mm(e.height)}`,
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
     operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec || e.operations?.length ? operationText(e, labels) : null] }],
     sill: () => [{ label: labels.sill, value: (e) => { const s = sillOf(e); return s === null ? '—' : String(mm(s)); }, raw: (e) => { const s = sillOf(e); return [s === null ? null : mm(s)]; }, num: true }],
-    levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
+    levels: () => data.levels.map((level) => ({ id: levelRowId(level), label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
     u: () => [{
       label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—'),
@@ -142,21 +143,29 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));
   return ids.flatMap((id): TableRowSpec[] => {
     const row = own.get(id);
-    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : (model[id]?.() ?? []).map((spec) => withTypedCell(spec, id, data.overrides));
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : (model[id]?.() ?? []).map((spec) => withTypedCell(spec, spec.id ?? id, data.overrides));
   });
 }
 
 /**
  * The row with the cells the user typed over the model's text (#446, `data.overrides`): the cell prints the typed text, in the sheet and in the
- * CSV and the XLSX alike (`joineryCellText`, the engine's). A row the model measures (counts, sizes) is not typed over, and is returned as it is.
+ * CSV and the XLSX alike (`joineryCellText`, the engine's). Every row can be typed over, the measured ones too (#485): a count or a size typed over reads as figures in the CSV and the XLSX when it is a number.
  */
 function withTypedCell(spec: TableRowSpec, id: string, overrides: readonly JoineryCellOverride[] | undefined): TableRowSpec {
   if (!isOverridableRow(id) || !overrides?.length) return { ...spec, id };
   return {
     ...spec, id,
     value: (e) => joineryCellText(overrides, e, id, spec.value(e)),
-    ...(spec.raw ? { raw: (e: ScheduleEntry) => { const o = joineryOverrideOf(overrides, e, id); return o ? [o.value || null] : spec.raw!(e); } } : {}),
+    ...(spec.raw ? { raw: (e: ScheduleEntry) => { const o = joineryOverrideOf(overrides, e, id); return o ? typedCells(o.value, spec) : spec.raw!(e); } } : {}),
   };
+}
+
+/** A typed cell in the CSV and the XLSX: figures where the row holds figures and the text reads as them (`1200 × 1500` in two columns), else the text in the first column. */
+function typedCells(value: string, spec: TableRowSpec): ExportCell[] {
+  const width = spec.heads?.length ?? 1;
+  const nums = spec.num ? overrideNumbers(value) : [];
+  if (nums.length === width) return nums;
+  return [value || null, ...Array.from({ length: width - 1 }, () => null)];
 }
 
 /** The text the cell of `entry` in the row `id` prints under `data`'s typed cells (#446); pass the data without `overrides` for the model's own text. Empty when the schedule has no such row. */

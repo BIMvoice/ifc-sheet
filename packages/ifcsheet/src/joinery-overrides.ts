@@ -27,11 +27,24 @@ const MAX_ABOUT = 120;
 /** A model row's id (`source:set:name`) is the longest row id: `property:` or `quantity:` and a set name and a property name of up to 120 characters each. */
 const MAX_ROW_ID = 260;
 
-/** The built-in rows whose text can be typed over: the ones read from the model per type. The counts and the sizes are measured, not typed. */
-export const OVERRIDABLE_ROWS = ['name', 'operation', 'sill', 'u', 'fire'] as const;
+/**
+ * The rows whose text can be typed over: every row of the schedule (#485). The ones read from the model per type (name, operation, sill, U value,
+ * fire rating), the measured ones (the size, the total and the count of each level, `levelRowId`), which a person fixes as a last resort when the
+ * model, or the measuring of it, has it wrong, and the properties and quantities the schedule lists (`ModelRow`).
+ */
+export const OVERRIDABLE_ROWS = ['name', 'size', 'operation', 'sill', 'u', 'fire', 'total'] as const;
 export type OverridableRow = (typeof OVERRIDABLE_ROWS)[number];
-/** Whether the text of the row can be typed over: the rows read from the model per type, and the properties and quantities the schedule lists (`ModelRow`). */
-export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || isModelRowId(row);
+const LEVEL_PREFIX = 'levels:';
+/** The id of the count row of the level `level`, which a type's cell is typed over by. */
+export const levelRowId = (level: string): string => `${LEVEL_PREFIX}${level}`;
+export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || (row.startsWith(LEVEL_PREFIX) && row.length > LEVEL_PREFIX.length) || isModelRowId(row);
+
+/** The numbers a typed cell holds, for the CSV and the XLSX: `1200 × 1500` is two, `3` one; text that is not a number is none. */
+export function overrideNumbers(value: string): number[] {
+  const parts = value.split(/[×x*]/).map((p) => p.trim().replace(',', '.'));
+  const nums = parts.map((p) => (/^-?\d+(\.\d+)?$/.test(p) ? Number(p) : NaN));
+  return nums.length > 0 && nums.every((n) => Number.isFinite(n)) ? nums : [];
+}
 
 export interface JoineryCellOverride {
   /** The type's identity (`typeIdentityOf`): the GlobalId of its IfcTypeObject, else its entry key. */

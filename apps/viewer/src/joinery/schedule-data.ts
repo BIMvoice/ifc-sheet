@@ -20,6 +20,7 @@ import { useProjectStore } from '@/project/project-store';
 import { entityName } from '@/lib/commands/modeling/authored-kinds';
 import { catalogue } from './catalog';
 import { prepareListProviders } from '@/lib/lists/prepare-providers';
+import { elementMeshLookup } from './element-meshes';
 
 // The row loop is the engine's (`joineryScheduleData`): the headless check and the app list the same rows.
 export { occurrenceMark };
@@ -38,7 +39,7 @@ export function scheduleData(kind: ScheduleKind, content?: ScheduleContent): Sch
     const dataStore = model.ifcDataStore;
     if (!dataStore) continue;
     const view = s.mutationViews.get(modelId) ?? null;
-    models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id), listProvider: () => (prepared ??= prepareListProviders(s, {})).pairs.find((pair) => pair.modelId === modelId)!.provider });
+    models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id), meshesOf: elementMeshLookup(model), listProvider: () => (prepared ??= prepareListProviders(s, {})).pairs.find((pair) => pair.modelId === modelId)!.provider });
   }
   const p = useProjectStore.getState();
   return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content, scheduleFilterProperties(p.schedules ?? []), modelRowsOf((p.schedules ?? []).map((x) => x.content)));

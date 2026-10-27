@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { joineryOverrideOf, modelRowLabel, typeIdentityOf } from '@bimvoice/ifcsheet';
+import { joineryOverrideOf, levelRowId, modelRowLabel, typeIdentityOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -51,7 +51,8 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
   if (!joinery) return null;
   const properties = (schedules.find((s) => s.id === schedule.id) ?? schedule).content?.properties ?? [];
   const own = mine ? properties.find((r) => r.id === mine.column) : undefined;
-  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : own ? modelRowLabel(own, properties) : mine.column) : '';
+  const levelName = mine && mine.column === levelRowId(mine.column.slice(7)) ? mine.column.slice(7) : null;
+  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : own ? modelRowLabel(own, properties) : levelName ?? mine.column) : '';
   const current = mine && found ? joineryOverrideOf(overrides, found.entry, mine.column) : undefined;
   const summary = mine && found ? t('joineryCell.summaryPicked', { row: rowName, type: found.about }) : t('joineryCell.summary');
   const key = mine ? `${mine.guid}:${mine.column}:${current?.value ?? ''}` : '';
@@ -65,6 +66,7 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
         <div data-joinery-cell-editor="">
           <p className="m-0 mt-1 text-xs font-medium text-white">{t('joineryCell.heading', { row: rowName, type: found.about })}</p>
           <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.model', { value: found.model })}</p>
+          {mine.column === 'size' && found.entry.measured ? <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.measured')}</p> : null}
           <label className={`${WALL_LABEL} mt-2`}>
             {t('joineryCell.value')}
             <input className={WALL_FIELD} value={text} onChange={(e) => setDraft({ key, text: e.target.value })} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit(); }} />
