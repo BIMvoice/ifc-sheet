@@ -2,12 +2,12 @@ ifcsheet: drawing sets from IFC models
 
 Usage:
   ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
-  ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
-  ifcsheet materials <model.ifc> [--project <file>] [--json]
+  ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements] [--locale <ro|en>]
+  ifcsheet materials <model.ifc> [--project <file>] [--json] [--locale <ro|en>]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>] [--project <file>]
   ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]
-  ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]
+  ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]
 
 Commands:
   build   Lay out the starting drawing set of the model (a plan per level, the
@@ -22,12 +22,13 @@ Commands:
           (ro or en), else English (Romanian with --pac).
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
-          weaker for it. Plain English, or JSON with --json. With --project, also what the
+          weaker for it. Plain text in the language the project records, else --locale (ro or en), else English; or JSON with --json. With --project, also what the
           saved project's split schedules get wrong: an element listed in more than one
           part, or in no part.
   materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
+          The text is in the language the project records, else --locale (ro or en), else English.
   boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
           in its own unit, from the quantities the model declares (never zero for a missing one: the elements
           that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.

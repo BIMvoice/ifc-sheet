@@ -19,6 +19,7 @@ import { sheetFormat } from './units-and-numbers.js';
 import type { ListScheduleTable } from './list-schedule.js';
 import type { ProjectSchedule } from './sub-reports.js';
 import type { CliIo } from './cli.js';
+import { commandLanguage } from './cli-language.js';
 
 export { listTableText };
 
@@ -29,7 +30,8 @@ export interface ListArgs {
   schedule?: string;
   csv: boolean;
   json: boolean;
-  locale: string;
+  /** `--locale` as given; the project's language, when it records one, comes first. */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -50,6 +52,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   try { projectText = await readFile(args.project, 'utf8'); } catch (error) { io.stderr(cannotRead(args.project, error)); return 1; }
   let project;
   try { project = readProjectFile(projectText); } catch (error) { io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`); return 1; }
+  const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
   const lists = project.schedules.filter(isList);
   if (lists.length === 0) {
     io.stderr(`ifcsheet: ${args.project} holds no list schedules; build one in the app (Schedule from the model) and save the project.\n`);
@@ -62,7 +65,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   }
   // The values come from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const [{ table }] = listSchedulesOn(model, [found], args.locale, basename(args.model), project.classificationMappings);
+  const [{ table }] = listSchedulesOn(model, [found], language, basename(args.model), project.classificationMappings);
   if (listTableIsEmpty(table)) {
     io.stderr(`ifcsheet: nothing to list: the elements of "${found.name}" are not in ${args.model}.\n`);
     return 1;
@@ -71,7 +74,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
     const total = table.bold.length > 0 ? table.bold[0] : -1;
     io.stdout(`${JSON.stringify({ file: args.model, project: args.project, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null }, null, 2)}\n`);
   }
-  else if (args.csv) io.stdout(listScheduleCsv(table, args.locale));
-  else io.stdout(listTableText(table, sheetFormat(args.locale, project.unitsAndNumbers)));
+  else if (args.csv) io.stdout(listScheduleCsv(table, language));
+  else io.stdout(listTableText(table, sheetFormat(language, project.unitsAndNumbers)));
   return 0;
 }

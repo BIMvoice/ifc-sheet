@@ -11,6 +11,7 @@
 
 import { nameLanguageOf, unknownLanguageMessage, unknownLocaleMessage, type NameLanguage } from './names.js';
 import type { ProjectFacts } from './project-read.js';
+import type { CliIo } from './cli-command.js';
 
 /** The message for a `--locale` that is not `ro` or `en`, or undefined when it is one (or absent). */
 export function localeProblem(locale: string | undefined): string | undefined {
@@ -42,4 +43,11 @@ export function resolveLanguage({ project, locale, pac = false }: LanguageInputs
     return { language: project.language, notes };
   }
   return { language: asked ?? (pac ? 'ro' : 'en'), notes };
+}
+
+/** A command's language: {@link resolveLanguage} with its notes written to stderr. */
+export function commandLanguage(inputs: LanguageInputs, io: CliIo): NameLanguage {
+  const { language, notes } = resolveLanguage(inputs);
+  for (const note of notes) io.stderr(note);
+  return language;
 }

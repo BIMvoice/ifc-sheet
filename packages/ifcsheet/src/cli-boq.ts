@@ -20,6 +20,8 @@ import { sheetNumber } from './sheet-number.js';
 import { sheetFormat } from './units-and-numbers.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
+import { commandLanguage } from './cli-language.js';
+import { cliSayFor } from './cli-words.js';
 
 export interface BoqArgs {
   model: string;
@@ -28,7 +30,8 @@ export interface BoqArgs {
   json: boolean;
   /** A detail row per type under each article. */
   detail: boolean;
-  locale: string;
+  /** `--locale` as given; the project's language, when it records one, comes first (`cli-language.ts`). */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -82,11 +85,12 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
   // The quantities are read from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
   const result = boqResult(model.dataStore, project.boqArticles);
-  const say = boqSayFor(args.locale);
+  const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
+  const say = boqSayFor(language);
   // The figures people read are written as the sheet writes them: the language with the project's "Units and numbers" (#88).
-  const format = sheetFormat(args.locale, project.unitsAndNumbers);
-  if (args.json) io.stdout(`${resultJson(args.model, args.project, result, args.locale)}\n`);
-  else if (args.csv) io.stdout(boqCsv(boqTable(result, say, { detail: args.detail }), args.locale));
+  const format = sheetFormat(language, project.unitsAndNumbers);
+  if (args.json) io.stdout(`${resultJson(args.model, args.project, result, language)}\n`);
+  else if (args.csv) io.stdout(boqCsv(boqTable(result, say, { detail: args.detail }), language));
   else {
     io.stdout(`${say('boq.title')}: ${args.model}\n\n`);
     result.lines.forEach((l, i) => {
@@ -96,7 +100,7 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
     const notes = result.lines.flatMap((l) => boqNotes(l, say));
     if (notes.length > 0) io.stdout(`\n${notes.join('\n')}\n`);
     const missing = boqMissing(result);
-    if (missing.elements > 0) io.stdout(`\n${missing.elements} elements lack a quantity an article takes: ${missing.list}.\n`);
+    if (missing.elements > 0) io.stdout(`\n${cliSayFor(language)('boq.missing', { count: missing.elements, list: missing.list })}\n`);
   }
   return result.lines.some((l) => l.problem) ? 1 : 0;
 }

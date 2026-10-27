@@ -5,7 +5,7 @@
 /** The model-side findings (#105, moved to the engine by #164): each present when the model lacks the thing, absent when it has it. */
 
 import { describe, expect, it } from 'vitest';
-import { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessKind } from './readiness.js';
+import { READINESS_EN, READINESS_RO, describeReadiness, modelReadiness, type ModelFacts, type ReadinessKind } from './readiness.js';
 
 /** A model with everything the set reads. */
 const COMPLETE: ModelFacts = { storeys: 2, spaces: 5, elements: 100, elementsWithoutStorey: 0, elementsWithoutMaterial: 0, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 };
@@ -71,5 +71,23 @@ describe('the far-away elements finding (#268)', () => {
     expect(finding.params.count).toBe(11);
     expect(String(finding.params.list).split("), '")).toHaveLength(8);
     expect(String(finding.params.list)).toMatch(/\(107 m\), … \+3$/);
+  });
+});
+
+describe('Romanian findings (#405)', () => {
+  it('has a sentence for every English key, with the same {parameters}', () => {
+    expect(Object.keys(READINESS_RO).sort()).toEqual(Object.keys(READINESS_EN).sort());
+    for (const key of Object.keys(READINESS_EN) as (keyof typeof READINESS_EN)[]) {
+      const names = (text: string) => (text.match(/\{\w+\}/g) ?? []).sort();
+      expect(names(READINESS_RO[key])).toEqual(names(READINESS_EN[key]));
+    }
+  });
+
+  it('is what describeReadiness says in ro, with a fractional figure written with the comma; English is unchanged', () => {
+    const f = { kind: 'estimatedAreas', key: 'ready.estimatedAreas', effectKey: 'ready.estimatedAreas.effect', params: { count: 2, area: 12.5, share: 3, list: "'1 A'", first: 'x' } } as const;
+    expect(describeReadiness(f, 'ro').missing).toContain('Au include 2 încăperi');
+    expect(describeReadiness(f, 'ro').missing).toContain('≈ 12,5 m²');
+    expect(describeReadiness(f).missing).toContain('Au includes 2 rooms');
+    expect(describeReadiness(f).missing).toContain('≈ 12.5 m²');
   });
 });

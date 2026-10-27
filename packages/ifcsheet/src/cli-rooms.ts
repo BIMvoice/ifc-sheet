@@ -15,12 +15,15 @@ import type { CliIo } from './cli.js';
 import type { RoomsRead } from './room-read.js';
 import { readProjectFile } from './project-read.js';
 import { sheetFormat } from './units-and-numbers.js';
+import { commandLanguage } from './cli-language.js';
+import { cliSayFor } from './cli-words.js';
 
 export interface RoomsArgs {
   model: string;
   csv: boolean;
   json: boolean;
-  locale: string;
+  /** `--locale` as given; the project's language, when it records one, comes first (`cli-language.ts`). */
+  locale?: string;
   /** A saved project: its "Units and numbers" setting decides how the text writes a figure (separator, decimals, unit); the CSV and JSON stay plain. */
   project?: string;
 }
@@ -43,17 +46,19 @@ function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, loc
 /** `ifcsheet rooms`: exit 0 with the schedule, 1 when the file cannot be read or has no rooms. */
 export async function rooms(args: RoomsArgs, io: CliIo): Promise<number> {
   let units;
+  let projectFacts: ReturnType<typeof readProjectFile> | undefined;
   if (args.project !== undefined) {
     let projectText: string;
     try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
       io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
       return 1;
     }
-    try { units = readProjectFile(projectText).unitsAndNumbers; } catch (error) {
+    try { projectFacts = readProjectFile(projectText); units = projectFacts.unitsAndNumbers; } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return 1;
     }
   }
+  const language = commandLanguage({ ...(projectFacts ? { project: projectFacts } : {}), ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(args.model));
@@ -75,12 +80,13 @@ export async function rooms(args: RoomsArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: ${args.model} has no rooms (IfcSpace) to list.\n`);
     return 1;
   }
-  if (args.json) io.stdout(`${scheduleJson(args.model, schedule, read, args.locale)}\n`);
-  else if (args.csv) io.stdout(`${roomScheduleCsv(schedule, args.locale)}\n`);
+  if (args.json) io.stdout(`${scheduleJson(args.model, schedule, read, language)}\n`);
+  else if (args.csv) io.stdout(`${roomScheduleCsv(schedule, language)}\n`);
   else {
-    io.stdout(`${roomScheduleText(schedule, sheetFormat(args.locale, units))}\n`);
-    const words = roomScheduleWords(args.locale);
-    io.stdout(`\n${schedule.rooms} rooms; areas from ${schedule.rooms - schedule.fromGeometry - schedule.withoutArea} ${words.quantity}, ${schedule.fromGeometry} ${words.geometry}${schedule.withoutArea ? `, ${schedule.withoutArea} none` : ''}. Left out: ${read.leftOut.external} external, ${read.leftOut.gfa} area-scheme (GFA), ${read.leftOut.parents} split into rooms of their own.\n`);
+    io.stdout(`${roomScheduleText(schedule, sheetFormat(language, units))}\n`);
+    const say = cliSayFor(language);
+    const none = schedule.withoutArea ? say('rooms.none', { count: schedule.withoutArea }) : '';
+    io.stdout(`\n${say('rooms.summary', { rooms: schedule.rooms, fromQuantity: schedule.rooms - schedule.fromGeometry - schedule.withoutArea, fromGeometry: schedule.fromGeometry, none, external: read.leftOut.external, gfa: read.leftOut.gfa, parents: read.leftOut.parents })}\n`);
   }
   return 0;
 }

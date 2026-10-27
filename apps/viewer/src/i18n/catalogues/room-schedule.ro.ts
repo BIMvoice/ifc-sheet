@@ -20,8 +20,6 @@ export const roomScheduleRo = {
   'roomSched.note.geometry': '* Modelul nu dă aria acestei încăperi: se ia aria amprentei geometriei ei ({count} încăperi).',
   'roomSched.note.none': '{count} încăperi nu au arie (modelul nu o dă și nu au geometrie); sunt listate și nu intră în totaluri.',
   'roomSched.note.leftOut': 'Excluse: {external} exterioare (balcoane, terase), {gfa} din schema de arii (GFA), {parents} împărțite în încăperi proprii.',
-  'ready.estimatedAreas': 'Au include {count} încăperi a căror arie nu este dată de model; sunt măsurate din geometrie (≈ {area} m², {share} % din Au) și pot fi greșite sub plafoane înclinate: {list}.',
-  'ready.estimatedAreas.effect': 'Tabelul de încăperi și arii și foaia de indicatori urbanistici le numără și le marchează. Dați NetFloorArea (Qto_SpaceBaseQuantities) acestor încăperi și Au devine exactă.',
   'ready.estimatedAreas.go': 'Mergi la prima încăpere',
   'urban.rule.auEstimated': 'Au include {count} încăperi a căror arie nu este dată de model: sunt măsurate din geometrie (≈ {area} m², {share} % din Au) și pot fi greșite sub plafoane înclinate: {list}.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

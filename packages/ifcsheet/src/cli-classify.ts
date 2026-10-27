@@ -16,6 +16,8 @@ import { readBoqElements, storeSource } from './boq-read.js';
 import { openModel } from './model.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
+import { commandLanguage } from './cli-language.js';
+import { cliSayFor } from './cli-words.js';
 
 export interface ClassifyArgs {
   model: string;
@@ -24,6 +26,8 @@ export interface ClassifyArgs {
   system?: string;
   csv: boolean;
   json: boolean;
+  /** `--locale` as given; the project's language, when it records one, comes first. */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -59,6 +63,7 @@ export async function classify(args: ClassifyArgs, io: CliIo): Promise<number> {
       : `ifcsheet: ${args.project} holds no classification mapping; add one in the app (Classification codes) and save the project.\n`);
     return 1;
   }
+  const say = cliSayFor(commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io));
   const model = await openModel(bytes, { geometry: false });
   const rows = classifiedTypes(readBoqElements(storeSource('model', model.dataStore), new Set()), [mapping], storeClassifications(new Map([['model', model.dataStore]])));
   if (args.json) {
@@ -67,9 +72,9 @@ export async function classify(args: ClassifyArgs, io: CliIo): Promise<number> {
     io.stdout(classifyCsv(rows));
   } else {
     io.stdout(`${args.model}: ${systemLabel(mapping.system)}\n\n`);
-    for (const r of rows) io.stdout(`${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : ' (no type)'}  x${r.count}${r.source === 'model' ? '  [model]' : ''}\n`);
+    for (const r of rows) io.stdout(`${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : say('classify.noType')}  x${r.count}${r.source === 'model' ? `  ${say('classify.fromModel')}` : ''}\n`);
     const missing = rows.filter((r) => r.source === 'none').reduce((n, r) => n + r.count, 0);
-    if (missing > 0) io.stdout(`\n${missing} elements have no code.\n`);
+    if (missing > 0) io.stdout(`\n${say('classify.noCode', { count: missing })}\n`);
   }
   return 0;
 }

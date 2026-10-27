@@ -6,7 +6,7 @@
 /** Schedules and lists: readiness, the bill of quantities, list schedules, sub-reports and their checks, joinery, rooms and areas. Add new exports of this area here, not in `../index.ts`. */
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
-export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
+export { READINESS_EN, READINESS_RO, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
 // The bill of quantities (antemasuratoare, #75). Reading it from models is `/project`: it loads the parser.
 export {
   BOQ_QUANTITIES, BOQ_UNITS, BOQ_UNIT_TEXT, COUNT_QUANTITY, MAX_WASTE, boqProblem, boqPropertyNames, hasSelector, newArticle, quantityDimension, readBoqArticle, readBoqArticles, unitDimension,
