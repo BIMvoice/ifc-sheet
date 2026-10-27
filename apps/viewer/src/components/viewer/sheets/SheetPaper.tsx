@@ -38,7 +38,7 @@ import { viewportPens } from './viewport-pens';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
-import { resolveViewGraphics, viewportHiddenLayers } from '@bimvoice/ifcsheet';
+import { resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -328,6 +328,9 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
           : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
+      <g data-sheet-notes="" {...penTags('VIEWPORT-LABELS', 0.25)}>
+        {sheetNoteLines(sheet).map((n, i) => <text key={i} x={n.at.x} y={n.at.y} fontSize={n.size} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{n.text}</text>)}
+      </g>
       <TitleBlockGraphic sheet={sheet} projectName={projectName} w={w} h={h} issueDate={issueDate} />
       <SheetDrafts sheet={sheet} projectName={projectName} issueDate={issueDate} entities={shows ? sheetDrafts.filter(shows) : sheetDrafts} layers={layers} extraPatterns={extraPatterns} />
     </svg>

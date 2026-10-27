@@ -20,9 +20,8 @@ import type { ProjectSheet } from '@/project/types';
 import { draftItem, fitProblems, referenceBars, sheetRegions, viewportRect, type SheetItem } from '../sheets/print-check';
 import { sheetSvgText } from '../sheets/sheet-export';
 import type { SheetContent } from '../sheets/useSheetContent';
+import { PX_PER_MM } from '@/wall/wall-zoom';
 
-/** CSS defines 96 px to the inch: this many px to a CSS millimetre. */
-const PX_PER_MM = 96 / 25.4;
 const ZOOM = { min: 0.1, max: 8 } as const;
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 

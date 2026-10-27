@@ -62,8 +62,13 @@ describe('MCP playground BYOK credential', () => {
     try {
       const container = render(<PlaygroundChat model={await oneWallModel()} />);
       await send(container, 'hello');
-      const anthropic = stub.sent.filter((h) => h.has('x-api-key'));
+      // SDK 0.x sent the key as `x-api-key`; 1.x sends `Authorization: Bearer`.
+      // Either way it is the user's own key, so accept the credential in either
+      // header and select Anthropic requests by the SDK's `anthropic-version`.
+      const credential = (h: Headers) => h.get('x-api-key') ?? h.get('authorization')?.replace(/^Bearer /, '');
+      const anthropic = stub.sent.filter((h) => h.has('anthropic-version'));
       assert.ok(anthropic.length > 0, 'expected a request to Anthropic');
+      assert.equal(credential(anthropic[0]), 'sk-ant-api03-playground');
       assert.equal(anthropic[0].get('anthropic-workspace-id'), WORKSPACE);
     } finally {
       stub.restore();

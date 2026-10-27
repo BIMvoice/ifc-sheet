@@ -829,5 +829,57 @@
   "code": 2,
   "stdout": "",
   "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--pac-mode",
+   "rural",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--pac-mode",
+   "bogus",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --pac-mode is one of full, rural.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac-mode",
+   "rural",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has --pac-mode only with --pac.\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--pac-mode",
+   "rural"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
  }
 ]

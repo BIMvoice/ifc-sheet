@@ -269,6 +269,8 @@ export interface ProjectSheet {
   revisionIds?: string[];
   /** The values this sheet gives title block parameters otherwise than the project's (`title-block-params.ts`); a name present wins. */
   titleBlockParams?: Record<string, string>;
+  /** Lines the sheet prints on itself, in the frame's bottom-left corner (`sheet-notes.ts`): why its paper or scale is not the template's. */
+  notes?: string[];
 }
 
 /** The identity of a model a project refers to (content hash, else its name). */
