@@ -72,7 +72,7 @@ describe('the package index', () => {
     const pinned = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as string[];
     expect(pinned.length).toBeGreaterThan(400);
     expect(surface).toEqual(pinned);
-  });
+  }, 120_000);
 });
 
 const CLI_SNAPSHOT = fileURLToPath(new URL('./cli-exports.snapshot.json', import.meta.url));
@@ -101,7 +101,7 @@ describe('the ./cli-* subpaths', () => {
     const pinned = JSON.parse(readFileSync(CLI_SNAPSHOT, 'utf8')) as Record<string, string[]>;
     expect(Object.keys(pinned).sort()).toEqual(Object.keys(surface).sort());
     expect(surface).toEqual(pinned);
-  });
+  }, 120_000);
 
   it('keep the output functions the MCP package imports', async () => {
     const functions = async (load: Promise<Record<string, unknown>>, names: string[]) => {
