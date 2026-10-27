@@ -141,6 +141,7 @@
   "ListCell: type (type-only)",
   "ListClassificationContext: type (type-only)",
   "ListFigureKind: type (type-only)",
+  "ListMissing: type (type-only)",
   "ListScheduleColumn: type (type-only)",
   "ListScheduleDef: type (type-only)",
   "ListScheduleTable: type (type-only)",
