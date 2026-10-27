@@ -34,7 +34,10 @@ export const BUILTIN_PARAMS = ['SheetNumber', 'SheetName', 'Scale', 'Date', 'Pag
  * itself is not one of them: it stays a user's name, as the parameter text
  * tool's own example uses it.)
  */
-export const SOFT_BUILTINS = ['ProjectPhase', 'ProjectNumber', 'ProjectManager', 'DesignedBy'] as const;
+export const SOFT_BUILTINS = [
+  'ProjectPhase', 'ProjectNumber', 'ProjectManager', 'DesignedBy',
+  'RegistrationNumber', 'ProjectManagerTitle', 'DesignedByTitle', 'DrawnByTitle', 'AuthorsCapacity', 'VerifierCapacity', 'VerifierRequirement', 'ReportNumber', 'ReportDate',
+] as const;
 export type BuiltinParam = (typeof BUILTIN_PARAMS)[number] | (typeof SOFT_BUILTINS)[number];
 
 /**
@@ -46,6 +49,8 @@ export type BuiltinParam = (typeof BUILTIN_PARAMS)[number] | (typeof SOFT_BUILTI
 export const FIELD_PARAMS = {
   project: 'Project', address: 'Address', client: 'Client', organisation: 'Organisation', drawnBy: 'DrawnBy', checkedBy: 'CheckedBy', date: 'Date',
   phase: 'ProjectPhase', projectNumber: 'ProjectNumber', projectManager: 'ProjectManager', designer: 'DesignedBy',
+  registrationNumber: 'RegistrationNumber', projectManagerTitle: 'ProjectManagerTitle', designerTitle: 'DesignedByTitle', drawnByTitle: 'DrawnByTitle',
+  authorsCapacity: 'AuthorsCapacity', verifierCapacity: 'VerifierCapacity', verifierRequirement: 'VerifierRequirement', reportNumber: 'ReportNumber', reportDate: 'ReportDate',
 } as const satisfies Record<string, BuiltinParam>;
 
 /** The built-ins a set of title block fields gives (`''` for a field not set). */

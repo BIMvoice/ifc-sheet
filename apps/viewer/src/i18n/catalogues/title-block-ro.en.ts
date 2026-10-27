@@ -9,6 +9,10 @@ export const titleBlockRoEn = {
   // The captions are the engine's (`title-block-ro.ts`): the layout is built there.
   ...RO_ONLY_CAPTIONS_EN,
   'tblayout.useRo': 'Use the Romanian layout',
-  'tblayout.roHint': 'Phase, project number, the roles that sign and an empty box each for the designer\'s and the verifier\'s stamp. It replaces the layout shown now (undo brings it back) and stays editable.',
+  'tblayout.roHint': 'The cartuș of Ordinul 975/2026 (model F_01): firm and registration number, phase, project and sheet numbers, the roles that sign with their titles and an empty signature box each, and the verifier\'s requirement and report. It replaces the layout shown now (undo brings it back) and stays editable.',
+  'wall.tb.projectManagerTitle': 'Project manager: professional title',
+  'wall.tb.designerTitle': 'Designed by: professional title',
+  'wall.tb.drawnByTitle': 'Drawn by: professional title',
+  'wall.tb.verifierCapacity': 'Verifier / expert: capacity',
   'wall.tb.phaseHint': 'e.g. PAC, PTh, DE (DTAC is the old name of PAC)',
 } as const satisfies Record<string, TranslationValue>;
