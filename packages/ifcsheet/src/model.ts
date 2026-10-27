@@ -12,7 +12,9 @@
 
 import { IfcTypeEnum, iterateEffectiveEntities, type SpatialNode } from '@ifc-lite/data';
 import { GeometryProcessor, convertIfcxMeshes, type GeometryResult, type MeshData } from '@ifc-lite/geometry';
+import { totalYupOffset } from '@ifc-lite/geometry/world-frame';
 import { IfcParser, buildIfcxDataStore, detectFormat, extractLengthUnitScale, parseIfcx, type IfcDataStore } from '@ifc-lite/parser';
+import type { Vec3 } from './drawing-frame.js';
 import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
@@ -61,6 +63,8 @@ export interface OpenedModel {
   proposalInput(level: ProjectLevel): ProposalInput | null;
   /** The parsed model, for reads the engine does not make itself. */
   dataStore: IfcDataStore;
+  /** The render frame's shift (`totalYupOffset`): what turns a point of the meshes' frame into the model's own coordinates. Zero without geometry. */
+  frameOffset: Vec3;
 }
 
 const footprint = (b: BoundingBox3D): Footprint => ({ min: { x: b.min.x, z: b.min.z }, max: { x: b.max.x, z: b.max.z } });
@@ -236,5 +240,6 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     includeFarElements,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),
     dataStore: ds,
+    frameOffset: totalYupOffset(frame),
   };
 }

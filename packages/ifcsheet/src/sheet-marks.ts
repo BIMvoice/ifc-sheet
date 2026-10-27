@@ -41,10 +41,10 @@ export interface MarkContext {
 }
 
 /** The app's sheet scales its pixel widths by this. */
-const K = 0.25;
+export const K = 0.25;
 
 /** One label per line, each a line pitch under the one before, in the text's own frame. */
-function lines(text: string, at: Point2D, px: number, deg: number, align: SheetText['align'], shift: number): SheetText[] {
+export function lines(text: string, at: Point2D, px: number, deg: number, align: SheetText['align'], shift: number): SheetText[] {
   const size = Math.max(px, 1);
   return text.split('\n').map((line, i) => label(at, line, size, deg, shift + i * 1.25 * size, align));
 }

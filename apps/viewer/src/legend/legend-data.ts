@@ -11,7 +11,7 @@
  */
 
 import type { AnnotationType, DraftSymbol, LegendCategory, LegendConfig } from '@/catalogue/types';
-import { findSymbol } from '@/drafting/symbols';
+import { findSymbol } from '@bimvoice/ifcsheet';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectMaterial, ProjectSheet, ProjectView } from '@/project/types';
 

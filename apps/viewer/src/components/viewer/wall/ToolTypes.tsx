@@ -10,7 +10,7 @@
  */
 
 import { applyAnnotationType } from '@/catalogue/annotation-type-actions';
-import { allSymbols } from '@/drafting/symbols';
+import { allSymbols } from '@bimvoice/ifcsheet';
 import { baseDraftSettings, patchDraftSettings, useDraftingSession } from '@/drafting/session';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';

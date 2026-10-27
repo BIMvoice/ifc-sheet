@@ -13,7 +13,7 @@
 
 import type { Pt } from '@/drafting/types';
 import { areaCandidates, boxAt, freeSpot, type Box, type Obstacle } from './free-spot';
-import { scaleBarTicks } from './scale-bar';
+import { scaleBarTicks } from '@bimvoice/ifcsheet';
 import type { Setback } from './plot';
 
 /** The north arrow's scale on paper (its circle is 18 symbol mm across) and the half side of the square it turns in, N included. */

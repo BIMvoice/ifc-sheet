@@ -9,7 +9,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { arcPoints } from '@bimvoice/ifcsheet';
+import { arcPoints, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
@@ -22,7 +22,6 @@ import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt
 import { entitySkeleton } from '@/drafting/annotation';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { AnnotationGraphics } from './AnnotationGraphics';
-import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 
 /** The shape as an SVG path in screen coordinates. */
 export function shapePath(shape: DraftShape, t: ViewTransform, axis: SectionAxisName): string {

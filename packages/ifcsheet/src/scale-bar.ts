@@ -11,7 +11,7 @@
  * are sized in paper millimetres at that scale.
  */
 
-import type { SymbolShape } from '@/catalogue/types';
+import type { SymbolShape } from './symbols.js';
 
 /** The most paper the whole bar may take, mm. */
 export const SCALE_BAR_TARGET_MM = 100;

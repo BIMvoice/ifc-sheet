@@ -40,3 +40,13 @@ export { layoutOnSheet, layoutTableOnSheet, registerHolders, scheduleBox, schedu
 export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from '../hatch-pattern.js';
 export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from '../hatch-fill.js';
 export { HATCH_UNIT_M, builtInPatterns, findPattern } from '../hatch-library.js';
+// Symbols: the library, the project's own, how one is placed, and the live ones (scale bar, north arrow, coordinate point)
+export { BUILT_IN_SYMBOLS, allSymbols, findSymbol, flattenShape, isBuiltInSymbol, missingSymbolMark, placeSymbol, setSymbolLibrary, symbolDrawingScale, type DraftSymbol, type PlacedSymbol, type SymbolInstance, type SymbolShape } from '../symbols.js';
+export { readSymbol } from '../symbol-read.js';
+export { SCALE_BAR_TARGET_MM, scaleBarShapes, scaleBarStep, scaleBarTicks } from '../scale-bar.js';
+export { COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, liveSymbol, type LiveSymbolContext } from '../live-symbols.js';
+export { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from '../true-north.js';
+export { COORDINATE_LABELS, drawingPointToLocal, liveSymbolContext, type CoordinateLabeller, type SiteFrame } from '../site-frame.js';
+export { AXIS_NAME, drawingToWorld, screenSigns, worldToDrawing, type SectionAxisName, type Vec3 } from '../drawing-frame.js';
+export { EPS, TAU, normAngle, polar, rotatePt, sweepOf } from '../draft-vec.js';
+export { hasStandardGeoreferencing } from '../georef-gate.js';

@@ -11,12 +11,27 @@
  * into the shapes it stands for.
  */
 
-import type { DraftSymbol, SymbolShape } from '@/catalogue/types';
-import type { DraftShape, Pt, SymbolInstanceShape } from './types';
-import { polar, rotatePt, sweepOf, TAU } from './vec';
-import { scaleBarShapes } from '@/siteplan/scale-bar';
+import type { AnnotationShape, DraftShape, Pt, SymbolInstanceShape } from './draft-types.js';
+import { polar, rotatePt, sweepOf, TAU } from './draft-vec.js';
+import { scaleBarShapes } from './scale-bar.js';
 
 export type SymbolInstance = SymbolInstanceShape;
+
+/** What a symbol is drawn from: geometry and plain text. */
+export type SymbolShape = DraftShape | Extract<AnnotationShape, { type: 'text' }>;
+
+/**
+ * A block of shapes drawn around the origin, which is its insertion point.
+ * `paper` symbols are drawn in paper millimetres and keep that size at any
+ * view scale (a north arrow, a tag bubble); `model` symbols are in metres
+ * and keep their real size (a scale bar, a piece of furniture).
+ */
+export interface DraftSymbol {
+  id: string;
+  name: string;
+  unit: 'paper' | 'model';
+  shapes: SymbolShape[];
+}
 
 const text = (x: number, y: number, t: string, height: number): SymbolShape => ({ type: 'text', p: { x, y }, text: t, height, rotation: 0 });
 const poly = (pts: [number, number][], closed = false): SymbolShape => ({ type: 'polyline', pts: pts.map(([x, y]) => ({ x, y })), closed });
@@ -67,9 +82,9 @@ export const BUILT_IN_SYMBOLS: readonly DraftSymbol[] = [
       text(-1.2, 11, 'N', 3.5),
     ],
   },
-  // Laid out here for 1:100; wherever it is drawn it is laid out again for that drawing's scale (`siteplan/live-symbols.ts`).
+  // Laid out here for 1:100; wherever it is drawn it is laid out again for that drawing's scale (`live-symbols.ts`).
   { id: 'builtin:scale-bar', name: 'Scale bar', unit: 'model', shapes: scaleBarShapes(100) },
-  // A point whose map coordinates (E / N) are printed beside it where it is drawn (`siteplan/live-symbols.ts`).
+  // A point whose map coordinates (E / N) are printed beside it where it is drawn (`live-symbols.ts`).
   {
     id: 'builtin:coordinate-point', name: 'Coordinate point', unit: 'paper',
     shapes: [line(-2.5, 0, 2.5, 0), line(0, -2.5, 0, 2.5), { type: 'circle', c: { x: 0, y: 0 }, r: 1.2 }],

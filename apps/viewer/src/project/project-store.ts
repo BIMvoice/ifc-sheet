@@ -13,7 +13,7 @@
  */
 
 import { resolve } from '@/i18n/registry';
-import { setSymbolLibrary } from '@/drafting/symbols';
+import { setSymbolLibrary, assignDefaultTemplates, type PacIntervention, type PacMode, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
@@ -30,7 +30,6 @@ import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
 import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
-import { assignDefaultTemplates, type PacIntervention, type PacMode, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';

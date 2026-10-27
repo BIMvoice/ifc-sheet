@@ -11,21 +11,29 @@
  *
  * Drawn with them (`sheet-marks.ts`): level marks, leaders, radial and angular dimensions, grid axes, hatches, and circles and arcs.
  *
- * Not drawn yet, and reported through `onSkipped`: symbols (their library and the north and coordinates they are drawn with are
- * the app's), a text's frame and leader (the frame is measured by the app's text widths), and a dimension figure's leader when
- * the figure was moved off its line.
+ * Symbols are drawn too (`sheet-symbols.ts`), from the built-in library and the project's own, with the scale of the viewport and the
+ * north and coordinates of the model (`site-frame.ts`); on a model with a map conversion the engine does not read, a coordinate point
+ * is not drawn.
+ *
+ * Not drawn yet, and reported through `onSkipped`: a text's frame and leader (the frame is measured by the app's text widths), and
+ * a dimension figure's leader when the figure was moved off its line.
  */
 
-import type { Point2D } from '@ifc-lite/drawing-2d';
+import type { Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
 import { formatDimension, layerPen, layerShows, lookOf, readableDeg, type LayerGroup, type StyleBook } from './draft-look.js';
+import { AXIS_NAME } from './drawing-frame.js';
 import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
 import { drawAxis, drawCurve, drawHatch, drawLeader, drawLevel, type MarkContext } from './sheet-marks.js';
+import { drawSymbol } from './sheet-symbols.js';
+import { liveSymbolContext, COORDINATE_LABELS, type SiteFrame } from './site-frame.js';
+import { COORDINATE_POINT_ID } from './live-symbols.js';
+import { findSymbol, type DraftSymbol } from './symbols.js';
 import { label, readableAngle, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from './viewport-annotation.js';
@@ -39,9 +47,20 @@ export interface SheetAnnotations {
   book: StyleBook;
   /** The project's own hatch patterns (a pattern the library lacks); a hatch names its pattern. */
   patterns?: readonly HatchPattern[];
+  /** The project's own symbols; a symbol names one, or a built-in. */
+  symbols?: readonly DraftSymbol[];
+  /** The model's frame, for the north arrow and the coordinate point; without it they are drawn as placed. */
+  site?: SiteFacts;
   locale: SheetLocale;
   /** A draft of a kind not printed yet, once per draft. */
   onSkipped?: (kind: AnnotationShape['type'], view: ProjectView | undefined) => void;
+}
+
+/** What the model tells the symbols (`siteFrameOf`): its frame, and what of it the engine could not read. */
+export interface SiteFacts {
+  frame: SiteFrame;
+  /** The model has a usable map conversion, which the app reads through its anchor georeference and the engine does not. */
+  georeferenced: boolean;
 }
 
 export type { SheetStroke };
@@ -51,10 +70,10 @@ export type { SheetStroke };
  * none when the layout gave the view none. A key plan prints no drafts, as on the sheet.
  */
 export function viewportAnnotations(
-  input: { view: ProjectView | undefined; vp: SheetViewport; at: (p: Pt) => Point2D; frame: Frame; box: Rect | null },
+  input: { view: ProjectView | undefined; vp: SheetViewport; at: (p: Pt) => Point2D; frame: Frame; box: Rect | null; plane?: SectionPlaneConfig },
   a: SheetAnnotations,
 ): { strokes: SheetStroke[]; texts: SheetText[] } {
-  const { view, vp, at, frame, box } = input;
+  const { view, vp, at, frame, box, plane } = input;
   const out = { strokes: [] as SheetStroke[], texts: [] as SheetText[] };
   if (vp.keyPlanOf !== undefined) return out;
   const hidden = viewportHiddenLayers(view, vp);
@@ -64,6 +83,10 @@ export function viewportAnnotations(
   const paperUnit = viewportPaperUnit(vp.scale);
   const factor = annotationFactor(vp.scale, view?.scale);
   const mmPerMetre = 1000 / vp.scale;
+  const own = a.symbols ?? [];
+  // Scale bar, north arrow and coordinate points follow this viewport's scale and the model, as the sheet's do (`siteplan/live-symbols.ts`).
+  const axis = plane ? AXIS_NAME[plane.axis] : 'down';
+  const live = a.site ? liveSymbolContext(a.site.frame, plane, axis, vp.scale, a.locale, COORDINATE_LABELS) : null;
   const context = (colour: string, look: MarkContext['look']): MarkContext => ({ at, frame, clip, box, mmPerMetre, colour, look, locale: a.locale, patterns: a.patterns ?? [], out });
   for (const e of a.drafts) {
     if (e.viewId !== vp.viewId) continue;
@@ -76,7 +99,7 @@ export function viewportAnnotations(
       drawCurve(shape, layer, mark);
       continue;
     }
-    const sized = annotationAtFactor(shape, factor);
+    const sized = annotationAtFactor(shape, factor, (id) => findSymbol(id, own)?.unit === 'paper');
     const look = mark.look;
     if (sized.type === 'text') {
       const px = sized.height * mmPerMetre;
@@ -88,7 +111,11 @@ export function viewportAnnotations(
     else if (sized.type === 'level') drawLevel(sized, mark);
     else if (sized.type === 'axis') drawAxis(sized, mark);
     else if (sized.type === 'hatch') drawHatch(sized, mark);
-    else if (sized.type === 'symbol') a.onSkipped?.('symbol', view);
+    else if (sized.type === 'symbol') {
+      // A coordinate point on a model the app places on the map is left out, not printed from the local frame.
+      if (a.site?.georeferenced && sized.symbolId === COORDINATE_POINT_ID) a.onSkipped?.('symbol', view);
+      else drawSymbol(sized, mark, { own, live, axis });
+    }
     else {
       const dim = look.dim;
       const o = { extGap: dim.extGap * paperUnit, extOver: dim.extOver * paperUnit, format: (m: number) => formatDimension(a.locale, m, dim), locale: a.locale };

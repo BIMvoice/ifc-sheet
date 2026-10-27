@@ -8,11 +8,13 @@
  * path; an absent optional field takes its default.
  */
 
-import { readShape } from '@bimvoice/ifcsheet';
+import { readSymbol } from '@bimvoice/ifcsheet';
+
+export { readSymbol };
 import type { AxisShape } from '@/drafting/types';
 import {
   ANNOTATION_TOOLS, DEFAULT_LABEL, DEFAULT_LEGEND, LEGEND_CATEGORIES, TAG_FIELDS,
-  type AnnotationTool, type AnnotationType, type DraftSymbol, type LegendCategory, type ProjectLegend, type SymbolShape, type TagFieldName,
+  type AnnotationTool, type AnnotationType, type LegendCategory, type ProjectLegend, type TagFieldName,
 } from './types';
 import { asTextFrame } from '@/drafting/text-block';
 import { asLeaderMode } from '@/labels/label-leader';
@@ -56,17 +58,6 @@ export function readAnnotationType(v: unknown, path: string, what?: string): Ann
     out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}) };
   }
   return out;
-}
-
-export function readSymbol(v: unknown, path: string, what?: string): DraftSymbol {
-  if (!isObject(v) || !isString(v.id) || !isString(v.name) || !v.name.trim()) fail(path, 'must be a symbol { id, name, shapes }', what);
-  if (!Array.isArray(v.shapes)) fail(`${path}.shapes`, 'must be an array', what);
-  const shapes = v.shapes.map((s, i): SymbolShape => {
-    const shape = readShape(s, `${path}.shapes/${i}`);
-    if (shape.type === 'line' || shape.type === 'polyline' || shape.type === 'circle' || shape.type === 'arc' || shape.type === 'text') return shape;
-    return fail(`${path}.shapes/${i}.type`, 'must be a line, polyline, circle, arc or text', what);
-  });
-  return { id: v.id, name: v.name, unit: v.unit === 'model' ? 'model' : 'paper', shapes };
 }
 
 export function readLegend(v: unknown, path: string, what?: string): ProjectLegend {

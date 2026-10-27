@@ -18,12 +18,12 @@
  *  - The viewer's render frame, Y-up: viewer (x, y, z) = IFC (x, z, −y)
  *    (`project/view-plane.ts` header; `viewerDeltaToProjectedDelta` reads
  *    viewer z as −IFC y). A direction needs no RTC shift.
- *  - The view's drawing: `worldToDrawing(plane, …)` (`drafting/frame.ts`).
+ *  - The view's drawing: `worldToDrawing(plane, …)` (`drawing-frame.ts`).
  *  - The screen / paper: `drawingToScreen`'s signs (`screenSigns`), y down.
  */
 
 import { EntityExtractor, type IfcDataStore } from '@ifc-lite/parser';
-import { screenSigns, worldToDrawing, type SectionAxisName } from '@/drafting/frame';
+import { screenSigns, worldToDrawing, type SectionAxisName } from './drawing-frame.js';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 
 /** A direction in the IFC project's XY plane, unit length. */
