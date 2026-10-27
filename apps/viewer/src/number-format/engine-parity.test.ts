@@ -66,6 +66,6 @@ describe('the sheet and the command line write the same figures', () => {
     const sheet = roomScheduleCells(schedule, { ...ROOM_SCHEDULE_EN, locale: COMMA }).flatMap((r) => r.cells);
     const engine = figures(roomScheduleText(schedule, COMMA));
     assert.ok(engine.includes('1.234,57') && engine.includes('14,16'), `the command line prints the comma: ${engine.join(' ')}`);
-    for (const f of engine) assert.ok(sheet.some((c) => c.replace(/ \*$/, '') === f), `the sheet prints ${f}: ${sheet.join(' | ')}`);
+    for (const f of engine) assert.ok(sheet.some((c) => c.replace(/ m²( \*)?$/, '') === f), `the sheet prints ${f}: ${sheet.join(' | ')}`);
   });
 });
