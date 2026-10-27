@@ -15,7 +15,9 @@
  *     (LBOVVO § 4), all READ. For any other Land nothing was read: the set draws 1:500, the model text's minimum
  *     (MBauVorlV § 7, a model, not law until a Land adopts it), and says the scale is unverified.
  *   - Abstandsflächen: in the Lageplan in Bayern (§ 7(3) no. 13) and NRW (§ 3(1) nos. 6, 12); in BW on a SEPARATE sheet
- *     (LBOVVO § 4(4)), which the BW set carries as the Abstandsflächenplan, the site plan drawn a second time.
+ *     (LBOVVO § 4(4)), which the BW set carries as the Abstandsflächenplan: the ground-floor cut a second time, on a sheet whose note says the Abstandsflächen are to be drawn in.
+ *   - A row is `read` for a Land only where that Land's own text was read (BayBauVorlV, DBauV, BauPrüfVO, LBOVVO). A row that cites
+ *     only the model text (MBauVorlV) is read for `other` and unverified for the three Länder.
  *   - The drawings are produced from the model; the plot, the distances, the Abstandsflächen, the calculations and the
  *     other documents are not, and the checklist says so.
  */
@@ -63,6 +65,8 @@ export interface GermanyItem {
 type Sourced = Readonly<Record<GermanyLand, string>>;
 
 const MODEL = 'MBauVorlV (model text, not law until a Land adopts it)';
+/** Appended to a model-text citation given for a Land: the model is READ, the Land's own ordinance is not, so the row is unverified for that Land. */
+const LAND_NOT_READ = ' (the model text; this Land\'s own ordinance was not read)';
 
 interface Row {
   id: string;
@@ -97,12 +101,12 @@ const ROWS: readonly Row[] = [
   // GRZ / GFZ / Baumasse: where a B-Plan sets one. The placement differs per Land. BauNVO §§ 19, 20 wording is a SNIPPET, so `other` is unverified.
   { id: 'useCalculation', unverified: ['other'], source: { bayern: 'BayBauVorlV § 3 no. 7: calculation of the permitted, existing and planned degree of building use where a B-Plan sets one (a document of its own)', nrw: 'BauPrüfVO § 3(2): Grundfläche, Geschossfläche, Vollgeschosse and Baumasse to show GRZ/GFZ/BMZ, added to the Lageplan inside a B-Plan area', bw: 'LBOVVO § 4(6) no. 6: calculation of land use by Grundflächen-, Geschossflächen- or Baumassenzahl, in the written part of the Lageplan where the B-Plan sets one', other: 'BauNVO §§ 19, 20: GRZ and GFZ where a B-Plan sets them; the Land\'s placement not read' } },
   { id: 'symbolsColours', source: { bayern: 'BayBauVorlV § 7(5), § 8(4): symbols and colours of Anlage 1', nrw: 'BauPrüfVO § 3(5), § 4(5): symbols and colours of the Anlage; PlanzV 90 for the Lageplan', bw: 'LBOVVO § 4(5), § 6(4): colours: new masonry red, new concrete pale green, existing grey, to demolish yellow', other: `${MODEL} § 7, § 8: symbols and colours as the Land prescribes` }, unverified: ['other'] },
-  // File rules: MBauVorlV § 2 (the model); Bayern DBauV § 11; BW LBOVVO § 3(2). READ.
-  { id: 'scaleBar', source: { bayern: 'DBauV § 11(2) and BayBauVorlV: a graphic scale bar on the drawings', nrw: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung`, bw: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung`, other: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung` } },
-  { id: 'pdfA', source: { bayern: 'DBauV § 11: PDF, individual files, no attachments embedded, no security or write protection', nrw: `${MODEL} § 2: PDF/A (ISO 19005-1), no embedded attachments`, bw: 'LBOVVO § 3(2): electronic, PDF/A', other: `${MODEL} § 2: PDF/A (ISO 19005-1), no embedded attachments` } },
-  { id: 'oneFile', source: { bayern: 'DBauV § 11: individual files', nrw: `${MODEL} § 2: each document its own file`, bw: `${MODEL} § 2: each document its own file`, other: `${MODEL} § 2: each document its own file` } },
-  { id: 'fileName', source: { bayern: `${MODEL} § 2: file name states the content and the date as jjjjmmtt`, nrw: `${MODEL} § 2: file name states the content and the date as jjjjmmtt`, bw: `${MODEL} § 2: file name states the content and the date as jjjjmmtt`, other: `${MODEL} § 2: file name states the content and the date as jjjjmmtt` } },
-  { id: 'designer', source: { bayern: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser`, nrw: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser`, bw: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser`, other: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser` } },
+  // File rules: READ for the Land only where its own text was read (Bayern DBauV § 11, BW LBOVVO § 3(2)); the rest cite the model text (MBauVorlV), READ as a model, so unverified for the Land.
+  { id: 'scaleBar', unverified: ['nrw', 'bw'], source: { bayern: 'DBauV § 11(2): a graphic scale bar on the drawings', nrw: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung${LAND_NOT_READ}`, bw: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung${LAND_NOT_READ}`, other: `${MODEL} § 3(2): a graphic scale bar beside the numeric scale on the Lageplan and every Bauzeichnung` } },
+  { id: 'pdfA', unverified: ['nrw'], source: { bayern: 'DBauV § 11: PDF, individual files, no attachments embedded, no security or write protection', nrw: `${MODEL} § 2: PDF/A (ISO 19005-1), no embedded attachments${LAND_NOT_READ}`, bw: 'LBOVVO § 3(2): electronic, PDF/A', other: `${MODEL} § 2: PDF/A (ISO 19005-1), no embedded attachments` } },
+  { id: 'oneFile', unverified: ['nrw', 'bw'], source: { bayern: 'DBauV § 11: individual files', nrw: `${MODEL} § 2: each document its own file${LAND_NOT_READ}`, bw: `${MODEL} § 2: each document its own file${LAND_NOT_READ}`, other: `${MODEL} § 2: each document its own file` } },
+  { id: 'fileName', unverified: ['bayern', 'nrw', 'bw'], source: { bayern: `${MODEL} § 2: file name states the content and the date as jjjjmmtt${LAND_NOT_READ}`, nrw: `${MODEL} § 2: file name states the content and the date as jjjjmmtt${LAND_NOT_READ}`, bw: `${MODEL} § 2: file name states the content and the date as jjjjmmtt${LAND_NOT_READ}`, other: `${MODEL} § 2: file name states the content and the date as jjjjmmtt` } },
+  { id: 'designer', unverified: ['bayern', 'nrw', 'bw'], source: { bayern: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser${LAND_NOT_READ}`, nrw: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser${LAND_NOT_READ}`, bw: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser${LAND_NOT_READ}`, other: `${MODEL} § 3(3): the Bauvorlagen name the Entwurfsverfasser` } },
   // Not read: NRW's statewide e-filing duty, and the documents beyond the drawings.
   { id: 'nrwFiling', unverified: ['nrw'], source: { nrw: 'BauPrüfVO § 1(2) still says durable paper with § 3a VwVfG unaffected; whether electronic filing is mandatory statewide: not established' } },
   { id: 'otherDocuments', unverified: [...GERMANY_LANDS], source: { bayern: 'Baubeschreibung, Brandschutz- and Standsicherheitsnachweis, forms: not read', nrw: 'Baubeschreibung, Brandschutz- and Standsicherheitsnachweis, forms: not read', bw: 'Baubeschreibung, Brandschutz- and Standsicherheitsnachweis, forms: not read', other: 'Baubeschreibung, Brandschutz- and Standsicherheitsnachweis, forms: not read' } },
@@ -170,15 +174,19 @@ export interface GermanyCoverageRow {
   item: GermanyItem;
   /** The sheets draw it ('yes') or the person supplies it ('no'). */
   state: GermanyState;
+  /** The model produces it and a sheet of the set shows it. Never true for the Lageplan or the Abstandsflächenplan: the sheet is made, its content is not. */
   drawn: boolean;
+  /** The sheet of the Lageplan or the Abstandsflächenplan is made and placed; its content (plot, distances, Abstandsflächen) is still to be drawn in. False for every other item. */
+  sheetMade: boolean;
   /** For the plans: the storeys with no plan on a sheet. */
   missingStoreys: string[];
 }
 
 /**
  * The checklist of a Land against a set. The plans, sections and elevations are read the way the PAC checklist reads them
- * (`pacCoverage`: a plan of EVERY storey), the Lageplan is held when a site plan is placed on a sheet, and the
- * Baden-Württemberg Abstandsflächenplan when a second one is.
+ * (`pacCoverage`: a plan of EVERY storey). The Lageplan and the Baden-Württemberg Abstandsflächenplan are a site plan on a sheet,
+ * the ground-floor cut only: the plot, the distances and the Abstandsflächen are not in the model, so they are never `drawn`;
+ * `sheetMade` says the sheet is there.
  */
 export function germanyCoverage(sheets: readonly PacCoverageSheet[], views: readonly ProjectView[], land: GermanyLand = 'other'): GermanyCoverageRow[] {
   const pac = new Map(pacCoverage(sheets, { views }).map((r) => [r.item.id, r]));
@@ -186,7 +194,8 @@ export function germanyCoverage(sheets: readonly PacCoverageSheet[], views: read
   const sitesPlaced = views.filter((v) => v.kind === 'plan' && v.site && placed.has(v.id)).length;
   return germanyItems(land).map((item): GermanyCoverageRow => {
     const row = item.drawnBy === 'site' || item.drawnBy === 'setback' ? undefined : pac.get(item.id);
-    const drawn = item.drawnBy === 'site' ? sitesPlaced >= 1 : item.drawnBy === 'setback' ? sitesPlaced >= 2 : row?.drawn === true;
-    return { item, state: drawn ? 'yes' : 'no', drawn, missingStoreys: row?.missingStoreys ?? [] };
+    const sheetMade = item.drawnBy === 'site' ? sitesPlaced >= 1 : item.drawnBy === 'setback' ? sitesPlaced >= 2 : false;
+    const drawn = item.drawnBy === 'site' || item.drawnBy === 'setback' ? false : row?.drawn === true;
+    return { item, state: drawn ? 'yes' : 'no', drawn, sheetMade, missingStoreys: row?.missingStoreys ?? [] };
   });
 }

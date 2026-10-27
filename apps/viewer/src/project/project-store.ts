@@ -184,21 +184,9 @@ export function setPermitPack(pack: PermitPack): void {
   if (norwayPermit !== state.norwayPermit || germanyPermit !== state.germanyPermit || pacMode !== state.pacMode) useProjectStore.setState({ norwayPermit, germanyPermit, pacMode, dirty: true });
 }
 
-/** Whether the project is a German building application (Bauantrag). On turns the other packs off; off goes back to the full permit project. */
-export function setGermanyPermit(on: boolean): void {
-  const pack = permitPackOf(useProjectStore.getState());
-  setPermitPack(on ? 'germany' : pack === 'germany' ? 'pacFull' : pack);
-}
-
 /** The Land of a German Bauantrag; `undefined` (the default) is none chosen, stored as absent. */
 export function setGermanyLand(land: GermanyLand | undefined): void {
   if (land !== useProjectStore.getState().germanyLand) useProjectStore.setState({ germanyLand: land, dirty: true });
-}
-
-/** Whether the project is a Norwegian building application (byggesak). On turns the PAC mode off; off goes back to the full permit project. */
-export function setNorwayPermit(on: boolean): void {
-  const pack = permitPackOf(useProjectStore.getState());
-  setPermitPack(on ? 'norway' : pack === 'norway' ? 'pacFull' : pack);
 }
 
 /** Which PAC permit project the project makes; choosing one turns the Norwegian mode off. */

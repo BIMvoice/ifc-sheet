@@ -13,6 +13,7 @@ export type TemplateNoteKey =
   | 'setTemplate.note.skipped.plan'
   | 'setTemplate.note.skipped.section'
   | 'setTemplate.note.skipped.elevation'
+  | 'setTemplate.note.skipped.site'
   | 'setTemplate.note.defaulted'
   | 'setTemplate.note.unplaced'
   | 'setTemplate.note.rescaled'
@@ -29,6 +30,7 @@ export const SET_TEMPLATE_EN: Record<TemplateNoteKey, string> = {
   'setTemplate.note.skipped.plan': 'Skipped on {sheet}: the template has a plan for storey {storey} (0 is the ground storey) and this model has no such storey.',
   'setTemplate.note.skipped.section': 'Skipped on {sheet}: the template has section {place} and this model offers fewer sections.',
   'setTemplate.note.skipped.elevation': 'Skipped on {sheet}: the template has the {direction} elevation and this model has none.',
+  'setTemplate.note.skipped.site': 'Skipped on {sheet}: the template has site plan {place} and this project has fewer site plans. Add one and place it on a sheet.',
   'setTemplate.note.defaulted': 'Not in the template, laid out the way the automatic set does, on the paper and at the scale of the last {series} sheet of the template: {names}.',
   'setTemplate.note.unplaced': 'The template has no {series} sheet, so these were left off the sheets: {names}.',
   'setTemplate.note.rescaled': '{sheet} is drawn at 1:{used}, not the template\'s 1:{wanted}: its drawings do not fit the paper at that scale.',

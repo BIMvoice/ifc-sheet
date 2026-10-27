@@ -10,6 +10,7 @@ export const setTemplateRo = {
   'setTemplate.note.skipped.plan': 'Omis la {sheet}: șablonul are un plan pentru nivelul {storey} (0 este nivelul de la parter) și modelul acesta nu are un asemenea nivel.',
   'setTemplate.note.skipped.section': 'Omis la {sheet}: șablonul are secțiunea {place}, iar modelul acesta oferă mai puține secțiuni.',
   'setTemplate.note.skipped.elevation': 'Omis la {sheet}: șablonul are fațada {direction}, iar modelul acesta nu o are.',
+  'setTemplate.note.skipped.site': 'Omis la {sheet}: șablonul are planul de situație {place}, iar proiectul acesta are mai puține planuri de situație. Adăugați unul și așezați-l pe o planșă.',
   'setTemplate.note.defaulted': 'Nu sunt în șablon; au fost așezate ca în setul automat, pe hârtia și la scara ultimei planșe din seria {series} a șablonului: {names}.',
   'setTemplate.note.unplaced': 'Șablonul nu are nicio planșă din seria {series}, deci acestea au rămas în afara planșelor: {names}.',
   'setTemplate.note.rescaled': '{sheet} este desenată la 1:{used}, nu la 1:{wanted} cât are șablonul: desenele ei nu încap pe hârtie la scara aceea.',

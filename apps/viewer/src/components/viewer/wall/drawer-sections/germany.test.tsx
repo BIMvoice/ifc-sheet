@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { germanyItems, generateDefaultSet, germanySetTemplate, type DefaultSet, type GermanyLand } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
-import { permitPackOf, projectDocument, resetProject, setGermanyLand, setGermanyPermit, setNorwayPermit, setPacMode, setPermitPack, useProjectStore } from '@/project/project-store';
+import { permitPackOf, projectDocument, resetProject, setGermanyLand, setPacMode, setPermitPack, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
@@ -18,7 +18,8 @@ import { germanySection } from './germany';
 
 /** The Germany mode (#372): an opt-in project field and the Land, a drawer switch "Deutschland (Bauantrag)", the checklist with its sources. */
 
-const NAMES = { name: 'Germany', plans: 'Plans', sections: 'Sections', elevations: 'Elevations', site: 'Site', siteNotes: ['Scale note', 'To add note'], setback: 'Setback', setbackNotes: ['Setback note'] };
+const NAMES = { name: 'Germany', plans: 'Plans', sections: 'Sections', elevations: 'Elevations', site: 'Site', siteNotes: ['Scale note', 'To add note'], setback: 'Abstandsflächenplan', setbackNotes: ['Setback note: to be drawn'] };
+const EXTENT = { min: { x: 0, y: 0, z: 0 }, max: { x: 12, y: 6, z: 9 } };
 
 const building = (land: GermanyLand): DefaultSet => generateDefaultSet({
   storeys: [{ name: 'Ground', elevation: 0, globalId: 'g0' }, { name: 'First', elevation: 3, globalId: 'g1' }],
@@ -28,9 +29,8 @@ const building = (land: GermanyLand): DefaultSet => generateDefaultSet({
 
 const mount = () => {
   const Section = germanySection.component;
-  return render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
+  return render(<Section go={() => undefined} onClose={() => undefined} extent={EXTENT} />);
 };
-const toggle = (ui: HTMLElement) => act(() => { (ui.querySelector('[data-germany-switch]') as HTMLInputElement).click(); });
 const choose = (ui: HTMLElement, value: string) => act(() => {
   const select = ui.querySelector('[data-germany-land]') as HTMLSelectElement;
   select.value = value;
@@ -41,12 +41,11 @@ beforeEach(() => resetProject());
 afterEach(() => { cleanup(); act(() => setLocale('en')); });
 
 describe('the Germany mode', () => {
-  it('is off in a new project: the switch only, no Land, no checklist', () => {
+  it('is off in a new project: nothing shown, no Land, no checklist', () => {
     const ui = mount();
-    assert.equal((ui.querySelector('[data-germany-switch]') as HTMLInputElement).checked, false);
+    assert.equal(ui.textContent, '');
     assert.equal(ui.querySelectorAll('[data-germany-item]').length, 0);
     assert.equal(ui.querySelector('[data-germany-land]'), null);
-    assert.match(ui.textContent ?? '', /Deutschland \(Bauantrag\)/);
     assert.equal(useProjectStore.getState().germanyLand, undefined);
   });
 
@@ -54,7 +53,7 @@ describe('the Germany mode', () => {
     const { document: doc } = building('bw');
     useProjectStore.setState({ views: doc.views, sheets: doc.sheets });
     const ui = mount();
-    toggle(ui);
+    act(() => setPermitPack('germany'));
     assert.equal(useProjectStore.getState().germanyPermit, true);
     assert.match(ui.querySelector('[data-germany-land-note]')?.textContent ?? '', /No Land chosen/);
     const row = (id: string) => ui.querySelector(`[data-germany-item="${id}"]`);
@@ -81,7 +80,9 @@ describe('the Germany mode', () => {
     assert.match(row('sitePlan')?.textContent ?? '', /LBOVVO § 4.*Drawn at 1:500/s);
     assert.doesNotMatch(row('sitePlan')?.textContent ?? '', /unverified/);
     assert.match(row('setbackSheet')?.textContent ?? '', /LBOVVO § 4\(4\)/);
-    assert.equal(row('setbackSheet')?.getAttribute('data-germany-drawn'), 'true');
+    // The sheet is made again with the Land; what it must show is not drawn by the model.
+    assert.deepEqual([row('setbackSheet')?.getAttribute('data-germany-sheet'), row('setbackSheet')?.getAttribute('data-germany-drawn')], ['true', 'false']);
+    assert.match(row('setbackSheet')?.textContent ?? '', /Sheet made; its content is to be added.*|To add/s);
     assert.equal(row('nrwFiling'), null);
 
     choose(ui, 'other');
@@ -90,25 +91,29 @@ describe('the Germany mode', () => {
 
     choose(ui, '');
     assert.equal(useProjectStore.getState().germanyLand, undefined);
-    toggle(ui);
+    act(() => setPermitPack('pacFull'));
     assert.equal(useProjectStore.getState().germanyPermit, undefined);
     assert.equal(ui.querySelectorAll('[data-germany-item]').length, 0);
   });
 
-  it('marks the views the sheets draw and leaves the file rules, the scale bar and the calculations to be added', () => {
+  it('marks the views the model produces as drawn; the Lageplan sheet is made but its content is to be added', () => {
     const { document: doc } = building('bayern');
     useProjectStore.setState({ views: doc.views, sheets: doc.sheets });
-    setGermanyPermit(true);
+    setPermitPack('germany');
     setGermanyLand('bayern');
     const ui = mount();
     const drawn = [...ui.querySelectorAll('[data-germany-drawn="true"]')].map((li) => li.getAttribute('data-germany-item'));
-    assert.deepEqual(drawn, ['plans', 'facades', 'sitePlan']); // the synthetic model offers no section
+    assert.deepEqual(drawn, ['plans', 'facades']); // the synthetic model offers no section
+    const lageplan = ui.querySelector('[data-germany-item="sitePlan"]')!;
+    assert.deepEqual([lageplan.getAttribute('data-germany-drawn'), lageplan.getAttribute('data-germany-sheet'), lageplan.getAttribute('data-germany-state')], ['false', 'true', 'no']);
+    assert.match(lageplan.textContent ?? '', /To add.*Sheet made; its content is to be added/s);
+    assert.doesNotMatch(lageplan.textContent ?? '', /Drawn from the model/);
     for (const id of ['scaleBar', 'pdfA', 'oneFile', 'fileName', 'designer', 'useCalculation']) assert.equal(ui.querySelector(`[data-germany-item="${id}"]`)?.getAttribute('data-germany-drawn'), 'false', id);
     assert.match(ui.querySelector('[data-germany-item="pdfA"]')?.textContent ?? '', /DBauV § 11/);
   });
 
   it('keeps the pack and the Land in the project file: saved, reopened, and off saved as absent', () => {
-    setGermanyPermit(true);
+    setPermitPack('germany');
     setGermanyLand('nrw');
     const saved = serializeProject(projectDocument());
     assert.deepEqual([JSON.parse(saved).germanyPermit, JSON.parse(saved).germanyLand], [true, 'nrw']);
@@ -117,9 +122,9 @@ describe('the Germany mode', () => {
     resetProject();
     useProjectStore.setState({ germanyPermit: loaded.germanyPermit, germanyLand: loaded.germanyLand });
     const ui = mount();
-    assert.equal((ui.querySelector('[data-germany-switch]') as HTMLInputElement).checked, true);
+    assert.equal(ui.querySelectorAll('[data-germany-item]').length > 0, true);
     assert.equal((ui.querySelector('[data-germany-land]') as HTMLSelectElement).value, 'nrw');
-    setGermanyPermit(false);
+    setPermitPack('pacFull');
     setGermanyLand(undefined);
     const off = JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>;
     assert.deepEqual(['germanyPermit' in off, 'germanyLand' in off], [false, false]);
@@ -130,26 +135,23 @@ describe('the Germany mode', () => {
   it('is one choice with the other packs: turning one on turns the others off, in any order', () => {
     const fields = () => { const s = useProjectStore.getState(); return [s.pacMode, s.norwayPermit, s.germanyPermit]; };
     setPermitPack('pacRural');
-    setGermanyPermit(true);
+    setPermitPack('germany');
     assert.deepEqual(fields(), [undefined, undefined, true]);
-    setNorwayPermit(true);
+    setPermitPack('norway');
     assert.deepEqual(fields(), [undefined, true, undefined]);
-    setGermanyPermit(true);
+    setPermitPack('germany');
     assert.deepEqual(fields(), [undefined, undefined, true]);
     setPacMode('rural');
     assert.deepEqual(fields(), ['rural', undefined, undefined]);
-    setGermanyPermit(true);
+    setPermitPack('germany');
     setPacMode('full');
     assert.deepEqual(fields(), [undefined, undefined, undefined]);
-    setPacMode('rural');
-    setGermanyPermit(false);
-    assert.equal(useProjectStore.getState().pacMode, 'rural', 'switching Germany off leaves the rural pack alone');
   });
 
   it('keeps the Land when the pack is switched off and on again, and reads a file that holds several packs as Norway first, then Germany', () => {
-    setGermanyPermit(true);
+    setPermitPack('germany');
     setGermanyLand('bw');
-    setGermanyPermit(false);
+    setPermitPack('pacFull');
     assert.equal(useProjectStore.getState().germanyLand, 'bw');
     const both = { ...JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>, germanyPermit: true, norwayPermit: true, pacMode: 'rural' };
     assert.equal(permitPackOf(parseProjectFile(JSON.stringify(both))), 'norway');
@@ -170,7 +172,7 @@ describe('the Germany mode', () => {
     }
     registerLocale('ro', checkCatalogue(ro).catalogue);
     act(() => setLocale('ro'));
-    setGermanyPermit(true);
+    setPermitPack('germany');
     setGermanyLand('bayern');
     const ui = mount();
     assert.match(ui.textContent ?? '', /Planurile tuturor nivelurilor/);
@@ -179,7 +181,8 @@ describe('the Germany mode', () => {
 
   it('names the Lageplan and the Abstandsflächenplan sheets with the official German term, and the scale only in the notes', () => {
     assert.equal(germanyEn['germany.set.site'], 'Site plan (Lageplan)');
-    assert.equal(germanyEn['germany.set.setback'], 'Setback areas plan (Abstandsflächenplan)');
+    assert.equal(germanyEn['germany.set.setback'], 'Abstandsflächenplan');
+    assert.equal(germanyRo['germany.set.setback'], 'Abstandsflächenplan');
     assert.equal(germanyRo['germany.set.site'], 'Plan de situație (Lageplan)');
     for (const c of [germanyEn, germanyRo] as Record<string, string>[]) {
       assert.doesNotMatch(c['germany.set.site'], /1:\d/);

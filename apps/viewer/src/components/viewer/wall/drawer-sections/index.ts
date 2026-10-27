@@ -18,6 +18,7 @@ import { materialsSection } from './materials';
 import { norwaySection } from './norway';
 import { numberingSection } from './numbering';
 import { pacSection } from './pac';
+import { permitPackSection } from './permit-pack';
 import { readinessSection } from './readiness';
 import { schedulesSection } from './schedules';
 import { sheetsSection } from './sheets';
@@ -39,6 +40,7 @@ export const DRAWER_SECTIONS: readonly DrawerSection[] = [
   norwaySection,
   numberingSection,
   pacSection,
+  permitPackSection,
   readinessSection,
   schedulesSection,
   sheetsSection,
