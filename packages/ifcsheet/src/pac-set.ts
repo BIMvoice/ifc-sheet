@@ -44,6 +44,11 @@ export type PacIntervention = 'new' | 'existing' | 'interior';
 export const PAC_INTERVENTIONS: readonly PacIntervention[] = ['new', 'existing', 'interior'];
 export const PAC_DEFAULT_INTERVENTION: PacIntervention = 'new';
 
+/** Which permit project a project makes: the full one (Anexa 2) or the simplified one for a rural house (Anexa 3). Absent in a project file: full. */
+export type PacMode = 'full' | 'rural';
+export const PAC_MODES: readonly PacMode[] = ['full', 'rural'];
+export const PAC_DEFAULT_MODE: PacMode = 'full';
+
 /** How an Anexa 2 item reaches the filing. */
 export type PacKind = 'drawing' | 'written' | 'existingBuilding';
 
@@ -155,14 +160,14 @@ export function pacApplies(item: Pick<PacItem, 'kind' | 'notForInterior'>, inter
  * "Planurile tuturor nivelurilor" (1.4.3 a) is held only when EVERY storey of the building has a plan placed on a sheet;
  * otherwise `missingStoreys` names the ones that have not.
  */
-export function pacCoverage(sheets: readonly PacCoverageSheet[], context: PacCoverageContext): PacCoverageRow[] {
+export function pacCoverage(sheets: readonly PacCoverageSheet[], context: PacCoverageContext, items: readonly PacItem[] = PAC_ITEMS): PacCoverageRow[] {
   const intervention = context.intervention ?? PAC_DEFAULT_INTERVENTION;
   const placed = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const storeys = allPlans(context.views);
   const missingStoreys = storeys.filter((plan) => !context.views.some((v) => v.kind === 'plan' && !v.site && !v.detail && !v.discipline && !v.reflected && sameElevation(v.level.elevation, plan.level.elevation) && placed.has(v.id))).map((plan) => plan.level.name);
-  return PAC_ITEMS.map((item): PacCoverageRow => {
+  return items.map((item): PacCoverageRow => {
     if (!pacApplies(item, intervention)) return { item, state: 'na', drawn: false, missingStoreys: [] };
-    if (item.id === 'plans') {
+    if (item.drawnBy === 'plans') {
       const state: PacState = storeys.length > 0 && missingStoreys.length === 0 ? 'yes' : 'no';
       return { item, state, drawn: state === 'yes', missingStoreys };
     }

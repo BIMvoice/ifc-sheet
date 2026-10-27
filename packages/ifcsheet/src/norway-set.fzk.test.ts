@@ -18,8 +18,9 @@ const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.met
 const missing = !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
 if (missing) console.warn(`[ifcsheet] skipping the Norway set test: ${missing}`);
 
-const NOTE = 'scale not set by regulation; 1:500 is usual';
-const NAMES = { name: 'Norway', plans: 'Floor plans', sections: 'Sections', facades: 'Facades', site: `Site plan (situasjonsplan), ${NOTE}` };
+const SCALE_NOTE = 'Scale 1:500 is usual; the regulation sets none.';
+const TO_ADD_NOTE = 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng), with a north arrow and a scale bar.';
+const NAMES = { name: 'Norway', plans: 'Floor plans', sections: 'Sections', facades: 'Facades', site: 'Site plan (situasjonsplan)', siteNotes: [SCALE_NOTE, TO_ADD_NOTE] };
 
 it('has the committed AC20-FZK-Haus fixture', () => {
   expect(existsSync(FZK), `${FZK} is committed; a missing file is a broken checkout`).toBe(true);
@@ -27,16 +28,19 @@ it('has the committed AC20-FZK-Haus fixture', () => {
 
 describe('the checklist', () => {
   it('lists exactly these items, with their status and scale', () => {
-    expect(NORWAY_ITEMS.map((i) => [i.id, i.status, i.scale, i.drawnBy])).toEqual([
-      ['plans', 'read', 100, 'plans'],
-      ['sections', 'read', 100, 'sections'],
-      ['facades', 'read', 100, 'elevations'],
-      ['mainDimensions', 'read', null, null],
-      ['sitePlan', 'unverified', 500, 'site'],
-      ['siteDistances', 'read', null, null],
-      ['terrainLines', 'read', null, null],
-      ['neighbourNotice', 'read', null, null],
-      ['eaveRidgeHeights', 'unverified', null, null],
+    expect(NORWAY_ITEMS.map((i) => [i.id, i.status, i.scale, i.scaleStatus, i.drawnBy])).toEqual([
+      ['plans', 'read', 100, 'read', 'plans'],
+      ['roomUse', 'read', null, null, null],
+      ['sections', 'read', 100, 'read', 'sections'],
+      ['floorHeights', 'read', null, null, null],
+      ['facades', 'read', 100, 'read', 'elevations'],
+      ['facadeTerrain', 'read', null, null, null],
+      ['mainDimensions', 'read', null, null, null],
+      ['sitePlan', 'read', 500, 'unverified', 'site'],
+      ['siteDistances', 'read', null, null, null],
+      ['terrainLines', 'read', null, null, null],
+      ['neighbourNotice', 'read', null, null, null],
+      ['eaveRidgeHeights', 'unverified', null, null, null],
     ]);
   });
 
@@ -58,6 +62,8 @@ describe('the template file', () => {
       ['Facades', [['elevation', 100], ['elevation', 100], ['elevation', 100], ['elevation', 100]]],
       [NAMES.site, [['site', 500]]],
     ]);
+    expect(template.sheets[3].notes).toEqual([SCALE_NOTE, TO_ADD_NOTE]);
+    expect(template.sheets.slice(0, 3).every((s) => s.notes === undefined)).toBe(true);
   });
 });
 
@@ -94,13 +100,17 @@ describe.skipIf(missing !== null)('the Norway set of AC20-FZK-Haus', () => {
     expect(viewsOf('Sections').every((v) => v.kind === 'section')).toBe(true);
   });
 
-  it('puts the site plan, cut on the ground storey, on its own sheet at 1:500, with the note in the sheet name', () => {
+  it('puts the site plan, cut on the ground storey, on its own sheet at 1:500, named plainly, with the notes printed on the sheet', () => {
     const [site] = viewsOf(NAMES.site);
     expect(viewsOf(NAMES.site).length).toBe(1);
     expect(site.kind === 'plan' && site.site).toBe(true);
     expect(site.scale).toBe(500);
     expect(sheet(NAMES.site).viewports?.[0].scale).toBe(500);
-    expect(NAMES.site).toContain('1:500 is usual');
+    expect(sheet(NAMES.site).name).toBe('Site plan (situasjonsplan)');
+    expect(sheet(NAMES.site).notes).toEqual([SCALE_NOTE, TO_ADD_NOTE]);
+    // The notes are on the sheet, not in the name the title block and the drawing list print.
+    expect(set.document.sheets.map((s) => s.name).join('|')).not.toContain('1:500');
+    expect(sheet('Floor plans').notes).toBeUndefined();
     expect(sheet(NAMES.site).series).toBe('plans');
     // The site plan is not one of the floor plans.
     expect(viewsOf('Floor plans').some((v) => v.kind === 'plan' && v.site)).toBe(false);
@@ -108,7 +118,9 @@ describe.skipIf(missing !== null)('the Norway set of AC20-FZK-Haus', () => {
 
   it('marks plans, sections, facades and the site plan drawn, and the rest to be supplied', () => {
     const rows = norwayCoverage(set.document.sheets, set.document.views);
+    // Only the views are drawn: room use, floor heights, terrain, the plot and the distances are for the person to add.
     expect(rows.filter((r) => r.drawn).map((r) => r.item.id)).toEqual(['plans', 'sections', 'facades', 'sitePlan']);
+    expect(rows.filter((r) => !r.drawn).map((r) => r.item.id)).toEqual(['roomUse', 'floorHeights', 'facadeTerrain', 'mainDimensions', 'siteDistances', 'terrainLines', 'neighbourNotice', 'eaveRidgeHeights']);
     expect(rows.every((r) => r.missingStoreys.length === 0)).toBe(true);
     expect(norwayCoverage([], set.document.views).some((r) => r.drawn)).toBe(false);
   });

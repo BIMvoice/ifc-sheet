@@ -10,7 +10,8 @@
 
 import type { ProjectDocument } from './document.js';
 import type { SetTemplate } from './set-template.js';
-import { pacSetTemplate, type PacIntervention } from './pac-set.js';
+import { pacSetTemplate, type PacIntervention, type PacMode } from './pac-set.js';
+import { pacRuralSetTemplate } from './pac-rural-set.js';
 import { pacSubmissionSheets } from './pac-submission.js';
 import { pacWordsFor } from './pac-words.js';
 import type { SheetGraphic } from './sheet-graphic.js';
@@ -18,14 +19,18 @@ import type { SheetGraphic } from './sheet-graphic.js';
 /** The language of the PAC words when `--locale` is not given: the permit is Romanian. */
 export const PAC_DEFAULT_LOCALE = 'ro';
 
-/** The set template that draws the PAC architecture sheets, named in `locale`. */
-export function pacTemplateFor(locale: string): SetTemplate {
+/** The set template that draws the PAC architecture sheets, named in `locale`: Anexa 2's, or for `rural` the simplified Anexa 3's (1:50, A3 stepping up). */
+export function pacTemplateFor(locale: string, mode: PacMode = 'full'): SetTemplate {
   const w = pacWordsFor(locale);
-  return pacSetTemplate({ name: w['pac.set.name'], plans: w['pac.set.plans'], facades: w['pac.set.facades'], sections: w['pac.set.sections'] });
+  return (mode === 'rural' ? pacRuralSetTemplate : pacSetTemplate)({ name: w['pac.set.name'], plans: w['pac.set.plans'], facades: w['pac.set.facades'], sections: w['pac.set.sections'] });
 }
 
-/** The pages of the submission: the opis, then the sheets of `set` as drawn. The opis is the one the app's issued PDF has (`pacOpisOf`). */
-export function pacPages(sheets: readonly SheetGraphic[], set: { document: ProjectDocument }, locale: string, intervention?: PacIntervention): SheetGraphic[] {
+/**
+ * The pages of the submission: the opis, then the sheets of `set` as drawn. The opis is the one the app's issued PDF has (`pacOpisOf`).
+ * The opis lists Anexa 2's contents, so a `rural` project (Anexa 3) has none, as in the app: its pages are the sheets.
+ */
+export function pacPages(sheets: readonly SheetGraphic[], set: { document: ProjectDocument }, locale: string, intervention?: PacIntervention, mode: PacMode = 'full'): SheetGraphic[] {
+  if (mode === 'rural') return [...sheets];
   const drawn = new Set(sheets.map((s) => s.sheetId));
   const { document } = set;
   return pacSubmissionSheets(sheets, { name: document.name, sheets: document.sheets.filter((s) => drawn.has(s.id)), views: document.views, titleBlock: document.titleBlock, intervention }, locale);

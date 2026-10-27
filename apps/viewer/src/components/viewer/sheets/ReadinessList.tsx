@@ -15,9 +15,11 @@ import { describeEffect, describeMissing } from '@/check/readiness-say';
 import { modelReadiness, type ModelFacts } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
-import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import { boqMissing } from '@bimvoice/ifcsheet';
+import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
+import { useUrbanIndicators } from '../urban/useUrban';
 import { sheetTitleBlockMisfits } from '@/check/title-block-fit';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { useBoqArticles, useBoqResult } from '../boq/useBoq';
@@ -57,14 +59,18 @@ function useModelReadiness() {
     () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated }),
     [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated],
   );
+  // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
+  const rural = useProjectStore((s) => permitPackOf(s) === 'pacRural');
+  const urban = useUrbanIndicators(rural);
+  const scope = rural && urban ? ruralScopeOf(urban.result) : undefined;
   return useMemo(() => {
     void mutationVersion; // an edit can add or remove what the facts count
     // A schedule split into parts must list every element once: the same check the card on the Wall shows.
     if (models.size === 0 && misfits.length === 0) return null;
     const checks = subReportChecks(schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(boqResult), misfits), owners };
-  }, [misfits, models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult]);
+    return { findings: modelReadiness(models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(boqResult), misfits, scope), owners };
+  }, [misfits, models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, scope?.levels, scope?.sd, scope?.sdAtLeast]);
 }
 
 /** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */

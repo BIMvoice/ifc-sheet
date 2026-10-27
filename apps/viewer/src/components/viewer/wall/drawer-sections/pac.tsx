@@ -3,10 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { useState } from 'react';
-import { PAC_INTERVENTIONS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
+import { PAC_INTERVENTIONS, PAC_RURAL_ITEMS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
 import { deliver, runIssue } from '@/issue/run';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { setPacIntervention, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
+import { ruralScopeFindings } from '@/check/rural-scope';
+import { describeMissing } from '@/check/readiness-say';
+import { useUrbanIndicators } from '../../urban/useUrban';
 import type { DrawerSection } from './types';
 
 const KINDS: readonly PacKind[] = ['drawing', 'written', 'existingBuilding'];
@@ -18,9 +21,14 @@ const scaleList = (scales: readonly number[], locale: string): string => scales.
 function Pac() {
   const { t, locale } = useTranslation();
   const sheets = useProjectStore((s) => s.sheets);
+  const pack = useProjectStore((s) => permitPackOf(s));
+  const rural = pack === 'pacRural';
   const views = useProjectStore((s) => s.views);
   const intervention = useProjectStore((s) => s.pacIntervention) ?? 'new';
-  const rows = pacCoverage(sheets, { views, intervention });
+  const rows = rural ? pacCoverage(sheets, { views, intervention }, PAC_RURAL_ITEMS) : pacCoverage(sheets, { views, intervention });
+  // Anexa 3's scope (P + M, 150 m² Sd) against the model: measured only in that mode, read again as the model changes. The same findings are in the readiness list.
+  const urban = useUrbanIndicators(rural);
+  const outside = rural && urban ? ruralScopeFindings(urban.result) : [];
   const [status, setStatus] = useState<string | null>(null);
   const submit = () => {
     setStatus(t('pac.submit.working'));
@@ -32,7 +40,17 @@ function Pac() {
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" aria-label={t('pac.title')}>
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('pac.title')}</h3>
-      <p className="m-0 mb-2 text-xs text-sky-100/80">{t('pac.intro')}</p>
+      <fieldset aria-label={t('pac.mode.label')} className="m-0 mb-2 flex min-w-0 flex-wrap gap-1 border-0 p-0">
+        {([false, true] as const).map((mode) => (
+          <button key={String(mode)} type="button" aria-pressed={pack === (mode ? 'pacRural' : 'pacFull')} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setPacMode(mode ? 'rural' : 'full')} className={`rounded-full border px-2 py-0.5 text-2xs ${pack === (mode ? 'pacRural' : 'pacFull') ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
+        ))}
+      </fieldset>
+      {outside.length > 0 ? (
+        <ul aria-live="polite" data-pac-scope="" className="m-0 mb-2 list-none p-0 text-xs text-amber-200">
+          {outside.map((f) => <li key={f.kind}>{describeMissing(f)}</li>)}
+        </ul>
+      ) : null}
+      <p className="m-0 mb-2 text-xs text-sky-100/80">{t(rural ? 'pac.rural.intro' : 'pac.intro')}</p>
       <label className="mb-2 flex flex-col gap-1 text-xs text-sky-100">
         <span className="font-medium text-white">{t('pac.intervention')}</span>
         <select value={intervention} onChange={(e) => setPacIntervention(PAC_INTERVENTIONS.find((i) => i === e.target.value) ?? 'new')} className="rounded border border-sky-300/30 bg-transparent px-1 py-0.5 text-xs text-white">
@@ -47,8 +65,8 @@ function Pac() {
               <li key={item.id} className="mt-1 text-xs text-sky-100" data-pac-item={item.id} data-pac-drawn={drawn} data-pac-state={state}>
                 <span>{t(`pac.item.${item.id}` as TranslationKey)}</span>
                 <span className="ml-1 text-2xs text-sky-100/60">
-                  {t('pac.point', { point: item.point })}
-                  {kind === 'drawing' ? `; ${item.scales ? t('pac.scales', { list: scaleList(item.scales, locale) }) : t('pac.scales.adequate')}` : ''}
+                  {t(rural ? 'pac.rural.point' : 'pac.point', { point: item.point })}
+                  {kind === 'drawing' && (item.scales || !rural) ? `; ${item.scales ? t(rural ? 'pac.rural.scales' : 'pac.scales', { list: scaleList(item.scales, locale) }) : t('pac.scales.adequate')}` : ''}
                 </span>
                 <span className={`ml-1 rounded-full px-1.5 py-0.5 text-2xs ${drawn ? 'bg-emerald-400/20 text-emerald-200' : 'bg-sky-400/15 text-sky-100'}`}>{state === 'na' ? t('pac.na') : drawn ? t('pac.drawn') : t('pac.supply')}</span>
                 {missingStoreys.length > 0 ? <span className="mt-0.5 block text-2xs text-amber-200" data-pac-missing>{t('pac.missingLevels', { list: missingStoreys.join(', ') })}</span> : null}
@@ -57,10 +75,14 @@ function Pac() {
           </ul>
         </div>
       ))}
-      <p className="m-0 mt-2 text-2xs text-sky-100/60">{t('pac.notSet')}</p>
-      <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
-      <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
-      {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
+      <p className="m-0 mt-2 text-2xs text-sky-100/60">{t(rural ? 'pac.rural.notSet' : 'pac.notSet')}</p>
+      {rural ? null : (
+        <>
+          <button type="button" data-pac-submit onClick={submit} className="mt-2 rounded border border-sky-300/30 px-2 py-1 text-xs text-white hover:bg-sky-400/15">{t('pac.submit')}</button>
+          <p className="m-0 mt-1 text-2xs text-sky-100/60">{t('pac.submit.hint')}</p>
+          {status ? <output className="m-0 mt-1 block text-2xs text-sky-100">{status}</output> : null}
+        </>
+      )}
     </section>
   );
 }

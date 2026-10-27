@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { NORWAY_ITEMS, generateDefaultSet, norwaySetTemplate, type DefaultSet } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
-import { projectDocument, resetProject, setNorwayPermit, useProjectStore } from '@/project/project-store';
+import { permitPackOf, projectDocument, resetProject, setNorwayPermit, setPacMode, setPermitPack, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
@@ -18,7 +18,7 @@ import { norwaySection } from './norway';
 
 /** The Norway mode (#372): an opt-in project field, a drawer switch "Norge (byggesak)", the checklist with its sources. */
 
-const NAMES = { name: 'Norway', plans: 'Plans', sections: 'Sections', facades: 'Facades', site: 'Site' };
+const NAMES = { name: 'Norway', plans: 'Plans', sections: 'Sections', facades: 'Facades', site: 'Site', siteNotes: ['Scale note', 'To add note'] };
 
 const building = (): DefaultSet => generateDefaultSet({
   storeys: [{ name: 'Ground', elevation: 0, globalId: 'g0' }, { name: 'First', elevation: 3, globalId: 'g1' }],
@@ -51,10 +51,14 @@ describe('the Norway mode', () => {
     assert.equal(useProjectStore.getState().norwayPermit, true);
     assert.equal(ui.querySelectorAll('[data-norway-item]').length, NORWAY_ITEMS.length);
     const row = (id: string) => ui.querySelector(`[data-norway-item="${id}"]`)!;
-    assert.deepEqual(NORWAY_ITEMS.map((i) => row(i.id).getAttribute('data-norway-status')), ['read', 'read', 'read', 'read', 'unverified', 'read', 'read', 'read', 'unverified']);
+    assert.deepEqual(NORWAY_ITEMS.map((i) => row(i.id).getAttribute('data-norway-status')), ['read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'unverified']);
     assert.deepEqual(NORWAY_ITEMS.filter((i) => row(i.id).getAttribute('data-norway-drawn') === 'true').map((i) => i.id), ['plans', 'facades', 'sitePlan']); // the synthetic model offers no section
     assert.match(row('plans').textContent ?? '', /SAK10 § 5-4 \(3\) m.*Drawn at 1:100/);
-    assert.match(row('sitePlan').textContent ?? '', /Drawn at 1:500.*Unverified/);
+    assert.match(row('sitePlan').textContent ?? '', /Drawn at 1:500; the scale is unverified.*Read in the official text/);
+    assert.doesNotMatch(row('sitePlan').textContent ?? '', /Unverified/);
+    // The views are drawn; what they must show is for the person to add.
+    for (const id of ['roomUse', 'floorHeights', 'facadeTerrain', 'mainDimensions', 'siteDistances', 'terrainLines']) assert.equal(row(id).getAttribute('data-norway-drawn'), 'false', id);
+    assert.doesNotMatch(row('plans').textContent ?? '', /room/i);
     assert.match(row('eaveRidgeHeights').textContent ?? '', /not in force.*Unverified/);
     assert.match(ui.textContent ?? '', /1:500 is the usual one and is a default here, not a rule/);
     toggle(ui);
@@ -86,5 +90,50 @@ describe('the Norway mode', () => {
     const ui = mount();
     assert.match(ui.textContent ?? '', /Planurile tuturor nivelurilor/);
     assert.match(ui.textContent ?? '', /Neverificat/);
+  });
+
+  it('is one choice with the PAC modes: turning one on turns the other off, in either order', () => {
+    setPermitPack('pacRural');
+    assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], ['rural', undefined]);
+    setNorwayPermit(true);
+    assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], [undefined, true]);
+    setPacMode('rural');
+    assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], ['rural', undefined]);
+    setNorwayPermit(true);
+    setPacMode('full');
+    assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], [undefined, undefined]);
+    setPacMode('rural');
+    setNorwayPermit(false);
+    assert.equal(useProjectStore.getState().pacMode, 'rural', 'switching Norway off leaves the rural pack alone');
+    const saved = JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>;
+    assert.deepEqual([saved.pacMode, 'norwayPermit' in saved], ['rural', false]);
+  });
+
+  it('switching Norway on in the drawer turns the rural PAC pack off, and the file keeps only Norway', () => {
+    setPacMode('rural');
+    const ui = mount();
+    toggle(ui);
+    const saved = JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>;
+    assert.deepEqual([saved.norwayPermit, 'pacMode' in saved], [true, false]);
+    assert.equal(ui.querySelectorAll('[data-norway-item]').length, NORWAY_ITEMS.length);
+  });
+
+  it('reads a project file that holds both as Norway, and loads old files with either field', () => {
+    const both = { ...JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>, norwayPermit: true, pacMode: 'rural' };
+    const doc = parseProjectFile(JSON.stringify(both));
+    assert.equal(permitPackOf(doc), 'norway');
+    assert.equal(permitPackOf(parseProjectFile(JSON.stringify({ ...both, norwayPermit: undefined }))), 'pacRural');
+    assert.equal(permitPackOf(parseProjectFile(JSON.stringify({ ...both, pacMode: undefined }))), 'norway');
+    assert.equal(permitPackOf(parseProjectFile(JSON.stringify({ ...both, pacMode: undefined, norwayPermit: undefined }))), 'pacFull');
+  });
+
+  it('names the situasjonsplan sheet plainly in both languages; the scale and to-add notes are separate lines', () => {
+    assert.equal(norwayEn['norway.set.site'], 'Site plan (situasjonsplan)');
+    assert.equal(norwayRo['norway.set.site'], 'Plan de situație (situasjonsplan)');
+    for (const c of [norwayEn, norwayRo] as Record<string, string>[]) {
+      assert.doesNotMatch(c['norway.set.site'], /1:500/);
+      assert.match(c['norway.set.siteScale'], /1:500/);
+      assert.match(c['norway.set.siteToAdd'], /tomt, avstander og terreng/);
+    }
   });
 });

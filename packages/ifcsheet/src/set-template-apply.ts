@@ -23,12 +23,15 @@ import { freshProjectId } from './ids.js';
 import { DEFAULT_SCHEME, numberSheets } from './numbering.js';
 import { findAllByRule, ruledViews, RULED_SERIES, type RuledSeries, type SetTemplate, type SheetLayoutRule, type SheetRule, type ViewRule } from './set-template.js';
 import type { TemplateNote } from './set-template-notes.js';
+import { rescaledNote, steppedUpNote } from './sheet-notes.js';
 
 export interface TemplateSetInput {
   views: readonly ProjectView[];
   extent: ModelExtent;
   now?: number;
   scheme?: NumberingScheme;
+  /** The language the notes printed on the sheets are written in ("ro", "en"); default English. */
+  locale?: string;
 }
 
 export interface TemplateSet {
@@ -95,7 +98,11 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
   const scale = scaleOn(sizes, start, wanted);
   if (wanted !== undefined && scale !== wanted) notes.push({ key: 'setTemplate.note.rescaled', params: { sheet: rule.name, wanted, used: scale } });
   const viewports: SheetViewport[] = placeViewports(members, sizes, scale, start, input.extent);
-  return { id: freshProjectId('sheet'), number: '', series: rule.series, name: rule.name, createdAt: input.now ?? Date.now(), ...start, viewports };
+  // Said on the sheet itself as well: a person holding the paper cannot see the report.
+  const printed: string[] = [...(rule.notes ?? [])];
+  if (wanted !== undefined && typeof start.paper === 'string' && typeof rule.layout.paper === 'string' && start.paper !== rule.layout.paper) printed.push(steppedUpNote(input.locale, rule.layout.paper, start.paper, wanted));
+  if (wanted !== undefined && scale !== wanted && typeof start.paper === 'string') printed.push(rescaledNote(input.locale, start.paper, wanted, scale));
+  return { id: freshProjectId('sheet'), number: '', series: rule.series, name: rule.name, createdAt: input.now ?? Date.now(), ...start, viewports, ...(printed.length > 0 ? { notes: printed } : {}) };
 }
 
 /**

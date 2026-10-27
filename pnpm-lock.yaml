@@ -1475,6 +1475,9 @@ importers:
       '@ifc-lite/rules':
         specifier: workspace:^
         version: link:../rules
+      '@ifc-lite/wasm':
+        specifier: workspace:^
+        version: link:../wasm
       fflate:
         specifier: ^0.8.3
         version: 0.8.3

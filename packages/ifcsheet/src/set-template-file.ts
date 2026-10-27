@@ -86,7 +86,8 @@ function readSheetRule(v: unknown, path: string): SheetRule {
   const series = RULED_SERIES.find((s) => s === o.series) ?? fail(`${path}/series`, 'must be plans, elevations or sections');
   const slots = listAt(o.slots, `${path}/slots`, readSlot);
   if (slots.length === 0) fail(`${path}/slots`, 'must hold at least one slot');
-  return { name: textAt(o.name, `${path}/name`), series, layout: readLayout(o.layout, `${path}/layout`), slots };
+  const notes = listAt(o.notes, `${path}/notes`, (n, at) => textAt(n, at));
+  return { name: textAt(o.name, `${path}/name`), series, layout: readLayout(o.layout, `${path}/layout`), slots, ...(notes.length > 0 ? { notes } : {}) };
 }
 
 function readScheduleRule(v: unknown, path: string): ScheduleRule {

@@ -67,6 +67,8 @@ export interface SheetRule {
   series: RuledSeries;
   layout: SheetLayoutRule;
   slots: SlotRule[];
+  /** Lines the sheet prints on itself (`ProjectSheet.notes`), fixed text in the language of whoever laid the set out; they come before the paper and scale notes. */
+  notes?: string[];
 }
 
 /** A schedule the set carries, by kind, on a sheet of the schedules series. */

@@ -12,7 +12,7 @@
  *     "Steg 4", READ). The set draws them at 1:100; a building that does not fit the paper at 1:100 is rescaled and said,
  *     as for every set template.
  *   - the situasjonsplan: SAK10 § 5-4 requires it ("målsatt situasjonsplan", READ) but NO scale is stated on the official
- *     pages read, so the scale is UNVERIFIED. The set draws it at 1:500, which a municipal guide calls usual (not a
+ *     pages read, so only the scale is UNVERIFIED (`scaleStatus`); the duty itself is READ. The set draws it at 1:500, which a municipal guide calls usual (not a
  *     source), and the sheet says so (`NORWAY_SITE_SCALE`).
  *   - The drawings are produced from the model; the written application and the BIM delivery (ByggesaksBIM) are not part
  *     of this set.
@@ -45,6 +45,8 @@ export interface NorwayItem {
   status: NorwayStatus;
   /** The scale (100 for 1:100) the set draws it at; null for what is not a scaled sheet. */
   scale: number | null;
+  /** How well the research backs the SCALE, apart from the duty itself (`status`); null when there is no scale. */
+  scaleStatus: NorwayStatus | null;
   drawnBy: NorwayDrawnBy;
 }
 
@@ -52,31 +54,39 @@ export interface NorwayItem {
 export const NORWAY_ITEMS: readonly NorwayItem[] = [
   // SAK10 § 5-4 third paragraph letter m: "tegninger og målsatt situasjonsplan" (READ, lovdata.no). The first paragraph
   // of § 5-4 makes each item apply only where relevant and necessary for the case.
-  { id: 'plans', source: 'SAK10 § 5-4 (3) m; DiBK guidance to § 5-4 and "Steg 4": one plan per floor, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, drawnBy: 'plans' },
-  { id: 'sections', source: 'DiBK guidance to § 5-4 and "Steg 4": lengthwise and crosswise, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, drawnBy: 'sections' },
-  { id: 'facades', source: 'DiBK "Steg 4": all sides of the building, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, drawnBy: 'elevations' },
+  // The three views are drawn from the model; what DiBK says they must SHOW (room use, floor heights, terrain) is not, and is
+  // its own item below, so a view on a sheet never reads as that content being there.
+  { id: 'plans', source: 'SAK10 § 5-4 (3) m; DiBK guidance to § 5-4 and "Steg 4": one plan per floor, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, scaleStatus: 'read', drawnBy: 'plans' },
+  { id: 'roomUse', source: 'DiBK guidance to § 5-4 and "Steg 4": room sizes and intended use of each room on the plans', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
+  { id: 'sections', source: 'DiBK guidance to § 5-4 and "Steg 4": lengthwise and crosswise, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, scaleStatus: 'read', drawnBy: 'sections' },
+  { id: 'floorHeights', source: 'DiBK guidance to § 5-4 and "Steg 4": the height of each floor on the sections', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
+  { id: 'facades', source: 'DiBK "Steg 4": all sides of the building, scale 1:100', status: 'read', scale: NORWAY_DRAWING_SCALE, scaleStatus: 'read', drawnBy: 'elevations' },
+  { id: 'facadeTerrain', source: 'DiBK "Steg 4": the terrain around the building before and after the work on the facades', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
   // "Hovedmål på tiltaket må påføres planer og snitt" (DiBK guidance to § 5-4, READ).
-  { id: 'mainDimensions', source: 'DiBK guidance to § 5-4: "Hovedmål på tiltaket må påføres planer og snitt"', status: 'read', scale: null, drawnBy: null },
-  // "målsatt situasjonsplan" is READ; its scale is not (see NORWAY_SITE_SCALE).
-  { id: 'sitePlan', source: 'SAK10 § 5-4 (3) m: "målsatt situasjonsplan"; scale not stated', status: 'unverified', scale: NORWAY_SITE_SCALE, drawnBy: 'site' },
+  { id: 'mainDimensions', source: 'DiBK guidance to § 5-4: "Hovedmål på tiltaket må påføres planer og snitt"', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
+  // "målsatt situasjonsplan" is a READ legal duty; only its scale is not (see NORWAY_SITE_SCALE), hence `scaleStatus`.
+  // The sheet is the ground storey's cut: the plot, the distances and the terrain are the items that follow.
+  { id: 'sitePlan', source: 'SAK10 § 5-4 (3) m: "målsatt situasjonsplan"; scale not stated', status: 'read', scale: NORWAY_SITE_SCALE, scaleStatus: 'unverified', drawnBy: 'site' },
   // Letters i and j of § 5-4 third paragraph, and "Minste avstand til eiendomsgrense og senterlinje vei må påføres" (DiBK guidance, READ).
-  { id: 'siteDistances', source: 'SAK10 § 5-4 (3) i, j; DiBK guidance to § 5-4: shortest distance to property boundary, road centreline, nearest building on the property and nearest neighbouring building', status: 'read', scale: null, drawnBy: null },
-  // "nye terrenglinjer" on the site plan, and the terrain before and after on the facades (DiBK "Steg 4", READ).
-  { id: 'terrainLines', source: 'DiBK guidance to § 5-4 and "Steg 4": new terrain lines on the site plan, terrain before and after on the facades', status: 'read', scale: null, drawnBy: null },
+  { id: 'siteDistances', source: 'SAK10 § 5-4 (3) i, j; DiBK guidance to § 5-4: shortest distance to property boundary, road centreline, nearest building on the property and nearest neighbouring building', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
+  // "nye terrenglinjer" on the site plan (DiBK "Steg 4", READ).
+  { id: 'terrainLines', source: 'DiBK guidance to § 5-4 and "Steg 4": new terrain lines on the site plan', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
   // Neighbour notification: "Målsatt situasjonsplan, snitt- og fasadetegninger skal vedlegges varselet" (SAK10 § 5-2 (2), READ).
-  { id: 'neighbourNotice', source: 'SAK10 § 5-2 (2): site plan, sections and facades attached to the neighbour notification', status: 'read', scale: null, drawnBy: null },
+  { id: 'neighbourNotice', source: 'SAK10 § 5-2 (2): site plan, sections and facades attached to the neighbour notification', status: 'read', scale: null, scaleStatus: null, drawnBy: null },
   // Eave and ridge height as mandatory drawing annotations: the DiBK pages read do not name them; only the draft §§ 5-9/5-10 (not in force) list them.
-  { id: 'eaveRidgeHeights', source: 'only the draft §§ 5-9/5-10 (consultation 2026, not in force); not on the DiBK pages read', status: 'unverified', scale: null, drawnBy: null },
+  { id: 'eaveRidgeHeights', source: 'only the draft §§ 5-9/5-10 (consultation 2026, not in force); not on the DiBK pages read', status: 'unverified', scale: null, scaleStatus: null, drawnBy: null },
 ];
 
-/** The names the Norway sheets carry, in the language of the caller; the site sheet's name includes the scale note. */
+/** The names and notes the Norway sheets carry, in the language of the caller. */
 export interface NorwaySheetNames {
   name: string;
   plans: string;
   sections: string;
   facades: string;
-  /** The situasjonsplan, with the note that its scale is not set by the regulation and 1:500 is usual. */
+  /** The situasjonsplan; its name only, the notes are `siteNotes`. */
   site: string;
+  /** Lines the situasjonsplan prints on itself: that its scale is not set by the regulation and 1:500 is usual, and what the person still has to draw in. */
+  siteNotes: string[];
 }
 
 /**
@@ -96,7 +106,7 @@ export function norwaySetTemplate(names: NorwaySheetNames): SetTemplate {
       { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'allPlans' }, scale }] },
       { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 }, scale }, { view: { kind: 'section', place: 1 }, scale }] },
       { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction }, scale })) },
-      { name: names.site, series: 'plans', layout, slots: [{ view: { kind: 'site' }, scale: NORWAY_SITE_SCALE }] },
+      { name: names.site, series: 'plans', layout, slots: [{ view: { kind: 'site' }, scale: NORWAY_SITE_SCALE }], notes: [...names.siteNotes] },
     ],
   };
 }
