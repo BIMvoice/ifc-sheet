@@ -23,6 +23,7 @@ import {
   DOCUMENT_ID, DRY_RUN, dryPrefix, extentOf, findSheet, findView, invalid, optBoolean, optChoice, optNumber, optText, sheetListing, sheetsOf, text, workingEntry,
 } from './ifcsheet-shared.js';
 import type { Tool } from './types.js';
+import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { okResult } from './util.js';
 
 const sheetsPatch = (doc: ProjectDocument, sheets: ProjectSheet[]): ProjectDocument => ({ ...doc, sheets });
@@ -236,3 +237,5 @@ export const ifcsheetRenumber: Tool = {
 };
 
 export const ifcsheetEditTools: Tool[] = [ifcsheetListSheets, ifcsheetAddView, ifcsheetPlaceView, ifcsheetSetTitleBlock, ifcsheetRenumber];
+
+export const toolGroup: ToolGroup = { order: 20, tools: ifcsheetEditTools };

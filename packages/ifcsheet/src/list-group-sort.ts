@@ -9,7 +9,7 @@
  * in agreement) without a component → lib layer inversion.
  */
 
-import { groupPathKey, type CellValue } from '@ifc-lite/lists';
+import { compareQuantities, groupPathKey, tallies, tallyTotals, tallyValue, type CellValue, type SumTally } from '@ifc-lite/lists';
 
 /** Null-first, numbers-numeric, everything-else locale-compared. */
 export function compareCells(a: CellValue, b: CellValue): number {
@@ -29,7 +29,7 @@ export type GroupOrder = 'count' | 'label';
 
 /** Minimal shape `orderGroups` needs — the group header's raw value (for the
  *  group-by column), row count, and per-column subtotals. */
-export interface OrderableGroup { label: string; raw: CellValue; count: number; sums: Record<string, number> }
+export interface OrderableGroup { label: string; raw: CellValue; count: number; sums: Record<string, number | null> }
 
 /** A bucketed group plus the member rows that fed it (row type is the
  *  caller's — `ListRow` for the table, `ListRow` projected to values by the
@@ -48,22 +48,22 @@ export function buildGroupBuckets<R>(
   getSumValue: (row: R, idx: number) => CellValue,
   formatLabel: (cell: CellValue) => string,
 ): Map<string, GroupBucket<R>> {
-  const zero = (): Record<string, number> => Object.fromEntries(sums.map((s) => [s.id, 0]));
   const byKey = new Map<string, GroupBucket<R>>();
+  const running = new Map<string, Record<string, SumTally>>();
   for (const row of rows) {
     const cell = getGroupCell(row);
     const isNone = cell === null || cell === undefined || cell === '';
     const raw: CellValue = isNone ? null : cell;
     const label = isNone ? '(none)' : formatLabel(cell);
     let g = byKey.get(label);
-    if (!g) { g = { key: label, label, raw, count: 0, sums: zero(), rows: [] }; byKey.set(label, g); }
+    if (!g) { g = { key: label, label, raw, count: 0, sums: {}, rows: [] }; byKey.set(label, g); running.set(label, tallies(sums.map((s) => s.id))); }
     g.count++;
     g.rows.push(row);
-    for (const s of sums) {
-      const v = getSumValue(row, s.idx);
-      if (typeof v === 'number' && Number.isFinite(v)) g.sums[s.id] += v;
-    }
+    const t = running.get(label)!;
+    for (const s of sums) tallyValue(t[s.id], getSumValue(row, s.idx));
   }
+  // A group none of whose rows states the quantity has no sum (null), not 0 (#411).
+  for (const [label, g] of byKey) g.sums = tallyTotals(running.get(label)!);
   return byKey;
 }
 
@@ -141,7 +141,7 @@ export function orderGroups<T extends OrderableGroup>(
   }
   const summed = sums.find((s) => s.idx === sort.colIdx);
   if (summed) {
-    return groups.sort((a, b) => ((a.sums[summed.id] - b.sums[summed.id]) || a.label.localeCompare(b.label)) * dir);
+    return groups.sort((a, b) => (compareQuantities(a.sums[summed.id], b.sums[summed.id]) || a.label.localeCompare(b.label)) * dir);
   }
   // A non-group, non-summed column has no group-level value to order by.
   return groups.sort(byCount);

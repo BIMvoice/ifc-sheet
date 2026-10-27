@@ -34,6 +34,7 @@ export const ENGINE_NAMES_EN = {
   'names.sheet.sectionsN': 'Sections {n}',
   'names.sheet.schedules': 'Schedules',
   'names.view.plan': 'Plan',
+  'names.view.site': 'Site plan',
   'names.view.north': 'North Elevation',
   'names.view.east': 'East Elevation',
   'names.view.south': 'South Elevation',

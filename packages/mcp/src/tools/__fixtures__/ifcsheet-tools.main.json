@@ -1,0 +1,807 @@
+[
+ {
+  "name": "ifcsheet_open_model",
+  "description": "Open an IFC or IFCX model for drawing-set work (the format is read from the content): parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "file_path": {
+     "type": "string",
+     "description": "Path to an .ifc or .ifcx file on the server (must be inside the allowed paths). Give this or ifc_base64."
+    },
+    "ifc_base64": {
+     "type": "string",
+     "description": "The .ifc file's bytes, base64-encoded. Give this or file_path."
+    },
+    "name": {
+     "type": "string",
+     "description": "A display name for the model when ifc_base64 is used. Default \"model.ifc\"."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_generate_set",
+  "description": "Lay out the default drawing set of an opened model: a floor plan per storey, elevations, and proposed sections, hung on numbered sheets (A-101 plans, A-201/A-202 elevations, A-301 sections). Returns document_id (pass it to ifcsheet_export_pdf), the sheets (number, name, paper, the views on each), the views (kind, level), and the full project document as JSON. Fails if the model has no geometry.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or ifc_base64."
+    },
+    "ifc_base64": {
+     "type": "string",
+     "description": "The .ifc file's bytes, base64: opens the model and lays out its set in this one call (the way to use the hosted endpoint, which keeps nothing between requests). Give this or model_id."
+    },
+    "name": {
+     "type": "string",
+     "description": "Project name printed in the title blocks. Default: the model's project name."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_export_pdf",
+  "description": "Write a generated drawing set as one PDF, a page per sheet at true scale. Give file_path to write the file on the server and get back the path, page count and size; omit file_path to get the PDF as base64 in the result instead.",
+  "scope": "export",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set."
+    },
+    "file_path": {
+     "type": "string",
+     "description": "Where to write the .pdf (must be inside the allowed paths; missing folders are created). Omit to receive base64 bytes in pdf_base64."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_check_readiness",
+  "description": "Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model. Optionally also reads a saved IfcSheet project (project_path, or project_json with the file's text): then a schedule split into parts is checked as the app checks it, for an element listed in more than one part or in none (kinds subReportDuplicates and subReportGaps), using the project's joinery catalogue and symbol mapping.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Path to a saved project (.ifclite-project.json) on the server (must be inside the allowed paths). Give this or project_json, or neither to check the model alone."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file. Give this or project_path."
+    }
+   },
+   "required": [
+    "model_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_list_sheets",
+  "description": "List the sheets of a drawing set held by this session. Returns, per sheet: id, number (e.g. \"A-101\"), name, paper (\"A1\") and paperMm (width and height, millimetres), orientation, and the views placed on it in order (slot = 0-based position, view name and kind, scale as \"1:100\", viewport centre in paper millimetres from the top-left). Also returns the views no sheet shows yet (unplaced_views: id, name, kind) and the title block fields every sheet prints. A sheet that prints a schedule says which (schedule: \"rooms\" or \"boq\"). Read-only.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_add_view",
+  "description": "Add a view to a drawing set; it is not on any sheet until ifcsheet_place_view. All lengths are metres in the viewer frame: X east, Y up, Z south (the building's box is \"extent\" in ifcsheet_open_model). kind \"plan\": give level (a storey name) and optionally cut_height_m (above the floor, default about 1.2). kind \"elevation\": give direction (north, south, east or west; the facade it looks at). kind \"section\": either axis (\"front\": a plane perpendicular to Z, \"side\": perpendicular to X) with offset_m (the plane's coordinate on that axis, default the middle of the building) and flipped, or a line in plan from [x, z] to [x, z] (optional look_towards [x, z], the side the section looks to); optional depth_m, how far past the cut it sees. kind \"axonometric\": preset se, sw, ne or nw (default se); optional cut-away: cut_level (a storey) with cut_height_m, nothing above that height is drawn, and/or box_min and box_max [x, y, z] (only what lies inside is drawn). name is optional (made unique). Returns the new view (id, name, kind) and how many views are unplaced. With dry_run true nothing is added: the view it would add is returned (its id is not kept).",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "kind": {
+     "type": "string",
+     "enum": [
+      "plan",
+      "elevation",
+      "section",
+      "axonometric"
+     ],
+     "description": "The kind of view."
+    },
+    "name": {
+     "type": "string",
+     "description": "The view's name. Default: the storey, the facade, \"Section A\", \"Axonometric\"."
+    },
+    "level": {
+     "type": "string",
+     "description": "plan: the storey name."
+    },
+    "cut_height_m": {
+     "type": "number",
+     "description": "plan, axonometric cut-away: the cut height in metres above the storey's floor."
+    },
+    "direction": {
+     "type": "string",
+     "enum": [
+      "north",
+      "south",
+      "east",
+      "west"
+     ],
+     "description": "elevation: the facade it looks at."
+    },
+    "axis": {
+     "type": "string",
+     "enum": [
+      "front",
+      "side"
+     ],
+     "description": "section: \"front\" cuts perpendicular to the Z axis, \"side\" perpendicular to X."
+    },
+    "offset_m": {
+     "type": "number",
+     "description": "section: the plane's coordinate on its axis, metres. Default: the middle of the building."
+    },
+    "flipped": {
+     "type": "boolean",
+     "description": "section: look the other way. Default false."
+    },
+    "from": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "section along a line: start [x, z], metres."
+    },
+    "to": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "section along a line: end [x, z], metres."
+    },
+    "look_towards": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "section along a line: a point [x, z] on the side the section looks to."
+    },
+    "depth_m": {
+     "type": "number",
+     "description": "section: how far beyond the cut the view sees, metres. Default: the whole building."
+    },
+    "preset": {
+     "type": "string",
+     "enum": [
+      "se",
+      "sw",
+      "ne",
+      "nw"
+     ],
+     "description": "axonometric: the corner it is seen from. Default se."
+    },
+    "cut_level": {
+     "type": "string",
+     "description": "axonometric cut-away: the storey whose cut height removes everything above."
+    },
+    "box_min": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 3,
+     "maxItems": 3,
+     "description": "axonometric cut-away: [x, y, z] corner of the box that is kept."
+    },
+    "box_max": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 3,
+     "maxItems": 3,
+     "description": "axonometric cut-away: the opposite corner."
+    }
+   },
+   "required": [
+    "document_id",
+    "kind"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_place_view",
+  "description": "Put a view on a sheet. Without sheet: the engine's own rule hangs it beside the others on the last sheet of its series (plans, elevations, sections) while there is room, else on a new sheet numbered next in that series; a 3D view belongs to no series, so it needs a sheet. With sheet (an id or number from ifcsheet_list_sheets): it is added to that sheet at slot (0-based position among the views on it, default last). scale is the denominator of the drawing scale, 100 for 1:100, one of 1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 10000; a sheet draws all its views at one scale, so every view on it is laid out again at it. Without scale the most detailed of 1:50, 1:100, 1:200 that fits is used. Errors, without changing anything, when the views do not fit the sheet's drawing area at that scale. With dry_run true nothing is placed: the sheet it would give is returned (a new sheet's id is not kept). A view already on another sheet is moved. Returns the sheet (number, views with slot and scale).",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "view": {
+     "type": "string",
+     "description": "The view's id or name."
+    },
+    "sheet": {
+     "type": "string",
+     "description": "The sheet's id or number. Omit to let the engine choose or make one."
+    },
+    "scale": {
+     "type": "number",
+     "description": "Scale denominator: 100 means 1:100."
+    },
+    "slot": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "Position among the sheet's views, 0 first. Needs sheet."
+    }
+   },
+   "required": [
+    "document_id",
+    "view"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_set_title_block",
+  "description": "Set title block fields. fields is an object of text values, keys among: project, address, client, organisation, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, registrationNumber, projectManagerTitle, designerTitle, drawnByTitle, authorsCapacity, verifierCapacity, verifierRequirement, reportNumber, reportDate (date is ISO, YYYY-MM-DD; each value at most 200 characters; an empty string blanks the field). Without sheet the fields are the project's, printed on every sheet; with sheet (an id or number) they are that sheet's own and win over the project's. The sheet number and name are not fields: they are the sheet's. A set with no title block layout prints project, sheet number and name, scale and date on a sheet; the other fields are kept in the project (ifcsheet_save_project) for the app's title block layouts. Returns the fields the sheet or the project has afterwards and changed (each field that differs: from, to). With dry_run true nothing is set and these are what the call would give.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "fields": {
+     "type": "object",
+     "description": "Field name to text, e.g. {\"client\": \"Muster AG\", \"drawnBy\": \"AB\"}.",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "sheet": {
+     "type": "string",
+     "description": "A sheet's id or number: set the fields for that sheet only. Omit for the whole project."
+    }
+   },
+   "required": [
+    "document_id",
+    "fields"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_renumber",
+  "description": "Renumber the sheets by a numbering scheme. preset \"default\" numbers by series: A-001 general, A-101 plans, A-201 elevations, A-301 sections, A-401 interior elevations, A-501 drafting views, A-601 schedules, A-901 other; \"sequential\" runs A01, A02, A03... through the whole set in sheet order. discipline (at most 8 characters, default \"A\") is printed first on every number. Sheet numbers typed by hand are kept unless overrides is \"renumber\". With dry_run true nothing changes and the table of changes is returned. Without preset the project's current scheme is applied again (this closes gaps). Returns changes: [{from, to}] and the scheme in force.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "preset": {
+     "type": "string",
+     "enum": [
+      "default",
+      "sequential"
+     ],
+     "description": "The numbering scheme."
+    },
+    "discipline": {
+     "type": "string",
+     "maxLength": 8,
+     "description": "The letter(s) printed first, default \"A\"."
+    },
+    "overrides": {
+     "type": "string",
+     "enum": [
+      "keep",
+      "renumber"
+     ],
+     "description": "keep (default): numbers typed by hand stay. renumber: they are renumbered too."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report the changes without making them."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_add_schedule",
+  "description": "Add a schedule on a new sheet of its own, in the schedules series (A-601 by default), landscape. kind \"rooms\": the room and area schedule of the model: every IfcSpace by level with its number, name and area in square metres (the model's NetFloorArea, else GrossFloorArea, else the footprint of its geometry), a total per level and for the building; the same rows as `ifcsheet rooms`. kind \"boq\": the bill of quantities (antemasuratoare) of the articles a saved project holds, summed over the model; give project_path (a .ifclite-project.json on the server) or project_json (its text); the same sums as `ifcsheet boq`. kind \"list\": a table built from the Lists engine, the app's \"Schedule from the model\": give list, the definition { filter?: { classes?, levels?, predefined?, properties? }, columns: [{ id, source: attribute|property|quantity|material|classification|spatial, propertyName, psetName?, label?, hidden? }], groupBy?: [column ids], sum?: [column ids], totals?: false }; its rows, counts and totals are the Lists panel's for that definition (the same as `ifcsheet list`), e.g. the walls by type with their count and NetSideArea. The table is read from the model whenever the set is drawn. Rows beyond what fits the paper are left off the sheet (rows_left_off says how many); a larger paper holds more, and the issue's CSV always has all. Returns the sheet, the rows counts and the first rows of the table; for rooms also total_row, the last row of the table: the building total (Au). With dry_run true no sheet is added: the same table and counts are returned.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "kind": {
+     "type": "string",
+     "enum": [
+      "rooms",
+      "boq",
+      "list"
+     ],
+     "description": "The schedule."
+    },
+    "name": {
+     "type": "string",
+     "description": "The sheet's name. Default \"Room and area schedule\" or \"Bill of quantities\"."
+    },
+    "paper": {
+     "type": "string",
+     "enum": [
+      "A0",
+      "A1",
+      "A2",
+      "A3",
+      "A4"
+     ],
+     "description": "The sheet's paper, default A3."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language and number format of the table: \"ro\" writes 12,50 and Romanian headings. Default en."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "boq: a saved project on the server (inside the allowed paths). Give this or project_json. list: optional, the project whose classification mappings an office classification column is read with."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "boq: the text of a saved project file. list: optional, as project_path."
+    },
+    "list": {
+     "type": "object",
+     "description": "list: the definition of the table: { filter?, columns, groupBy?, sum?, totals? }.",
+     "additionalProperties": true
+    }
+   },
+   "required": [
+    "document_id",
+    "kind"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_apply_template",
+  "description": "Lay out the drawing set of an opened model by a set template (.bvset, the file the app saves from a finished set): which sheets, which views on them, at which scale, on which paper, numbered by the template's scheme. The same as `ifcsheet build --template`. Give template_path (a .bvset file on the server) or template_json (its text). A rule that finds no view in this model (a third storey it does not have) is skipped and said in notes; so are views the template did not foresee and schedules it carries (add those with ifcsheet_add_schedule). Returns a new document_id, the sheets and the notes. Fails if the model has no geometry. With dry_run true no set is made (document_id is null): the sheets and notes it would give are returned.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model."
+    },
+    "template_path": {
+     "type": "string",
+     "description": "A .bvset file on the server (inside the allowed paths). Give this or template_json."
+    },
+    "template_json": {
+     "type": "string",
+     "description": "The text of a .bvset file."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "name": {
+     "type": "string",
+     "description": "The project name printed in the title blocks. Default: the model's."
+    }
+   },
+   "required": [
+    "model_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_export_dxf",
+  "description": "Write the sheets of a drawing set as DXF files, one per sheet, into a directory on the server: named by sheet number (A-101.dxf), paper millimetres, the same files as `ifcsheet build --dxf`.  Like the engine's DXF, the files hold lines and no text. Give sheet (an id or number) to write one sheet only. The directory is created if absent and must be inside the allowed paths. Returns the files written (sheet, file, bytes).",
+  "scope": "export",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "directory": {
+     "type": "string",
+     "description": "The directory to write into."
+    },
+    "sheet": {
+     "type": "string",
+     "description": "One sheet's id or number. Default: every sheet."
+    }
+   },
+   "required": [
+    "document_id",
+    "directory"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_issue_set",
+  "description": "Issue the set: write into a directory on the server the PDF (a page per sheet, true scale; <project>.pdf), a DXF per sheet (dxf/A-101.dxf, ...), the drawing register as CSV (register.csv: number, name, paper, scale, views, one row per sheet), and the CSV of every schedule sheet (schedules/). With annotated_ifc true also <model>.annotated.ifc, the annotated copy of the IFC (#82): the headless tools hold no drafts (dimensions, tags and notes are the app's), so the copy carries no annotations, and the result says so; it is a new file, the opened IFC is never written. With handover true also handover.zip: the PDF, the DXFs, the register, the schedules and the IFC as it was opened (and the annotated copy, with annotated_ifc), named by pattern (tokens {project} {number} {sheet} {revision} {date} {issue}, default \"{number} {sheet}\"; plain ASCII), the package `ifcsheet build --handover` writes. The directory is created if absent, must be inside the allowed paths, and the opened IFC is never written to. Returns every file with its size, the page count and the sheet numbers.",
+  "scope": "export",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "directory": {
+     "type": "string",
+     "description": "The directory to write into."
+    },
+    "handover": {
+     "type": "boolean",
+     "description": "Also write handover.zip. Default false."
+    },
+    "pattern": {
+     "type": "string",
+     "description": "handover: how its files are named. Default \"{number} {sheet}\"."
+    },
+    "annotated_ifc": {
+     "type": "boolean",
+     "description": "Also write <model>.annotated.ifc, a copy of the IFC made by the annotated-IFC export (and put it in handover.zip). This build holds no drafts, so the copy has no annotations; the result says so. Default false."
+    }
+   },
+   "required": [
+    "document_id",
+    "directory"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_save_project",
+  "description": "Save the drawing set as a project file (.ifclite-project.json, format \"ifclite-project\" version 1) so a later session can ifcsheet_load_project it, and `ifcsheet check --project` and the app can read it. It holds the project document (views, sheets, title block, numbering) and the schedule sheets. Anything else a loaded file held (the app's drafts, styles, issues) is kept and written back as it was read. file_path must end in .json, be inside the allowed paths, and is never an .ifc file or the opened model; missing folders are created; an existing file is replaced. Returns the file, its size and the sheet numbers.",
+  "scope": "export",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "file_path": {
+     "type": "string",
+     "description": "Where to write the project, e.g. /work/haus.ifclite-project.json."
+    }
+   },
+   "required": [
+    "document_id",
+    "file_path"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_load_project",
+  "description": "Load a saved project file (.ifclite-project.json, written by ifcsheet_save_project or by the app) as a drawing set on an opened model, to continue editing, export or issue it. Give model_id (the model the project is for) and project_path (a file on the server) or project_json (its text). The views, sheets, title block and numbering are used as stored; the plans are cut on the model's storeys. A file with the wrong format, a newer version, or a sheet showing a view the file does not have is refused with the reason. Returns a new document_id, the sheets and the views not placed.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "A project file on the server (inside the allowed paths). Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a project file."
+    }
+   },
+   "required": [
+    "model_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_undo",
+  "description": "Undo the last edit made to a drawing set by ifcsheet_add_view, ifcsheet_place_view, ifcsheet_set_title_block, ifcsheet_add_schedule or ifcsheet_renumber: the set (views, sheets, title block, schedules) goes back to exactly what it was before that call. Call again to go back further. Dry runs are never in the history, and a call that failed changed nothing, so it has nothing to undo. The last 50 edits of a set are kept. When there is nothing to undo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_redo",
+  "description": "Redo the edit ifcsheet_undo took back, on a drawing set. A new edit after an undo ends the undone branch: there is then nothing to redo. When there is nothing to redo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_rooms",
+  "description": "The room and area schedule of an opened model, as `ifcsheet rooms`: every room (IfcSpace) by level with its number, name, area (m²) and perimeter (m), a total per level and for the building (the urban indicators' Au). An area is the model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry; each room says which (source), and a room with no area has area null. Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Optional project_path or project_json: its \"Units and numbers\" setting formats the text (comma, decimals); the numbers stay plain. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Optional. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_materials",
+  "description": "The materials of an opened model and how each draws where a view cuts it (hatch, hatch scale, fill, hatch pen, membrane), as `ifcsheet materials`. With a project (project_path or project_json) the project's own materials table applies; a material it has no row for is guessed from its name (auto true). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Optional. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_boq",
+  "description": "The bill of quantities (antemasuratoare) of an opened model, as `ifcsheet boq`: the articles of a saved project (project_path or project_json, required), each with its total in its own unit (m, m², m³, kg, buc for a count) from the quantities the model declares. A total is null when no element has the quantity; an element lacking it is named in the article's missing list, never counted as 0. An article the engine refuses (no code, no selector, an unknown quantity, a unit mismatch) has refused set to its reason. detail true adds a row per type to the text and CSV (byType is always returned). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "detail": {
+     "type": "boolean",
+     "description": "A row per type under each article in text and csv."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_list",
+  "description": "A schedule from the Lists engine over an opened model, as `ifcsheet list`: the list schedule of a saved project (project_path or project_json, required), i.e. the elements of its definition by class, storey and property, its columns, grouped and summed. The rows and totals are the Lists panel's. schedule names one by id or name (the only one when the project has one). header, rows (cells are numbers, text or null where an element lacks the value) and totals (or null). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. To lay a list out on a sheet use ifcsheet_add_schedule kind \"list\". Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "schedule": {
+     "type": "string",
+     "description": "The list schedule's id or name."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_classify",
+  "description": "The model's types with their classification code, as `ifcsheet classify`: the model's own IfcClassificationReference first (source \"model\"), else the project's mapping (a type, a material or a class to the office's code); source \"none\" and code null when neither gives one. A saved project (project_path or project_json) is required; system picks one of its classification systems (a name or id; default the first). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "system": {
+     "type": "string",
+     "description": "A classification system of the project, by name or id. Default: the first."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ }
+]

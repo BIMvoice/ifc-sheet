@@ -164,10 +164,34 @@ export function setPacIntervention(works: PacIntervention): void {
   if (next !== useProjectStore.getState().pacIntervention) useProjectStore.setState({ pacIntervention: next, dirty: true });
 }
 
-/** Which permit project the project makes; the full one is the default and is stored as absent, so a project that never chose saves as before. */
+/** The permit pack a project follows: the full permit project (the default), the rural one (`pacMode`), or the Norwegian building application (`norwayPermit`). */
+export type PermitPack = 'pacFull' | 'pacRural' | 'norway';
+
+/** The pack of a project's two fields; a file that somehow holds both reads as Norway, so every part of the app agrees on one. */
+export function permitPackOf(s: { norwayPermit?: true; pacMode?: PacMode }): PermitPack {
+  return s.norwayPermit === true ? 'norway' : s.pacMode === 'rural' ? 'pacRural' : 'pacFull';
+}
+
+/**
+ * Choose the permit pack: ONE of the three, written to both fields in one update so they cannot both be on. The default pack and
+ * "Norway off" are stored as absent, so a project that never chose saves as before.
+ */
+export function setPermitPack(pack: PermitPack): void {
+  const state = useProjectStore.getState();
+  const norwayPermit = pack === 'norway' ? true as const : undefined;
+  const pacMode = pack === 'pacRural' ? 'rural' as const : undefined;
+  if (norwayPermit !== state.norwayPermit || pacMode !== state.pacMode) useProjectStore.setState({ norwayPermit, pacMode, dirty: true });
+}
+
+/** Whether the project is a Norwegian building application (byggesak). On turns the PAC mode off; off goes back to the full permit project. */
+export function setNorwayPermit(on: boolean): void {
+  const pack = permitPackOf(useProjectStore.getState());
+  setPermitPack(on ? 'norway' : pack === 'norway' ? 'pacFull' : pack);
+}
+
+/** Which PAC permit project the project makes; choosing one turns the Norwegian mode off. */
 export function setPacMode(mode: PacMode): void {
-  const next = mode === 'full' ? undefined : mode;
-  if (next !== useProjectStore.getState().pacMode) useProjectStore.setState({ pacMode: next, dirty: true });
+  setPermitPack(mode === 'rural' ? 'pacRural' : 'pacFull');
 }
 
 /**

@@ -19,16 +19,12 @@ import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
 import type { ProjectFacts } from '@bimvoice/ifcsheet/project';
 import type { ToolContext } from '../context.js';
 import type { Tool } from './types.js';
+import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
 import { drawSet } from './ifcsheet-draw.js';
 import { outputPath } from './ifcsheet-shared.js';
-import { ifcsheetAddSchedule } from './ifcsheet-schedule.js';
-import { ifcsheetTakeoffTools } from './ifcsheet-takeoff.js';
-import { ifcsheetEditTools } from './ifcsheet-edit.js';
-import { ifcsheetFileTools } from './ifcsheet-files.js';
-import { ifcsheetHistoryTools } from './ifcsheet-undo.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -38,7 +34,7 @@ async function modelBytes(input: Record<string, unknown>, ctx: ToolContext): Pro
   if ((typeof path === 'string') === (typeof base64 === 'string')) {
     throw new ToolExecutionError({
       code: ToolErrorCode.INVALID_INPUT,
-      message: 'Give exactly one of file_path (an .ifc file on the server) or ifc_base64 (the file\'s bytes, base64).',
+      message: 'Give exactly one of file_path (an .ifc or .ifcx file on the server) or ifc_base64 (the file\'s bytes, base64).',
     });
   }
   if (typeof base64 === 'string') {
@@ -75,7 +71,7 @@ async function openEntry(input: Record<string, unknown>, ctx: ToolContext) {
     throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
   }
   if (model.dataStore.entityCount === 0) {
-    throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC STEP file.` });
+    throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC or IFCX model.` });
   }
   return addSheetModel(ctx, name, model, { bytes, path });
 }
@@ -83,12 +79,12 @@ async function openEntry(input: Record<string, unknown>, ctx: ToolContext) {
 export const ifcsheetOpenModel: Tool = {
   name: 'ifcsheet_open_model',
   description:
-    'Open an IFC model for drawing-set work: parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.',
+    'Open an IFC or IFCX model for drawing-set work (the format is read from the content): parses it and meshes its geometry. Returns a model_id handle for ifcsheet_generate_set, plus a summary (project name, storeys with elevations, element and mesh counts). This is a separate handle from model_load; it does not register the model for the query tools. Next step: ifcsheet_generate_set.',
   scope: 'read',
   inputSchema: {
     type: 'object',
     properties: {
-      file_path: { type: 'string', description: 'Path to an .ifc file on the server (must be inside the allowed paths). Give this or ifc_base64.' },
+      file_path: { type: 'string', description: 'Path to an .ifc or .ifcx file on the server (must be inside the allowed paths). Give this or ifc_base64.' },
       ifc_base64: { type: 'string', description: 'The .ifc file\'s bytes, base64-encoded. Give this or file_path.' },
       name: { type: 'string', description: 'A display name for the model when ifc_base64 is used. Default "model.ifc".' },
     },
@@ -261,7 +257,8 @@ export const ifcsheetCheckReadiness: Tool = {
   },
 };
 
-export const ifcsheetTools: Tool[] = [
-  ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness,
-  ...ifcsheetEditTools, ifcsheetAddSchedule, ...ifcsheetFileTools, ...ifcsheetHistoryTools, ...ifcsheetTakeoffTools,
-];
+/** The four tools of this file; the other tool files register their own groups (`ifcsheet-tools.ts`). */
+export const toolGroup: ToolGroup = {
+  order: 10,
+  tools: [ifcsheetOpenModel, ifcsheetGenerateSet, ifcsheetExportPdf, ifcsheetCheckReadiness],
+};
