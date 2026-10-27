@@ -14,6 +14,7 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_generate_set`, `ifcsheet_apply_template` and `ifcsheet_load_project` each make a drawing set and give a `document_id`. The editing tools change that set in the session's memory; the PDF, DXF and issue always draw the latest edit. Nothing is on disk until `ifcsheet_save_project` or an export.
 - Lengths are metres in the viewer frame (X east, Y up, Z south). Paper sizes are millimetres. A scale is its denominator: 100 means 1:100.
 - `dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template` and `ifcsheet_renumber` reports what the call would change and changes nothing. Ids a dry run reports are not kept.
+- The takeoff tools (`ifcsheet_rooms`, `ifcsheet_materials`, `ifcsheet_boq`, `ifcsheet_list`, `ifcsheet_classify`) take a `model_id` (or the `document_id` of a set on it) and, for the project's number format and settings, `project_path` or `project_json`; `ifcsheet_boq`, `ifcsheet_list` and `ifcsheet_classify` need one. Each returns the values the command prints with `--json` (numbers as numbers, a missing quantity as `null`), plus `text` (what the command prints, in the project's "Units and numbers" format) and `csv`. They call the same engine functions as the commands and change nothing.
 - `ifcsheet_undo` takes back the last edit of a set and `ifcsheet_redo` re-applies it. Dry runs are not in the history; a new edit after an undo clears redo; the last 50 edits are kept. Undo with nothing to undo says so and is not an error. `ifcsheet_save_project` still writes the set to disk.
 
 ## Tools
@@ -29,6 +30,11 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_set_title_block`: set title block fields, project-wide or for one sheet (client, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, address...); returns the fields in force and the ones that changed.
 - `ifcsheet_renumber`: renumber the sheets by a scheme (`default` A-101 style, `sequential` A01, A02...).
 - `ifcsheet_add_schedule`: a room and area schedule (`rooms`, with the building total Au as `total_row`) a bill of quantities (`boq`, from a saved project's articles) or a table from the Lists engine (`list`, with a definition of columns, grouping and sums; the same rows and totals as the app's Lists panel) on a sheet of its own.
+- `ifcsheet_rooms`: the room and area schedule as data (`ifcsheet rooms`): rooms by level with number, name, area (m²), perimeter (m), a total per level and for the building (Au). Read-only; a room with no area has `area: null`.
+- `ifcsheet_materials`: the model's materials and how each draws (hatch, fill, pen, membrane), with the project's table when given (`ifcsheet materials`). Read-only.
+- `ifcsheet_boq`: the bill of quantities of a saved project's articles over the model (`ifcsheet boq`): per article the total in its unit, the counts, the elements that lack the quantity and, per type, the same. A total with no quantity behind it is `null`, never 0. Read-only.
+- `ifcsheet_list`: a Lists-engine schedule of a saved project over the model (`ifcsheet list`): `header`, `rows`, `totals`; `schedule` picks one. Read-only.
+- `ifcsheet_classify`: the model's types with their classification code, the model's own first, else the project's mapping (`ifcsheet classify`); `system` picks one. Read-only.
 - `ifcsheet_export_pdf`: the set as one PDF, a page per sheet at true scale.
 - `ifcsheet_export_dxf`: one DXF per sheet into a directory.
 - `ifcsheet_issue_set`: the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover: true`, `handover.zip` (with the IFC as opened); `annotated_ifc: true` adds the annotated copy of the IFC.
