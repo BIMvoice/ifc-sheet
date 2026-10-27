@@ -3,34 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Annotation size on a sheet. Text, dimension, level, leader and axis sizes
- * are stored in model metres at the scale of the view they were drawn on
- * (0.25 m is 2.5 mm at 1:100). A viewport may show the view at another scale;
- * the paper size an annotation was drawn for must not change with it, so its
- * sizes are multiplied by viewport scale / view scale, and the style values in
- * paper millimetres (extension gaps, arrows) are converted with the viewport's
- * scale, not the view's.
+ * Annotation size on a sheet: the engine's rule (`packages/ifcsheet/src/viewport-annotation.ts`), which the PDF of
+ * `ifcsheet build` prints with too (#479), given the app's symbol library to say which symbols are drawn in paper millimetres.
  */
 
+import { annotationAtFactor as sizedAtFactor } from '@bimvoice/ifcsheet';
 import { findSymbol } from '@/drafting/symbols';
 import type { AnnotationShape } from '@/drafting/types';
 
-/** The view scale a viewport shows it at, when the view carries none. */
-export const DEFAULT_VIEW_SCALE = 100;
-
-/** Factor on stored annotation sizes so they print at the size they were drawn for. */
-export function annotationFactor(viewportScale: number, viewScale: number | undefined): number {
-  return viewportScale / (viewScale && viewScale > 0 ? viewScale : DEFAULT_VIEW_SCALE);
-}
-
-/** Model metres per paper millimetre in a viewport at `viewportScale`. */
-export const viewportPaperUnit = (viewportScale: number): number => viewportScale / 1000;
+export { DEFAULT_VIEW_SCALE, annotationFactor, viewportPaperUnit } from '@bimvoice/ifcsheet';
 
 /** `shape` with its paper-size-bound dimensions multiplied by `factor`; geometry is untouched. */
 export function annotationAtFactor(shape: AnnotationShape, factor: number): AnnotationShape {
-  if (factor === 1 || shape.type === 'hatch') return shape;
-  // A paper symbol is millimetres of paper and follows the factor; a model symbol is metres and stays put.
-  if (shape.type === 'symbol') return findSymbol(shape.symbolId)?.unit === 'paper' ? { ...shape, scale: shape.scale * factor } : shape;
-  const sized = { ...shape, height: shape.height * factor };
-  return sized.type === 'axis' ? { ...sized, size: sized.size * factor } : sized;
+  return sizedAtFactor(shape, factor, (id) => findSymbol(id)?.unit === 'paper');
 }

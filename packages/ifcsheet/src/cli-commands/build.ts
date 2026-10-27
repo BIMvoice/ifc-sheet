@@ -2,14 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** `ifcsheet build`: the starting drawing set as PDF, DXF and handover ZIP (#164). The argument checks and the call, as `run` in `cli.ts` had them before the commands became a registry. */
+/** `ifcsheet build`: the starting drawing set, or a project's own (#479), as PDF, DXF and handover ZIP (#164). The argument checks and the call, as `run` in `cli.ts` had them before the commands became a registry. */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
-import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { exportDxf, exportPdf, openModel, projectSheetOptions, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { projectSetOf } from '../project-set.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
 import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from '../pac-set.js';
 import { PAC_DEFAULT_LOCALE, pacPages, pacTemplateFor } from '../cli-pac.js';
@@ -84,14 +85,21 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
+  // The project's own set (#479): its views, sheets, drafts and placed schedules, unless --template or --pac asks for a set of their rules.
+  const own = project && !setTemplate ? projectSetOf({ ...project, ...(args.name ? { name: args.name } : {}) }, model) : null;
+  if (project) io.stderr(own ? `ifcsheet: printing the drawing set of ${args.project}: ${own.document.sheets.length} sheet${own.document.sheets.length === 1 ? '' : 's'}, ${own.document.views.length} view${own.document.views.length === 1 ? '' : 's'}.\n`
+    : project.set.sheets.length > 0 ? `ifcsheet: ${args.pac ? '--pac' : '--template'} lays the sheets out by its rules; the ${project.set.sheets.length} sheets of ${args.project} are not printed.\n`
+    : `ifcsheet: ${args.project} holds no drawing set (no sheet); laying out a fresh one.\n`);
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(language ? { locale: language } : {}) });
+  const generated = own ?? generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(language ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(language ? { language } : {}) });
+  // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
+  const extras = own && project ? projectSheetOptions(project, model, language ?? 'en', sheetFormat(language ?? 'en', standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
+  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(language ? { language } : {}), ...extras });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
@@ -149,7 +157,10 @@ export const buildCommand: CliCommand = {
           With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
           one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
           A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
-          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.`,
+          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
+          With --project, the sheets are the project's own when it holds any (its views, its sheets with the
+          viewports where they were put, the dimensions and texts drawn on the views, the list schedules placed);
+          a project with no sheet gets the starting set. Which one is printed is said on stderr.`,
   async run(rest, values, io) {
     if (values.csv || values.detail || (values.locale !== undefined && !values.pac)) {
       io.stderr('ifcsheet build has no --csv or --detail, and --locale only with --pac; they are options of boq and rooms.\n');

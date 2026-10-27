@@ -13,11 +13,11 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
-  type BoqArticle, type SheetLocale, type UnitsAndNumbers,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readClassificationMappings, readProjectSet, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
-import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
+import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type ProjectSheetSource, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { SetSchedule, SheetModelEntry, SheetSetEntry } from './ifcsheet-store.js';
 
@@ -89,10 +89,23 @@ export interface DrawnSet {
   schedules: { schedule: SetSchedule; table: ScheduleTable; drawn: number }[];
 }
 
-/** Every sheet of the set as shapes on its paper, schedules included. */
+/**
+ * What a loaded project file drew on its sheets (#479): its drafts and the schedules the app placed, read again from the document
+ * (a loaded file's other keys are kept on it) by the reader `ifcsheet build --project` uses. Null for a set with neither.
+ */
+function projectOf(document: ProjectDocument): ProjectSheetSource | null {
+  const raw = document as unknown as Record<string, unknown>;
+  if (!Array.isArray(raw.drafts) && !Array.isArray(raw.schedules)) return null;
+  const schedules = (Array.isArray(raw.schedules) ? raw.schedules : []).flatMap((s) => readSchedule(s) ?? []);
+  return { set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings) };
+}
+
+/** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them. */
 export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Promise<DrawnSet> {
-  const { sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
-  const sheets = await sheetGraphics(entry.set, model.model);
+  const { projectSheetOptions, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
+  const project = projectOf(entry.set.document);
+  const extras = project ? projectSheetOptions(project, model.model, 'en', sheetFormat('en', entry.set.document.unitsAndNumbers), model.name) : {};
+  const sheets = await sheetGraphics(entry.set, model.model, extras);
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
     const sheet = entry.set.document.sheets.find((s) => s.id === schedule.sheetId);

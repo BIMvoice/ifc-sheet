@@ -18,6 +18,8 @@ import { projectTitleFields } from './title-block-sources.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { propertySetsOf } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties, type PenTable } from './view-style.js';
+import type { SheetAnnotations } from './sheet-annotations.js';
+import type { SheetSchedules } from './sheet-schedules.js';
 
 export interface SheetGraphicsOptions {
   /** Cut each view's drawing from the meshes (default true); without it the sheets carry their frames and titles only. */
@@ -28,6 +30,10 @@ export interface SheetGraphicsOptions {
   pens?: PenTable;
   /** The language the title blocks' dates are written in (`formatTitleBlockDate`); absent: as stored (ISO). */
   language?: string;
+  /** A saved project's drafts, drawn on the viewports of the views they are on (#479, `projectSheetOptions`). */
+  annotations?: SheetAnnotations;
+  /** A saved project's list schedules, drawn where they are placed (#479, `projectSheetOptions`). */
+  schedules?: SheetSchedules;
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -71,5 +77,6 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language));
+  const project = options.annotations || options.schedules ? { annotations: options.annotations, schedules: options.schedules } : undefined;
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, project));
 }

@@ -311,15 +311,16 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     // The engine's own reader (`ifcsheet check --project`) accepts the file.
     expect((await ok('ifcsheet_check_readiness', { model_id: modelId, project_path: file })).project).toBe(file);
 
-    // The app's other state travels through a load and a save.
-    onDisk.drafts = [{ id: 'd1', keep: 'me' }];
+    // The app's other state travels through a load and a save. A draft is read by the app's reader (#479), so it is one the app writes.
+    const draft = { id: 'd1', viewId: onDisk.views[0].id, layerId: '0', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, params: { keep: 'me' } };
+    onDisk.drafts = [draft];
     const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_json: JSON.stringify(onDisk) });
     expect(loaded.sheets.map((s: any) => s.number)).toEqual(['A-101', 'A-201', 'A-202', 'A-301', 'A-601']);
     expect(loaded.sheets[4].schedule).toBe('rooms');
     expect(loaded.sheets[0].views.map((v: any) => v.view)).toEqual(['Erdgeschoss', 'Dachgeschoss']);
     const resaved = join(tmp, 'resaved.ifclite-project.json');
     await ok('ifcsheet_save_project', { document_id: loaded.document_id, file_path: resaved });
-    expect(JSON.parse(await readFile(resaved, 'utf8')).drafts).toEqual([{ id: 'd1', keep: 'me' }]);
+    expect(JSON.parse(await readFile(resaved, 'utf8')).drafts).toEqual([draft]);
     // The loaded set draws: five pages, the schedule's too.
     expect((await ok('ifcsheet_export_pdf', { document_id: loaded.document_id })).pages).toBe(5);
     expect((await ok('ifcsheet_load_project', { model_id: modelId, project_path: file })).sheets).toHaveLength(5);
@@ -386,8 +387,9 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     await refused('ifcsheet_load_project', load({ format: 'other' }), /"format" must be "ifclite-project"/);
     await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 99, views: [], sheets: [] }), /version 99/);
     await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [] }), /must be arrays/);
-    await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [{ id: 'v', name: 'V', kind: 'moon' }], sheets: [] }), /views\[0\]/);
-    await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [], sheets: [{ id: 's', number: 'A-1', name: 'S', viewports: [{ viewId: 'ghost', x: 1, y: 1, scale: 100 }] }] }), /shows a view the project does not have/);
+    await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [{ id: 'v', name: 'V', kind: 'moon' }], sheets: [] }), /\/views\/0\.kind must be one of/);
+    await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [], sheets: [], drafts: [{ id: 'd1', keep: 'me' }] }), /\/drafts\/0 must have a string id and viewId/);
+    await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [], sheets: [{ id: 's', number: 'A-1', name: 'S', viewports: [{ id: 'vp', viewId: 'ghost', x: 1, y: 1, scale: 100 }] }] }), /shows a view the project does not have/);
     await refused('ifcsheet_load_project', { model_id: 'sheetmodel-999', project_json: '{}' }, /No drawing-set model/);
     // apply_template with a missing handle
     await refused('ifcsheet_apply_template', { model_id: 'sheetmodel-999', template_json: '{}' }, /No drawing-set model/);

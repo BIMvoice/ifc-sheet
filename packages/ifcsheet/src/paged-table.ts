@@ -12,7 +12,7 @@
  * laid out, is what `fit` in `schedule-fit` places, clips and counts.
  */
 
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ScheduleLayout, SchedulePrim } from './schedule-prim.js';
 
 export const ROW = 6;
 export const TEXT = 2.5;

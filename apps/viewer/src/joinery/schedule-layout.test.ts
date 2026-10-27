@@ -10,7 +10,7 @@ import { csvLines, joineryCsv } from './export-test-util';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
-import { PAD } from './paged-table';
+import { PAD } from '@bimvoice/ifcsheet';
 
 const labels: ScheduleLabels = {
   locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',

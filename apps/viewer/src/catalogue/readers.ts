@@ -8,7 +8,7 @@
  * path; an absent optional field takes its default.
  */
 
-import { readShape } from '@/drafting/draft-file';
+import { readShape } from '@bimvoice/ifcsheet';
 import type { AxisShape } from '@/drafting/types';
 import {
   ANNOTATION_TOOLS, DEFAULT_LABEL, DEFAULT_LEGEND, LEGEND_CATEGORIES, TAG_FIELDS,

@@ -8,10 +8,11 @@
  * `ifcsheet check --project` and `ifcsheet_check_readiness` build the same findings from it as the app does.
  *
  * Reads only what the checks and the build use. The graphic standard and the title block layout are read for `ifcsheet build`
- * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters); the views and the sheets are not read: no readiness finding
- * depends on them yet (the set-side checks of the app's Check panel do, and are not in the engine). Everything read
- * is read as the app reads it (`readSchedule`, `readJoinerySpec`, `readJoineryMapping` are the app's own readers),
- * and what is malformed is dropped, so an old file, or one with a damaged section, loads with that section empty.
+ * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters), and so is the drawing set
+ * (`set`: the views, sheets, drafts and their styles, #479), which the build prints. Everything read is read as the app reads it
+ * (`readSchedule`, `readJoinerySpec`, `readJoineryMapping`, and the set's readers in `project-set.ts` are the app's own readers).
+ * What the checks read is dropped when malformed, so an old file, or one with a damaged section, loads with that section empty; the
+ * set is read as strictly as the app reads it, so a view or sheet the app would refuse the file for refuses it here too.
  * A file that is not a project file, or that a newer build wrote, is refused with the app's wording.
  */
 
@@ -41,6 +42,7 @@ import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
 import type { StoreyInput } from './view-defaults.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
+import { readProjectSet, type ProjectSet } from './project-set.js';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject {
@@ -75,6 +77,8 @@ export interface ProjectFacts extends JoineryProject {
   pacMode?: PacMode;
   /** The urban indicators' terrain level, ±0.00 and storeys left out of Ad for CUT; absent: the defaults. */
   urbanSettings?: UrbanSettings;
+  /** The project's own drawing set (#479): what `ifcsheet build --project` prints; its lists are empty when the file holds none. */
+  set: ProjectSet;
 }
 
 type Json = Record<string, unknown>;
@@ -99,6 +103,8 @@ export function readProjectFile(text: string): ProjectFacts {
   const titleBlockSources = readTitleSources(parsed.titleBlockSources);
   const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
+  // Before the lenient fields: a view, sheet or draft the app refuses the file for refuses it here first, as in the app.
+  const set = readProjectSet(parsed);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
@@ -118,6 +124,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(titleBlockParams?.length ? { titleBlockParams } : {}),
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
+    set,
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

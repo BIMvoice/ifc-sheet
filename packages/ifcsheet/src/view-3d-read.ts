@@ -4,8 +4,9 @@
 
 /** A 3D view's print settings as read from a project file; what is not recognised is dropped. */
 
-import { AXONOMETRIC_PRESETS } from './axonometric';
-import type { AxonometricPreset, ProjectLevel, ThreeDProjectView } from './types';
+import { AXONOMETRIC_PRESETS } from './axonometric.js';
+import type { ProjectLevel } from './document.js';
+import type { AxonometricPreset, ThreeDProjectView } from './view-3d-types.js';
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;

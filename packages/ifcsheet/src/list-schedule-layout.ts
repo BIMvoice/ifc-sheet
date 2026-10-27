@@ -9,10 +9,12 @@
  * kind (an area, a volume, a length) decides its decimals, a count is whole.
  */
 
-import { listTableCells, textWidthEm, truncateToWidth, type ListScheduleTable } from '@bimvoice/ifcsheet';
-import type { SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock } from './paged-table';
+import { listTableCells } from './list-figures.js';
+import type { ListScheduleTable } from './list-schedule.js';
+import { textWidthEm, truncateToWidth } from './text-width.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock } from './paged-table.js';
 
 export interface ListSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

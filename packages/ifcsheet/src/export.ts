@@ -64,7 +64,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
   doc.setFont('Inter', 'normal');
   sheets.forEach((sheet, i) => {
     if (i > 0) doc.addPage(page(sheet).format, page(sheet).orientation);
-    const stroke = (polylines: SheetGraphic['frame'], width: number) => {
+    const stroke = (polylines: readonly Polyline[], width: number) => {
       doc.setLineWidth(width);
       for (const pts of polylines) {
         if (pts.length < 2) continue;
@@ -94,6 +94,19 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     doc.setDrawColor('#000000');
     stroke(sheet.frame, PEN.frame);
     stroke(sheet.marks, PEN.mark);
+    // What the project drew with its own pens (#479): the drafts' layer pens, the dimensions' lines and ticks, the schedules' rules.
+    for (const s of sheet.strokes ?? []) {
+      if (s.fill) {
+        doc.setFillColor(s.colour);
+        for (const run of s.runs) if (run.length > 2) doc.path([{ op: 'm', c: [run[0].x, run[0].y] }, ...run.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]).fill();
+        continue;
+      }
+      doc.setDrawColor(s.colour);
+      doc.setLineDashPattern(s.dash ? [...s.dash] : [], 0);
+      stroke(s.runs, s.width);
+    }
+    doc.setLineDashPattern([], 0);
+    doc.setDrawColor('#000000');
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
@@ -170,6 +183,8 @@ export function exportDxf(sheet: SheetGraphic): string {
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
       ...penLayers(sheet),
       { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
+      // R12 has no line weight: the project's drafts, dimensions and schedule rules on one layer, their outlines only.
+      ...(sheet.strokes?.length ? [{ name: 'SHEET-DRAFTS', color: '#000000', polylines: sheet.strokes.flatMap((s) => [...s.runs]), closed: false }] : []),
       ...colourLayers(sheet),
     ],
   });

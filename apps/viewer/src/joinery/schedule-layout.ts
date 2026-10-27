@@ -16,37 +16,18 @@
  */
 
 import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
-import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
-import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { PAD, pageTitle, shownRows, symbolsShown, textCellText, textRowId, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
+
+// What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
+export type { ScheduleLayout, SchedulePrim };
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-
-export type SchedulePrim =
-  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
-  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
-  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
-
-export interface ScheduleLayout {
-  width: number;
-  height: number;
-  prims: SchedulePrim[];
-  /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
-  pages?: number;
-  /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
-  minBox?: { width: number; height: number };
-  /**
-   * Set when the table is wrapped to a viewport's box (joinery schedules on a sheet): the box, paper mm, it is drawn at the top
-   * left of and clipped to, and the smallest box that holds one band whole (a resize stops there).
-   */
-  fit?: { box: { x: number; y: number; w: number; h: number }; min: { width: number; height: number } };
-}
 
 export interface ScheduleLabels {
   /** The language the U value is written in on paper ("1,1" in Romanian); the CSV and XLSX keep the plain number. */

@@ -17,7 +17,7 @@ import {
   type BoqElement, type ListScheduleTable, type RoomRecord,
 } from '@bimvoice/ifcsheet';
 import { layoutBoq } from '@/joinery/boq-layout';
-import { layoutListSchedule } from '@/joinery/list-schedule-layout';
+import { layoutListSchedule } from '@bimvoice/ifcsheet';
 import { roomScheduleCells } from '@/joinery/room-schedule-layout';
 import type { SchedulePrim } from '@/joinery/schedule-layout';
 

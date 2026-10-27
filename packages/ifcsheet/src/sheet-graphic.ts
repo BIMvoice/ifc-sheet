@@ -35,6 +35,8 @@ import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
+import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
+import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 
 export type Polyline = readonly Point2D[];
 
@@ -43,7 +45,7 @@ export interface SheetText {
   text: string;
   /** Text height, paper mm. */
   size: number;
-  align?: 'left' | 'center';
+  align?: 'left' | 'center' | 'right';
   /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
   angle?: number;
 }
@@ -90,6 +92,8 @@ export interface SheetGraphic {
   pens: SheetPen[];
   /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
   marks: Polyline[];
+  /** What a project drew on the sheet with its own pens (#479): the views' drafts and dimensions, the placed schedules' rules; absent: none. */
+  strokes?: SheetStroke[];
   texts: SheetText[];
   /** The images the sheet carries: the title block's logo. */
   images: SheetImage[];
@@ -163,11 +167,23 @@ export function sheetGraphic(
   projectFields?: Record<string, string>,
   /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
   language?: string,
+  /** A saved project's drafts and placed schedules (#479); absent: the sheet carries its views only. */
+  project?: { annotations?: SheetAnnotations; schedules?: SheetSchedules },
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  const strokes: SheetStroke[] = [];
   for (const vp of vps) {
+    // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
+    const schedule = project?.schedules ? placedListSchedule(sheet, doc.sheets, vp, project.schedules) : null;
+    if (schedule) {
+      const g = scheduleGraphics(schedule, vp);
+      strokes.push(...g.strokes);
+      out.texts.push(...g.texts);
+      out.viewports.push({ viewId: vp.viewId, box: g.box });
+      continue;
+    }
     const view = doc.views.find((v) => v.id === vp.viewId);
     const drawing = drawings.get(vp.viewId);
     const k = 1000 / vp.scale;
@@ -198,6 +214,13 @@ export function sheetGraphic(
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
     }
+    // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
+    if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
+      const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box }, project.annotations);
+      strokes.push(...drafted.strokes);
+      out.texts.push(...drafted.texts);
+    }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }
   // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner (the viewports and their titles are not free).
@@ -220,5 +243,6 @@ export function sheetGraphic(
   out.texts.push(...block.texts);
   out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
   out.images.push(...block.images);
+  if (strokes.length) out.strokes = strokes;
   return out;
 }

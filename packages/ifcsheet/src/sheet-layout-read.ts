@@ -8,11 +8,11 @@
  * value is malformed (a viewport without a view or a positive scale).
  */
 
-import { readSheetParams, readTitleBlock } from '@bimvoice/ifcsheet';
-import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering';
-import { readPaper } from './paper';
-import { readFrame } from './sheet-frame';
-import type { NumberGroup, ProjectSheet, SheetViewport } from './types';
+import { readSheetParams, readTitleBlock } from './title-block-file-read.js';
+import { NUMBER_GROUPS, typedBeforeSchemes } from './numbering.js';
+import { readPaper } from './paper.js';
+import { readFrame } from './sheet-frame.js';
+import type { NumberGroup, ProjectSheet, SheetViewport } from './document.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
