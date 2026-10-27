@@ -59,6 +59,23 @@ describe('a sheet places a viewport\'s cross-references once while nothing chang
     assert.deepEqual(next.map((d) => d.id), ['a', 'b'], 'a draft added to the plan is drawn');
   });
 
+  it('places them once across mounts too: a sheet the Wall hangs as an outline and draws again finds its marks placed', () => {
+    // The Wall mounts a sheet's drawing when its zoom takes it over the drawn width and drops it when it falls back under,
+    // so a zoom in and out remounts the hook. The marks are in paper millimetres: the zoom is not among what they read.
+    useProjectStore.setState({ views: [plan], sheets: [sheet], drafts: [line('a', 1)] });
+    useViewDrawings.setState({ byView: { p: { drawing, status: 'ready', progress: 100, phase: '', error: null } } });
+    render(<Harness />);
+    assert.ok(hook);
+    const first = hook.content(vp).drafts;
+    cleanup();
+    hook = null;
+    render(<Harness />);
+    assert.ok(hook);
+    assert.equal((hook as SheetContent).content(vp).drafts, first, 'the same marks, not placed again');
+    act(() => useProjectStore.setState({ drafts: [line('a', 1), line('b', 3)] }));
+    assert.notEqual((hook as SheetContent).content(vp).drafts, first, 'but a change to the plan places them again');
+  });
+
   it('keeps a viewport at another scale apart', () => {
     useProjectStore.setState({ views: [plan], sheets: [sheet], drafts: [line('a', 1)] });
     useViewDrawings.setState({ byView: { p: { drawing, status: 'ready', progress: 100, phase: '', error: null } } });
