@@ -55,6 +55,8 @@ export interface DefaultSetOptions {
   scheme?: NumberingScheme;
   /** A set template (#21): the sheets are made by its rules (`applySetTemplate`) instead of the automatic grouping; the views are the same. */
   setTemplate?: SetTemplate;
+  /** The language the notes printed on the sheets are written in (`applySetTemplate`); default English. */
+  locale?: string;
 }
 
 /** Something the person should know about the set, as a catalogue key and its parameters. */
@@ -120,6 +122,18 @@ class Planner {
     }
   }
 
+  /**
+   * The site plan a template with a `site` rule draws: the ground storey's cut, flagged `site`, at the scale the rule
+   * asks for. None when the project has one already (the app's `ensureSitePlan` keeps the first too) or has no plan.
+   */
+  sitePlan(template: SetTemplate | undefined): void {
+    const slot = template?.sheets.flatMap((s) => s.slots).find((s) => s.view.kind === 'site');
+    if (!slot || this.views.some((v) => v.kind === 'plan' && v.site)) return;
+    const ground = groundPlan(this.views.filter((v) => !v.detail));
+    if (!ground) return;
+    this.add<PlanProjectView>({ kind: 'plan', name: nameOf('names.view.site'), cutHeight: ground.cutHeight, level: ground.level, site: true, ...(slot.scale === undefined ? {} : { scale: slot.scale }) });
+  }
+
   /** The four elevations, each plane outside its facade and each seeing through the building. */
   elevations(): void {
     for (const direction of ELEVATION_DIRECTIONS) {
@@ -180,11 +194,12 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   const planner = new Planner(levels, model.extent, now);
   planner.plans();
   planner.elevations();
+  planner.sitePlan(options.setTemplate);
   planner.planScales(templates, options.setTemplate);
   planner.sections(model);
   const chosen = options.setTemplate?.numbering ?? options.scheme;
   const scheme = chosen ?? DEFAULT_SCHEME;
-  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme }) : null;
+  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme, ...(options.locale ? { locale: options.locale } : {}) }) : null;
   const sheets = ruled ? ruled.sheets : buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme });
   // The schedules a template carries are added by the app; the engine says so rather than leave them out silently.
   const schedules = (options.setTemplate?.schedules ?? []).map((r): TemplateNote => ({ key: 'setTemplate.note.schedule', params: { kind: r.kind, name: r.name } }));

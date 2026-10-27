@@ -16,9 +16,11 @@ import { describeEffect, describeMissing } from '@/check/readiness-say';
 import { modelReadiness, type ModelFacts } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
-import { setIncludeFarElements, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setIncludeFarElements, useProjectStore } from '@/project/project-store';
 import { subReportChecks } from '@/check/sub-report-check';
 import { boqMissing } from '@bimvoice/ifcsheet';
+import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
+import { useUrbanIndicators } from '../urban/useUrban';
 import { sheetTitleBlockMisfits } from '@/check/title-block-fit';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { useBoqArticles, useBoqResult } from '../boq/useBoq';
@@ -44,7 +46,7 @@ function useModelReadiness() {
   // What the bill of quantities could not state (#75); nothing while the project holds no article.
   const boqResult = useBoqResult(useBoqArticles().length > 0);
   // The values the project's own (Romanian) title block cuts short on a sheet, judged on what each sheet shows.
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const template = useProjectStore((s) => s.titleBlockTemplate);
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
@@ -55,10 +57,14 @@ function useModelReadiness() {
   const projectFields = useEffectiveTitleBlock();
   const asIndicated = t('sheets.asIndicated');
   const misfits = useMemo(
-    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated }),
-    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated],
+    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated, language: locale }),
+    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated, locale],
   );
-  const inputs = useMemo(() => ({ models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits }), [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits]);
+  // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
+  const rural = useProjectStore((s) => permitPackOf(s) === 'pacRural');
+  const urban = useUrbanIndicators(rural);
+  const scope = rural && urban ? ruralScopeOf(urban.result) : undefined;
+  const inputs = useMemo(() => ({ models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits, scope }), [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits, scope?.levels, scope?.sd, scope?.sdAtLeast]);
   // Read in a task of its own (#154): the facts walk every element and room of the model (about 50 to 60 ms on a large
   // one), and the model's arrival changes `models` in the same render that finishes the 3D and lays the set out, so
   // reading them there made one long task of it. A list that appears reads them at once.
@@ -69,7 +75,7 @@ function useModelReadiness() {
     if (settled.models.size === 0 && settled.misfits.length === 0) return null;
     const checks = subReportChecks(settled.schedules ?? []);
     const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
-    return { findings: modelReadiness(settled.models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(settled.boqResult), settled.misfits), owners };
+    return { findings: modelReadiness(settled.models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(settled.boqResult), settled.misfits, settled.scope), owners };
   }, [settled]);
 }
 

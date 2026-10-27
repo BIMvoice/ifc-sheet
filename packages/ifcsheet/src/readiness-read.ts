@@ -11,13 +11,14 @@
  * Its own entry, `@bimvoice/ifcsheet/readiness-read`, and part of `/headless`.
  */
 
+import { iterateEffectiveEntities } from '@ifc-lite/data';
 import { getInheritanceChainAcrossSchemas, resolveAllMaterialDefIds, type IfcDataStore } from '@ifc-lite/parser';
 import type { SubReportCheck } from './sub-report-check.js';
 import type { BoqMissing } from './boq-compute.js';
 import type { MeshData } from '@ifc-lite/geometry';
 import { estimatedAreas } from './room-estimates.js';
 import { readRooms } from './room-read.js';
-import { modelReadiness, type FarElementFact, type ModelFacts, type ReadinessFinding } from './readiness.js';
+import { modelReadiness, type FarElementFact, type ModelFacts, type ReadinessFinding, type RuralScope } from './readiness.js';
 
 /**
  * An IFC GlobalId: 22 characters of the base-64 alphabet, the first of them 0-3 (it carries two bits).
@@ -54,7 +55,12 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
   for (const { store, storeys } of sources) {
     const { entities, entityIndex, spatialHierarchy } = store;
     facts.storeys += storeys;
-    facts.spaces += entityIndex.byType.get('IFCSPACE')?.length ?? 0;
+    // An IFCX store has no STEP type index: its rooms are the entity table's (the effective-entity enumeration walks it).
+    if (store.schemaVersion === 'IFC5') {
+      facts.spaces += [...iterateEffectiveEntities(store, null, ['IFCSPACE'])].length;
+    } else {
+      facts.spaces += entityIndex.byType.get('IFCSPACE')?.length ?? 0;
+    }
     for (let i = 0; i < entities.count; i++) {
       const id = entities.expressId[i];
       if (!isPhysicalElement(entities.getTypeName(id))) continue;
@@ -76,10 +82,10 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
 }
 
 /** The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report. */
-export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing): ReadinessFinding[] {
+export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, rural?: RuralScope): ReadinessFinding[] {
   const facts = readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]);
   const far = (model.farElements ?? []).map(({ label, distance }) => ({ label, distance }));
   // The rooms measured from geometry, through the same helper the app asks (`room-estimates.ts`).
   const estimated = estimatedAreas(readRooms(model.dataStore, model.meshes ?? []).rooms);
-  return modelReadiness({ ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq);
+  return modelReadiness({ ...facts, ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq, [], rural);
 }

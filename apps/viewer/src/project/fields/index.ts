@@ -55,7 +55,9 @@ import { commentsField } from './comments';
 import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
 import { revisionsField } from './revisions';
+import { norwayPermitField } from './norway-permit';
 import { pacInterventionField } from './pac-intervention';
+import { pacModeField } from './pac-mode';
 import { siteAreaField } from './site-area';
 import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
@@ -131,6 +133,10 @@ const DOCUMENT_FIELD_DEFS = [
   installedStandardField,
   // The works the permit project is for (#364); absent: a new building.
   pacInterventionField,
+  // The project is a Norwegian building application (#372); absent: it is not.
+  norwayPermitField,
+  // Which permit project: the full one or the simplified one for a rural house (#364); absent: the full one.
+  pacModeField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

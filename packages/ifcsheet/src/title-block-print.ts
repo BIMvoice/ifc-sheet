@@ -35,11 +35,11 @@ export function sheetFields(sheet: Pick<ProjectSheet, 'titleBlock'>, doc: Pick<P
 }
 
 /** The names a layout's `{Name}` can mean on `sheet`, as the app answers them (`useSheetParamLookup`). */
-export function sheetLookup(sheet: ProjectSheet, doc: ProjectDocument, scale: string, projectFields?: Record<string, string>): (name: string) => string | undefined {
+export function sheetLookup(sheet: ProjectSheet, doc: ProjectDocument, scale: string, projectFields?: Record<string, string>, language?: string): (name: string) => string | undefined {
   const fields = sheetFields(sheet, doc, projectFields);
   const page = doc.sheets.findIndex((s) => s.id === sheet.id) + 1;
   return paramLookup(sheet, doc.titleBlockParams, {
-    ...fieldBuiltins(fields), SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Page: `${page}/${doc.sheets.length}`,
+    ...fieldBuiltins(fields, language), SheetNumber: sheet.number, SheetName: sheet.name, Scale: scale, Page: `${page}/${doc.sheets.length}`,
     // The revision is never typed: it is the latest the sheet has.
     Revision: currentRevisionOf(sheet, doc)?.code ?? '',
   });

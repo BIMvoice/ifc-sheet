@@ -57,3 +57,7 @@ export {
   type RoomRecord, type RoomSchedule, type RoomScheduleLevel, type RoomScheduleLine, type RoomScheduleWords, type ScheduleLevelInfo,
 } from '../room-schedule.js';
 export { estimatedAreas, type EstimatedAreas } from '../room-estimates.js';
+
+// The urban settings of a project file, read by the app and the command line alike (the indicators themselves are `@bimvoice/ifcsheet/urban`, which loads the wasm)
+export { readUrbanSettings } from '../urban-settings-read.js';
+export { RURAL_MAX_LEVELS, RURAL_MAX_SD, ruralReadiness, type RuralScope } from '../readiness.js';

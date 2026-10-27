@@ -147,9 +147,9 @@ describe('the headless run gives the app\'s rows, groups, totals and files (#78)
     const { modelUnits } = prepareListProviders(state(), {});
     const head = runListScheduleHeadless({ id: 's', name: 'Walls', list: WALLS_BY_TYPE }, [{ modelId: 'fzk', provider: headless() }], modelUnits);
     const groups = (head.result.groups ?? []).filter((g) => g.level === 0);
-    assert.deepEqual(groups.map((g) => Number(g.sums.area.toFixed(4))).sort((a, b) => b - a), [136.2761, 54.1895]);
+    assert.deepEqual(groups.map((g) => Number(g.sums.area!.toFixed(4))).sort((a, b) => b - a), [136.2761, 54.1895]);
     assert.equal(head.result.summary?.count, 13);
-    assert.equal(Number(head.result.summary!.sums.area.toFixed(4)), 190.4655);
+    assert.equal(Number(head.result.summary!.sums.area!.toFixed(4)), 190.4655);
   });
 
   it('writes the CSV the app writes when the command line is run on the saved project', async (t) => {
