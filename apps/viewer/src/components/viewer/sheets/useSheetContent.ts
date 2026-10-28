@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { markStyleOf, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -117,10 +117,12 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         const graphics = resolveViewGraphics(view, viewTemplates);
         const phases = phaseViewOf(graphics, phaseSource);
         // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
-        const kept = raw ? withoutHiddenElements(raw, graphics, renderIdGlobalId) : null;
+        // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
+        const detail = resolveDetailLevel(graphics, vp.scale);
+        const kept = raw ? atDetailLevel(withoutHiddenElements(raw, graphics, renderIdGlobalId), detail) : null;
         const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
-        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw
