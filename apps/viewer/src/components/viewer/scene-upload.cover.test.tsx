@@ -150,7 +150,13 @@ async function load(renderer: Renderer, geometry: MeshData[]): Promise<(next: Me
   const root = createRoot(document.createElement('div'));
   mounted.push(root);
   await act(async () => { root.render(<Harness renderer={renderer} geometry={geometry} />); });
-  return async (next) => { await act(async () => { root.render(<Harness renderer={renderer} geometry={next} />); }); };
+  // A change reaches the 3D one browser task after the render that brought it (#154, useNextTaskValue). act runs the
+  // effect that starts that task's timer only when its scope ends, so the render and the wait are two scopes: the
+  // second waits out the timer, and its update is rendered before the test looks at the scene.
+  return async (next) => {
+    await act(async () => { root.render(<Harness renderer={renderer} geometry={next} />); });
+    await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+  };
 }
 
 const MODEL = [mesh(1, [1, 0, 0, 1]), mesh(2, [0, 0, 1, 1]), mesh(3, [1, 0, 0, 1])];
