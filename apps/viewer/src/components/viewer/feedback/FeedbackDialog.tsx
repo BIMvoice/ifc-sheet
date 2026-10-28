@@ -90,6 +90,23 @@ function FeedbackForm({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** The Feedback form, open or closed by its host (the header's button, the "?" menu). */
+export function FeedbackDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation();
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg border-sky-300/20 bg-[#08214a] text-sky-50">
+        <DialogHeader>
+          <DialogTitle>{t('feedback.title')}</DialogTitle>
+          <DialogDescription className="sr-only">{t('feedback.opens')}</DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while open, so each opening starts a fresh report with fresh facts. */}
+        <FeedbackForm onClose={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** The Feedback button for the Wall header, and the form it opens. */
 export function FeedbackButton({ className }: { className: string }) {
   const { t } = useTranslation();
@@ -97,16 +114,7 @@ export function FeedbackButton({ className }: { className: string }) {
   return (
     <>
       <button type="button" className={className} aria-haspopup="dialog" onClick={() => setOpen(true)}>{t('feedback.button')}</button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg border-sky-300/20 bg-[#08214a] text-sky-50">
-          <DialogHeader>
-            <DialogTitle>{t('feedback.title')}</DialogTitle>
-            <DialogDescription className="sr-only">{t('feedback.opens')}</DialogDescription>
-          </DialogHeader>
-          {/* Mounted only while open, so each opening starts a fresh report with fresh facts. */}
-          <FeedbackForm onClose={() => setOpen(false)} />
-        </DialogContent>
-      </Dialog>
+      <FeedbackDialog open={open} onOpenChange={setOpen} />
     </>
   );
 }

@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/plugin-api",
+  "private": true,
   "version": "0.4.0",
   "description": "Dependency-free type surface for ifc-lite file-source plugins",
   "type": "module",

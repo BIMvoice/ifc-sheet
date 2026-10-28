@@ -627,5 +627,181 @@
    "additionalProperties": false
   },
   "handler": "function"
+ },
+ {
+  "name": "ifcsheet_rooms",
+  "description": "The room and area schedule of an opened model, as `ifcsheet rooms`: every room (IfcSpace) by level with its number, name, area (m²) and perimeter (m), a total per level and for the building (the urban indicators' Au). An area is the model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry; each room says which (source), and a room with no area has area null. Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Optional project_path or project_json: its \"Units and numbers\" setting formats the text (comma, decimals); the numbers stay plain. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Optional. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_materials",
+  "description": "The materials of an opened model and how each draws where a view cuts it (hatch, hatch scale, fill, hatch pen, membrane), as `ifcsheet materials`. With a project (project_path or project_json) the project's own materials table applies; a material it has no row for is guessed from its name (auto true). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Optional. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_boq",
+  "description": "The bill of quantities (antemasuratoare) of an opened model, as `ifcsheet boq`: the articles of a saved project (project_path or project_json, required), each with its total in its own unit (m, m², m³, kg, buc for a count) from the quantities the model declares. A total is null when no element has the quantity; an element lacking it is named in the article's missing list, never counted as 0. An article the engine refuses (no code, no selector, an unknown quantity, a unit mismatch) has refused set to its reason. detail true adds a row per type to the text and CSV (byType is always returned). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "detail": {
+     "type": "boolean",
+     "description": "A row per type under each article in text and csv."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_list",
+  "description": "A schedule from the Lists engine over an opened model, as `ifcsheet list`: the list schedule of a saved project (project_path or project_json, required), i.e. the elements of its definition by class, storey and property, its columns, grouped and summed. The rows and totals are the Lists panel's. schedule names one by id or name (the only one when the project has one). header, rows (cells are numbers, text or null where an element lacks the value) and totals (or null). A total over rows that do not all state the quantity leaves those rows out (never counts them as 0); missing says which column and how many of the rows, and notes (also the last line of text and csv) says it in words. Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. To lay a list out on a sheet use ifcsheet_add_schedule kind \"list\". Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "schedule": {
+     "type": "string",
+     "description": "The list schedule's id or name."
+    },
+    "locale": {
+     "type": "string",
+     "enum": [
+      "en",
+      "ro"
+     ],
+     "description": "The language of the headings and of the text: \"ro\" writes 12,50. Default en. The project's \"Units and numbers\" setting then decides the separator and decimals of the text."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_classify",
+  "description": "The model's types with their classification code, as `ifcsheet classify`: the model's own IfcClassificationReference first (source \"model\"), else the project's mapping (a type, a material or a class to the office's code); source \"none\" and code null when neither gives one. A saved project (project_path or project_json) is required; system picks one of its classification systems (a name or id; default the first). Returns the same values `--json` prints, with numbers as numbers and a missing quantity as null (never 0), plus text (what the command prints) and csv. Read-only. Needs a model_id or document_id.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "model_id": {
+     "type": "string",
+     "description": "The model_id returned by ifcsheet_open_model. Give this or document_id."
+    },
+    "document_id": {
+     "type": "string",
+     "description": "A document_id of a drawing set: its model is read. Give this or model_id."
+    },
+    "project_path": {
+     "type": "string",
+     "description": "Required. A saved project (.ifclite-project.json) on the server, inside the allowed paths. Give this or project_json."
+    },
+    "project_json": {
+     "type": "string",
+     "description": "The text of a saved project file."
+    },
+    "system": {
+     "type": "string",
+     "description": "A classification system of the project, by name or id. Default: the first."
+    }
+   },
+   "additionalProperties": false
+  },
+  "handler": "function"
  }
 ]

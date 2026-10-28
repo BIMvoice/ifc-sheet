@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/load-trace",
+  "private": true,
   "version": "0.1.0",
   "description": "Dependency-free load-trace spans: performance.measure plus a per-load, cross-thread span tree with worker clock alignment and Chrome-trace export",
   "type": "module",
