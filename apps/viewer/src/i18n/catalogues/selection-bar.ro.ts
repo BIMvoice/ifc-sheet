@@ -21,6 +21,7 @@ export const selectionBarRo = {
   'standards.el.reset': 'Revino la stil',
   'standards.text.bold': 'Aldin',
   'standards.text.italic': 'Cursiv',
+  'standards.dim.allOffset': 'DIMALL, primul șir față de perete (mm)',
   'standards.dim.placement.above': 'Deasupra',
   'standards.dim.placement.centered': 'În linie',
   'standards.dim.placement.below': 'Dedesubt',
