@@ -32,6 +32,8 @@ import type { SheetContent } from '../sheets/useSheetContent';
 import { isResizable } from '@/project/viewport-resize';
 import { cellAt, pickCell } from '@/joinery/list-cell-pick';
 import { ViewportHandles } from './ViewportHandles';
+import { SheetHints } from '@/onboarding/SheetHints';
+import { dismissHint } from '@/onboarding/hints';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
 import { keysBelongElsewhere } from './wall-key-bus';
@@ -214,7 +216,10 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         onPointerCancel={endDrag}
         onDoubleClick={(e) => {
           const vp = viewportAt(toPaper(e.clientX, e.clientY));
-          if (vp && !runningCommand()) onOpen(vp);
+          if (vp && !runningCommand()) {
+            dismissHint('openView');
+            onOpen(vp);
+          }
         }}
       >
         <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
@@ -228,6 +233,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           </svg>
         ) : null}
         {drafting.overlay}
+        <SheetHints resizing={resizing !== null} hasDrawings={(sheet.viewports ?? []).length > 0} />
         {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} min={chosenFit?.min} /> : null}
         <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
       </div>
