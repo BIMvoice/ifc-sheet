@@ -130,7 +130,7 @@ export const commandsEn = {
   'commands.drafting.copy': 'Copy the selected drawing elements',
   'commands.drafting.paste': 'Paste the copied elements (click to place)',
   'commands.drafting.duplicate': 'Duplicate the selection in place, offset',
-  'commands.drafting.cancel': 'Cancel the command',
+  'commands.drafting.cancel': 'Cancel the command, or end the current tool. It never leaves the drawing: use Back to sheet. In a tool card, a list or number field lets Escape end the tool; a text field keeps its own Escape.',
   'commands.drafting.erase': 'Erase the selection',
   'commands.drafting.confirm': 'Confirm, or repeat the last command',
   'commands.help.shortcuts': 'Show keyboard shortcuts',
