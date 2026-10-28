@@ -44,6 +44,8 @@ export interface ListGroup {
 export interface ListSummary {
   count: number;
   sums: Record<string, number | null>;
+  /** Per summed column: how many rows state no value for it and so are left out of its sum. Only columns with at least one such row appear; absent when none does. */
+  missing?: Record<string, number>;
 }
 
 /**
