@@ -9,7 +9,7 @@
  * the PDF draw the layout's prims through `ScheduleGraphic` (see `view-choice.test.tsx`), so what is asserted is that markup.
  */
 
-import { beforeEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { defaultWindowSpec, type JoinerySpec } from '@ifc-lite/create';
@@ -23,6 +23,8 @@ import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { commitDrafts, draftsOfView, editDrafts, newDraft, undoDrafts } from '@/drafting/draft-store';
 import { joineryDraftViewId } from './view-draft-id';
 import { openJoineryViewDrafts } from './view-drafts';
+import { attachDraftingView, cancelCommand, clickDrawing, pressEnter, submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { packageCurrentProject } from '@/project/package/project-save';
 import { ScheduleGraphic } from '@/components/viewer/joinery/ScheduleGraphic';
 
 const labels: ScheduleLabels = {
@@ -178,5 +180,61 @@ describe('entering a view with a double-click', () => {
     const front = l.regions!.find((r) => r.type === W2 && r.view === 'front')!;
     const lines = l.prims.filter((p): p is Extract<SchedulePrim, { kind: 'path' }> => p.kind === 'path' && p.view === 'front' && !!p.pick && p.pick.type === W2);
     for (const p of lines) for (const q of p.pts) assert.ok(q.x >= front.box.x && q.x <= front.box.x + front.box.w && q.y >= front.box.y && q.y <= front.box.y + front.box.h);
+  });
+});
+
+describe('commands in a type\'s view', () => {
+  const said = () => useDraftingSession.getState().history.map((h) => JSON.stringify(h)).join('\n');
+  const close: (() => void)[] = [];
+  beforeEach(() => {
+    cancelCommand();
+    useDraftingSession.setState({ selection: new Set(), history: [], lastCommandId: null });
+    attachDraftingView(null, 'front', () => []);
+  });
+  afterEach(() => { close.splice(0).forEach((c) => c()); attachDraftingView(null, 'front', () => []); });
+
+  it('refuses DIMLINEAR with a message and loses nothing; a line still persists', () => {
+    close.push(openJoineryViewDrafts(W1, 'front'));
+    const id = joineryDraftViewId(W1, 'front');
+    attachDraftingView(id, 'front', () => []);
+    submitCommandLine('L', null);
+    clickDrawing({ x: 0, y: 0 }, 0.05, false);
+    clickDrawing({ x: 0.5, y: 0.5 }, 0.05, false);
+    pressEnter();
+    assert.equal(typeOf(W1).view?.drafts?.front?.length, 1, 'the line is on the type');
+    for (const name of ['DIMLINEAR', 'DIMALIGNED', 'LEADER', 'DIMRADIUS', 'DIMANGULAR', 'LEVEL']) {
+      useDraftingSession.setState({ history: [] });
+      submitCommandLine(name, null);
+      assert.equal(useDraftingSession.getState().commandId, null, `${name} did not start`);
+      assert.match(said(), /joinery\.draft\.refused/, name);
+    }
+    assert.equal(draftsOfView(id).length, 1, 'nothing was added or lost');
+    assert.equal(typeOf(W1).view?.drafts?.front?.length, 1);
+  });
+
+  it('refuses every command that makes a shape the type does not store, and allows the ones that make a stored one', async () => {
+    const { DRAFT_COMMANDS } = await import('@/drafting/commands/registry');
+    const { JOINERY_VIEW_COMMANDS } = await import('./view-draft-id');
+    const { DRAW_COMMANDS } = await import('@/drafting/commands/draw');
+    const { MODIFY_COMMANDS } = await import('@/drafting/commands/modify');
+    for (const c of [...DRAW_COMMANDS, ...MODIFY_COMMANDS]) assert.ok(JOINERY_VIEW_COMMANDS.has(c.id), `${c.id} is a draw or modify command`);
+    for (const id of ['dimaligned', 'dimlinear', 'leader', 'dimangular', 'level', 'axis', 'symbol', 'tag']) assert.ok(DRAFT_COMMANDS.some((c) => c.id === id) && !JOINERY_VIEW_COMMANDS.has(id), id);
+  });
+});
+
+describe('saving the package while a type\'s view is open', () => {
+  it('does not write the view\'s working copy into the package, and keeps the type\'s shapes', async () => {
+    const close = openJoineryViewDrafts(W1, 'front');
+    try {
+      editDrafts({ add: [newDraft(joineryDraftViewId(W1, 'front'), 'opening', OPENING)] });
+      assert.equal(useProjectStore.getState().drafts.filter((d) => d.viewId.startsWith('joinery:')).length, 1, 'the working copy is in the store');
+      const packaged = await packageCurrentProject('p');
+      assert.deepEqual((packaged.doc.drafts ?? []).filter((d) => d.viewId.startsWith('joinery:')), []);
+      const text = [...packaged.files.values()].map((f) => new TextDecoder().decode(f as Uint8Array)).join('\n');
+      assert.ok(!text.includes('joinery:w1:front'), 'no file of the package names the working copy');
+      assert.equal(packaged.doc.joineryTypes?.find((t) => t.id === W1)?.view?.drafts?.front?.length, 1, 'the type carries the line');
+    } finally {
+      close();
+    }
   });
 });
