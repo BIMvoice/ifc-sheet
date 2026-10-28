@@ -12,7 +12,7 @@
  * in one undo step per model. A Tag nobody wrote from the schedule is not touched.
  */
 
-import { applyContent, followedTags, orderedRows, readScheduleContent, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort, type SubReportFilter } from '@bimvoice/ifcsheet';
+import { applyContent, followedTags, modelRowId, orderedRows, readScheduleContent, MAX_MODEL_ROWS, type ModelRow, textOwner, type ScheduleContent, type ScheduleNumbering, type ScheduleSort, type SubReportFilter } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
 import type { ProjectSchedule } from '@/project/types';
@@ -50,6 +50,19 @@ export function setRowShown(scheduleId: string, rowId: string, shown: boolean): 
     if (shown) hidden.delete(rowId); else hidden.add(rowId);
     return { ...c, rows: { ...c.rows, hidden: [...hidden] } };
   });
+}
+
+/** Add a property or quantity of the model as a row (#446), shown; one the schedule already lists is shown, not added twice. Returns false when the schedule already lists as many as it may. */
+export function addModelRow(scheduleId: string, column: { source: 'property' | 'quantity'; psetName?: string; propertyName: string }): boolean {
+  const row: ModelRow = { id: modelRowId(column.source, column.psetName ?? '', column.propertyName), source: column.source, psetName: column.psetName ?? '', propertyName: column.propertyName };
+  const held = contentHolder(scheduleId)?.content?.properties ?? [];
+  if (!held.some((r) => r.id === row.id) && held.length >= MAX_MODEL_ROWS) return false;
+  changeContent(scheduleId, (c) => {
+    const hidden = (c.rows?.hidden ?? []).filter((id) => id !== row.id);
+    const properties = (c.properties ?? []).some((r) => r.id === row.id) ? c.properties : [...(c.properties ?? []), row];
+    return { ...c, properties, rows: { ...c.rows, hidden } };
+  });
+  return true;
 }
 
 /** Move a row one place up (`-1`) or down (`1`) among all the rows, hidden ones included. */

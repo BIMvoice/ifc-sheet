@@ -17,15 +17,18 @@
  * the saved project print the same text.
  */
 
+import { isModelRowId } from './joinery-model-rows.js';
 import { cleanText } from './schedule-text.js';
 
 /** The most overrides a project keeps; a damaged file cannot grow the project without bound. */
 export const MAX_JOINERY_OVERRIDES = 2000;
 const MAX_VALUE = 200;
 const MAX_ABOUT = 120;
+/** A model row's id (`source:set:name`) is the longest row id: `property:` or `quantity:` and a set name and a property name of up to 120 characters each. */
+const MAX_ROW_ID = 260;
 
 /**
- * The rows whose text can be typed over: every row of the schedule (#485). The ones read from the model per type (name, operation, sill, U value,
+ * The rows whose text can be typed over: every row of the schedule (#485), the properties and quantities the schedule lists (`ModelRow`) included. The ones read from the model per type (name, operation, sill, U value,
  * fire rating) and the measured ones, the size, the total and the count of each level (`levelRowId`), which a person fixes as a last resort
  * when the model, or the measuring of it, has it wrong.
  */
@@ -34,7 +37,7 @@ export type OverridableRow = (typeof OVERRIDABLE_ROWS)[number];
 const LEVEL_PREFIX = 'levels:';
 /** The id of the count row of the level `level`, which a type's cell is typed over by. */
 export const levelRowId = (level: string): string => `${LEVEL_PREFIX}${level}`;
-export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || (row.startsWith(LEVEL_PREFIX) && row.length > LEVEL_PREFIX.length);
+export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || isModelRowId(row) || (row.startsWith(LEVEL_PREFIX) && row.length > LEVEL_PREFIX.length);
 
 /** The numbers a typed cell holds, for the CSV and the XLSX: `1200 × 1500` is two, `3` one; text that is not a number is none. */
 export function overrideNumbers(value: string): number[] {
@@ -69,7 +72,7 @@ export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | unde
   for (const r of raw) {
     if (typeof r !== 'object' || r === null) continue;
     const o = r as Record<string, unknown>;
-    const type = cleanText(o.type, 200), row = cleanText(o.row, 200);
+    const type = cleanText(o.type, 200), row = cleanText(o.row, MAX_ROW_ID);
     if (!type || !isOverridableRow(row) || typeof o.value !== 'string') continue;
     const cell = `${type}\u0000${row}`;
     if (!byCell.has(cell) && byCell.size >= MAX_JOINERY_OVERRIDES) continue;

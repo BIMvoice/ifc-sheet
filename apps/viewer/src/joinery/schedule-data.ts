@@ -13,13 +13,14 @@
  * tag, the Elements sheet and `schedule-numbering.ts` share.
  */
 
-import { DEFAULT_JOINERY_MAPPING, scheduleFilterProperties, type ScheduleContent } from '@bimvoice/ifcsheet';
+import { DEFAULT_JOINERY_MAPPING, modelRowsOf, scheduleFilterProperties, type ScheduleContent } from '@bimvoice/ifcsheet';
 import { joineryScheduleData, occurrenceMark, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence } from '@bimvoice/ifcsheet/project';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { entityName } from '@/lib/commands/modeling/authored-kinds';
 import { catalogue } from './catalog';
 import { elementMeshLookup } from './element-meshes';
+import { prepareListProviders } from '@/lib/lists/prepare-providers';
 
 // The row loop is the engine's (`joineryScheduleData`): the headless check and the app list the same rows.
 export { occurrenceMark };
@@ -33,12 +34,14 @@ export type { ScheduleData, ScheduleEntry, ScheduleKind, ScheduleOccurrence };
 export function scheduleData(kind: ScheduleKind, content?: ScheduleContent): ScheduleData {
   const s = useViewerStore.getState();
   const models: ScheduleModel[] = [];
+  let prepared: ReturnType<typeof prepareListProviders> | undefined;
   for (const [modelId, model] of s.models) {
     const dataStore = model.ifcDataStore;
     if (!dataStore) continue;
     const view = s.mutationViews.get(modelId) ?? null;
-    models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id), meshesOf: elementMeshLookup(model) });
+    models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id), meshesOf: elementMeshLookup(model), listProvider: () => (prepared ??= prepareListProviders(s, {})).pairs.find((pair) => pair.modelId === modelId)!.provider });
   }
   const p = useProjectStore.getState();
-  return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content, scheduleFilterProperties(p.schedules ?? []));
+  return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content, scheduleFilterProperties(p.schedules ?? []), modelRowsOf((p.schedules ?? []).map((x) => x.content)));
 }
+

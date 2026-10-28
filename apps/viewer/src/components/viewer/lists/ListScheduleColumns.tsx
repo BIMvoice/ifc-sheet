@@ -15,12 +15,14 @@ const nameOf = (c: ListScheduleColumn): string => c.label ?? (c.psetName ? `${c.
 const encode = (source: ListScheduleColumn['source'], pset: string | undefined, name: string): string => JSON.stringify([source, pset ?? null, name]);
 
 /** The select that adds a column: any attribute, property or quantity of the loaded models. The builder and the viewport card on the sheet (#446) offer the same choice. */
-export function AddColumnPicker({ facts, taken, onAdd, labelOf, attributesOnly = false, label }: {
+export function AddColumnPicker({ facts, taken, onAdd, labelOf, attributesOnly = false, omitClassification = false, label }: {
   facts: ModelFacts; taken: ReadonlySet<string>; onAdd: (column: ListScheduleColumn) => void;
   /** The words an attribute is offered in (default: its name). A joinery schedule's columns are its rows, named in the app's words. */
   labelOf?: (name: string) => string;
   /** Offer the attributes only, not the classification, quantities or properties: a joinery schedule's rows are not the model's properties. */
   attributesOnly?: boolean;
+  /** Leave the office classification out: a joinery schedule offers its own rows and the model's properties and quantities (#446), not the classification. */
+  omitClassification?: boolean;
   label?: string;
 }) {
   const { t } = useTranslation();
@@ -43,7 +45,7 @@ export function AddColumnPicker({ facts, taken, onAdd, labelOf, attributesOnly =
         {attributesOnly
           ? facts.attributes.map((a) => option('attribute', undefined, a, labelOf?.(a) ?? a))
           : <optgroup label={t('listSched.builder.attributes')}>{facts.attributes.map((a) => option('attribute', undefined, a, labelOf?.(a) ?? a))}</optgroup>}
-        {attributesOnly ? null : <optgroup label={t('class.list.group')}>{option('officeClassification', undefined, 'Code', t('class.list.code'))}{option('officeClassification', undefined, 'Title', t('class.list.title'))}</optgroup>}
+        {attributesOnly || omitClassification ? null : <optgroup label={t('class.list.group')}>{option('officeClassification', undefined, 'Code', t('class.list.code'))}{option('officeClassification', undefined, 'Title', t('class.list.title'))}</optgroup>}
         {attributesOnly ? null : [...facts.quantities].map(([set, names]) => <optgroup key={`q:${set}`} label={t('listSched.builder.quantities', { set })}>{names.map((n) => option('quantity', set, n))}</optgroup>)}
         {attributesOnly ? null : [...facts.properties].map(([set, names]) => <optgroup key={`p:${set}`} label={t('listSched.builder.properties', { set })}>{names.map((n) => option('property', set, n))}</optgroup>)}
       </select>
