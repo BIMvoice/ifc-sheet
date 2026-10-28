@@ -45,7 +45,7 @@ export const draftingStandardsEn = {
   'standards.text.font.mono': 'Monospace',
   'standards.tables.name': 'Tables',
   'standards.tables.make': 'Add a Tables style',
-  'standards.tables.fontsNote': 'Schedules, reports and the drawing register follow this style (font and italic). Only the three faces the PDF can write are offered: sans serif (Inter), serif (Times) and monospace (Courier). Sizes stay as they are.',
+  'standards.tables.fontsNote': 'Schedules, reports and the drawing register follow this style (font and italic). Only the three faces the PDF can write are offered: sans serif (Inter), serif (Times) and monospace (Courier). Italic is available for serif and monospace; the PDF has no italic Inter. Sizes stay as they are.',
   'standards.text.bold': 'Bold',
   'standards.text.italic': 'Italic',
   'standards.text.color': 'Colour',

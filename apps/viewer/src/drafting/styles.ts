@@ -51,7 +51,8 @@ export const TABLE_FONTS: readonly FontKind[] = ['sans', 'serif', 'mono'];
 /** The face the tables are set in: the project's "Tables" text style, or none (today's sans) when it has not made one. */
 export function tablesFace(textStyles: readonly TextStyle[] | undefined): { font: FontKind; italic: boolean; styled: boolean } {
   const style = textStyles?.find((s) => s.id === TABLES_STYLE_ID);
-  return style ? { font: style.font, italic: style.italic, styled: true } : { font: 'sans', italic: false, styled: false };
+  // The PDF embeds Inter regular and bold only: an italic sans table would be drawn in Times, so italic applies to serif and mono alone.
+  return style ? { font: style.font, italic: style.italic && style.font !== 'sans', styled: true } : { font: 'sans', italic: false, styled: false };
 }
 
 export const DEFAULT_TEXT_STYLE: TextStyle = { id: STANDARD, name: 'Standard', height: 2.5, font: 'sans', bold: false, italic: false };

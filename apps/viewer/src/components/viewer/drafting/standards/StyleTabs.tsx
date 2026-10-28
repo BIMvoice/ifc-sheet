@@ -116,7 +116,7 @@ export function TextStylesTab() {
         </Row>
         {tables ? <p className="text-2xs text-zinc-500">{t('standards.tables.fontsNote')}</p> : null}
         {tables ? null : <Row label={t('standards.text.bold')}><input type="checkbox" checked={style.bold} onChange={(e) => set({ bold: e.target.checked })} /></Row>}
-        <Row label={t('standards.text.italic')}><input type="checkbox" checked={style.italic} onChange={(e) => set({ italic: e.target.checked })} /></Row>
+        <Row label={t('standards.text.italic')}><input type="checkbox" checked={style.italic && !(tables && style.font === 'sans')} disabled={tables && style.font === 'sans'} onChange={(e) => set({ italic: e.target.checked })} /></Row>
         {tables ? null : <Row label={t('standards.text.color')}><ColorChoice label={t('standards.text.color')} value={style.color} onChange={(color) => set({ color })} /></Row>}
         <Button size="sm" variant="outline" disabled={currentStyles().textStyle === style.id} onClick={() => setCurrentStyles({ textStyle: style.id, textHeightMm: style.height })}>
           {t('standards.style.makeCurrent')}

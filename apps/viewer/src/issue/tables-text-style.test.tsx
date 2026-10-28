@@ -92,4 +92,17 @@ describe('the Tables text style (#500)', () => {
     assert.match(dxf, /\nTables\n/, 'the DXF has a Tables text style');
     assert.match(dxf, /\ntimes\.ttf\n/, 'it names the serif font file');
   });
+
+  it('does not set a sans serif table in italic: the PDF has no italic Inter and would silently draw Times', async () => {
+    updateTextStyle(addTablesStyle('Tables'), { font: 'sans', italic: true });
+    const { svg, pdf } = await issued();
+    for (const tag of scheduleText(svg)) assert.doesNotMatch(tag, /font-style/, tag);
+    assert.deepEqual([...usedFonts(pdf)], ['Inter'], 'the page stays in the embedded Inter');
+  });
+
+  it('keeps italic for the serif face, which the PDF writes in Times-Italic', async () => {
+    updateTextStyle(addTablesStyle('Tables'), { font: 'serif', italic: true });
+    const { svg } = await issued();
+    for (const tag of scheduleText(svg)) assert.match(tag, /font-style="italic"/, tag);
+  });
 });
