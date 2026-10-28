@@ -12,7 +12,7 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
-import { resolve } from '@/i18n/registry';
+import { resolve, setProjectNameLanguageSource } from '@/i18n/registry';
 import { setSymbolLibrary, assignDefaultTemplates, type PacIntervention, type PacMode, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
@@ -20,6 +20,7 @@ import { settleDetailMarks } from '@/drafting/detail-mark';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
+import { draftsAtViewScale } from './viewport-annotation';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
@@ -55,6 +56,9 @@ export const useProjectStore = create<ProjectState>()(() => ({
   activeItemId: null,
   dirty: false,
 }));
+
+// Names the app generates later are in the language the project recorded when its names were first made, whatever the interface shows.
+setProjectNameLanguageSource(() => useProjectStore.getState().language);
 
 // Symbol instances look their definition up in this library (`drafting/symbols.ts`): keep it the project's.
 useProjectStore.subscribe((s, previous) => {
@@ -292,11 +296,11 @@ function renameProjectItemNow(id: string, name: string): void {
 /** Change a view's settings (cut height, view depth, section plane…). Its id and kind never change. */
 function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   const state = useProjectStore.getState();
-  if (!state.views.some((v) => v.id === id)) return;
-  useProjectStore.setState({
-    views: state.views.map((v) => (v.id === id ? ({ ...v, ...patch, id: v.id, kind: v.kind } as ProjectView) : v)),
-    dirty: true,
-  });
+  const before = state.views.find((v) => v.id === id);
+  if (!before) return;
+  // A new scale re-expresses the view's annotation sizes (stored in model metres) so they keep their paper size (#488).
+  const drafts = draftsAtViewScale(state.drafts, id, before.scale, patch.scale);
+  useProjectStore.setState({ views: state.views.map((v) => (v.id === id ? ({ ...v, ...patch, id: v.id, kind: v.kind } as ProjectView) : v)), drafts, dirty: true });
 }
 
 function duplicateProjectViewNow(id: string): string | null {

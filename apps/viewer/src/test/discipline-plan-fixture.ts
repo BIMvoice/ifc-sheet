@@ -78,14 +78,15 @@ export function planModelMissing(path: string): string | false {
   return false;
 }
 
-/** Check `planModelMissing(path)` first. */
-export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
+/** Check `planModelMissing(path)` first. `geometryHashes` turns on the per-element geometry fingerprints and world boxes the viewer turns on for a project (what WHATCHANGED compares). */
+export async function loadPlanModel(path: string, options: { geometryHashes?: boolean } = {}): Promise<LoadedPlanModel> {
   const bytes = readFileSync(path);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const ds = await new IfcParser().parseColumnar(buffer);
   serveWasmFromDisk();
   const processor = new GeometryProcessor();
   await processor.init();
+  if (options.geometryHashes) processor.enableGeometryHashes();
   const geometry = await processor.process(new Uint8Array(buffer));
   const maxExpressId = Math.max(...geometry.meshes.map((m) => m.expressId));
   useViewerStore.setState({
