@@ -29,7 +29,7 @@ export function sheetSvgText(svg: SVGSVGElement, sheet: ProjectSheet, crop?: Pap
   clone.setAttribute('height', `${h}mm`);
   if (crop) clone.setAttribute('viewBox', `${crop.x} ${crop.y} ${crop.w} ${crop.h}`);
   clone.removeAttribute('class');
-  for (const el of Array.from(clone.querySelectorAll('[data-export-ignore="true"]'))) el.remove();
+  for (const el of Array.from(clone.querySelectorAll('[data-export-ignore="true"], [data-print-ignore="true"]'))) el.remove();
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`;
 }
 

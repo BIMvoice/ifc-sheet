@@ -40,6 +40,16 @@
       "import": "./dist/plan-symbols.js",
       "default": "./dist/plan-symbols.js"
     },
+    "./underlay": {
+      "types": "./dist/underlay.d.ts",
+      "import": "./dist/underlay.js",
+      "default": "./dist/underlay.js"
+    },
+    "./underlay-read": {
+      "types": "./dist/underlay-read.d.ts",
+      "import": "./dist/underlay-read.js",
+      "default": "./dist/underlay-read.js"
+    },
     "./readiness-read": {
       "types": "./dist/readiness-read.d.ts",
       "import": "./dist/readiness-read.js",

@@ -149,7 +149,7 @@ export function pacOpisTexts(opis: PacOpis): SheetText[] {
 export function pacOpisSheet(opis: PacOpis): SheetGraphic {
   return {
     sheetId: 'pac-opis', number: '', name: opis.title, paper: { ...PAC_OPIS_PAPER },
-    frame: [], fills: [], cut: [], lines: [], pens: [], marks: [], texts: pacOpisTexts(opis), images: [], viewports: [],
+    frame: [], fills: [], cut: [], lines: [], pens: [], marks: [], texts: pacOpisTexts(opis), images: [], underlays: [], viewports: [],
   };
 }
 

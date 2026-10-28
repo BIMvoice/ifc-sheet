@@ -17,6 +17,7 @@ import { measureShape, parseParamValue } from '@/drafting/measure';
 import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { AnnotationFields } from './AnnotationFields';
+import { LineStyleFields } from './LineStyleFields';
 import { AnnotationStyleFields } from './AnnotationStyleFields';
 
 const TYPE_KEYS = {
@@ -84,6 +85,7 @@ export function DraftPropertiesPanel({ entities, layers, extraPatterns }: { enti
           {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </Row>
+      {single && isGeometry(single.shape) ? <LineStyleFields entity={single} layer={layers.find((l) => l.id === single.layerId)} /> : null}
       {single && !isGeometry(single.shape) ? <AnnotationFields entity={single} shape={single.shape} extraPatterns={extraPatterns} /> : null}
       {single && !isGeometry(single.shape) ? <AnnotationStyleFields entity={single} shape={single.shape} /> : null}
       {measure ? (
