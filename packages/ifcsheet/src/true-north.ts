@@ -56,3 +56,47 @@ export function trueNorthOf(store: IfcDataStore | null | undefined): PlanDirecti
   }
   return found;
 }
+
+/** Grid north (the map's +N) in project XY, from an IfcMapConversion's X axis (abscissa, ordinate) = (cos θ, sin θ). */
+export function gridNorthOf(xAxisAbscissa: number | undefined, xAxisOrdinate: number | undefined): PlanDirection | null {
+  const a = xAxisAbscissa ?? 1;
+  const b = xAxisOrdinate ?? 0;
+  // E = a·x − b·y, N = b·x + a·y: the local direction with ΔE = 0 and ΔN > 0 is (b, a).
+  return unitDirection(b, a);
+}
+
+/** The X axis (abscissa, ordinate) of the model's IfcMapConversion (attributes 5 and 6 of it and of IfcMapConversionScaled); null when it has none. */
+export function mapConversionAxisOf(store: IfcDataStore | null | undefined): { abscissa?: number; ordinate?: number } | null {
+  if (!store?.source?.length || !store.entityIndex) return null;
+  const extractor = new EntityExtractor(store.source);
+  const { byId, byType } = store.entityIndex;
+  for (const type of ['IFCMAPCONVERSION', 'IFCMAPCONVERSIONSCALED']) {
+    // @raw-entity-enumeration-ok The map conversion is read as stated; the app passes its edited one to `siteNorth` itself.
+    const id = (byType.get(type) ?? [])[0];
+    const ref = id === undefined ? undefined : byId.get(id);
+    const attributes = ref ? extractor.extractEntity(ref)?.attributes : undefined;
+    if (!attributes) continue;
+    const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+    return { abscissa: num(attributes[5]), ordinate: num(attributes[6]) };
+  }
+  return null;
+}
+
+/**
+ * The north a drawing's arrow points to, in project XY: the model's TrueNorth, else grid north of its
+ * map conversion, else `null` (project north, +Y). The one rule, shared by the site plan, the viewport
+ * arrow on the screen and the PDF/DXF writers.
+ */
+export function siteNorth(
+  trueNorth: PlanDirection | null,
+  mapConversionAxis: { abscissa?: number; ordinate?: number } | null | undefined,
+): { north: PlanDirection | null; northSource: 'trueNorth' | 'gridNorth' | null } {
+  if (trueNorth) return { north: trueNorth, northSource: 'trueNorth' };
+  const grid = mapConversionAxis ? gridNorthOf(mapConversionAxis.abscissa, mapConversionAxis.ordinate) : null;
+  return grid ? { north: grid, northSource: 'gridNorth' } : { north: null, northSource: null };
+}
+
+/** `siteNorth` for a model as stated in its file. */
+export function northOfStore(store: IfcDataStore | null | undefined): PlanDirection | null {
+  return siteNorth(trueNorthOf(store), mapConversionAxisOf(store)).north;
+}

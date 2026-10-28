@@ -15,13 +15,14 @@ import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { sheetFormat, type ProjectDocument } from '@bimvoice/ifcsheet';
 import { sheetGraphic } from '@bimvoice/ifcsheet/headless';
-import { trueNorthOf } from '@bimvoice/ifcsheet/true-north';
+import { northOfStore } from '@bimvoice/ifcsheet/true-north';
 import { cleanup, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { northArrowRotation } from '@/siteplan/true-north';
+import { NORTH_ARROW_ID, SCALE_BAR_ID } from '@/siteplan/live-symbols';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
 import { exportDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';
@@ -53,7 +54,7 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   const marks = ui.querySelector('[data-viewport-marks]');
   const units = useProjectStore.getState().unitsAndNumbers;
   const doc = { name: 'House', models: [], views: [v], sheets: [sheet] } as unknown as ProjectDocument;
-  const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: trueNorthOf(store), locale: sheetFormat('en', units) });
+  const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) });
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
   return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
 }
@@ -153,24 +154,12 @@ describe('a site plan viewport: one placement on the screen, in the PDF layout a
   // A site plan with a plot, a footprint and a setback in the way of the old free-spot placement.
   const site = { boundary: [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }], footprint: [[{ x: 10, y: 5 }, { x: 25, y: 5 }, { x: 25, y: 15 }, { x: 10, y: 15 }]], setbacks: [] };
 
-  it('draws the default marks of a site plan at the same points on the screen and in the layout, with no choice made on the viewport', async () => {
+  it('draws a site plan\'s symbols by the free-spot rule, as before, and no corner marks', async () => {
     const { marks, layout } = await bothSides(viewport({}), SITE_VIEW, site);
-    assert.ok(marks, 'the site plan shows its marks by default');
-    assert.equal(marks.parentElement?.querySelectorAll('[data-site-symbol]').length, 0, 'no second set of symbols');
-    const paths = [...marks.querySelectorAll('path')].filter((p) => p.getAttribute('fill') === 'none');
-    assert.equal(paths.length, layout.symbols.strokes.length);
-    paths.forEach((p, i) => same(numbers(p.getAttribute('d') ?? ''), flat(layout.symbols.strokes[i]), `stroke ${i}`));
-    const texts = [...marks.querySelectorAll('text')];
-    assert.deepEqual(texts.map((t) => t.textContent), ['N', '0', '2.5', '5 m']);
-    for (const t of texts) assert.ok(layout.texts.some((l) => l.text === t.textContent && Math.abs(l.at.x - Number(t.getAttribute('x'))) < 1e-9 && Math.abs(l.at.y - Number(t.getAttribute('y'))) < 1e-9), `${t.textContent} at the same point`);
-  });
-
-  it('writes the same SITE-SYMBOLS points in the app\'s DXF and the engine\'s', async () => {
-    const { screenDxf, engineDxf } = await bothSides(viewport({}), SITE_VIEW, site);
-    const onScreen = layerPoints(screenDxf, 'SITE-SYMBOLS');
-    const inEngine = layerPoints(engineDxf, 'SITE-SYMBOLS');
-    assert.ok(inEngine.length > 10, 'the engine\'s DXF carries the marks');
-    assert.deepEqual(onScreen, inEngine);
+    assert.equal(marks, null, 'no corner marks on a site plan');
+    assert.deepEqual(layout.symbols, { strokes: [], solids: [] });
+    const symbols = document.querySelectorAll('[data-site-symbol]');
+    assert.deepEqual([...symbols].map((g) => g.getAttribute('data-site-symbol')), [NORTH_ARROW_ID, SCALE_BAR_ID]);
   });
 });
 

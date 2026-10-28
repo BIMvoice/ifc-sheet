@@ -22,20 +22,12 @@
  *  - The screen / paper: `drawingToScreen`'s signs (`screenSigns`), y down.
  */
 
-import { trueNorthOf, unitDirection, type PlanDirection } from '@bimvoice/ifcsheet/true-north';
+import { gridNorthOf, trueNorthOf, type PlanDirection } from '@bimvoice/ifcsheet/true-north';
 import { screenSigns, worldToDrawing, type SectionAxisName } from '@/drafting/frame';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 
 /** Read by the engine, so the sheet's PDF and the screen turn the arrow by the same angle (`@bimvoice/ifcsheet/true-north`). */
-export { trueNorthOf, type PlanDirection };
-
-/** Grid north (the map's +N) in project XY, from an IfcMapConversion's X axis (abscissa, ordinate) = (cos θ, sin θ). */
-export function gridNorthOf(xAxisAbscissa: number | undefined, xAxisOrdinate: number | undefined): PlanDirection | null {
-  const a = xAxisAbscissa ?? 1;
-  const b = xAxisOrdinate ?? 0;
-  // E = a·x − b·y, N = b·x + a·y: the local direction with ΔE = 0 and ΔN > 0 is (b, a).
-  return unitDirection(b, a);
-}
+export { gridNorthOf, trueNorthOf, type PlanDirection };
 
 /**
  * The rotation a north arrow takes on a plan drawing: radians,
