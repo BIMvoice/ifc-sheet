@@ -19,6 +19,7 @@ export const selectionBarRo = {
   'standards.el.resetTag': 'Revino la valoarea din model',
   'standards.el.tagOverridden': 'Text scris peste valoarea din model',
   'standards.el.reset': 'Revino la stil',
+  'standards.dim.flipSide': 'Inversează partea',
   'standards.text.bold': 'Aldin',
   'standards.text.italic': 'Cursiv',
   'standards.dim.allOffset': 'DIMALL, primul șir față de perete (mm)',
