@@ -28,7 +28,7 @@ import { readModelRowCells } from './joinery-model-values.js';
 import type { ListDataProvider } from '@ifc-lite/lists';
 import type { ScheduleTextRow } from './schedule-text.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
-import { measureElementSize } from './element-size.js';
+import { statedOrMeasuredSize } from './element-size.js';
 import type { MeshData } from '@ifc-lite/geometry';
 import { doorOperationOf } from './door-operation.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
@@ -343,17 +343,8 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
         count(entry, id);
         continue;
       }
-      let height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
-      // No OverallWidth / OverallHeight (a non-parametric window): the size of its body, measured in its own frame (#485).
-      let measuredWidth = false, measuredHeight = false;
-      if (!(width > 0 && height > 0)) {
-        // Only the side the IFC does not state is measured; a stated one is kept.
-        const measured = measureElementSize(model.meshesOf?.(id));
-        if (measured) {
-          if (!(width > 0)) { width = measured.width; measuredWidth = true; }
-          if (!(height > 0)) { height = measured.height; measuredHeight = true; }
-        }
-      }
+      // No OverallWidth / OverallHeight (a non-parametric window): the side the IFC does not state is measured from its body, in its own frame (#485).
+      const { width, height, measuredWidth, measuredHeight } = statedOrMeasuredSize(real(attrs[9]) * unit, real(attrs[8]) * unit, () => model.meshesOf?.(id));
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
       const stated = k === 'door' ? doorOperationOf(live, id, (types ??= typeIndex(live)).get(id) ?? null) : null;
       const operation = stated?.hinge ? (`${stated.doubleActing ? 'double-acting' : 'swing'}-${stated.hinge}` as NonNullable<ScheduleEntry['operations']>[number]) : undefined;

@@ -91,6 +91,16 @@ export function measureElementSize(meshes: readonly MeshData[] | undefined): { w
   return { width: frame.width, height: frame.height };
 }
 
+/**
+ * A door's or window's width and height (metres): the ones the IFC states, and a side it does not state (not above 0) measured from `meshes`
+ * in the element's own frame (#485), flagged as measured. A stated side is kept; with nothing to measure, the stated values are returned as they are.
+ */
+export function statedOrMeasuredSize(width: number, height: number, meshes: () => readonly MeshData[] | undefined): { width: number; height: number; measuredWidth: boolean; measuredHeight: boolean } {
+  const measured = width > 0 && height > 0 ? null : measureElementSize(meshes());
+  const measuredWidth = measured !== null && !(width > 0), measuredHeight = measured !== null && !(height > 0);
+  return { width: measured && measuredWidth ? measured.width : width, height: measured && measuredHeight ? measured.height : height, measuredWidth, measuredHeight };
+}
+
 /** `(expressId) => meshes` over a headless model's meshes (`OpenedModel.meshes`), grouped once on first use; instancing templates are never an element's. */
 export function meshesByExpressId(meshes: readonly MeshData[]): (expressId: number) => readonly MeshData[] | undefined {
   let byId: Map<number, MeshData[]> | null = null;
