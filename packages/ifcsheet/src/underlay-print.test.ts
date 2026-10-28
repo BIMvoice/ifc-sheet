@@ -71,7 +71,9 @@ const contents = (pdf: Uint8Array): string => {
   for (const m of text.matchAll(/stream\r?\n/g)) {
     const start = m.index + m[0].length;
     const end = text.indexOf('endstream', start);
-    try { out.push(inflateSync(Buffer.from(text.slice(start, end), 'latin1')).toString('latin1')); } catch { /* an image or font stream */ }
+    const body = Buffer.from(text.slice(start, end), 'latin1');
+    // zlib streams start 0x78; an image or font stream is not one of ours to read, and any other failure is the test's to see.
+    if (body[0] === 0x78) out.push(inflateSync(body).toString('latin1'));
   }
   return out.join('\n');
 };
