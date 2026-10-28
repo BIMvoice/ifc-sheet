@@ -18,7 +18,17 @@ import { generateViewDrawings, openModel, sheetGraphics } from './headless.js';
 import { planSymbolsOn, readPlanSymbols, withPlanSymbols, type PlanSymbol } from './plan-symbols.js';
 
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
-const bytes = () => new TextEncoder().encode(planSymbolIfc());
+const bytes = (text: string = planSymbolIfc()) => new TextEncoder().encode(text);
+/**
+ * The fixture with CHAIR_2's body mapped through its own MappingTarget (#70): a type whose symbol is on the type only, so the
+ * target is the one thing that places the symbol the way the body is placed. Axis1 `x`, Axis2 `y` (null: left to the operator).
+ */
+const chair2Target = (x: string, y: string | null): string => planSymbolIfc()
+  .replace('#86=IFCMAPPEDITEM(#41,#68);', '#86=IFCMAPPEDITEM(#41,#70);')
+  .replace('#87=', `#71=IFCDIRECTION((${x}));\n${y ? `#72=IFCDIRECTION((${y}));\n` : ''}#70=IFCCARTESIANTRANSFORMATIONOPERATOR3D(#71,${y ? '#72' : '$'},#10,1.,#12);\n#87=`);
+/** Mirrored across the local x axis (Axis2 pointing the other way), and turned a quarter turn (Axis1 along local +y). */
+const MIRRORED = chair2Target('1.,0.,0.', '0.,-1.,0.');
+const TURNED = chair2Target('0.,1.,0.', null);
 
 type Box = { minX: number; maxX: number; minY: number; maxY: number };
 const boxOf = (points: { x: number; y: number }[]): Box => ({
@@ -43,6 +53,22 @@ describe('reading the plan symbols of a model (#489)', () => {
     // CHAIR_2 is turned a quarter turn about its origin (6, 3): local +x runs to world +y, local +y to world -x.
     const two = boxOf(read.symbols.get(CHAIR_2)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
     close(two.minX, 5.3, 2); close(two.maxX, 6); close(two.minY, -3.8); close(two.maxY, -3);
+  });
+
+  it('places a type-held symbol through the occurrence\'s MappingTarget: mirrored, the arc is on the other side (#508)', async () => {
+    const store = await new IfcParser().parseColumnar(bytes(MIRRORED).buffer as ArrayBuffer);
+    // CHAIR_2 at (6, 3), local +x to world +y, local +y to world -x. The target flips local y, so the half circle that bulges to local +y
+    // bulges to world +x, past the rectangle's 6, instead of to the world -x as the un-mirrored chair draws it.
+    const two = boxOf(readPlanSymbols(store).symbols.get(CHAIR_2)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
+    close(two.minX, 6); close(two.maxX, 6.7, 2); close(two.minY, -3.8); close(two.maxY, -3);
+  });
+
+  it('places a type-held symbol through a MappingTarget that turns the instance (#508)', async () => {
+    const store = await new IfcParser().parseColumnar(bytes(TURNED).buffer as ArrayBuffer);
+    // The target turns local +x to local +y (a quarter turn), on top of the placement's quarter turn: the instance is a half turn from the
+    // file's axes, so the rectangle runs from (6, 3) to (5.2, 2.5) and the half circle bulges to world -y, to 2.3.
+    const two = boxOf(readPlanSymbols(store).symbols.get(CHAIR_2)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
+    close(two.minX, 5.2); close(two.maxX, 6); close(two.minY, -3); close(two.maxY, -2.3, 2);
   });
 
   it('draws the arc as a curve through its trims, in the file\'s angle unit (degrees here)', async () => {
@@ -101,8 +127,8 @@ describe('putting the symbols into a plan drawing (#489)', () => {
 });
 
 describe.skipIf(!existsSync(WASM))('the plan of the model, from its bodies and from its symbols (#489)', () => {
-  const setup = async () => {
-    const model = await openModel(bytes());
+  const setup = async (text?: string) => {
+    const model = await openModel(bytes(text));
     const set = generateDefaultSet(model, { now: Date.UTC(2026, 9, 27) });
     if (!set) throw new Error('no set');
     // The chairs stand below the 1.2 m cut: a plan with a view depth shows them, as a plan of furniture does.
@@ -127,6 +153,16 @@ describe.skipIf(!existsSync(WASM))('the plan of the model, from its bodies and f
     expect(facesOf(drawn, CHAIR_1) + facesOf(drawn, CHAIR_2)).toBe(0);
     expect(drawn.lines.filter((l) => l.entityId === BOX)).toEqual(drawing.lines.filter((l) => l.entityId === BOX));
     expect(facesOf(drawn, BOX)).toBe(facesOf(drawing, BOX));
+  });
+
+  it('draws a mirrored or turned type-held symbol the way the cut body is drawn, not un-mirrored (#508)', async () => {
+    for (const [text, arcSide] of [[MIRRORED, 'maxX'], [TURNED, 'maxY']] as const) {
+      const { model, drawing } = await setup(text);
+      const drawn = withPlanSymbols(drawing, readPlanSymbols(model.dataStore, model.coordinateInfo).symbols);
+      const body = boxOf(linePoints(drawing, CHAIR_2)), symbol = boxOf(linePoints(drawn, CHAIR_2));
+      // The rectangle is the body's own footprint, whichever way the instance is turned or mirrored.
+      for (const edge of ['minX', 'maxX', 'minY', 'maxY'] as const) close(symbol[edge], edge === arcSide ? body[edge] + 0.2 : body[edge], 2);
+    }
   });
 
   it('prints the symbols on the sheet, and the bodies when the view says not to', async () => {

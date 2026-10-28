@@ -31,7 +31,7 @@ import { RelationshipType } from '@ifc-lite/data';
 import { getInheritanceChainAcrossSchemas, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
 import { ifcToViewerAxes, totalYupOffset, type RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
 import { projectTo2D, type Drawing2D, type DrawingLine, type DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { IDENTITY, compose, invertRigid, planeAngleScale, placementFrame, axisFrame, ref, type P3 } from './plan-symbol-frame.js';
+import { IDENTITY, compose, invertRigid, operatorFrame, planeAngleScale, placementFrame, axisFrame, ref, type P3, type Xf } from './plan-symbol-frame.js';
 import { readItem, type CurveContext } from './plan-symbol-curves.js';
 import { isPhysicalElement } from './readiness-read.js';
 
@@ -92,6 +92,23 @@ const refsOf = (entity: { attributes?: unknown[] } | null, index: number): numbe
   (Array.isArray(entity?.attributes?.[index]) ? (entity!.attributes![index] as unknown[]) : []).flatMap((v) => { const r = ref(v); return r === null ? [] : [r]; });
 
 /**
+ * The MappingTarget an occurrence maps its type with: the operator of the first IfcMappedItem, in the representations of its
+ * product definition shape `shape`, whose MappingSource is one of the type's `typeMaps`. The identity when it maps none of them.
+ */
+function mappingTargetOf(store: IfcDataStore, shape: number | null, typeMaps: ReadonlySet<number> | undefined): Xf {
+  if (shape === null || !typeMaps) return IDENTITY;
+  for (const rep of refsOf(store.getEntity(shape), 2)) {
+    for (const item of refsOf(store.getEntity(rep), 3)) {
+      const mapped = store.getEntity(item);
+      if (String(mapped?.type).toUpperCase() !== 'IFCMAPPEDITEM') continue;
+      const source = ref(mapped?.attributes?.[0]);
+      if (source !== null && typeMaps.has(source)) return operatorFrame(store, ref(mapped?.attributes?.[1])) ?? IDENTITY;
+    }
+  }
+  return IDENTITY;
+}
+
+/**
  * Every element's plan symbol, in the render frame `frame` describes (`CoordinateInfo`): through the element's
  * placement, and for a symbol on the type through the type's RepresentationMap origin. An element with a symbol on the
  * occurrence itself takes it over the type's. Empty for a model without a plan representation (one pass over its
@@ -113,6 +130,8 @@ export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | n
     if (rep !== null && plan.has(rep)) maps.set(id, rep);
   }
   const planMapsOfType = new Map<number, number[]>();
+  // Every representation map a type holds, plan or not: the occurrence's body is mapped from one of them, and its target places the symbol too.
+  const mapsOfType = new Map<number, Set<number>>();
   const occurrences: number[] = [];
   const { entities } = store;
   for (let i = 0; i < entities.count; i++) {
@@ -121,8 +140,9 @@ export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | n
     if (isPhysicalElement(name)) {
       if (!OPENING.test(name)) occurrences.push(id);
     } else if (maps.size > 0 && getInheritanceChainAcrossSchemas(name).includes('IfcTypeProduct')) {
-      const own = refsOf(store.getEntity(id), 6).filter((m) => maps.has(m));
-      if (own.length) planMapsOfType.set(id, own);
+      const all = refsOf(store.getEntity(id), 6);
+      const own = all.filter((m) => maps.has(m));
+      if (own.length) { planMapsOfType.set(id, own); mapsOfType.set(id, new Set(all)); }
     }
   }
   const ctx: CurveContext = { store, angle: planeAngleScale(store), skipped: new Set() };
@@ -144,9 +164,12 @@ export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | n
       for (const rep of direct) for (const item of refsOf(store.getEntity(rep), 3)) readItem(ctx, item, placement, lines);
     } else {
       const typeId = store.relationships?.getRelated(id, RelationshipType.DefinesByType, 'inverse')[0];
+      // The occurrence's own IfcMappedItem of the type (its body's) carries the MappingTarget: a mirrored, turned or scaled instance
+      // draws its symbol the way it draws its body.
+      const target = typeId === undefined ? IDENTITY : mappingTargetOf(store, shape, mapsOfType.get(typeId));
       for (const map of typeId === undefined ? [] : planMapsOfType.get(typeId) ?? []) {
         const origin = axisFrame(store, ref(store.getEntity(map)?.attributes?.[0]));
-        const inner = compose(placement, origin ? invertRigid(origin) : IDENTITY);
+        const inner = compose(placement, compose(target, origin ? invertRigid(origin) : IDENTITY));
         for (const item of refsOf(store.getEntity(maps.get(map)!), 3)) readItem(ctx, item, inner, lines);
       }
     }
