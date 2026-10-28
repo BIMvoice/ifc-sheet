@@ -178,6 +178,7 @@ describe('Romanian catalogue (#53)', () => {
     const misread = keys.filter((k) => /pattern|reshaped/i.test(Object.values(forms(en[k])).join(' ')) && /model/i.test(Object.values(forms(catalogue[k])).join(' ')));
     assert.deepEqual(misread, []);
     assert.equal(catalogue['wall.hatch.pattern'], 'Tipar');
+    assert.equal(catalogue['drafting.props.pattern'], 'Tipar');
     assert.match(String(catalogue['whatchanged.usage']), /^WHATCHANGED nu primește argumente, sau primește CLEAR ori ACCEPT; „\{arg\}”/);
   });
 

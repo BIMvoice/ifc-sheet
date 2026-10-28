@@ -6,6 +6,7 @@ import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
 import { anonymizedExportRo } from '../catalogues/anonymized-export.ro';
+import { appearancePickersRo } from '../catalogues/appearance-pickers.ro';
 import { boqRo } from '../catalogues/boq.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
@@ -15,6 +16,7 @@ import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
 import { commandPaletteRo } from '../catalogues/command-palette.ro';
 import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
+import { documentRo } from '../catalogues/document.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
@@ -26,10 +28,13 @@ import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
 import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { handoverRo } from '../catalogues/handover.ro';
+import { hierarchyRo } from '../catalogues/hierarchy.ro';
+import { idsPanelRo } from '../catalogues/ids-panel.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
+import { landxmlRo } from '../catalogues/landxml.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
@@ -38,6 +43,7 @@ export const roAL = {
   ...annotateSetRo,
   ...annotatedIfcRo,
   ...anonymizedExportRo,
+  ...appearancePickersRo,
   ...boqRo,
   ...cadLayersRo,
   ...catalogueRo,
@@ -47,6 +53,7 @@ export const roAL = {
   ...commandPaletteRo,
   ...creditsRo,
   ...cutawayAxoRo,
+  ...documentRo,
   ...draftingRo,
   ...draftingStandardsRo,
   ...elementGraphicsRo,
@@ -58,9 +65,12 @@ export const roAL = {
   ...feedbackRo,
   ...geometryExportDialogsRo,
   ...handoverRo,
+  ...hierarchyRo,
+  ...idsPanelRo,
   ...ionUploadRo,
   ...issueChangesRo,
   ...issueRo,
   ...keyboardShortcutsRo,
+  ...landxmlRo,
   ...listScheduleRo,
 } as const;
