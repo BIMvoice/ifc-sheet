@@ -30,6 +30,13 @@ const chair2Target = (x: string, y: string | null): string => planSymbolIfc()
 const MIRRORED = chair2Target('1.,0.,0.', '0.,-1.,0.');
 const TURNED = chair2Target('0.,1.,0.', null);
 
+/**
+ * The FootPrint map (shared by both chairs) given a MappingOrigin that is rotated a quarter turn (its x along the map's +y) and translated
+ * 0.5 m along x: IfcMappedItem places a map's items by MappingTarget . MappingOrigin, the origin applied first (the geometry kernel's
+ * `compose_mapped_transform`, IfcOpenShell's order), so a map point (x, y) lands at (0.5 - y, x) in the instance's frame.
+ */
+const ORIGIN_MAP = planSymbolIfc().replace('#42=IFCREPRESENTATIONMAP(#11,#44);', '#42=IFCREPRESENTATIONMAP(#75,#44);\n#75=IFCAXIS2PLACEMENT3D(#76,$,#13);\n#76=IFCCARTESIANPOINT((0.5,0.,0.));');
+
 type Box = { minX: number; maxX: number; minY: number; maxY: number };
 const boxOf = (points: { x: number; y: number }[]): Box => ({
   minX: Math.min(...points.map((p) => p.x)), maxX: Math.max(...points.map((p) => p.x)),
@@ -69,6 +76,19 @@ describe('reading the plan symbols of a model (#489)', () => {
     // file's axes, so the rectangle runs from (6, 3) to (5.2, 2.5) and the half circle bulges to world -y, to 2.3.
     const two = boxOf(readPlanSymbols(store).symbols.get(CHAIR_2)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
     close(two.minX, 5.2); close(two.maxX, 6); close(two.minY, -3); close(two.maxY, -2.3, 2);
+  });
+
+  // Review of #508: the symbol went through the inverse of the MappingOrigin, the body (and the 3D engine) through the origin itself. Every other
+  // fixture has an identity origin, which is its own inverse.
+  it('places a symbol through the map\'s MappingOrigin itself, not its inverse (#508)', async () => {
+    const store = await new IfcParser().parseColumnar(bytes(ORIGIN_MAP).buffer as ArrayBuffer);
+    const read = readPlanSymbols(store);
+    // CHAIR_1 (its own mapped item, at (2, 3)): rectangle x in 2 + [0, 0.5], y in 3 + [0, 0.8], the half circle bulging to -x by 0.2.
+    const one = boxOf(read.symbols.get(CHAIR_1)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
+    close(one.minX, 1.8, 2); close(one.maxX, 2.5); close(one.minY, -3.8); close(one.maxY, -3);
+    // CHAIR_2 (through its type, at (6, 3) and turned): world (6 - x, 3.5 - y) of the map point, so x in [5.2, 6], y in [3, 3.5], the arc down to 2.8.
+    const two = boxOf(read.symbols.get(CHAIR_2)!.curves.flat().map((p) => ({ x: p.x, y: p.z })));
+    close(two.minX, 5.2); close(two.maxX, 6); close(two.minY, -3.5); close(two.maxY, -2.8, 2);
   });
 
   it('draws the arc as a curve through its trims, in the file\'s angle unit (degrees here)', async () => {

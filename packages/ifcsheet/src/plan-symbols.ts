@@ -31,7 +31,7 @@ import { RelationshipType } from '@ifc-lite/data';
 import { getInheritanceChainAcrossSchemas, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
 import { ifcToViewerAxes, totalYupOffset, type RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
 import { projectTo2D, type Drawing2D, type DrawingLine, type DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { IDENTITY, compose, invertRigid, operatorFrame, planeAngleScale, placementFrame, axisFrame, ref, type P3, type Xf } from './plan-symbol-frame.js';
+import { IDENTITY, compose, operatorFrame, planeAngleScale, placementFrame, axisFrame, ref, type P3, type Xf } from './plan-symbol-frame.js';
 import { readItem, type CurveContext } from './plan-symbol-curves.js';
 import { isPhysicalElement } from './readiness-read.js';
 
@@ -169,7 +169,7 @@ export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | n
       const target = typeId === undefined ? IDENTITY : mappingTargetOf(store, shape, mapsOfType.get(typeId));
       for (const map of typeId === undefined ? [] : planMapsOfType.get(typeId) ?? []) {
         const origin = axisFrame(store, ref(store.getEntity(map)?.attributes?.[0]));
-        const inner = compose(placement, compose(target, origin ? invertRigid(origin) : IDENTITY));
+        const inner = compose(placement, compose(target, origin ?? IDENTITY));
         for (const item of refsOf(store.getEntity(maps.get(map)!), 3)) readItem(ctx, item, inner, lines);
       }
     }

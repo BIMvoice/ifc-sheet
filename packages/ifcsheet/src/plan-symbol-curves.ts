@@ -236,7 +236,7 @@ export function readItem(ctx: CurveContext, id: number | null, xf: Xf, out: Line
       const target = operatorFrame(ctx.store, ref(attrs[1]));
       const mapped = map ? ctx.store.getEntity(ref(map.attributes?.[1]) ?? -1) : null;
       if (!map || !target || !mapped) { ctx.skipped.add(type); return; }
-      const inner = compose(xf, compose(target, origin ? invertRigid(origin) : [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]));
+      const inner = compose(xf, compose(target, origin ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]));
       for (const e of list(mapped.attributes?.[3])) readItem(ctx, ref(e), inner, out, depth + 1);
       return;
     }
