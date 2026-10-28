@@ -16,10 +16,11 @@
  * (`ifcsheet build --standard ro`) apply the same one; the app re-exports them.
  */
 
-import { ROMANIAN_PRACTICE } from './graphic-standard.js';
+import { GERMAN_PRACTICE, ROMANIAN_PRACTICE } from './graphic-standard.js';
 import type { NumberingScheme } from './document.js';
 import type { UnitsAndNumbers } from './names.js';
 import { TITLE_BLOCK_CAPTIONS_RO, romanianTitleBlock, type RoCaption } from './title-block-ro.js';
+import { standardTitleBlock, type StandardCaption } from './title-block-standard.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 
 /** The parts of a drawing standard a pack can set. */
@@ -81,20 +82,63 @@ export function romaniaPack(t: (key: RoCaption) => string): StandardPack {
   };
 }
 
+export const GERMANY_PACK_ID = 'de-din';
+
+/**
+ * The title block's captions of the German pack: German practice names no title block layout (MBauVorlV § 3(3) only
+ * requires that the Bauvorlagen state their Entwurfsverfasser), so the pack uses the standard layout with German words.
+ * The pack is German, so these are its own data and do not follow the interface language.
+ */
+export const TITLE_BLOCK_CAPTIONS_DE: Record<StandardCaption, string> = {
+  'sheets.tb.project': 'Bauvorhaben',
+  'sheets.tb.address': 'Baugrundstück',
+  'sheets.tb.client': 'Bauherr',
+  'sheets.tb.organisation': 'Entwurfsverfasser',
+  'sheets.tb.title': 'Planinhalt',
+  'sheets.tb.drawnBy': 'Gezeichnet',
+  'sheets.tb.checkedBy': 'Geprüft',
+  'sheets.tb.date': 'Datum',
+  'sheets.tb.revision': 'Index',
+  'sheets.tb.number': 'Plan-Nr.',
+  'sheets.tb.scale': 'Maßstab',
+};
+
+/**
+ * "German practice (ISO 128 line series)". Only values IfcSheet can name a source for:
+ *  - pens: the German graphic standard (`GERMAN_PRACTICE`): ISO 128 line widths and ISO 3098 lettering (the DIN EN ISO
+ *    editions), the 0.5 line group; none checked against DIN 1356-1;
+ *  - title block: the standard layout with German captions, the organisation field captioned Entwurfsverfasser;
+ *  - units: a comma as the decimal separator (German usage; no DIN text was consulted).
+ * Left to the project (`notSet`): numbering, length unit, decimals, hatch patterns and view templates. The date format
+ * (tt.mm.jjjj) is not a pack part: dates print as the project stores them.
+ */
+export function germanyPack(): StandardPack {
+  return {
+    id: GERMANY_PACK_ID,
+    name: 'German practice (ISO 128 line series)',
+    version: STANDARD_PACK_VERSION,
+    description: 'German drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, a title block with German captions, a comma for decimals. Values are the ones IfcSheet can name an ISO source for; none is checked against DIN 1356-1.',
+    graphicStandard: GERMAN_PRACTICE.id,
+    titleBlockTemplate: standardTitleBlock((key) => TITLE_BLOCK_CAPTIONS_DE[key], GERMAN_PRACTICE),
+    unitsAndNumbers: { separator: 'comma' },
+    notSet: PACK_NOT_SET,
+  };
+}
+
 /** The packs that ship with the app. */
-export const builtInPacks = (t: (key: RoCaption) => string): StandardPack[] => [romaniaPack(t)];
+export const builtInPacks = (t: (key: RoCaption) => string): StandardPack[] => [romaniaPack(t), germanyPack()];
 
 /** The ids `ifcsheet build --standard` takes, each the pack it applies. */
-export const COMMAND_LINE_STANDARDS: Readonly<Record<string, string>> = { ro: ROMANIA_PACK_ID };
+export const COMMAND_LINE_STANDARDS: Readonly<Record<string, string>> = { ro: ROMANIA_PACK_ID, de: GERMANY_PACK_ID };
 
 /** The ids `--standard` knows, in the order the message lists them. */
 export const COMMAND_LINE_STANDARD_IDS: readonly string[] = Object.keys(COMMAND_LINE_STANDARDS);
 
 /**
- * The pack a command-line id names (`ro`; the pack's own id `ro-stas` too), its captions in the language of the standard
- * (Romanian for `ro`), or undefined for an id that is not one.
+ * The pack a command-line id names (`ro`, `de`; the pack's own id `ro-stas`, `de-din` too), its captions in the language of the standard
+ * (Romanian for `ro`, German for `de`), or undefined for an id that is not one.
  */
 export function packForCommandLine(id: string): StandardPack | undefined {
   const packId = COMMAND_LINE_STANDARDS[id] ?? (Object.values(COMMAND_LINE_STANDARDS).includes(id) ? id : undefined);
-  return packId === ROMANIA_PACK_ID ? romaniaPack((key) => TITLE_BLOCK_CAPTIONS_RO[key]) : undefined;
+  return packId === ROMANIA_PACK_ID ? romaniaPack((key) => TITLE_BLOCK_CAPTIONS_RO[key]) : packId === GERMANY_PACK_ID ? germanyPack() : undefined;
 }

@@ -16,7 +16,7 @@ import { GRAPHIC_STANDARDS, type GraphicStandard } from '@bimvoice/ifcsheet';
 import type { DimStyle, TextStyle } from './styles';
 
 export {
-  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, MARK_STYLES, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, markStyleOf, standardValues,
+  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, GERMAN_PRACTICE, ISO_3098_HEIGHTS, MARK_STYLES, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, markStyleOf, standardValues,
   type GraphicStandard, type MarkStyle, type WeightPair,
 } from '@bimvoice/ifcsheet';
 
