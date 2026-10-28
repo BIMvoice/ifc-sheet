@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { customPropNames, customValue, fireOf, propRowId, shownRows, symbolsShown, textCellText, textRowId, thermalOf } from '@bimvoice/ifcsheet';
+import { customPropNames, customValue, fireOf, propRowId, shownRows, symbolsShown, textCellText, textRowId, thermalOf, TYPE_ENTRY_PREFIX } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -115,6 +115,13 @@ interface TableRowSpec {
 const mm = (m: number): number => Math.round(m * 1000);
 
 /**
+ * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) has only the kind's default sill,
+ * which the model never stated, so it prints none.
+ */
+const sillOf = (e: ScheduleEntry): number | null =>
+  e.kind === 'window' && e.spec && !e.spec.id?.startsWith(TYPE_ENTRY_PREFIX) ? e.spec.sillHeight : null;
+
+/**
  * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
  * reader of the choice, agree). By default: name, size, operation, sill, the count per level, total, U value, fire rating, then the
  * user's own text rows. The CSV and XLSX read the same list (`joineryExport`), so the file has the rows the sheet prints.
@@ -128,7 +135,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
     operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],
-    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
+    sill: () => [{ label: labels.sill, value: (e) => { const s = sillOf(e); return s === null ? '—' : String(mm(s)); }, raw: (e) => { const s = sillOf(e); return [s === null ? null : mm(s)]; }, num: true }],
     levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
     u: () => [{
