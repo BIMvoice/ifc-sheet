@@ -12,7 +12,7 @@ export const hierarchyRo = {
   'hierarchy.modelTagChip.unresolvedTitle': 'Această etichetă nu mai există',
   'hierarchy.modelTagEditor.addAriaLabel': 'Adăugați o etichetă',
   'hierarchy.modelTagEditor.addPlaceholder': 'Adăugați o etichetă… (Enter)',
-  'hierarchy.modelTagEditor.allModels': 'Toate cele {countDisplay} modele',
+  'hierarchy.modelTagEditor.allModels': 'Toate modelele ({countDisplay})',
   'hierarchy.modelTagEditor.allTagsAriaLabel': 'Toate etichetele',
   'hierarchy.modelTagEditor.applyToAriaLabel': 'Se aplică la',
   'hierarchy.modelTagEditor.assign': 'Atribuie',
@@ -20,7 +20,7 @@ export const hierarchyRo = {
   'hierarchy.modelTagEditor.create': 'Creați',
   'hierarchy.modelTagEditor.deleteAriaLabel': 'Ștergeți eticheta {name}',
   'hierarchy.modelTagEditor.deleteTooltip': 'Ștergeți această etichetă peste tot. Filtrele salvate care o numesc o vor arăta ca nerezolvată.',
-  'hierarchy.modelTagEditor.descriptionAll': 'Etichete pentru toate cele {countDisplay} modele. Etichetele servesc doar organizării — nu modifică niciodată fișierul IFC.',
+  'hierarchy.modelTagEditor.descriptionAll': 'Etichete pentru toate modelele ({countDisplay}). Etichetele servesc doar organizării — nu modifică niciodată fișierul IFC.',
   'hierarchy.modelTagEditor.descriptionCount': {
     one: "Etichete pentru {countDisplay} model. Etichetele servesc doar organizării — nu modifică niciodată fișierul IFC.",
     few: "Etichete pentru {countDisplay} modele. Etichetele servesc doar organizării — nu modifică niciodată fișierul IFC.",

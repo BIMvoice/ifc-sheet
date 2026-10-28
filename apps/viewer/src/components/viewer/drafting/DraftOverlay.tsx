@@ -9,7 +9,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
+import { entityPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
 import { SectionDepthBand } from './SectionDepthBand';
@@ -17,9 +17,12 @@ import { DetailCropPreview } from './DetailCropPreview';
 import { resolveLevelRef } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import type { CustomLineType } from '@/drafting/line-types';
 import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt, type SnapHit } from '@/drafting/types';
 import { entitySkeleton } from '@/drafting/annotation';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { useTranslation } from '@/i18n';
+import { tagOverrideOf } from '@/drafting/tag-override';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 
@@ -108,6 +111,7 @@ function SnapMarker({ snap, t, axis }: { snap: SnapHit; t: ViewTransform; axis: 
 }
 
 const NO_GROUPS: LayerGroup[] = [];
+const NO_LINE_TYPES: CustomLineType[] = [];
 const NO_GRIPS: Grip[] = [];
 
 /** The dragged entity as it will be, drawn over the original. */
@@ -131,6 +135,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
   const textStyles = useProjectStore((s) => s.textStyles);
   const dimStyles = useProjectStore((s) => s.dimStyles);
   const groups = useProjectStore((s) => s.layerGroups) ?? NO_GROUPS;
+  const lineTypes = useProjectStore((s) => s.lineTypes) ?? NO_LINE_TYPES;
   const book = useMemo(() => ({ textStyles: textStyles ?? [], dimStyles: dimStyles ?? [] }), [textStyles, dimStyles]);
   /** Paper millimetres → screen px. */
   const mm = paperUnit * t.scale;
@@ -151,6 +156,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           return (
             <g key={e.id}>
               <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} />
+              {/* Editor only: this overlay is never part of the sheet or the PDF. */}
+              {e.shape.type === 'leader' && tagOverrideOf(e) !== null ? <TagOverrideMark shape={e.shape} t={t} axis={axis} /> : null}
               {isHover || isSelected ? (
                 <path d={entitySkeleton(e.shape).map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke={isSelected ? '#2563eb' : '#60a5fa'} strokeWidth={1} strokeDasharray="4 3" />
               ) : null}
@@ -158,14 +165,14 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           );
         }
         // The layer's pen at the view's scale: weight and line type in paper mm, never thinner than a pixel.
-        const pen = layerPen(layer);
+        const pen = entityPen(layer, e.params, lineTypes);
         const dash = pen.dash.length ? pen.dash.map((d) => Math.max(d * mm, 2)).join(' ') : undefined;
         return (
           <path
             key={e.id}
             d={shapePath(e.shape, t, axis)}
             fill="none"
-            stroke={isSelected ? '#2563eb' : isHover ? '#60a5fa' : color}
+            stroke={isSelected ? '#2563eb' : isHover ? '#60a5fa' : pen.color}
             strokeWidth={isSelected || isHover ? 2 : Math.max(pen.width * mm, 1)}
             strokeDasharray={isSelected ? '6 3' : dash}
           />
@@ -190,6 +197,13 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
     </svg>
   );
 });
+
+/** A small amber ring on the text end of a tag whose text is written over the model's (#445); not printed. */
+function TagOverrideMark({ shape, t, axis }: { shape: Extract<DraftEntity['shape'], { type: 'leader' }>; t: ViewTransform; axis: SectionAxisName }) {
+  const p = drawingToScreen(shape.pts[shape.pts.length - 1], t, axis);
+  const { t: tr } = useTranslation();
+  return <circle data-tag-override="true" cx={p.x} cy={p.y} r={4} fill="none" stroke="#f59e0b" strokeWidth={2}><title>{tr('standards.el.tagOverridden')}</title></circle>;
+}
 
 function SelectionWindow({ window, t, axis }: { window: { a: Pt; b: Pt }; t: ViewTransform; axis: SectionAxisName }) {
   const a = drawingToScreen(window.a, t, axis);

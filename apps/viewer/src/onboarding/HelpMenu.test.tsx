@@ -41,9 +41,9 @@ describe('the ? menu', () => {
     assert.ok(document.querySelector('[role="menu"]'), 'opened by Enter');
   });
 
-  it('offers shortcuts, the six how-tos, report or suggest, the tour and the hints setting in English', () => {
+  it('offers shortcuts, the six how-tos, report or suggest, the project on GitHub, the tour and the hints setting in English', () => {
     open();
-    assert.deepEqual(items(), ['Keyboard shortcuts', 'Open a model', 'Hang the set', 'Dimension and tag', 'Schedules', 'Title block', 'Export', 'Report a bug or suggest a feature', 'Tour of the Wall', 'Hints in Settings']);
+    assert.deepEqual(items(), ['Keyboard shortcuts', 'Open a model', 'Hang the set', 'Dimension and tag', 'Schedules', 'Title block', 'Export', 'Report a bug or suggest a feature', 'IfcSheet on GitHub', 'Tour of the Wall', 'Hints in Settings']);
   });
 
   it('offers the same items in Romanian', () => {
@@ -51,10 +51,20 @@ describe('the ? menu', () => {
     setLocale('ro');
     open();
     const got = items();
-    assert.equal(got.length, 10);
+    assert.equal(got.length, 11);
+    assert.ok(got.includes('IfcSheet pe GitHub'));
     assert.equal(got[0], 'Scurtături de tastatură');
     assert.ok(got.includes('Raportați o problemă sau propuneți o funcție'));
     assert.equal(document.querySelector('[role="menu"]') !== null && trigger().getAttribute('aria-label'), 'Ajutor');
+  });
+
+  it('links to the repository in a new tab', () => {
+    open();
+    const link = [...document.querySelectorAll<HTMLAnchorElement>('a[role="menuitem"]')].find((e) => e.textContent === 'IfcSheet on GitHub');
+    assert.ok(link, 'a GitHub menu item');
+    assert.equal(link.getAttribute('href'), 'https://github.com/BIMvoice/ifcsheet');
+    assert.equal(link.getAttribute('target'), '_blank');
+    assert.match(link.getAttribute('rel') ?? '', /noopener/);
   });
 
   it('opens the shortcut list, the settings and a how-to page', () => {
