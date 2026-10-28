@@ -15,6 +15,7 @@ import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { CustomLineType } from '@/drafting/line-types';
 import type { ProjectIssue } from '@/issue/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, SheetTemplate, TemplateSeries } from '@bimvoice/ifcsheet';
@@ -77,6 +78,8 @@ export interface ProjectDocument extends EngineDocument, ProjectFieldTypes {
   textStyles?: TextStyle[];
   dimStyles?: DimStyle[];
   layerGroups?: LayerGroup[];
+  /** The project's own line types (dash patterns in paper mm) layers and drafted lines can name; the built-in ones are in code. */
+  lineTypes?: CustomLineType[];
   /** The built-in graphic standard (pens and text sizes) the sheets draw with, by id (`drafting/graphic-standard.ts`); absent: the IfcSheet default. */
   graphicStandard?: string;
   /** Door and window opening symbols in elevation: apex at the handle (default, window makers' sketches) or at the hinges (DIN 1356). */

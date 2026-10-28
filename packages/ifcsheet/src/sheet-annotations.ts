@@ -23,7 +23,7 @@ import type { Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline, pointInBox } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
-import { formatDimension, layerShows, lookOf, type LayerGroup, type StyleBook } from './draft-look.js';
+import { entityPen, formatDimension, layerPrints, layerShows, lookOf, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import { AXIS_NAME } from './drawing-frame.js';
 import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
 import type { HatchPattern } from './hatch-pattern.js';
@@ -34,7 +34,7 @@ import { drawSymbol } from './sheet-symbols.js';
 import { liveSymbolContext, COORDINATE_LABELS, type SiteFrame } from './site-frame.js';
 import { COORDINATE_POINT_ID } from './live-symbols.js';
 import { findSymbol, type DraftSymbol } from './symbols.js';
-import { label, readableAngle, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
+import { label, readableAngle, textInk, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from './viewport-annotation.js';
 import { viewportHiddenLayers } from './view-templates.js';
@@ -44,6 +44,8 @@ export interface SheetAnnotations {
   drafts: readonly DraftEntity[];
   layers: readonly DraftLayer[];
   groups: readonly LayerGroup[];
+  /** The project's own line types, which a layer or a drafted line may name (absent: only the built-in ones). */
+  lineTypes?: readonly CustomLineType[];
   book: StyleBook;
   /** The project's own hatch patterns (a pattern the library lacks); a hatch names its pattern. */
   patterns?: readonly HatchPattern[];
@@ -92,11 +94,13 @@ export function viewportAnnotations(
     if (e.viewId !== vp.viewId) continue;
     const layer = layerOf.get(e.layerId);
     if (layer && !layerShows(layer, a.groups, { view: hidden })) continue;
+    // A layer switched off for printing is on the screen only (the app's sheet marks it `data-print-ignore`).
+    if (!layerPrints(layer)) continue;
     const colour = layer?.color ?? '#000';
     const shape = e.shape;
     const mark = context(colour, lookOf(a.book, e.params));
     if (isGeometry(shape)) {
-      drawCurve(shape, layer, mark);
+      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), mark);
       continue;
     }
     const sized = annotationAtFactor(shape, factor, (id) => findSymbol(id, own)?.unit === 'paper');
@@ -105,7 +109,7 @@ export function viewportAnnotations(
       const px = sized.height * mmPerMetre;
       const deg = readableAngle(sized.rotation, frame);
       // One label per line, each a line pitch under the one before, in the text's own frame.
-      sized.text.split('\n').forEach((line, i) => out.texts.push(label(at(sized.p), line, Math.max(px, 1), deg, i * 1.25 * Math.max(px, 1), 'left')));
+      sized.text.split('\n').forEach((line, i) => out.texts.push(label(at(sized.p), line, Math.max(px, 1), deg, i * 1.25 * Math.max(px, 1), 'left', textInk(look.text, look.text.color ?? colour))));
       if (sized.frame || sized.leader) a.onSkipped?.('text', view);
     } else if (sized.type === 'leader') drawLeader(sized, mark);
     else if (sized.type === 'level') drawLevel(sized, mark);
@@ -134,7 +138,7 @@ export function viewportAnnotations(
       // Above the line in the text's own frame (screen-up for a level line, screen-left for an upright one); centred breaks the line under it.
       const shift = dim.placement === 'centered' ? px * 0.35 : dim.placement === 'below' ? dim.textGap + px * 0.8 : -dim.textGap;
       const textAt = sized.type === 'dimension' ? sized.textAt : undefined;
-      out.texts.push(label(at(textAt ?? layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center'));
+      out.texts.push(label(at(textAt ?? layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center', textInk(look.text, look.text.color ?? dim.color ?? colour)));
       if (textAt) a.onSkipped?.('dimension', view);
     }
   }

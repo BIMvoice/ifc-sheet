@@ -13,7 +13,7 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { SectionAxisName } from './drawing-frame.js';
 import type { SymbolInstanceShape } from './draft-types.js';
 import { liveSymbol, type LiveSymbolContext } from './live-symbols.js';
-import { label, readableAngle } from './sheet-stroke.js';
+import { label, readableAngle, textInk } from './sheet-stroke.js';
 import { K, type MarkContext } from './sheet-marks.js';
 import { flattenShape, missingSymbolMark, placeSymbol, type DraftSymbol } from './symbols.js';
 
@@ -38,6 +38,7 @@ export function drawSymbol(shape: SymbolInstanceShape, c: MarkContext, s: Symbol
   c.out.strokes.push({ colour: c.colour, width: K, ...(def ? {} : { dash: [3 * K, 2 * K] }), runs });
   for (const x of placed?.texts ?? []) {
     const px = Math.max(x.height * c.mmPerMetre, 1);
-    c.out.texts.push(label(c.at(x.p), x.text, px, readableAngle(x.rotation, c.frame), 0, 'left'));
+    // In the text style, coloured as the symbol's lines (the app's `Symbol` passes its colour, not the style's).
+    c.out.texts.push(label(c.at(x.p), x.text, px, readableAngle(x.rotation, c.frame), 0, 'left', textInk(c.look.text, c.colour)));
   }
 }
