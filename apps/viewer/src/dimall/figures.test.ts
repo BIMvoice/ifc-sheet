@@ -94,7 +94,7 @@ describe('DIMALL and section marks', () => {
     assert.deepEqual(collisions(house(), view), []);
   });
   it('counts the strings that run through the arrow or letter of a section mark', () => {
-    const view = symbol({ x: 6, y: -1 }, { x: 6, y: 11 });
+    const view = symbol({ x: 6, y: -1.8 }, { x: 6, y: 11.8 });
     const plan = planDimensions(house(), { paperUnit: 0.1, textHeight: H });
     assert.ok(stringsThroughHeads(plan.strings, symbolPieces(view), H) > 0);
     assert.equal(stringsThroughHeads(plan.strings, symbolPieces([]), H), 0);

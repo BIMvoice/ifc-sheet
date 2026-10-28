@@ -22,6 +22,7 @@ import type { TitleSources } from './title-block-sources.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
+import type { ViewUnderlay } from './underlay.js';
 
 export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
@@ -324,4 +325,6 @@ export interface ProjectDocument {
   language?: NameLanguage;
   /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
   unitsAndNumbers?: UnitsAndNumbers;
+  /** PDF pages and images laid under views (#457); a sheet prints those that name it in `printOnSheets` (`underlay.ts`). */
+  underlays?: ViewUnderlay[];
 }

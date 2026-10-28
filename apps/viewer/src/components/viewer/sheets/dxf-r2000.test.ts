@@ -5,9 +5,47 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HatchPattern } from '@bimvoice/ifcsheet/hatch';
-import { aciOf, DxfR2000, dxfLineWeight } from './dxf-r2000';
+import { aciOf, DxfR2000, dxfLineWeight, ltypeName } from './dxf-r2000';
 
 const read = (w: DxfR2000) => new TextDecoder('windows-1252').decode(w.bytes('test'));
+
+/** The names (group 2) of the LTYPE records, in the order written, with the description (group 3) of each. */
+const ltypes = (dxf: string): { name: string; description: string }[] => {
+  const lines = dxf.split('\n').map((l) => l.replace(/\r$/, '').trim());
+  const out: { name: string; description: string }[] = [];
+  let current: { name: string; description: string } | null = null;
+  for (let i = 0; i + 1 < lines.length; i += 2) {
+    if (lines[i] === '0') { current = lines[i + 1] === 'LTYPE' ? { name: '', description: '' } : null; if (current) out.push(current); }
+    else if (current && lines[i] === '2') current.name = lines[i + 1];
+    else if (current && lines[i] === '3') current.description = lines[i + 1];
+  }
+  return out;
+};
+const ltypeNames = (dxf: string): string[] => ltypes(dxf).map((l) => l.name);
+
+describe('a project line type\'s name in the LTYPE table (#514)', () => {
+  const DASH = [6, 2];
+  it('is ASCII with the diacritics reduced, whatever the project calls it', () => {
+    assert.equal(ltypeName('Întrerupt ș/ț/ă'), 'Intrerupt_s_t_a');
+    assert.equal(ltypeName('ș ț'), 's_t');
+    assert.equal(ltypeName('日本'), 'LTYPE');
+    const w = new DxfR2000();
+    w.defineLineType('p1', 'Întrerupt', DASH);
+    assert.deepEqual(ltypes(read(w)).filter((l) => l.name === 'Intrerupt').map((l) => l.description), ['Întrerupt'], 'the display name stays as the description');
+  });
+
+  it('never repeats a reserved or built-in name, nor a name another line type took', () => {
+    const w = new DxfR2000();
+    for (const [id, name] of [['a', 'ByLayer'], ['b', 'BYBLOCK'], ['c', 'continuous'], ['d', 'Dashed'], ['e', 'Ștreang'], ['f', 'Streang'], ['g', 'ș'], ['h', 'ț']] as const) w.defineLineType(id, name, DASH);
+    const written = ltypeNames(read(w));
+    const upper = written.map((n) => n.toUpperCase());
+    assert.equal(new Set(upper).size, upper.length, `no duplicate LTYPE name in ${written.join(', ')}`);
+    for (const n of written) assert.match(n, /^[\x20-\x7e]+$/);
+    assert.ok(!written.includes('?') && !written.some((n) => n.includes('?')), 'no letter written as ?');
+    // The skeleton writes ByLayer and ByBlock itself: a project line type of that name is moved off, not a second record.
+    for (const reserved of ['BYLAYER', 'BYBLOCK']) assert.equal(upper.filter((n) => n === reserved).length, 1, reserved);
+  });
+});
 
 describe('DxfR2000', () => {
   it('maps colours and pen widths to DXF values', () => {

@@ -157,8 +157,6 @@ interface Box { x: number; y: number; w: number; h: number }
 
 const rect = (b: Box): Pt[] => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
 
-const DASH_TYPES = new Set(['dashed', 'dotted', 'dashdot']);
-
 /** A hatch pattern in a box, as outline plus pattern lines (a solid pattern fills it). */
 function hatchSwatch(out: LegendPrim[], b: Box, patternName: string, scale: number, ctx: LegendLayoutContext, fill?: string): void {
   const pattern = findPattern(patternName, ctx.patterns);
@@ -187,7 +185,7 @@ function swatch(out: LegendPrim[], e: LegendEntry, b: Box, ctx: LegendLayoutCont
       if (e.hatch && e.membrane) out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: 0.7, color: INK, dash: true });
       break;
     case 'layers':
-      out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: Math.max(e.weight, 0.1), color: e.color, ...(DASH_TYPES.has(e.lineType) ? { dash: true } : {}) });
+      out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: Math.max(e.weight, 0.1), color: e.color, ...(e.lineType !== 'continuous' ? { dash: true } : {}) });
       break;
     case 'hatches':
       hatchSwatch(out, b, e.name, e.scale, ctx);
