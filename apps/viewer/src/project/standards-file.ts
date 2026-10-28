@@ -38,6 +38,7 @@ function readDim(v: Raw): DimStyle {
     extGap: num(v.extGap, d.extGap), extOver: num(v.extOver, d.extOver),
     placement: oneOf<TextPlacement>(v.placement, ['above', 'centered', 'below'], d.placement), textGap: num(v.textGap, d.textGap),
     precision: Math.round(num(v.precision, d.precision)), unit: oneOf<LengthUnit>(v.unit, ['m', 'cm', 'mm'], d.unit), ...color(v.color),
+    ...(v.allOffset === undefined ? {} : { allOffset: Math.max(0, num(v.allOffset, d.allOffset ?? 0)) }),
   };
 }
 
