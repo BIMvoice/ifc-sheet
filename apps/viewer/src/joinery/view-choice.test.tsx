@@ -8,6 +8,7 @@
  * layout's prims through `ScheduleGraphic` (`SheetPaper`, `useSheetContent`), so what is asserted is the markup that component renders.
  */
 
+import '@/test/setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -20,6 +21,7 @@ import { elementViews, type ElementViews } from './element-views';
 import { useProjectStore } from '@/project/project-store';
 import { hideViewLine, setViewDetail, showHiddenViewLines } from './view-choice-actions';
 import { ScheduleGraphic } from '@/components/viewer/joinery/ScheduleGraphic';
+import { svgDocumentText } from '@/components/viewer/sheets/sheet-export';
 
 const labels: ScheduleLabels = {
   locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: (op) => op,
@@ -121,13 +123,41 @@ describe('hiding a single line', () => {
     assert.equal(paths(hiddenOnly), paths(plain) - 1, 'exactly the one line goes');
   });
 
+  it('the SVG export has each line once: the invisible paths that pick a line are left out', async () => {
+    const v = await views();
+    const layout = lay(spec0, v);
+    const svgOf = (markup: string): SVGSVGElement => {
+      const host = document.createElement('div');
+      host.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg">${markup}</svg>`;
+      return host.querySelector('svg')!;
+    };
+    const live = svgOf(renderToStaticMarkup(<ScheduleGraphic layout={layout} onPick={() => {}} />));
+    const plain = renderToStaticMarkup(<ScheduleGraphic layout={layout} />);
+    assert.ok(live.querySelectorAll('[data-pick-line]').length > 0, 'the live view has pick paths');
+    const exported = svgDocumentText(live, 100, 100);
+    assert.ok(!exported.includes('data-pick-line'), 'none is exported');
+    const count = (m: string) => (m.match(/<path /g) ?? []).length;
+    assert.equal(count(exported), count(plain), 'the export draws the same paths as the view without picking');
+  });
+
   it('every schedule that shows the type draws the same choice (the choice is on the type)', async () => {
     const v = await views();
     const id = picks(lay(spec0, v))[0];
-    const chosen = withViewLineHidden(withViewDetail(spec0, 'frame'), id);
-    const a = layoutSchedule(dataOf(chosen), labels, { scale: 20, views: new Map([['w1', v]]) });
-    const b = layoutSchedule({ ...dataOf(chosen), content: {} }, labels, { scale: 20, views: new Map([['w1', v]]) });
-    assert.deepEqual(a, b);
+    useProjectStore.setState({ joineryTypes: [spec0] });
+    setViewDetail('w1', 'frame');
+    hideViewLine('w1', id);
+    const stored = useProjectStore.getState().joineryTypes![0];
+    // Two different schedules: the second has another type before it and hides some of its rows. Both take the type from the project's catalogue.
+    const entry = (spec: JoinerySpec): ScheduleData['entries'][number] => ({ key: spec.id!, kind: 'window', spec, mark: spec.mark, name: 'W', width: 1.2, height: 1.5, counts: { Ground: 1 }, total: 1, occurrences: [] });
+    const other: JoinerySpec = { ...spec0, id: 'w2', mark: 'W2' };
+    const first = layoutSchedule({ levels: ['Ground'], entries: [entry(stored)] }, labels, { scale: 20, views: new Map([['w1', v]]) });
+    const second = layoutSchedule({ levels: ['Ground'], entries: [entry(other), entry(stored)], content: { rows: { hidden: ['sill', 'fire'] } } }, labels, { scale: 20, views: new Map([['w1', v], ['w2', v]]) });
+    const ofType = (l: ReturnType<typeof lay>) => l.prims.flatMap((p) => (p.kind === 'path' && p.pick?.type === 'w1' ? [p.pick.line] : []));
+    assert.ok(ofType(first).length > 0, 'the type is drawn with pickable lines');
+    assert.ok(!ofType(first).includes(id) && !ofType(second).includes(id), 'the hidden line is gone from both');
+    assert.deepEqual(ofType(second), ofType(first), 'both draw the same lines of the type');
+    const unchosen = layoutSchedule({ levels: ['Ground'], entries: [entry(spec0)] }, labels, { scale: 20, views: new Map([['w1', v]]) });
+    assert.notDeepEqual(ofType(unchosen), ofType(first), 'and the choice does change what is drawn');
   });
 });
 

@@ -22,6 +22,7 @@ import { openJoinery } from '@/joinery/dialog-store';
 import { writeOccurrenceNumbers } from '@/joinery/schedule-numbering';
 import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
+import { svgDocumentText } from '../sheets/sheet-export';
 import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
 import { TAB_EXPORT } from '../wall/wall-type';
 import { ScheduleGraphic, useScheduleLayout } from './ScheduleGraphic';
@@ -66,10 +67,7 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const exportSvg = () => {
     const svg = svgRef.current;
     if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute('width', `${w}mm`);
-    clone.setAttribute('height', `${h}mm`);
-    downloadFile(`<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`, `${stem}.svg`, 'image/svg+xml');
+    downloadFile(svgDocumentText(svg, w, h), `${stem}.svg`, 'image/svg+xml');
   };
   const number = () => {
     const out = writeOccurrenceNumbers(data);
