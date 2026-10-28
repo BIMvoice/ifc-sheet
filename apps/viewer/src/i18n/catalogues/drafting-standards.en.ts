@@ -86,6 +86,7 @@ export const draftingStandardsEn = {
   'standards.el.style': 'Style',
   'standards.el.byStyle': 'By style',
   'standards.el.reset': 'Reset to style',
+  'standards.dim.flipSide': 'Flip side',
   'standards.el.overridden': 'Overridden on this element',
   'standards.el.editText': 'Edit text',
   'standards.el.resetTag': 'Reset to model value',
