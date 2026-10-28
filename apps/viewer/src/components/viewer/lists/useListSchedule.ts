@@ -35,8 +35,8 @@ const NO_SCHEDULES: ProjectSchedule[] = [];
 /** A list schedule with its definition. */
 const isListSchedule = (s: ProjectSchedule | undefined): s is ProjectSchedule & { list: ListScheduleDef } => s?.kind === 'list' && !!s.list;
 
-/** What a run reads of the definition: not the name, which only titles the table. */
-const fingerprint = (list: ListScheduleDef): string => JSON.stringify(list);
+/** What a run reads of the definition: not the name, which only titles the table, and not the overrides, which are printed in afterwards (`listTableSourceOf`) and must not run the list again. */
+const fingerprint = ({ overrides: _overrides, ...list }: ListScheduleDef): string => JSON.stringify(list);
 
 /** The same object while every dep is `===` its predecessor; a new one otherwise. */
 function useStableKey(deps: readonly unknown[]): object {

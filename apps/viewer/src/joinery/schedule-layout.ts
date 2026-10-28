@@ -23,10 +23,10 @@ import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { PAD, pageTitle, shownRows, symbolsShown, textCellText, textRowId, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
+import { PAD, pageTitle, shownRows, symbolsShown, textCellText, textRowId, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
 
 // What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
-export type { ScheduleLayout, SchedulePrim };
+export type { ScheduleCell, ScheduleLayout, SchedulePrim };
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export interface ScheduleLabels {

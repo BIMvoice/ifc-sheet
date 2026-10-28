@@ -7,18 +7,24 @@
  * for a joinery schedule), the totals row, and the button that opens the builder. Nothing for any other schedule.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ProjectSchedule } from '@/project/types';
 import { useTranslation } from '@/i18n';
-import { moveListColumn, setListColumnHidden, setListTotals } from '@/joinery/list-schedule-actions';
+import { addListColumn, moveListColumn, removeListColumn, setListColumnHidden, setListTotals } from '@/joinery/list-schedule-actions';
 import { CardSection } from '../wall/CardSection';
 import { WALL_PILL } from '../wall/wall-type';
+import { ListCellEditor } from './ListCellEditor';
 import { ListScheduleBuilder } from './ListScheduleBuilder';
+import { AddColumnPicker } from './ListScheduleColumns';
+import { modelFacts } from './list-schedule-draft';
+import { useListProviders } from './useListProviders';
 
 export function ListScheduleCard({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const list = schedule.list;
+  const { providers } = useListProviders();
+  const facts = useMemo(() => modelFacts(providers), [providers]);
   if (schedule.kind !== 'list' || !list) return null;
   const grouped = (list.groupBy ?? []).length > 0;
   const name = (id: string) => { const c = list.columns.find((x) => x.id === id); return c?.label ?? c?.propertyName ?? id; };
@@ -35,15 +41,18 @@ export function ListScheduleCard({ schedule }: { schedule: ProjectSchedule }) {
             </label>
             <button type="button" className={WALL_PILL} disabled={i === 0} aria-label={t('listSched.builder.up', { name: name(c.id) })} onClick={() => moveListColumn(schedule.id, c.id, -1)}>↑</button>
             <button type="button" className={WALL_PILL} disabled={i === list.columns.length - 1} aria-label={t('listSched.builder.down', { name: name(c.id) })} onClick={() => moveListColumn(schedule.id, c.id, 1)}>↓</button>
+            <button type="button" className={WALL_PILL} aria-label={t('listSched.builder.remove', { name: name(c.id) })} onClick={() => removeListColumn(schedule.id, c.id)}>×</button>
           </li>
         ))}
       </ul>
+      <AddColumnPicker facts={facts} taken={new Set(list.columns.map((c) => c.id))} onAdd={(column) => addListColumn(schedule.id, column)} />
       {grouped ? (
         <label className="mt-2 flex items-center gap-2 text-xs text-sky-100">
           <input type="checkbox" checked={list.totals !== false} onChange={(e) => setListTotals(schedule.id, e.target.checked)} />
           {t('listSched.builder.totals')}
         </label>
       ) : null}
+      {grouped ? <p className="m-0 mt-3 text-xs text-sky-200">{t('listSched.cell.grouped')}</p> : <ListCellEditor schedule={schedule} />}
       <button type="button" className={`${WALL_PILL} mt-3`} onClick={() => setOpen(true)}>{t('listSched.card.edit')}</button>
       {open ? <ListScheduleBuilder schedule={schedule} onClose={() => setOpen(false)} /> : null}
     </CardSection>

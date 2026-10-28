@@ -30,5 +30,5 @@ export async function runListSchedule(
   const definition = listDefinitionOf(schedule, pairs);
   const result = await runListFederated(definition, pairs, state, { evaluatorModels: evaluatorModelsFromState(state), signal: options.signal });
   options.signal?.throwIfAborted();
-  return listRunOf(definition, result, modelUnits, state.unitDisplayOverrides, options.today);
+  return listRunOf(definition, result, modelUnits, state.unitDisplayOverrides, options.today, pairs);
 }
