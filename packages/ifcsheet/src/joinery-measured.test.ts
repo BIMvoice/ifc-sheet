@@ -154,3 +154,98 @@ describe('a cell typed on a group keyed by its measured size (#485)', () => {
     expect(orphanedJoineryOverrides(typed, read)).toHaveLength(1);
   });
 });
+
+/** `meshesOf` over the model's meshes with every position scaled by `f`: the same windows measured `f` times larger (re-tessellation noise, or a real change). */
+function scaledMeshesOf(meshes: Parameters<typeof meshesByExpressId>[0], f: number) {
+  const of = meshesByExpressId(meshes);
+  return (id: number) => of(id)?.map((m) => {
+    const origin = m.origin ?? [0, 0, 0];
+    const positions = Float32Array.from(m.positions, (v, i) => (v + origin[i % 3]) * f);
+    return { ...m, positions, origin: [0, 0, 0] as [number, number, number] };
+  });
+}
+
+describe('the identity of a group keyed by its measured size (#485)', () => {
+  const save = (o: unknown) => readProjectFile(JSON.stringify({ format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'House', joineryOverrides: o })).joineryOverrides;
+
+  async function typedOn(windows: Parameters<typeof bonsaiIfc>[0]) {
+    const model = await openModel(new TextEncoder().encode(bonsaiIfc(windows)));
+    const at = (f: number | null) => joineryScheduleData([{ modelId: 'm', dataStore: model.dataStore, view: null, ...(f === null ? {} : { meshesOf: scaledMeshesOf(model.meshes, f) }) }], project, 'window').entries;
+    const [entry] = at(1);
+    const typed = save(setJoineryOverride(setJoineryOverride(undefined, entry, 'name', 'Fenster', 'W1'), entry, 'size', '1250 × 1550', 'W1'));
+    return { at, entry, typed };
+  }
+
+  it('keeps its typed cells when re-tessellation moves the measured size by a millimetre', async () => {
+    const { at, entry, typed } = await typedOn([{}, {}]);
+    const moved = at(1.001);
+    expect(moved.map((e) => e.key)).not.toContain(entry.key);
+    for (const e of moved) {
+      expect(joineryCellText(typed, e, 'name', 'model')).toBe('Fenster');
+      expect(joineryCellText(typed, e, 'size', 'model')).toBe('1250 × 1550');
+    }
+    expect(orphanedJoineryOverrides(typed, moved)).toEqual([]);
+    // Typed again on the moved group, the cell replaces the one saved under the old key instead of adding a second.
+    const retyped = setJoineryOverride(typed, moved[0], 'name', 'Okno', 'W1');
+    expect(retyped.filter((o) => o.row === 'name')).toHaveLength(1);
+    expect(joineryCellText(retyped, entry, 'name', 'model')).toBe('Okno');
+  });
+
+  it('keeps its typed cells without geometry, and they apply again once the geometry is measured, a millimetre off', async () => {
+    const { at, entry, typed } = await typedOn([{}]);
+    const unread = at(null);
+    expect(unread[0].key).toBe('untyped:window:?');
+    expect(joineryCellText(typed, unread[0], 'name', 'model')).toBe('model');
+    expect(orphanedJoineryOverrides(typed, unread)).toEqual([]);
+    const loaded = at(1.001);
+    expect(loaded[0].key).not.toBe(entry.key);
+    expect(orphanedJoineryOverrides(typed, loaded)).toEqual([]);
+    expect(joineryCellText(typed, loaded[0], 'name', 'model')).toBe('Fenster');
+  });
+
+  it('keeps its typed cells when the size is typed over, which does not re-key the group', async () => {
+    const { at, typed } = await typedOn([{}]);
+    const [again] = at(1.001);
+    expect(joineryCellText(typed, again, 'size', 'model')).toBe('1250 × 1550');
+    expect(joineryCellText(typed, again, 'name', 'model')).toBe('Fenster');
+  });
+
+  it('reports its typed cells as orphaned when the model really changed size, and does not move them', async () => {
+    const { at, typed } = await typedOn([{}]);
+    const changed = at(1.05);
+    expect(joineryCellText(typed, changed[0], 'name', 'model')).toBe('model');
+    expect(orphanedJoineryOverrides(typed, changed)).toEqual([{ type: typed![0].type, about: 'W1', count: 2 }]);
+    // A stated size is not measured: it has no tolerance, a millimetre is a different group.
+    const stated = await scheduleOfFixture([{ stated: [1.2, 1.5] }]);
+    const near = [{ type: 'untyped:window:1201×1500', row: 'name', value: 'X', about: 'W' }];
+    expect(joineryCellText(near, stated.data.entries[0], 'name', 'model')).toBe('model');
+    // A door group whose size is unread does not hide a window's orphaned cells.
+    const doorUnread = [{ key: 'untyped:door:?' }, ...changed];
+    expect(orphanedJoineryOverrides(typed, doorUnread)).toHaveLength(1);
+  });
+
+  it('takes the nearest saved size when two are within reach, the group\'s own key first', () => {
+    const entry = { key: 'untyped:window:1201×1500', measuredWidth: true, measuredHeight: true };
+    const saved = [
+      { type: 'untyped:window:1205×1500', row: 'name', value: 'far', about: '' },
+      { type: 'untyped:window:1200×1500', row: 'name', value: 'near', about: '' },
+      { type: 'untyped:window:?', row: 'name', value: 'legacy', about: '' },
+    ];
+    expect(joineryCellText(saved, entry, 'name', 'model')).toBe('near');
+    expect(joineryCellText([...saved, { type: entry.key, row: 'name', value: 'own', about: '' }], entry, 'name', 'model')).toBe('own');
+    expect(joineryCellText([saved[2], saved[0]], entry, 'name', 'model')).toBe('far');
+  });
+
+  it('reads an old project: a key saved before the move, and one saved before sizes were measured, still apply', async () => {
+    const { at } = await typedOn([{}]);
+    const [entry] = at(1.001);
+    const [w, h] = [mm(entry.width), mm(entry.height)];
+    const old = `{"format":"${PROJECT_FILE_FORMAT}","name":"House","joineryOverrides":[`
+      + `{"type":"untyped:window:${w - 1}×${h - 1}","row":"name","value":"Fenster","about":"W1 Window"},`
+      + `{"type":"untyped:window:?","row":"fire","value":"EI30","about":"W1 Window"}]}`;
+    const typed = readProjectFile(old).joineryOverrides;
+    expect(joineryCellText(typed, entry, 'name', 'model')).toBe('Fenster');
+    expect(joineryCellText(typed, entry, 'fire', 'model')).toBe('EI30');
+    expect(orphanedJoineryOverrides(typed, [entry])).toEqual([]);
+  });
+});

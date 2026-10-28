@@ -12,6 +12,11 @@
  * entry's own key: the catalogue id of a type that is only configured, or `untyped:<kind>:<size>` for elements the model gives no type.
  * A cell is found by either, so an override typed while the type had no IfcTypeObject still finds it once the model gains one.
  *
+ * The size in an `untyped:` key is measured when the IFC states none (#485), and a measurement moves: re-tessellation and the rounding to the
+ * millimetre turn 1200 into 1201. So a saved `untyped:` key also finds the group whose MEASURED sides are within `MEASURED_TOLERANCE_MM` of
+ * its own and whose stated sides are equal (`keyDistance`); the nearest wins. A side that moved further is a real change of the model, and
+ * the override is reported as orphaned. The key is never the typed size: the size is a cell that can be typed over like any other.
+ *
  * The overrides are part of the project (`joineryOverrides`). The data of a schedule carries them (`ScheduleData.overrides`, put there by
  * `scheduleOf`), and `joineryCellText` is the one step that says what a cell prints, so the sheet, the CSV, the XLSX and a headless read of
  * the saved project print the same text.
@@ -75,13 +80,37 @@ export interface JoineryCellOverride {
   about: string;
 }
 
-/** The part of a schedule entry that names its type. */
-export interface TypeFacts { key: string; typeGlobalId?: string }
+/** The part of a schedule entry that names its type; `measuredWidth` / `measuredHeight`: that side of the key was measured, so it may move (#485). */
+export interface TypeFacts { key: string; typeGlobalId?: string; measuredWidth?: boolean; measuredHeight?: boolean }
 
 /** The identity an override is saved under: the IfcTypeObject's GlobalId when the type has one, else the entry's key. */
 export const typeIdentityOf = (e: TypeFacts): string => e.typeGlobalId ?? e.key;
 
-const isOf = (o: JoineryCellOverride, e: TypeFacts): boolean => o.type === e.key || (e.typeGlobalId !== undefined && o.type === e.typeGlobalId);
+/**
+ * How far a measured side may have moved, in millimetres, and still be the same group: re-tessellation and the rounding to the millimetre
+ * move it by 1 mm; a door or window that really changed size changes by tens of millimetres.
+ */
+const MEASURED_TOLERANCE_MM = 5;
+const UNTYPED_SIZE = /^untyped:([a-z]+):(\d+)×(\d+)$/;
+/** A group whose size is not read yet: no geometry loaded, or none to measure (`?`, or a side of 0). */
+const UNREAD_SIZE = /^untyped:([a-z]+):(\?|0×\d+|\d+×0)$/;
+
+/**
+ * How far the saved identity `type` is from the entry: 0 for its GlobalId or its key, else the larger move in mm of a measured side within
+ * tolerance (stated sides equal), else Infinity. A key saved before sizes were measured, `untyped:<kind>:?`, named every group of that kind
+ * with a side the IFC does not state, so it finds each of them, after any nearer key.
+ */
+function keyDistance(type: string, e: TypeFacts): number {
+  if (type === e.key || (e.typeGlobalId !== undefined && type === e.typeGlobalId)) return 0;
+  if (type.endsWith(':?') && e.key.startsWith(type.slice(0, -1)) && (e.measuredWidth || e.measuredHeight)) return MEASURED_TOLERANCE_MM + 1;
+  const saved = UNTYPED_SIZE.exec(type), live = UNTYPED_SIZE.exec(e.key);
+  if (!saved || !live || saved[1] !== live[1]) return Infinity;
+  const dw = Math.abs(Number(saved[2]) - Number(live[2])), dh = Math.abs(Number(saved[3]) - Number(live[3]));
+  const same = (d: number, measured: boolean | undefined): boolean => d === 0 || (measured === true && d <= MEASURED_TOLERANCE_MM);
+  return same(dw, e.measuredWidth) && same(dh, e.measuredHeight) ? Math.max(dw, dh) : Infinity;
+}
+
+const isOf = (o: JoineryCellOverride, e: TypeFacts): boolean => keyDistance(o.type, e) !== Infinity;
 
 /** The overrides as saved, read back: a damaged one or one of a row that cannot be typed over is dropped, a repeat of the same cell keeps the last, and none is `undefined`. */
 export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | undefined {
@@ -99,10 +128,10 @@ export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | unde
   return byCell.size ? [...byCell.values()] : undefined;
 }
 
-/** The override of the type's cell in `row`, if any; one saved under the IfcTypeObject's GlobalId wins over one saved under the entry key. */
+/** The override of the type's cell in `row`, if any; one saved under the IfcTypeObject's GlobalId wins over one saved under the entry key, which wins over the nearest measured size. */
 export function joineryOverrideOf(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string): JoineryCellOverride | undefined {
   const mine = (overrides ?? []).filter((o) => o.row === row && isOf(o, entry));
-  return mine.find((o) => o.type === entry.typeGlobalId) ?? mine[0];
+  return mine.find((o) => o.type === entry.typeGlobalId) ?? mine.reduce<JoineryCellOverride | undefined>((best, o) => (!best || keyDistance(o.type, entry) < keyDistance(best.type, entry) ? o : best), undefined);
 }
 
 /** What the cell of `entry` in `row` prints: the typed text, else `model`. The one rule the sheet, the exports and a headless read share. */
@@ -125,12 +154,13 @@ export const dropJoineryOverrides = (overrides: readonly JoineryCellOverride[] |
 /** The overrides whose type none of `entries` (every type the model and the catalogue list now) names, each type once: what "What is missing" lists. */
 export function orphanedJoineryOverrides(overrides: readonly JoineryCellOverride[] | undefined, entries: readonly TypeFacts[]): { type: string; about: string; count: number }[] {
   const out = new Map<string, { type: string; about: string; count: number }>();
-  // A group of doors or windows with no stated size is keyed by its measured size (`untyped:<kind>:<w>×<h>`), which is 0 before the geometry has loaded
-  // and in a run without geometry: a typed cell of such a group is not missing then, it is not matched yet, so it is neither reported nor offered for deletion.
-  const sizeUnread = entries.some((e) => /^untyped:[a-z]+:(\?|0×\d+|\d+×0)$/.test(e.key));
+  // A group of doors or windows with no stated size is keyed by its measured size (`untyped:<kind>:<w>×<h>`), which is unread before the geometry has loaded
+  // and in a run without geometry: a typed cell of a group of that kind is not missing then, it is not matched yet, so it is neither reported nor offered for deletion.
+  const unread = new Set(entries.map((e) => UNREAD_SIZE.exec(e.key)?.[1]).filter((k) => k !== undefined));
   for (const o of overrides ?? []) {
     if (entries.some((e) => isOf(o, e))) continue;
-    if (sizeUnread && o.type.startsWith('untyped:')) continue;
+    const kind = /^untyped:([a-z]+):/.exec(o.type)?.[1];
+    if (kind !== undefined && unread.has(kind)) continue;
     const found = out.get(o.type);
     if (found) { found.count++; if (!found.about) found.about = o.about; } else out.set(o.type, { type: o.type, about: o.about, count: 1 });
   }
