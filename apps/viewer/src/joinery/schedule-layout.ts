@@ -333,7 +333,7 @@ export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): 
       {
         name: labels.elements, workbookOnly: true, numeric: [3, 4],
         header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
-        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, e.name, mm(e.width), mm(e.height), o.level, o.globalId])),
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, joineryCellText(data.overrides, e, 'name', e.name), mm(e.width), mm(e.height), o.level, o.globalId])),
       },
     ],
   };

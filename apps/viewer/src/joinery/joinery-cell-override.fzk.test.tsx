@@ -176,6 +176,20 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
   });
 });
 
+describe('a typed name reaches the workbook\'s Elements sheet too (#446)', () => {
+  it('prints the type\'s typed name on each of its elements, as the Types sheet does', () => {
+    const id = windowSchedule();
+    setJoineryCellOverride(entryOf(W2), 'name', 'Fenster 2', 'W2 Window');
+    const tables = joineryExport(scheduleDataOf(useProjectStore.getState().schedules!.find((s) => s.id === id)!), joineryLabels(LABELS)).tables;
+    const types = tables[0], elements = tables[1];
+    const typed = types.rows.find((r) => r[0] === 'W2')!;
+    assert.ok(typed.includes('Fenster 2'), 'the Types sheet has the typed name');
+    const ofW2 = elements.rows.filter((r) => r[1] === 'W2');
+    assert.ok(ofW2.length > 0);
+    assert.deepEqual([...new Set(ofW2.map((r) => r[2]))], ['Fenster 2']);
+  });
+});
+
 describe('the project keeps them, and the engine prints the same (#446)', () => {
   it('survives a save and a reopen: the app\'s reader, the engine\'s, and the drawing after the project is loaded again', async () => {
     const id = windowSchedule();
