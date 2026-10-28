@@ -62,7 +62,7 @@ export function modelRowLabel(row: ModelRow, all: readonly ModelRow[]): string {
 }
 
 /** The part of a schedule entry a model row is read from. */
-export interface ModelRowFacts { occurrences: readonly { modelValues?: Readonly<Record<string, string>> }[] }
+export interface ModelRowFacts { occurrences: readonly { modelValues?: Readonly<Record<string, string>>; modelNumbers?: Readonly<Record<string, number>> }[] }
 
 /** What the cell of a type prints for a model row: the value its elements share, a dash when none states one, else `varies` (some differ, or only some state it). */
 export function modelRowText(entry: ModelRowFacts, rowId: string, varies = 'varies'): string {
@@ -71,4 +71,12 @@ export function modelRowText(entry: ModelRowFacts, rowId: string, varies = 'vari
   if (values.size > 1) return varies;
   const [only] = values;
   return only || '—';
+}
+
+/** The figure the cell of a type holds, for a spreadsheet: the number its elements all state; null when they differ, when one states none, or when the value is text. */
+export function modelRowNumber(entry: ModelRowFacts, rowId: string): number | null {
+  if (entry.occurrences.length === 0) return null;
+  const values = entry.occurrences.map((o) => o.modelNumbers?.[rowId]);
+  const [first] = values;
+  return typeof first === 'number' && values.every((v) => v === first) ? first : null;
 }

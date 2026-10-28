@@ -57,7 +57,15 @@ export function mergeFound(parts: readonly FoundModelRows[]): FoundModelRows {
  * for a row has no entry for it. Run through the Lists engine and its export model, so the figures carry the model's units as a list prints them.
  */
 export function readModelRowValues(source: ModelRowSource, ids: readonly number[], rows: readonly ModelRow[]): Map<number, Record<string, string>> {
-  const out = new Map<number, Record<string, string>>();
+  return new Map([...readModelRowCells(source, ids, rows)].map(([id, cells]) => [id, cells.texts]));
+}
+
+/** An element's value for each row it states: the text a list prints, and the figure itself where the value is a number (what a spreadsheet needs). */
+export interface ModelRowCells { texts: Record<string, string>; numbers: Record<string, number> }
+
+/** `readModelRowValues` with the figures kept as numbers beside their text. */
+export function readModelRowCells(source: ModelRowSource, ids: readonly number[], rows: readonly ModelRow[]): Map<number, ModelRowCells> {
+  const out = new Map<number, ModelRowCells>();
   if (ids.length === 0 || rows.length === 0) return out;
   const columns: ColumnDefinition[] = rows.map((r) => ({ id: r.id, source: r.source, psetName: r.psetName, propertyName: r.propertyName }));
   const definition: ListDefinition = { id: 'joinery-model-rows', name: '', createdAt: 0, updatedAt: 0, entityTypes: [], groups: [], columns, expressIdsByModel: { [source.modelId]: [...ids] } };
@@ -68,8 +76,15 @@ export function readModelRowValues(source: ModelRowSource, ids: readonly number[
   result.rows.forEach((row, i) => {
     const cells = run.model.rows[i] ?? [];
     const texts: Record<string, string> = {};
-    rows.forEach((r, c) => { const t = displayCell(cells[c] ?? null); if (t !== '') texts[r.id] = t; });
-    out.set(row.entityId, texts);
+    const numbers: Record<string, number> = {};
+    rows.forEach((r, c) => {
+      const value = cells[c] ?? null;
+      const t = displayCell(value);
+      if (t === '') return;
+      texts[r.id] = t;
+      if (typeof value === 'number' && Number.isFinite(value)) numbers[r.id] = value;
+    });
+    out.set(row.entityId, { texts, numbers });
   });
   return out;
 }

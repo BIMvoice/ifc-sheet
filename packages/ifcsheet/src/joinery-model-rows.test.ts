@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { describe, expect, it } from 'vitest';
-import { MAX_MODEL_ROWS, modelRowId, modelRowLabel, modelRowText, modelRowsOf, readModelRows } from './joinery-model-rows.js';
+import { MAX_MODEL_ROWS, modelRowId, modelRowLabel, modelRowNumber, modelRowText, modelRowsOf, readModelRows } from './joinery-model-rows.js';
 import { readJoineryOverrides } from './joinery-overrides.js';
 import { orderedRows, readScheduleContent } from './schedule-content.js';
 
@@ -35,6 +35,15 @@ describe('model rows of a joinery schedule (#446)', () => {
     expect(modelRowText({ occurrences: [occ('1.4'), occ()] }, U.id, 'diferă')).toBe('diferă');
     expect(modelRowText({ occurrences: [occ(), occ()] }, U.id)).toBe('—');
     expect(modelRowText({ occurrences: [] }, U.id)).toBe('—');
+  });
+
+  it('keeps the figure for a spreadsheet only when every element states the same number', () => {
+    const n = (v?: number) => ({ modelNumbers: v === undefined ? undefined : { [U.id]: v } });
+    expect(modelRowNumber({ occurrences: [n(1.4), n(1.4)] }, U.id)).toBe(1.4);
+    expect(modelRowNumber({ occurrences: [n(1.4), n(2.4)] }, U.id)).toBeNull();
+    expect(modelRowNumber({ occurrences: [n(1.4), n()] }, U.id)).toBeNull();
+    expect(modelRowNumber({ occurrences: [{ modelValues: { [U.id]: 'EI30' } }] }, U.id)).toBeNull();
+    expect(modelRowNumber({ occurrences: [] }, U.id)).toBeNull();
   });
 
   it('labels a row by its name, with the set where two rows share it', () => {
