@@ -23,6 +23,7 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { paperOf } from '@/project/sheets';
 import { useProjectStore } from '@/project/project-store';
 import { rasterViewNames } from '@/project/view-raster';
+import { omittedUnderlayViewNames } from '@/underlay/underlay';
 import { toast } from '@/components/ui/toast';
 import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
@@ -306,4 +307,8 @@ export function exportSheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): void {
   // A raster viewport comes out as an empty frame: say so, and where the image is.
   const rasters = rasterViewNames(sheet, useProjectStore.getState().views);
   if (rasters.length > 0) toast.error(resolve('sheets.dxf.rasterOmitted', { views: rasters.join(', ') }), `dxf-raster-${sheet.id}`);
+  // An underlay the sheet prints is a picture too: the DXF leaves it out, and says so.
+  const state = useProjectStore.getState();
+  const underlays = omittedUnderlayViewNames(sheet, state.views, state.underlays);
+  if (underlays.length > 0) toast.error(resolve('sheets.dxf.underlayOmitted', { views: underlays.join(', ') }), `dxf-underlay-${sheet.id}`);
 }

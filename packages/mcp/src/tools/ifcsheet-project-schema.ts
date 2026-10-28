@@ -159,6 +159,7 @@ export function projectSchema(): Schema {
       includeFarElements: bool,
       handoverPattern: str,
       unitsAndNumbers: obj,
+      hatchPatterns: { type: 'string', description: "The project's own hatch patterns as .pat text (the built-in ones are not stored); a colour scheme's hatches may name them." },
       [SCHEDULES_KEY]: { type: 'array', items: schedule, description: 'The schedule sheets of the set (room schedule, bill of quantities, list from the Lists engine).' },
     },
     additionalProperties: true,
