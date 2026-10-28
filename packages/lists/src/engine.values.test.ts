@@ -374,6 +374,27 @@ describe('grouping bookkeeping', () => {
     expect(summary?.sums.v).toBe(5);
     expect(groups?.[0].sums.v).toBe(5);
   });
+
+  it('counts the rows a sum leaves out because they state no value (#432); a declared 0 and a complete sum are not missing', () => {
+    const definition = def({
+      columns: [
+        { id: 'k', source: 'attribute', propertyName: 'Class' },
+        { id: 'v', source: 'quantity', psetName: 'Q', propertyName: 'V' },
+        { id: 'w', source: 'quantity', psetName: 'Q', propertyName: 'W' },
+      ],
+      grouping: { columnId: 'k', sumColumnIds: ['v', 'w'] },
+    });
+    const rows: ListRow[] = [
+      { entityId: 1, modelId: 'm', values: ['IfcWall', 2, 1] },
+      { entityId: 2, modelId: 'm', values: ['IfcWall', null, 0] },
+      { entityId: 3, modelId: 'm', values: ['IfcWall', Number.NaN, 4] },
+      { entityId: 4, modelId: 'm', values: ['IfcWall', 0, 5] },
+    ];
+    const { summary } = summariseListRows(definition, rows);
+    expect(summary?.count).toBe(4);
+    expect(summary?.missing).toEqual({ v: 2 });
+    expect(summariseListRows(definition, rows.filter((r) => r.entityId !== 2 && r.entityId !== 3)).summary?.missing).toBeUndefined();
+  });
 });
 
 // ============================================================================

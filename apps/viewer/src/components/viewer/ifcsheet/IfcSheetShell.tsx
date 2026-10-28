@@ -27,6 +27,7 @@ import { WhatChanged } from '../whatchanged/WhatChanged';
 import { AnnotateSet } from '../annotate/AnnotateSet';
 import { openDemoModel } from './demo-model';
 import { LanguagePicker } from './LanguagePicker';
+import { HelpMenu } from '@/onboarding/HelpMenu';
 import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { useIfcSheetTour } from './useIfcSheetTour';
 import { WALL_PILL } from '../wall/wall-type';
@@ -86,6 +87,7 @@ export function IfcSheetShell() {
         <button type="button" aria-haspopup="dialog" className={quiet} onClick={() => window.dispatchEvent(new CustomEvent(EVENT_SHOW_SHORTCUTS, { detail: { tab: 'shortcuts' } }))}>{t('wall.keys.title')}</button>
         <FeedbackButton className={quiet} />
         <button type="button" aria-label={t('ifcsheetTour.helpLabel')} className={quiet} onClick={reopenTour}>{t('ifcsheetTour.help')}</button>
+        <HelpMenu className={quiet} onTour={reopenTour} />
       </header>
       <div className="min-h-0 flex-1">
         <WallView />

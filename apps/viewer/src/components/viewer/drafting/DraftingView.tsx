@@ -71,7 +71,7 @@ import { useDraftingProviders } from './useDraftingProviders';
 
 import { CommandLine } from './CommandLine';
 
-import { useDraftingPointer } from './useDraftingPointer';
+import { gripCursor, useDraftingPointer } from './useDraftingPointer';
 
 import { useDraftingKeys } from './useDraftingKeys';
 import { submitTypedLine } from './typed-line';
@@ -123,7 +123,7 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
-import { resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
@@ -157,6 +157,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const views = useProjectStore((s) => s.views);
   const selection = useDraftingSession((s) => s.selection);
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
+  const orthoToggled = useDraftingSession((s) => s.ortho);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -199,7 +200,9 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
-  const viewDrawing = useMemo(() => (drawing ? withoutHiddenElements(drawing, graphics, renderIdGlobalId) : null), [drawing, graphics, models]);
+  // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
+  const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
+  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withoutHiddenElements(drawing, graphics, renderIdGlobalId), detail) : null), [drawing, graphics, models, detail]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
@@ -214,7 +217,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
     return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
-  }, [viewDrawing, graphics, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
+  }, [viewDrawing, graphics, detail, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
   // Each face's and line's style: the view's one styler, its sheets' too (#34).
   const canvasStyler = useViewCanvasStyler(graphics, shown);
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
@@ -279,7 +282,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -311,7 +314,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ref={containerRef}
         data-drafting-canvas
         // Always white paper, as the drawing canvas paints it: drafted ink stays visible in dark mode.
-        className="relative min-h-0 flex-1 overflow-hidden bg-white cursor-none touch-none"
+        className={`relative min-h-0 flex-1 overflow-hidden bg-white touch-none ${gripCursor(state) === 'grabbing' ? 'cursor-grabbing' : gripCursor(state) === 'grab' ? 'cursor-grab' : 'cursor-none'}`}
+        data-grip-cursor={gripCursor(state) ?? undefined}
         {...pointer}
         onDoubleClick={(e) => {
           // Double-click an annotation: select it and edit its text in place.
@@ -344,7 +348,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} transform={viewTransform} axis={axis} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} detail={detail} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
         </div>
@@ -356,6 +360,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           preview={preview}
           snap={state.snap}
           cursor={state.cursor}
+          orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
           window={state.window}
           highlight={highlight}
           extraPatterns={extraPatterns}
