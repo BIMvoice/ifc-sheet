@@ -25,6 +25,7 @@ export const onboardingRo = {
   'onboarding.menu.shortcuts': 'Scurtături de tastatură',
   'onboarding.menu.howTo': 'Cum se face',
   'onboarding.menu.report': 'Raportați o problemă sau propuneți o funcție',
+  'onboarding.menu.github': 'IfcSheet pe GitHub',
   'onboarding.menu.tour': 'Turul panoului',
   'onboarding.menu.hints': 'Indicii, în Setări',
 
