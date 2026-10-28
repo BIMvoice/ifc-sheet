@@ -26,7 +26,7 @@ const INPUT = 'h-6 w-24 rounded-sm border border-zinc-300 dark:border-zinc-700 b
 
 export const isDimensional = (shape: AnnotationShape) => shape.type === 'dimension' || shape.type === 'radial' || shape.type === 'angular';
 
-function Line({ label, field, entity, children }: { label: string; field: string; entity: DraftEntity; children: React.ReactNode }) {
+export function Line({ label, field, entity, children }: { label: string; field: string; entity: DraftEntity; children: React.ReactNode }) {
   const { t } = useTranslation();
   const own = entity.params[overrideKey(field)] !== undefined;
   return (
