@@ -148,6 +148,8 @@ const DOCUMENT_FIELD_DEFS = [
   listField('lineTypes', (raw) => at(raw, 'lineTypes', readLineType), { presentOnly: true }),
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
+  // The office's annotation presets (#497); absent: none.
+  annotationPresetsField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];
