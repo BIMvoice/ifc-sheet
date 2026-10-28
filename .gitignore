@@ -165,3 +165,7 @@ apps/autodesk-exchange-worker/obj/
 
 # Unreviewed live AI evaluation runs (scripts/ai-eval/run-live-eval.mjs); only reviewed recordings are promoted.
 tests/ai-eval/results/
+
+# Copied in by scripts/copy-package-legal.mjs at pack time
+packages/*/LICENSE
+packages/*/NOTICE
