@@ -22,7 +22,7 @@ export interface PaperCrop {
 }
 
 /** What an SVG export leaves out: the editing aids (selection marks, invisible pick paths) a view draws for the mouse. */
-const EDITING_AIDS = '[data-export-ignore="true"]';
+const EDITING_AIDS = '[data-export-ignore="true"], [data-print-ignore="true"]';
 
 /** A view's SVG as a standalone document `w` x `h` millimetres, without the editing aids (`data-export-ignore`). */
 export function svgDocumentText(svg: SVGSVGElement, w: number, h: number, viewBox?: PaperCrop): string {
