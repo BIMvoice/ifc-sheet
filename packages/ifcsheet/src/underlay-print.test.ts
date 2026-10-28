@@ -102,12 +102,23 @@ describe('an underlay in the headless PDF (#457)', () => {
     expect(Math.atan2(b, a)).toBeCloseTo(0.4, 6);
   });
 
-  it('a section (y up) and an east elevation (x mirrored) place it as their drawing is placed', () => {
-    for (const axis of ['z', 'x'] as const) {
-      const g = graphicOf('s1', axis);
-      expect(g.underlays[0].matrix).toEqual(underlayMatrix(underlay, placer(drawing(axis), doc().sheets[0].viewports![0])));
+  it('a plan, a section (y up) and an east elevation (x mirrored) place it as their drawing is placed, against figures worked out by hand', () => {
+    // Not the shared functions: the pixel corners are turned by 0.4 rad about the underlay's centre, then put on the paper
+    // the way each cut orients its drawing (a plan keeps y down the paper, a section points it up, an east elevation also mirrors x).
+    // The drawing's bounds are 10 x 4, so its centre (5, 2) sits at the viewport (200, 150); 1:50 is 20 mm a metre.
+    const signs = { y: [1, 1], z: [1, -1], x: [-1, -1] } as const;
+    const onPaper = (axis: 'x' | 'y' | 'z', px: number, py: number): [number, number] => {
+      const lx = (px - 1) * 1.5, ly = -(py - 1) * 1.5;
+      const dx = 3 + lx * Math.cos(0.4) - ly * Math.sin(0.4), dy = 1.5 + lx * Math.sin(0.4) + ly * Math.cos(0.4);
+      return [200 + (dx - 5) * signs[axis][0] * 20, 150 + (dy - 2) * signs[axis][1] * 20];
+    };
+    for (const axis of ['y', 'z', 'x'] as const) {
+      const [ox, oy] = onPaper(axis, 0, 0), [ax, ay] = onPaper(axis, 1, 0), [bx, by] = onPaper(axis, 0, 1);
+      const want = [ax - ox, ay - oy, bx - ox, by - oy, ox, oy];
+      graphicOf('s1', axis).underlays[0].matrix.forEach((n, i) => expect(n, `${axis} matrix[${i}]`).toBeCloseTo(want[i], 6));
     }
     expect(graphicOf('s1', 'z').underlays[0].matrix).not.toEqual(graphicOf('s1', 'y').underlays[0].matrix);
+    expect(graphicOf('s1', 'x').underlays[0].matrix[0]).toBeCloseTo(-graphicOf('s1', 'z').underlays[0].matrix[0], 6);
   });
 
   it('prints on the sheet that is chosen and on no other; at zero opacity on none', () => {
