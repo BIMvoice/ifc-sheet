@@ -15,7 +15,7 @@
  * width. Pure: the screen tab, sheets, SVG and DXF all draw these primitives.
  */
 
-import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
+import { defaultWindowSpec, normalisedPanels, type PanelOperation } from '@ifc-lite/create';
 import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
@@ -116,11 +116,14 @@ interface TableRowSpec {
 const mm = (m: number): number => Math.round(m * 1000);
 
 /**
- * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) has only the kind's default sill,
- * which the model never stated, so it prints none.
+ * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) starts with the kind's default
+ * sill, which the model never stated, so it prints none until the user sets a different one in the joinery dialog.
  */
-const sillOf = (e: ScheduleEntry): number | null =>
-  e.kind === 'window' && e.spec && !e.spec.id?.startsWith(typeEntryId('')) ? e.spec.sillHeight : null;
+const sillOf = (e: ScheduleEntry): number | null => {
+  if (e.kind !== 'window' || !e.spec) return null;
+  if (!e.spec.id?.startsWith(typeEntryId(''))) return e.spec.sillHeight;
+  return Math.abs(e.spec.sillHeight - defaultWindowSpec().sillHeight) < 1e-9 ? null : e.spec.sillHeight;
+};
 
 /**
  * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
