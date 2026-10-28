@@ -49,4 +49,13 @@ export const listScheduleEn = {
   'listSched.card.summaryGrouped': '{columns} columns, grouped by {groups}',
   'listSched.card.hint': 'The rows come from the Lists engine, as the Lists panel computes them. A hidden column is not printed; it still groups and sums.',
   'listSched.card.edit': 'Edit the definition',
+  'listSched.cell.hint': "Click a cell of the table on the sheet to type another value over the model's.",
+  'listSched.cell.gone': 'The cell picked is not in the table any more. Click another.',
+  'listSched.cell.grouped': 'A grouped table has a row per group, not per element: its cells cannot be typed over.',
+  'listSched.cell.title': '{column}: {element}',
+  'listSched.cell.model': 'Model value: {value}',
+  'listSched.cell.value': 'Value on the sheet',
+  'listSched.cell.overridden': "Typed over the model's value. Marked on the sheet here; the print carries no mark.",
+  'listSched.cell.reset': 'Reset to model value',
+  'listSched.cell.done': 'Done',
 } as const satisfies Record<string, TranslationValue>;
