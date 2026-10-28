@@ -9,6 +9,7 @@
  */
 
 import { entityBounds } from '@/drafting/annotation';
+import { anchorsOf } from '@/drafting/dimension-anchor';
 import { sectionLink } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
 import { titleBlockOf } from '@/project/title-block';
@@ -93,15 +94,18 @@ const NAMED: readonly [param: string, what: 'tag' | 'label' | 'dimension'][] = [
 
 /**
  * A tag or label whose element is no longer in the model, and a dimension DIMALL placed to measure a door or window that is gone
- * (it is stamped with what it measures: `params.measures`). A dimension drawn by hand names no element.
+ * (it is stamped with what it measures: `params.measures`). A dimension snapped to model geometry is stamped with the elements at its ends (`anchorA`, `anchorB`); a free one names no element.
  *
  * One finding per annotation, named by what it was: its text, the element's last known name and class (`lastKnown`) and
  * GlobalId, and every sheet that shows its view (a view on two sheets is still one annotation, so one finding listing both).
  */
 export function danglingAnnotations(input: CheckInput): Finding[] {
   return input.drafts.flatMap((d): Finding[] => {
-    const found = NAMED.map(([param, what]) => ({ guid: d.params[param], what })).find((x): x is { guid: string; what: 'tag' | 'label' | 'dimension' } => typeof x.guid === 'string');
-    if (!found || input.elementExists(found.guid)) return [];
+    const named = NAMED.map(([param, what]) => ({ guid: d.params[param], what })).filter((x): x is { guid: string; what: 'tag' | 'label' | 'dimension' } => typeof x.guid === 'string');
+    // A dimension snapped to model geometry is attached to the elements at its ends (#459): either one gone is a dimension that no longer measures anything.
+    const attached = anchorsOf(d).map(({ anchor }) => ({ guid: anchor.g, what: 'dimension' as const }));
+    const found = named.length > 0 ? (input.elementExists(named[0].guid) ? undefined : named[0]) : attached.find((x) => !input.elementExists(x.guid));
+    if (!found) return [];
     const view = input.views.find((v) => v.id === d.viewId);
     const sheets = view ? input.sheets.filter((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id)) : [];
     const known = input.lastKnown?.(found.guid);

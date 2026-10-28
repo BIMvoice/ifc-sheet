@@ -21,6 +21,8 @@ import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/dra
 import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt, type SnapHit } from '@/drafting/types';
 import { entitySkeleton } from '@/drafting/annotation';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { useTranslation } from '@/i18n';
+import { tagOverrideOf } from '@/drafting/tag-override';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import type { LiveSymbolContext } from '@/siteplan/live-symbols';
 
@@ -140,6 +142,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           return (
             <g key={e.id}>
               <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} />
+              {/* Editor only: this overlay is never part of the sheet or the PDF. */}
+              {e.shape.type === 'leader' && tagOverrideOf(e) !== null ? <TagOverrideMark shape={e.shape} t={t} axis={axis} /> : null}
               {isHover || isSelected ? (
                 <path d={entitySkeleton(e.shape).map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke={isSelected ? '#2563eb' : '#60a5fa'} strokeWidth={1} strokeDasharray="4 3" />
               ) : null}
@@ -179,6 +183,13 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
     </svg>
   );
 });
+
+/** A small amber ring on the text end of a tag whose text is written over the model's (#445); not printed. */
+function TagOverrideMark({ shape, t, axis }: { shape: Extract<DraftEntity['shape'], { type: 'leader' }>; t: ViewTransform; axis: SectionAxisName }) {
+  const p = drawingToScreen(shape.pts[shape.pts.length - 1], t, axis);
+  const { t: tr } = useTranslation();
+  return <circle data-tag-override="true" cx={p.x} cy={p.y} r={4} fill="none" stroke="#f59e0b" strokeWidth={2}><title>{tr('standards.el.tagOverridden')}</title></circle>;
+}
 
 function SelectionWindow({ window, t, axis }: { window: { a: Pt; b: Pt }; t: ViewTransform; axis: SectionAxisName }) {
   const a = drawingToScreen(window.a, t, axis);
