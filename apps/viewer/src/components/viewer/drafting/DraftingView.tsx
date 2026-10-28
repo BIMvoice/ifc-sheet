@@ -24,8 +24,6 @@ import { openStandards } from '@/project/standards-dialog-store';
 
 import { useTranslation } from '@/i18n';
 
-import { cn } from '@/lib/utils';
-
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
 
@@ -66,6 +64,7 @@ import {
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
 
@@ -386,18 +385,5 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn('h-6 rounded-sm px-2 font-medium', active ? 'bg-primary/15 text-primary' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900')}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }
