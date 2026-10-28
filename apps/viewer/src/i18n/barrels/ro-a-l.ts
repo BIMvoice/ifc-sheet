@@ -8,6 +8,7 @@ import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
 import { anonymizedExportRo } from '../catalogues/anonymized-export.ro';
 import { appearancePickersRo } from '../catalogues/appearance-pickers.ro';
 import { boqRo } from '../catalogues/boq.ro';
+import { byggesaksbimRo } from '../catalogues/byggesaksbim.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
 import { checkRo } from '../catalogues/check.ro';
@@ -46,6 +47,7 @@ export const roAL = {
   ...anonymizedExportRo,
   ...appearancePickersRo,
   ...boqRo,
+  ...byggesaksbimRo,
   ...cadLayersRo,
   ...catalogueRo,
   ...checkRo,
