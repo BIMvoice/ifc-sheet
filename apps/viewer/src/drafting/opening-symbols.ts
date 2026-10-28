@@ -272,7 +272,8 @@ export function openingSymbols(
       const stated = operationOf(id);
       const own = stated && entry.l2w ? statedFlips(stated, entry.l2w, plane, rect) : null;
       // The manual flips toggle the stated hand, as they toggle the default one.
-      const door = doorSymbol(rect, (own ?? 0) ^ flipsOf(id), own === null ? undefined : stated ?? undefined);
+      // A placement whose X does not run along the opening leaves the hand unknown, but a sliding, folding or revolving door is still not a swinging one.
+      const door = doorSymbol(rect, (own ?? 0) ^ flipsOf(id), stated && (own !== null || stated.motion !== 'swing') ? stated : undefined);
       out.push({ id, kind: 'door', shapes: door.thin, heavy: door.heavy, dashed: door.dashed });
     } else out.push({ id, kind: 'window', shapes: windowSymbol(rect) });
   }

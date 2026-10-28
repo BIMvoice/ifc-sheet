@@ -152,3 +152,30 @@ describe('openingSymbols with a stated operation', () => {
   });
 });
 
+
+/** #486: a sliding, folding or revolving door keeps its own symbol when its placement's X does not run along the opening (only the hand is then unknown). */
+describe('openingSymbols with a stated operation on a placement turned across the opening', () => {
+  const plan = { axis: 'y' as const, position: 1.2, flipped: false };
+  // Local X along world z, across the 0.9 m wide opening that runs along world x.
+  const across = {
+    ...box('IfcDoor', [-0.45, -1.05, -0.03], [0.45, 1.05, 0.03], [5, 1.05, 2]),
+    localToWorld: [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1],
+  } as unknown as MeshData;
+  const symbol = (op: DoorOperation) => openingSymbols([across], plan, () => 0, () => null, () => op)[0];
+
+  it('draws a revolving door as the circle and cross, not a swing arc', () => {
+    const door = symbol({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+    assert.ok(door.shapes.some((s) => s.type === 'circle'));
+    assert.ok(!door.shapes.some((s) => s.type === 'arc'));
+  });
+
+  it('draws a sliding door as a bar with an arrow, not a swing arc', () => {
+    const door = symbol({ motion: 'sliding', hinge: null, towards: 'left', leaves: 1, doubleActing: false });
+    assert.ok(!door.shapes.some((s) => s.type === 'arc'));
+  });
+
+  it('still leaves a swinging door as it was drawn', () => {
+    const door = symbol({ motion: 'swing', hinge: 'left', towards: null, leaves: 1, doubleActing: false });
+    assert.ok(door.shapes.some((s) => s.type === 'arc'));
+  });
+});
