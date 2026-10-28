@@ -76,7 +76,8 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   if (args.pac) setTemplate = pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE, pacMode);
   // A permit project is a Romanian one: Ordinul 975/2026 asks for the cartuș F_01, so --pac draws the Romanian standard's
   // title block unless --standard names one (that wins) or the project has a title block of its own.
-  const language = args.pac ? args.locale ?? PAC_DEFAULT_LOCALE : undefined;
+  // The run's language: --locale, else the PAC default; a project file saves none, so --locale is how a Romanian project prints Romanian lists without --pac.
+  const language = args.locale ?? (args.pac ? PAC_DEFAULT_LOCALE : undefined);
   const standardId = args.standard ?? (args.pac && language === 'ro' && !project?.titleBlockTemplate ? 'ro' : undefined);
   const standard = buildStandard(standardId, project);
   if (!standard) {
@@ -146,7 +147,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>] [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>] [--pac-mode <full|rural>]] [--project <file> [--locale <ro|en>]] [--standard <id>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -163,8 +164,8 @@ export const buildCommand: CliCommand = {
           quantities, drawing register);
           a project with no sheet gets the starting set. Which one is printed is said on stderr.`,
   async run(rest, values, io) {
-    if (values.csv || values.detail || (values.locale !== undefined && !values.pac)) {
-      io.stderr('ifcsheet build has no --csv or --detail, and --locale only with --pac; they are options of boq and rooms.\n');
+    if (values.csv || values.detail || (values.locale !== undefined && !values.pac && values.project === undefined)) {
+      io.stderr('ifcsheet build has no --csv or --detail, and --locale only with --pac or --project; they are options of boq and rooms.\n');
       return EXIT.usage;
     }
     if (values.json) {
