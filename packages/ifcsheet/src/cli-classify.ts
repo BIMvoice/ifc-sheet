@@ -13,7 +13,7 @@ import { escapeCsvCell } from '@ifc-lite/export';
 import { classifiedTypes, mappingsFor, systemLabel, type ClassificationMapping, type ClassifiedType } from './classification.js';
 import { storeClassifications } from './classification-read.js';
 import { readBoqElements, storeSource } from './boq-read.js';
-import { openModel } from './model.js';
+import { openModel, type OpenedModel } from './model.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
 
@@ -44,6 +44,35 @@ export function classifyCsv(rows: readonly ClassifiedType[]): string {
   return `﻿${[line(['Class', 'Type', 'Code', 'Title', 'Source', 'Count']), ...rows.map((r) => line([plain(r.className), r.typeName ?? '', r.code, r.title, r.source, r.count]))].join('\r\n')}\r\n`;
 }
 
+/** Everything `ifcsheet classify` prints for a model, as values: the one computation of the command and of the MCP tool `ifcsheet_classify`. */
+export interface ClassifyOutput {
+  rows: ClassifiedType[];
+  system: string;
+  /** What `--json` prints (before it is written as text). A code or title nothing gives is null. */
+  json: { file: string; project: string; system: string; types: { class: string; type: string | null; code: string | null; title: string | null; source: string; count: number }[] };
+  csv: string;
+  text: string;
+}
+
+/** The classification of an opened model's types by the mapping `system` names (the first when none is named), or the sentence saying why there is none. */
+export function classifyOutput(file: string, projectName: string, model: Pick<OpenedModel, 'dataStore'>, mappings: readonly ClassificationMapping[], system: string | undefined): ClassifyOutput | { error: string } {
+  const mapping = chosenMapping(mappings, system);
+  if (!mapping) {
+    return { error: system
+      ? `${projectName} has no classification system "${system}"; it has: ${mappings.map((m) => systemLabel(m.system)).join(', ') || 'none'}.`
+      : `${projectName} holds no classification mapping; add one in the app (Classification codes) and save the project.` };
+  }
+  const rows = classifiedTypes(readBoqElements(storeSource('model', model.dataStore), new Set()), [mapping], storeClassifications(new Map([['model', model.dataStore]])));
+  let text = `${file}: ${systemLabel(mapping.system)}\n\n`;
+  for (const r of rows) text += `${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : ' (no type)'}  x${r.count}${r.source === 'model' ? '  [model]' : ''}\n`;
+  const missing = rows.filter((r) => r.source === 'none').reduce((n, r) => n + r.count, 0);
+  if (missing > 0) text += `\n${missing} elements have no code.\n`;
+  return {
+    rows, system: systemLabel(mapping.system), text, csv: classifyCsv(rows),
+    json: { file, project: projectName, system: systemLabel(mapping.system), types: rows.map((r) => ({ class: r.className, type: r.typeName, code: r.code || null, title: r.title || null, source: r.source, count: r.count })) },
+  };
+}
+
 /** `ifcsheet classify`: exit 0 with the table, 1 when a file cannot be read or the project holds no such mapping. */
 export async function classify(args: ClassifyArgs, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
@@ -52,24 +81,14 @@ export async function classify(args: ClassifyArgs, io: CliIo): Promise<number> {
   try { projectText = await readFile(args.project, 'utf8'); } catch (error) { io.stderr(cannotRead(args.project, error)); return 1; }
   let project;
   try { project = readProjectFile(projectText); } catch (error) { io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`); return 1; }
-  const mapping = chosenMapping(project.classificationMappings, args.system);
-  if (!mapping) {
-    io.stderr(args.system
-      ? `ifcsheet: ${args.project} has no classification system "${args.system}"; it has: ${project.classificationMappings.map((m) => systemLabel(m.system)).join(', ') || 'none'}.\n`
-      : `ifcsheet: ${args.project} holds no classification mapping; add one in the app (Classification codes) and save the project.\n`);
+  const model = await openModel(bytes, { geometry: false });
+  const out = classifyOutput(args.model, args.project, model, project.classificationMappings, args.system);
+  if ('error' in out) {
+    io.stderr(`ifcsheet: ${out.error}\n`);
     return 1;
   }
-  const model = await openModel(bytes, { geometry: false });
-  const rows = classifiedTypes(readBoqElements(storeSource('model', model.dataStore), new Set()), [mapping], storeClassifications(new Map([['model', model.dataStore]])));
-  if (args.json) {
-    io.stdout(`${JSON.stringify({ file: args.model, project: args.project, system: systemLabel(mapping.system), types: rows.map((r) => ({ class: r.className, type: r.typeName, code: r.code || null, title: r.title || null, source: r.source, count: r.count })) }, null, 2)}\n`);
-  } else if (args.csv) {
-    io.stdout(classifyCsv(rows));
-  } else {
-    io.stdout(`${args.model}: ${systemLabel(mapping.system)}\n\n`);
-    for (const r of rows) io.stdout(`${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : ' (no type)'}  x${r.count}${r.source === 'model' ? '  [model]' : ''}\n`);
-    const missing = rows.filter((r) => r.source === 'none').reduce((n, r) => n + r.count, 0);
-    if (missing > 0) io.stdout(`\n${missing} elements have no code.\n`);
-  }
+  if (args.json) io.stdout(`${JSON.stringify(out.json, null, 2)}\n`);
+  else if (args.csv) io.stdout(out.csv);
+  else io.stdout(out.text);
   return 0;
 }

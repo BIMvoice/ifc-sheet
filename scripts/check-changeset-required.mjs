@@ -18,7 +18,7 @@
  * `git merge-base origin/main HEAD`), take the files the head changed. A file
  * under `packages/<name>/src/` counts unless it is a test (`*.test.*`,
  * `*.spec.*`, `__tests__/`, `__fixtures__/`, `__snapshots__/`). Its package
- * counts when its package.json is not `"private": true`. Nothing under
+ * counts when its package.json is not `"private": true` or it still carries a `publishConfig` (the vendored packages, #423). Nothing under
  * `apps/` counts: the apps (`apps/viewer` among them) are not published, so a
  * viewer-only, docs-only or CI-only pull request passes without a changeset.
  * Each counted package must be named by a changeset the pull request adds or
@@ -90,7 +90,10 @@ function main(argv) {
     const manifest = join(root, dir, 'package.json');
     if (!existsSync(manifest)) continue; // the package itself was deleted
     const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
-    if (pkg.private === true || !pkg.name) continue;
+    // Vendored packages are `private` (#423) only to block publishing; they
+    // are still versioned and CHANGELOG'd, so they still need a changeset.
+    // The marker is a `publishConfig` (internal tools never had one).
+    if ((pkg.private === true && pkg.publishConfig == null) || !pkg.name) continue;
     published.set(pkg.name, { dir, files });
   }
   if (published.size === 0) {
