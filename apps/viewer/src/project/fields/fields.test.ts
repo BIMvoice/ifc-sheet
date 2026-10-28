@@ -39,8 +39,9 @@ const KEYS_BEFORE_REGISTERED = [
 const base = { name: 'p', models: [], views: [], sheets: [], drafts: [], draftLayers: [] } as unknown as ProjectDocument;
 
 describe('the document field registry', () => {
-  it('assembles the same fields in the same order as the hard-coded list it replaced', () => {
-    assert.deepEqual(DOCUMENT_FIELDS.map((f) => f.key), KEYS_BEFORE_REGISTERED);
+  it('assembles the same fields in the same order as the hard-coded list it replaced, then the registered ones', () => {
+    // A slice, not the whole list: a field added to `./registered.ts` comes after the frozen ones and must not turn this red.
+    assert.deepEqual(DOCUMENT_FIELDS.map((f) => f.key).slice(0, KEYS_BEFORE_REGISTERED.length), KEYS_BEFORE_REGISTERED);
   });
 
   it('puts registered fields after the frozen list, sorted by key whatever the order they are listed in', () => {
