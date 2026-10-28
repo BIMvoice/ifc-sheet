@@ -44,6 +44,8 @@ import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
 import type { StoreyInput } from './view-defaults.js';
+import { readUnderlays } from './underlay-read.js';
+import type { ViewUnderlay } from './underlay.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
 import { readProjectSet, type ProjectSet } from './project-set.js';
 
@@ -86,6 +88,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   urbanSettings?: UrbanSettings;
   /** The project's own drawing set (#479): what `ifcsheet build --project` prints; its lists are empty when the file holds none. */
   set: ProjectSet;
+  /** The pictures laid under views (#457); absent when the file has none. A build prints each on the sheets it names, when the generated set has that view and sheet. */
+  underlays?: ViewUnderlay[];
 }
 
 type Json = Record<string, unknown>;
@@ -113,6 +117,7 @@ export function readProjectFile(text: string): ProjectFacts {
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
   // Before the lenient fields: a view, sheet or draft the app refuses the file for refuses it here first, as in the app.
   const set = readProjectSet(parsed);
+  const underlays = readUnderlays(parsed);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   const sheets = readProjectSheets(parsed);
   return {
@@ -138,6 +143,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
     set,
+    ...(underlays.length > 0 ? { underlays } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }
