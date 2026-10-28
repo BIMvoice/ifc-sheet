@@ -21,7 +21,7 @@ const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
 const mm = (m: number): number => Math.round(m * 1000);
 
 /** A Bonsai-style IFC4 file: `windows` windows on the storey "Level 0", each a rectangle profile extruded; `stated` sizes the second one's Overall slots. */
-function bonsaiIfc(windows: { stated?: [number, number] }[]): string {
+function bonsaiIfc(windows: { stated?: [number | null, number | null] }[]): string {
   const rows = [
     `#1=IFCPROJECT('0Zr1xa$W9EkOxMp4Oi0001',$,'P',$,$,$,$,(#9),#8);`,
     `#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`,
@@ -49,7 +49,8 @@ function bonsaiIfc(windows: { stated?: [number, number] }[]): string {
   windows.forEach((w, i) => {
     const base = 100 + i * 10;
     const turn = i === 0 ? '0.8660254037844387,0.5' : '1.,0.';
-    const stated = w.stated ? `${w.stated[1]},${w.stated[0]}` : '$,$';
+    const num = (v: number | null | undefined): string => (v == null ? '$' : Number.isInteger(v) ? `${v}.` : String(v));
+    const stated = w.stated ? `${num(w.stated[1])},${num(w.stated[0])}` : '$,$';
     rows.push(
       `#${base}=IFCCARTESIANPOINT((${2 + i * 3}.,1.,0.));`,
       `#${base + 1}=IFCDIRECTION((${turn},0.));`,
@@ -75,7 +76,7 @@ describe('a window the IFC gives no size, in the schedule (#485)', () => {
     const e = data.entries[0];
     assert.ok(Math.abs(mm(e.width) - 1200) <= 1 && Math.abs(mm(e.height) - 1500) <= 1, `${mm(e.width)} x ${mm(e.height)}`);
     const texts = sheetTexts(data);
-    assert.ok(texts.includes(`≈ ${mm(e.width)} × ${mm(e.height)}`));
+    assert.ok(texts.includes(`≈ ${mm(e.width)} × ≈ ${mm(e.height)}`));
     assert.ok(!texts.includes('0 × 0'));
     const table = joineryExport(data, joineryLabels(LABELS)).tables[0];
     const col = table.header.indexOf('Width (mm)');
@@ -111,5 +112,25 @@ describe('a window the IFC gives no size, in the schedule (#485)', () => {
     // Reset to the model's value: the measured size is back.
     const reset = clearJoineryOverride(clearJoineryOverride(clearJoineryOverride(o, e, 'size'), e, 'total'), e, levelRowId('Level 0'));
     assert.deepEqual(sheetTexts(scheduleOf([SCHEDULE], SCHEDULE, data, reset)), sheetTexts(data));
+  });
+
+  it('measures only the side the IFC does not state, and marks only that side', async () => {
+    const run = async (stated: [number | null, number | null]) => {
+      const model = await openModel(new TextEncoder().encode(bonsaiIfc([{ stated }])));
+      const data = joineryScheduleData([{ modelId: 'm', dataStore: model.dataStore, view: null, meshesOf: meshesByExpressId(model.meshes) }], project, 'window');
+      return { e: data.entries[0], texts: sheetTexts(data) };
+    };
+    // Width stated (900), height missing: the body is 1.2 x 1.5, so only the height may come from it.
+    const w = await run([0.9, null]);
+    assert.equal(mm(w.e.width), 900);
+    assert.ok(Math.abs(mm(w.e.height) - 1500) <= 1, String(mm(w.e.height)));
+    assert.deepEqual([w.e.measuredWidth, w.e.measuredHeight], [false, true]);
+    assert.ok(w.texts.includes(`900 × ≈ ${mm(w.e.height)}`), w.texts.join('|'));
+    // Height stated (1800), width missing.
+    const h = await run([null, 1.8]);
+    assert.equal(mm(h.e.height), 1800);
+    assert.ok(Math.abs(mm(h.e.width) - 1200) <= 1, String(mm(h.e.width)));
+    assert.deepEqual([h.e.measuredWidth, h.e.measuredHeight], [true, false]);
+    assert.ok(h.texts.includes(`≈ ${mm(h.e.width)} × 1800`), h.texts.join('|'));
   });
 });

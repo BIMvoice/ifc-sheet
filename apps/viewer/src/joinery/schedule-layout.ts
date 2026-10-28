@@ -131,8 +131,8 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const model: Record<string, () => TableRowSpec[]> = {
     name: () => [{ label: labels.name, value: (e) => e.name }],
     size: () => [{
-      // A size measured from the geometry (the IFC states none, #485) is marked with ≈; the CSV and the XLSX keep the figures.
-      label: labels.size, value: (e) => `${e.measured ? '≈ ' : ''}${mm(e.width)} × ${mm(e.height)}`,
+      // A size measured from the geometry (the IFC states none, #485) is marked with ≈ on that side alone; the CSV and the XLSX keep the figures.
+      label: labels.size, value: (e) => `${e.measuredWidth ? '≈ ' : ''}${mm(e.width)} × ${e.measuredHeight ? '≈ ' : ''}${mm(e.height)}`,
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
     operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],

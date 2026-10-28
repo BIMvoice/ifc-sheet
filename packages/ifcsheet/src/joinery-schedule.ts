@@ -47,6 +47,9 @@ export interface ScheduleOccurrence {
   properties?: PropertyFact[];
   /** The element's size was measured from its geometry: the IFC states none (#485). */
   measured?: boolean;
+  /** Which of the two was measured: only the side the IFC does not state is (#485). */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
 }
 
 export interface ScheduleEntry {
@@ -63,6 +66,9 @@ export interface ScheduleEntry {
   height: number;
   /** Width and height were measured from the elements' geometry in their own frame, not stated by the IFC (#485): every element of this group lacked OverallWidth / OverallHeight. */
   measured?: boolean;
+  /** The width / the height alone was measured: every element of the group lacked that side's Overall value. `measured` is true when either is. */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
   /** Count per level name. */
   counts: Record<string, number>;
   total: number;
@@ -322,10 +328,14 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       }
       let height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
       // No OverallWidth / OverallHeight (a non-parametric window): the size of its body, measured in its own frame (#485).
-      let wasMeasured = false;
+      let measuredWidth = false, measuredHeight = false;
       if (!(width > 0 && height > 0)) {
+        // Only the side the IFC does not state is measured; a stated one is kept.
         const measured = measureElementSize(model.meshesOf?.(id));
-        if (measured) { width = measured.width; height = measured.height; wasMeasured = true; }
+        if (measured) {
+          if (!(width > 0)) { width = measured.width; measuredWidth = true; }
+          if (!(height > 0)) { height = measured.height; measuredHeight = true; }
+        }
       }
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
       const key = `untyped:${k}:${size}`;
@@ -335,7 +345,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       };
       byKey.set(key, entry);
       count(entry, id);
-      if (wasMeasured) entry.occurrences[entry.occurrences.length - 1].measured = true;
+      if (measuredWidth || measuredHeight) Object.assign(entry.occurrences[entry.occurrences.length - 1], { measured: true, measuredWidth, measuredHeight });
     }
   }
   // Catalogue types not placed yet still belong in the schedule (with no count).
@@ -348,7 +358,11 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
   markUntyped(entries);
-  for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) e.measured = true;
+  for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) {
+    e.measuredWidth = e.occurrences.every((o) => o.measuredWidth);
+    e.measuredHeight = e.occurrences.every((o) => o.measuredHeight);
+    e.measured = e.measuredWidth || e.measuredHeight;
+  }
   const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
   if (entries.some((e) => e.counts['—'])) levels.push('—');
   // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.
