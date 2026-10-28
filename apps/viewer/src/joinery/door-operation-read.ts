@@ -32,7 +32,9 @@ export function doorOperationOfRenderId(id: number): DoorOperation | null {
   try {
     m.types ??= typeIndex({ dataStore, view });
     op = doorOperationOf({ dataStore, view }, ref.expressId, m.types.get(ref.expressId) ?? null);
-  } catch {
+  } catch (err) {
+    // The door then draws the default hand, the defect #486 fixes: say so rather than fail silently.
+    console.warn(`[joinery] door ${ref.expressId} in ${ref.modelId}: its operation could not be read (${err instanceof Error ? err.message : String(err)}); it draws the default swing.`);
     op = null;
   }
   m.byElement.set(ref.expressId, op);

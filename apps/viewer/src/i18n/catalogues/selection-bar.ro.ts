@@ -16,6 +16,8 @@ export const selectionBarRo = {
   'standards.el.style': 'Stil',
   'standards.el.height': 'Înălțime (mm)',
   'standards.el.editText': 'Editează textul',
+  'standards.el.resetTag': 'Revino la valoarea din model',
+  'standards.el.tagOverridden': 'Text scris peste valoarea din model',
   'standards.el.reset': 'Revino la stil',
   'standards.dim.flipSide': 'Inversează partea',
   'standards.text.bold': 'Aldin',

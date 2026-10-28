@@ -41,6 +41,13 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
     case 'SINGLE_SWING_RIGHT': return { hinge: 'right', leaves: 1, doubleActing: false };
     case 'DOUBLE_SWING_LEFT': return { hinge: 'left', leaves: 1, doubleActing: true };
     case 'DOUBLE_SWING_RIGHT': return { hinge: 'right', leaves: 1, doubleActing: true };
+    // IFC4 / IFC4X3 swing leaf beside a fixed panel: the hand names the leaf's hinge, as SINGLE_SWING_* does and as
+    // this repo's own writer emits it (joinery-ifc.ts `doorOperation`: a swing-left leaf with fixed glazing beside it).
+    case 'SWING_FIXED_LEFT': return { hinge: 'left', leaves: 1, doubleActing: false };
+    case 'SWING_FIXED_RIGHT': return { hinge: 'right', leaves: 1, doubleActing: false };
+    // Two leaves, each swinging one way (the pair is drawn as two leaves, like DOUBLE_DOOR_SINGLE_SWING).
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT':
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT':
     case 'DOUBLE_DOOR_SINGLE_SWING': return { hinge: null, leaves: 2, doubleActing: false };
     case 'DOUBLE_DOOR_DOUBLE_SWING': return { hinge: null, leaves: 2, doubleActing: true };
     default: return null;

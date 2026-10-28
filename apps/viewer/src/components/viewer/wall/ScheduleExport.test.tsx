@@ -140,7 +140,12 @@ describe('the buttons', () => {
     window.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { downloads.push({ name: this.download, type: pending?.type ?? '', blob: pending! }); };
   });
   afterEach(() => { URL.createObjectURL = realCreate; window.HTMLAnchorElement.prototype.click = realClick; });
-  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+  // Wait for the download the click starts (the XLSX writer loads lazily, so a fixed pause is a race on a loaded runner), never longer than 15 s.
+  const settle = (count = 0) => act(async () => {
+    const until = Date.now() + 15_000;
+    await new Promise((r) => setTimeout(r, 300));
+    while (downloads.length < count && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+  });
   const buttons = (view: HTMLElement) => [...view.querySelectorAll<HTMLButtonElement>('button')].filter((b) => /CSV|XLSX/.test(b.textContent ?? ''));
 
   it('the card offers CSV and XLSX, named after the schedule', async () => {
@@ -149,9 +154,9 @@ describe('the buttons', () => {
     openSection(view, 'Export');
     const [csv, xlsx] = buttons(view);
     click(csv);
-    await settle();
+    await settle(1);
     click(xlsx);
-    await settle();
+    await settle(2);
     assert.deepEqual(downloads.map((d) => d.name), ['Joinery.csv', 'Joinery.xlsx']);
     assert.match(downloads[0].type, /text\/csv/);
     const text = await downloads[0].blob.text();
@@ -166,7 +171,7 @@ describe('the buttons', () => {
     const id = project();
     const view = render(<ScheduleExportButtons schedule={scheduleById(id)!} />);
     click(buttons(view)[0]);
-    await settle();
+    await settle(1);
     assert.ok(csvLines(await downloads[0].blob.text())[0].includes(';'));
   });
 

@@ -43,6 +43,10 @@ describe('parseDoorOperation', () => {
     expect(parseDoorOperation('SINGLE_SWING_RIGHT')).toEqual({ hinge: 'right', leaves: 1, doubleActing: false });
     expect(parseDoorOperation('DOUBLE_SWING_LEFT')).toEqual({ hinge: 'left', leaves: 1, doubleActing: true });
     expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
+    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual({ hinge: 'left', leaves: 1, doubleActing: false });
+    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual({ hinge: 'right', leaves: 1, doubleActing: false });
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
     for (const v of ['NOTDEFINED', 'SLIDING_TO_LEFT', 'FOLDING_TO_RIGHT', 'REVOLVING', 'USERDEFINED', null, undefined]) expect(parseDoorOperation(v)).toBeNull();
   });
 });

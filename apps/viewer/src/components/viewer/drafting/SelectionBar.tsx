@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
 import { editDrafts } from '@/drafting/draft-store';
@@ -23,6 +23,8 @@ import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/dra
 import { overriddenFields, resolveDim, resolveText, type ArrowKind, type TextPlacement } from '@/drafting/styles';
 import { isGeometry, type AnnotationShape, type DraftEntity, type Pt } from '@/drafting/types';
 import { resetElementOverrides, setElementOverride, setElementStyle } from '@/project/drafting-standards';
+import { isElementTag, tagOverrideOf } from '@/drafting/tag-override';
+import { overrideTagText, resetTagText } from '@/project/tag-override-actions';
 import { openStandards } from '@/project/standards-dialog-store';
 import { flipDimensionSide } from '@/drafting/dimension-flip';
 import { isDimensional, useStyleBook } from './AnnotationStyleFields';
@@ -117,6 +119,9 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
         {editable !== null ? (
           <IconButton label={t('standards.el.editText')} className="size-7" onClick={() => onEditingChange(true)}><Pencil className="size-3.5" /></IconButton>
         ) : null}
+        {tagOverrideOf(entity) !== null ? (
+          <IconButton label={t('standards.el.resetTag')} className="size-7" onClick={() => resetTagText(entity.id)}><Undo2 className="size-3.5" /></IconButton>
+        ) : null}
         <IconButton label={t('standards.el.reset')} className="size-7" disabled={overriddenFields(entity.params).length === 0} onClick={() => resetElementOverrides(ids)}><RotateCcw className="size-3.5" /></IconButton>
         <IconButton label={t('standards.open')} className="size-7" onClick={() => openStandards(dimensional ? 'dim' : 'text', String(entity.params[kind] ?? 'standard'))}><SlidersHorizontal className="size-3.5" /></IconButton>
       </div>
@@ -133,7 +138,10 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
   const commit = () => {
-    if (text !== value) editDrafts({ update: new Map([[entity.id, withText(entity.shape as AnnotationShape, text)]]) });
+    if (text !== value && isElementTag(entity)) {
+      // An element tag keeps its link and takes the written text over the model's (#445).
+      overrideTagText(entity.id, text);
+    } else if (text !== value) editDrafts({ update: new Map([[entity.id, withText(entity.shape as AnnotationShape, text)]]) });
     onDone();
   };
   return (
