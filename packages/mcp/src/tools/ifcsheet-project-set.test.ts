@@ -137,4 +137,27 @@ describe.skipIf(missing !== null)('a hand-arranged project prints the same throu
     expect(planPage).toEqual(expect.arrayContaining(['8.50', 'Hand note']));
     expect(fromMcp[doc.sheets.length - 1]).toEqual(expect.arrayContaining(['Walls by type', 'Type', 'Count', 'NetSideArea (m²)', 'Total', '13']));
   }, 300_000);
+
+  it('a project that records ro prints its figures in Romanian through MCP too, as the build does', async () => {
+    const document_id = (await ok('ifcsheet_generate_set', { model_id: modelId })).document_id as string;
+    const saved = join(tmp, 'saved-ro.ifclite-project.json');
+    await ok('ifcsheet_save_project', { document_id, file_path: saved });
+    const doc = JSON.parse(await readFile(saved, 'utf8'));
+    const plan = doc.views.find((v: any) => v.kind === 'plan');
+    const c = doc.sheets.flatMap((s: any) => s.viewports ?? []).find((vp: any) => vp.viewId === plan.id).center;
+    doc.drafts = [{ id: 'dim', viewId: plan.id, layerId: '0', shape: { type: 'dimension', variant: 'aligned', a: { x: c.x - 4.25, y: c.y }, b: { x: c.x + 4.25, y: c.y }, at: { x: c.x, y: c.y + 1 }, height: 0.25 }, params: {} }];
+    doc.draftLayers = [{ id: '0', name: '0', color: '#18181b', visible: true, locked: false }];
+    const figures = async (name: string, extra: Record<string, unknown>): Promise<{ cli: string[]; mcp: string[] }> => {
+      const file = join(tmp, `${name}.ifclite-project.json`);
+      await writeFile(file, JSON.stringify({ ...doc, ...extra }));
+      await cli('build', FZK, '--project', file, '--out', join(tmp, `${name}-cli.pdf`));
+      const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_path: file });
+      await ok('ifcsheet_export_pdf', { document_id: loaded.document_id, file_path: join(tmp, `${name}-mcp.pdf`) });
+      const pick = async (f: string) => (await pageTexts(join(tmp, f))).flat().filter((t) => /^8[.,]50$/.test(t));
+      return { cli: await pick(`${name}-cli.pdf`), mcp: await pick(`${name}-mcp.pdf`) };
+    };
+    expect(await figures('ro', { language: 'ro' })).toEqual({ cli: ['8,50'], mcp: ['8,50'] });
+    expect(await figures('en', { language: 'en' })).toEqual({ cli: ['8.50'], mcp: ['8.50'] });
+    expect(await figures('none', {})).toEqual({ cli: ['8.50'], mcp: ['8.50'] });
+  }, 300_000);
 });
