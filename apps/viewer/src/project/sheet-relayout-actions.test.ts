@@ -129,3 +129,25 @@ describe('a drawing that no longer fits at the new scale (#450)', () => {
     assert.equal((coarser.notes ?? []).some(isRescaledNote), false);
   });
 });
+
+describe('what a scale change must not do (#450)', () => {
+  beforeEach(() => begin(FLATS));
+
+  it('offers no layout on a sheet the layout cannot place (a schedule hangs on it): the offer would do nothing', () => {
+    const start = sheetOne();
+    const schedule: SheetViewport = { ...first(start), id: 'vp-schedule', viewId: 'schedule-not-a-view', x: first(start).x + 60 };
+    useProjectStore.setState({ sheets: state().sheets.map((s) => (s.id === start.id ? { ...s, viewports: [...(s.viewports ?? []), schedule] } : s)) });
+    const result = changeViewportScale(start.id, first(start).id, first(start).viewId, 50, FLATS);
+    assert.equal(result, 'alone');
+    assert.equal(relaySheetAt(start.id, 50, FLATS), false);
+  });
+
+  it('keeps a note the person wrote, even one that starts like a rescaled note', () => {
+    const start = sheetOne();
+    const own = 'Scale 1:20: see the stair detail on A-501';
+    useProjectStore.setState({ sheets: state().sheets.map((s) => (s.id === start.id ? { ...s, notes: [own] } : s)) });
+    assert.equal(changeViewportScale(start.id, first(start).id, first(start).viewId, 50, FLATS), 'relaid');
+    assert.deepEqual(sheetOne().notes, [own]);
+    assert.equal(isRescaledNote(own), false);
+  });
+});

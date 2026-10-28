@@ -42,7 +42,7 @@ export function changeViewportScale(sheetId: string, viewportId: string, viewId:
   runAsOneUndoStep(() => {
     setViewportScale(sheetId, viewportId, viewId, scale);
     if (untouched) result = relaySheetAt(sheetId, scale, extent) ? 'relaid' : 'alone';
-    else if ((sheet?.viewports?.length ?? 0) > 1) result = 'kept';
+    else if (sheet && (sheet.viewports?.length ?? 0) > 1 && relaySheet(sheet, views, extent, scale, getLocale())) result = 'kept';
   });
   return result;
 }
