@@ -23,9 +23,13 @@
 #   - a change confined to packages the viewer neither depends on nor mentions
 #     (scripts/ci-viewer-affected.mjs decides, and answers "run" on any doubt
 #     or error) skips the viewer shards and the viewer production build.
+#     That script also sets aside test files nothing imports: in a package the
+#     viewer depends on they skip both, in apps/viewer they skip the build only
+#     (#538). Romanian catalogues are not set aside, the viewer imports them.
 # Anything not listed above counts as JavaScript, so an unclassified path runs
 # more, never less. A change under .github/ (this workflow, the shared
-# actions), or to pnpm-lock.yaml or Cargo.lock, runs everything. A push to main
+# actions), or to pnpm-lock.yaml, Cargo.lock or a package manager file (root
+# package.json, pnpm-workspace.yaml, .npmrc, .nvmrc), runs everything. A push to main
 # and a merge-queue entry always run everything, with the full package set.
 #
 # Skipped jobs make the per-job checks unusable as required checks (a skipped
@@ -104,6 +108,7 @@ jobs:
       packages: ${{ steps.flags.outputs.packages }}
       rust: ${{ steps.flags.outputs.rust }}
       viewer: ${{ steps.flags.outputs.viewer }}
+      viewer_build: ${{ steps.flags.outputs.viewer_build }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -120,7 +125,7 @@ jobs:
           everything() {
             echo "$1: running everything."
             out all true; out ci "$2"; out code true; out docs_only false
-            out packages true; out rust true; out viewer true
+            out packages true; out rust true; out viewer true; out viewer_build true
             exit 0
           }
 
@@ -141,6 +146,11 @@ jobs:
 
           if any '^\.github/'; then everything "A change under .github/" true; fi
           if any '^(pnpm-lock\.yaml|Cargo\.lock)$'; then everything "A lockfile changed" false; fi
+          # The package manager and the toolchain: anything here can change
+          # every job's inputs, so run everything.
+          if any '^(package\.json|pnpm-workspace\.yaml|\.npmrc|\.nvmrc|\.node-version|\.tool-versions|\.pnpmfile\.cjs)$'; then
+            everything "A package manager file changed" false
+          fi
 
           out all false
           out ci false
@@ -150,17 +160,20 @@ jobs:
           # agrees (rust/** is a globalDependency), so they count here.
           if any_but "$DOCS|^apps/"; then out packages true; else out packages false; fi
           if any "$RUST"; then out rust true; else out rust false; fi
-          # Files that could reach the viewer: not docs, Rust or an app. They
-          # skip the viewer only when scripts/ci-viewer-affected.mjs proves the
-          # packages they sit in are neither depended on nor mentioned by it.
+          # Files that could reach the viewer: not docs, Rust or an app other
+          # than apps/viewer. scripts/ci-viewer-affected.mjs decides per lane
+          # and answers "run" on any doubt or error. The shards and the
+          # production build are decided separately: a test file nothing
+          # imports can change a shard's result but not the bundle. A Romanian
+          # catalogue is NOT skipped: viewer tests and the build import it.
           candidates="$RUNNER_TEMP/viewer-candidates.txt"
-          grep -vE "$DOCS|$RUST|^apps/" "$changed" > "$candidates" || true
-          if any '^apps/viewer/'; then out viewer true
-          elif [ ! -s "$candidates" ]; then out viewer false
-          else
-            verdict=$(node scripts/ci-viewer-affected.mjs "$candidates" || echo true)
-            if [ "$verdict" = false ]; then out viewer false; else out viewer true; fi
-          fi
+          grep -vE "$DOCS|$RUST" "$changed" | awk '!/^apps\// || /^apps\/viewer\//' > "$candidates" || true
+          for lane in tests build; do
+            if [ ! -s "$candidates" ]; then verdict=false
+            else verdict=$(node scripts/ci-viewer-affected.mjs "$candidates" "$lane" || echo true); fi
+            [ "$verdict" = false ] || verdict=true
+            if [ "$lane" = tests ]; then out viewer "$verdict"; else out viewer_build "$verdict"; fi
+          done
 
   # The engine (packages/wasm/pkg) is not committed and IfcSheet's Rust differs
   # from the published @ifc-lite/wasm, so it is built from source once here and
@@ -436,7 +449,7 @@ jobs:
   viewer-build:
     name: Viewer production build
     needs: [changes, wasm]
-    if: needs.changes.outputs.viewer == 'true'
+    if: needs.changes.outputs.viewer_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
