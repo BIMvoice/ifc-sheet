@@ -17,9 +17,11 @@ import { updateProjectView } from '@/project/project-store';
 import { viewportBox } from '@/project/sheets';
 import { PRINT_DPI, effectiveDpi, rasterFits } from '@/project/view-raster';
 import type { AxonometricPreset, SheetViewport, ThreeDProjectView, ThreeDProjection } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
+import { CutawayCard } from './CutawayAxoForm';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 const SAVED = 'saved';
 
 interface ThreeDControlsProps {
@@ -67,6 +69,7 @@ export function ThreeDControls({ view, slot, bounds = null, captureDeps }: Three
               {AXONOMETRIC_PRESETS.map((p) => <option key={p} value={p}>{t(`wall.vp.threeD.corner.${p}`)}</option>)}
             </select>
           </label>
+          <CutawayCard view={view} />
           {view.viewpoint ? (
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={view.shaded === true} onChange={(e) => updateProjectView(view.id, { shaded: e.target.checked, ...(e.target.checked ? { preset: undefined } : {}) })} />

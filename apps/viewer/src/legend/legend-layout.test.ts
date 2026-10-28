@@ -17,7 +17,7 @@ import type { LegendGroup } from './legend-data.js';
 import { layoutLegend, type LegendLabels, type LegendLayoutContext, type LegendPrim } from './legend-layout.js';
 
 const labels: LegendLabels = {
-  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations' },
+  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations', colours: 'Colours' },
   continued: (h) => `${h} (cont.)`, tool: (t) => t, membrane: 'membrane', sampleText: 'Abc',
 };
 const ctx: LegendLayoutContext = { textStyle: { ...DEFAULT_TEXT_STYLE }, patterns: [], labels };

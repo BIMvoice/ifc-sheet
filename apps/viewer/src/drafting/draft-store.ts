@@ -31,6 +31,10 @@ interface Group {
   views: Delta<ProjectView>;
   sheets: Delta<ProjectSheet>;
   revisions: Delta<ProjectRevision> & { before: string[]; after: string[] };
+  /** The project's lists of things with ids that removing a view, sheet, schedule or legend also takes from (`LIST_FIELDS`), each as what the step did to it. */
+  lists: ListChange[];
+  /** The order of the ids of each list the step added to or removed from, before and after, so a removed item comes back where it was. */
+  orders: Orders;
   fields: FieldChange[];
 }
 type Step =
@@ -38,13 +42,45 @@ type Step =
   | { group: Group };
 
 /**
- * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143): undo puts
+ * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143; the fields a standards pack sets, #365): undo puts
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate'] as const;
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard'] as const;
 type StepField = (typeof STEP_FIELDS)[number];
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
+
+/**
+ * Project lists of things with ids that a step may add to, remove from or change (#51): removing a schedule takes its parts and text rows,
+ * a legend leaves the sheets, a sheet takes its comments. Kept as deltas like the views and sheets, so undo brings back what the step took
+ * and leaves what was added after it.
+ */
+const LIST_FIELDS = ['schedules', 'legends', 'civilDrawings', 'comments', 'viewTemplates', 'materials'] as const;
+type ListField = (typeof LIST_FIELDS)[number];
+type ListChange = { [K in ListField]: { key: K; delta: Delta<NonNullable<ProjectDocument[K]>[number]> } }[ListField];
+
+/** `delta` applied to the list `key` of `s`, as a state patch; nothing when the step did not touch it (an absent list stays absent). */
+function listsPatch(s: ProjectDocument, lists: readonly ListChange[], apply: (current: readonly { id: string }[], d: Delta<{ id: string }>) => { id: string }[]): Partial<ProjectDocument> {
+  const out: Record<string, unknown> = {};
+  for (const c of lists) out[c.key] = apply((s[c.key] ?? []) as readonly { id: string }[], c.delta as Delta<{ id: string }>);
+  return out as Partial<ProjectDocument>;
+}
+
+type OrderedKey = 'drafts' | 'views' | 'sheets' | ListField;
+type Orders = Partial<Record<OrderedKey, { before: string[]; after: string[] }>>;
+const ORDERED_KEYS: readonly OrderedKey[] = ['drafts', 'views', 'sheets', ...LIST_FIELDS];
+const idsOf = (list: readonly { id: string }[] | undefined): string[] => (list ?? []).map((t) => t.id);
+
+/** `patch` with every list the step added to or removed from put in the order it had `at` the step. */
+function ordered(patch: Partial<ProjectDocument>, orders: Orders, at: 'before' | 'after'): Partial<ProjectDocument> {
+  const out: Record<string, unknown> = { ...patch };
+  for (const key of ORDERED_KEYS) {
+    const order = orders[key];
+    const list = out[key] as { id: string }[] | undefined;
+    if (order && list) out[key] = inOrder(list, order[at]);
+  }
+  return out as Partial<ProjectDocument>;
+}
 
 let past: Step[] = [];
 let future: Step[] = [];
@@ -92,12 +128,70 @@ export function runAsOneUndoStep(change: () => void): void {
   const revisionsBefore = before.revisions ?? [];
   const revisionsAfter = after.revisions ?? [];
   const fields = STEP_FIELDS.filter((key) => before[key] !== after[key]).map((key) => ({ key, before: before[key], after: after[key] }) as FieldChange);
+  const lists = LIST_FIELDS.flatMap((key) => {
+    const delta = diffById<{ id: string }>(before[key] ?? [], after[key] ?? []);
+    return isEmptyDelta(delta) ? [] : [{ key, delta } as ListChange];
+  });
+  const orders: Orders = {};
+  for (const key of ORDERED_KEYS) {
+    if (before[key] === after[key]) continue;
+    const delta = diffById<{ id: string }>(before[key] ?? [], after[key] ?? []);
+    if (delta.added.length + delta.removed.length > 0) orders[key] = { before: idsOf(before[key]), after: idsOf(after[key]) };
+  }
   const group: Group = {
     drafts: diffById(before.drafts, after.drafts), views: diffById(before.views, after.views), sheets: diffById(before.sheets, after.sheets),
     revisions: { ...diffById(revisionsBefore, revisionsAfter), before: revisionsBefore.map((r) => r.id), after: revisionsAfter.map((r) => r.id) },
-    fields,
+    lists, orders, fields,
   };
-  if (!isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions) || fields.length > 0) pushStep({ group });
+  if (lists.length > 0 || !isEmptyDelta(group.drafts) || !isEmptyDelta(group.views) || !isEmptyDelta(group.sheets) || !isEmptyDelta(group.revisions) || fields.length > 0) pushStep({ group });
+}
+
+/**
+ * Run `change` as the project's starting state: it changes views, sheets and drafts through the ordinary functions but leaves
+ * no undo step, so Undo at the bottom of the history has nothing to take back (the set built when a model opens, #293).
+ */
+export function runAsStartingState(change: () => void): void {
+  const wasGrouping = grouping;
+  grouping = true;
+  try {
+    change();
+  } finally {
+    grouping = wasGrouping;
+  }
+}
+
+/**
+ * Work that happens in several runs with the page free between them (annotating the whole set, #333), made ONE undo step.
+ * Each `run` is synchronous and leaves no step of its own; the drafts it adds, removes or changes are kept, and `close`
+ * records them as one grouped step. Anything the user does between two runs makes its own step and is not in this one, so
+ * Undo takes back just what the runs did.
+ */
+export interface UndoSpan {
+  run(change: () => void): void;
+  close(): void;
+}
+
+export function openUndoSpan(): UndoSpan {
+  const delta: Delta<DraftEntity> = { added: [], removed: [], changed: [] };
+  return {
+    run(change) {
+      const before = useProjectStore.getState().drafts;
+      try {
+        runAsStartingState(change);
+      } finally {
+        // What a run did before it failed is part of the step too.
+        const d = diffById(before, useProjectStore.getState().drafts);
+        delta.added.push(...d.added);
+        delta.removed.push(...d.removed);
+        delta.changed.push(...d.changed);
+      }
+    },
+    close() {
+      if (isEmptyDelta(delta)) return;
+      const none = <T extends { id: string }>(): Delta<T> => ({ added: [], removed: [], changed: [] });
+      pushStep({ group: { drafts: delta, views: none(), sheets: none(), revisions: { ...none<ProjectRevision>(), before: [], after: [] }, lists: [], orders: {}, fields: [] } });
+    },
+  };
 }
 
 /** The fields `changes` set back to `to`, each only where it still holds the value the step moved it `from`. */
@@ -122,7 +216,10 @@ function revert(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
   useProjectStore.setState((s) => ({
-    drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets),
+    ...ordered({
+      drafts: undoDelta(s.drafts, group.drafts), views: undoDelta(s.views, group.views), sheets: undoDelta(s.sheets, group.sheets),
+      ...listsPatch(s, group.lists, undoDelta),
+    }, group.orders, 'before'),
     ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(undoDelta(s.revisions ?? [], group.revisions), group.revisions.before) }),
     ...fieldsBack(s, group.fields, 'after', 'before'),
     dirty: true,
@@ -133,7 +230,10 @@ function reapply(step: Step): void {
   if (!('group' in step)) { useProjectStore.setState({ drafts: step.drafts, dirty: true }); return; }
   const { group } = step;
   useProjectStore.setState((s) => ({
-    drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets),
+    ...ordered({
+      drafts: redoDelta(s.drafts, group.drafts), views: redoDelta(s.views, group.views), sheets: redoDelta(s.sheets, group.sheets),
+      ...listsPatch(s, group.lists, redoDelta),
+    }, group.orders, 'after'),
     ...(isEmptyDelta(group.revisions) ? {} : { revisions: inOrder(redoDelta(s.revisions ?? [], group.revisions), group.revisions.after) }),
     ...fieldsBack(s, group.fields, 'before', 'after'),
     dirty: true,
@@ -200,6 +300,13 @@ export function editDrafts(edit: {
   if (added.length === 0 && remove.size === 0 && update.size === 0) return [];
   commitDrafts([...next, ...added]);
   return added.map((d) => d.id);
+}
+
+/** One undoable step that swaps a whole entity (its shape and its params) for `next`, found by id. */
+export function replaceDraft(next: DraftEntity): void {
+  const { drafts } = useProjectStore.getState();
+  if (!drafts.some((d) => d.id === next.id)) return;
+  commitDrafts(drafts.map((d) => (d.id === next.id ? next : d)));
 }
 
 export function setDraftParams(ids: ReadonlySet<string>, params: Record<string, DraftParamValue | null>): void {

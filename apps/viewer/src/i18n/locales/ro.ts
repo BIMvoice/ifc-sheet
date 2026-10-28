@@ -6,39 +6,15 @@
  * Romanian (#53): the IfcSheet face, i.e. the Wall, the project drawer, the
  * sheet cards, the title block, the scales and the tool rail, plus the
  * checks, issue and what-changed panels the Wall opens, the names it gives
- * what it creates, and the privacy notice. The 3D viewer
+ * what it creates, the privacy notice, comments, revisions, the preview at paper size and the tag fields. The 3D viewer
  * around it stays English until its catalogues are translated; a key
  * missing here falls back to English one by one. Term choices: `../ro-glossary.md`.
  */
 import type { Catalogue } from '../registry';
-import { checkRo } from '../catalogues/check.ro';
-import { faceRo } from '../catalogues/face.ro';
-import { namesRo } from '../catalogues/names.ro';
-import { issueRo } from '../catalogues/issue.ro';
-import { sheetContentRo } from '../catalogues/sheet-content.ro';
-import { sheetsRo } from '../catalogues/sheets.ro';
-import { wallRo } from '../catalogues/wall.ro';
-import { whatChangedRo } from '../catalogues/whatchanged.ro';
-import { featuresRo } from '../catalogues/features.ro';
-import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
-import { revisionsRo } from '../catalogues/revisions.ro';
-import { catalogueRo } from '../catalogues/catalogue.ro';
-import { cadLayersRo } from '../catalogues/cad-layers.ro';
-import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
+import { roAL } from '../barrels/ro-a-l';
+import { roMZ } from '../barrels/ro-m-z';
 
 export default {
-  ...wallRo,
-  ...sheetsRo,
-  ...checkRo,
-  ...issueRo,
-  ...whatChangedRo,
-  ...sheetContentRo,
-  ...namesRo,
-  ...faceRo,
-  ...featuresRo,
-  ...titleBlockSourcesRo,
-  ...revisionsRo,
-  ...catalogueRo,
-  ...cadLayersRo,
-  ...titleBlockParamsRo,
+  ...roAL,
+  ...roMZ,
 } satisfies Catalogue;

@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/pointcloud",
+  "private": true,
   "version": "0.11.0",
   "description": "Point cloud decoders and types for IFC-Lite",
   "type": "module",

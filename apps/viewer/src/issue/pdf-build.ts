@@ -12,9 +12,10 @@
  */
 
 import type { jsPDF } from 'jspdf';
+import { pacOpisTexts, PAC_OPIS_PAPER, type PacOpis } from '@bimvoice/ifcsheet';
 import { paperOf } from '@/project/sheets';
 import type { IssuePlan } from './plan';
-import type { ListLabels } from './output';
+import { changeCell, listsChanges, paperText, type ListLabels } from './output';
 import { archival } from './pdf-archival';
 import { embedFonts, FALLBACK_FAMILY, FONT_FAMILY, missingGlyphs, useEmbeddedFont, type FontLoader } from './pdf-fonts';
 import { layerRuns, type LayerGroup, type LayerRef } from './pdf-layers';
@@ -32,6 +33,8 @@ export interface PdfLabels extends ListLabels {
 export interface PdfOptions {
   /** Write the archival metadata (`pdf-archival.ts`; not a PDF/A file, and the file does not claim to be one). */
   archival?: boolean;
+  /** The permit project's opis (`pacOpis`): drawn as the first page, before the sheets (#364). The engine lays it out, as the command line's PDF does. */
+  opis?: PacOpis;
   /** The creation date; now when omitted. */
   created?: Date;
   /** How the embedded font files are read (the browser fetches them from `public/fonts/`). */
@@ -56,10 +59,21 @@ export function layerName(layer: LayerRef, labels: Pick<PdfLabels, 'groups' | 'r
   return { group, name: layer.group === 'drafting' ? `${labels.drafting}: ${layer.key}` : (labels.roles[layer.key] ?? layer.key) };
 }
 
+/** The permit project's opis page: the engine's texts (`pacOpisTexts`), the same the command line's submission PDF draws. */
+function opisPage(doc: jsPDF, opis: PacOpis, family: string): void {
+  doc.setFont(family, 'normal');
+  for (const t of pacOpisTexts(opis)) {
+    doc.setFontSize((t.size / 25.4) * 72);
+    doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left' });
+  }
+}
+
 function listPage(doc: jsPDF, plan: IssuePlan, projectName: string, labels: PdfLabels, family: string): void {
-  const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision];
-  const cols = [20, 60, 25, 35, 30];
-  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, `${row.paper} ${row.orientation}`, row.revision]);
+  const change = listsChanges(plan, labels) ? labels.change : undefined;
+  const head = [labels.sheet, labels.sheetTitle, labels.scale, labels.paper, labels.revision, ...(change ? [change.change] : [])];
+  const cols = change ? [18, 50, 22, 30, 20, 30] : [20, 60, 25, 35, 30];
+  const rows = plan.sheets.map(({ row }) => [row.number, row.title, row.scale, paperText(row, labels), row.revision, ...(change ? [changeCell(plan, row.number, change)] : [])]);
+  if (change) for (const r of plan.changes.removed) rows.push([r.number, r.title, '', '', '', change.removed]);
   doc.setFont(family, 'bold');
   doc.setFontSize(18);
   doc.text(labels.title, 20, 28);
@@ -118,7 +132,7 @@ export async function buildIssuePdf(plan: IssuePlan, svgs: ReadonlyMap<string, s
   const { jsPDF } = await import('jspdf');
   await import('svg2pdf.js');
   const sheets = plan.sheets.filter(({ sheet }) => svgs.has(sheet.id));
-  const first = plan.listFirst || sheets.length === 0 ? { w: 210, h: 297 } : paperOf(sheets[0].sheet);
+  const first = plan.listFirst || options.opis || sheets.length === 0 ? { w: 210, h: 297 } : paperOf(sheets[0].sheet);
   const created = options.created ?? new Date();
   const doc = new jsPDF({ unit: 'mm', format: [first.w, first.h], orientation: first.w > first.h ? 'landscape' : 'portrait', compress: true });
   const embedded = await embedFonts(doc, options.loadFont);
@@ -145,6 +159,12 @@ export async function buildIssuePdf(plan: IssuePlan, svgs: ReadonlyMap<string, s
     listPage(doc, plan, projectName, labels, embedded ? FONT_FAMILY : FALLBACK_FAMILY);
     written.push(projectName, plan.name, ...plan.sheets.map(({ row }) => `${row.number} ${row.title} ${row.revision}`));
     doc.outline.add(null, labels.title, { pageNumber: doc.getNumberOfPages() });
+  }
+  if (options.opis) {
+    nextPage(PAC_OPIS_PAPER.w, PAC_OPIS_PAPER.h);
+    opisPage(doc, options.opis, embedded ? FONT_FAMILY : FALLBACK_FAMILY);
+    written.push(options.opis.title, options.opis.law, options.opis.project, ...options.opis.rows.map((r) => `${r.point} ${r.name}`));
+    doc.outline.add(null, options.opis.title, { pageNumber: doc.getNumberOfPages() });
   }
   for (const { sheet, row } of sheets) {
     const { w, h } = paperOf(sheet);

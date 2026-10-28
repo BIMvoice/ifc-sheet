@@ -11,26 +11,38 @@
 
 import { memo, useMemo } from 'react';
 import type { LegendConfig, ProjectLegend } from '@/catalogue/types';
+import { sheetLevel, sheetNumber } from '@bimvoice/ifcsheet/names';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { useSheetLocale } from '@/project/units-and-numbers';
+import { ATTRIBUTE_CHOICES } from '@/project/colour-scheme-choices';
 import { useViewerStore } from '@/store';
 import { fontFamily } from '@/drafting/styles';
 import { LEGEND_CATEGORIES } from '@/catalogue/types';
 import type { LegendLabels, LegendLayout, LegendPrim } from '@/legend/legend-layout';
 import { layoutOf, type LegendEnv } from '@/legend/legend-env';
+import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { useProjectStore } from '@/project/project-store';
 import { useViewDrawings } from '@/project/view-drawings';
 import type { ProjectSheet } from '@/project/types';
 import { penTags } from '../sheets/dxf-tags';
 
+/** The readable name of an attribute a view can be coloured by, in the app's language. */
+export const attributeLabeller = (t: (key: TranslationKey) => string) => (name: string): string | undefined =>
+  (ATTRIBUTE_CHOICES as readonly string[]).includes(name) ? t(`wall.scheme.attr.${name}` as TranslationKey) : undefined;
+
 export function useLegendLabels(): LegendLabels {
   const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => ({
     heading: Object.fromEntries(LEGEND_CATEGORIES.map((c) => [c, t(`legend.category.${c}` as TranslationKey)])) as LegendLabels['heading'],
     tool: (tool) => t(`atype.tool.${tool}` as TranslationKey),
     continued: (heading) => t('legend.continued', { heading }),
     membrane: t('legend.membrane'),
     sampleText: t('legend.sampleText'),
-  }), [t]);
+    sampleDimension: sheetNumber(locale, 2.5, 2, { group: false }),
+    sampleLevel: sheetLevel(locale, 0),
+    attribute: attributeLabeller(t),
+  }), [t, locale]);
 }
 
 /** Everything a legend lists, as of now; a new object whenever any of it changes. */
@@ -46,14 +58,15 @@ function useLegendEnv(): LegendEnv {
   const patterns = useProjectStore((s) => s.hatchPatterns) ?? '';
   const textStyles = useProjectStore((s) => s.textStyles);
   const byView = useViewDrawings((s) => s.byView);
+  const meshes = useDrawingRuntime().geometryResult?.meshes;
   // The viewer store: material names are read from the loaded models, which edits and loads change.
   const models = useViewerStore((s) => s.models);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   return useMemo(
-    () => ({ labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView }),
+    () => ({ labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes }),
     // models / mutationVersion do not appear in the env but must make a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, models, mutationVersion],
+    [labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes, models, mutationVersion],
   );
 }
 
@@ -83,7 +96,7 @@ function Prim({ p }: { p: LegendPrim }) {
   }
   if (p.kind === 'path') {
     const d = p.pts.map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(2)},${q.y.toFixed(2)}`).join('') + (p.closed ? 'Z' : '');
-    return <path {...penTags('LEGEND', p.w, p.dash, p.color)} d={d} fill={p.fill ?? 'none'} stroke={p.color ?? '#000'} strokeWidth={p.w} strokeDasharray={p.dash ? '1.4 0.9' : undefined} strokeLinejoin="round" />;
+    return <path {...penTags('LEGEND', p.w, p.dash, p.color)} data-dxf-fill={p.solid ? 'solid' : undefined} d={d} fill={p.fill ?? 'none'} stroke={p.color ?? '#000'} strokeWidth={p.w} strokeDasharray={p.dash ? '1.4 0.9' : undefined} strokeLinejoin="round" />;
   }
   return (
     <text {...penTags('LEGEND', 0.18)} x={p.x} y={p.y} fontSize={p.size} fontFamily={fontFamily(p.font ?? 'sans')} fontWeight={p.bold ? 700 : 400} fill="#000" textAnchor={p.anchor}>

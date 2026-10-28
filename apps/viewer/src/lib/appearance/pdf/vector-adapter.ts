@@ -169,7 +169,7 @@ export async function decodePdfVectorPage(
   page: PDFPageProxy, source: Uint8Array, request: PdfVectorRequest,
   decoder: PdfVectorDecoder, signal?: AbortSignal, context: PdfVectorDecodeContext = {},
 ): Promise<PdfVectorPage> {
-  if (decoder.version !== '6.3.289')
+  if (decoder.version !== '6.4.299')
     throw new PdfAppearanceError('unsupported', 'This PDF decoder version has not been qualified for vectors.');
   const list = await page.getOperatorList({ intent: 'display' });
   if (signal?.aborted) throw new PdfAppearanceError('cancelled', 'PDF vector preparation cancelled.');

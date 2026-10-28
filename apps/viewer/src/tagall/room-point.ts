@@ -11,6 +11,7 @@
  */
 
 import type { Pt } from '@/drafting/types';
+import type { RectIndex } from '@/labels/rect-index';
 import { pointInRing, rectAround, rectHitsRing, rectInsideRing, rectsOverlap, ringBounds, type Rect } from '@/labels/label-geometry';
 
 export interface RoomObstacles {
@@ -18,6 +19,9 @@ export interface RoomObstacles {
   rects: readonly Rect[];
   /** Outlines of elements the label must not lie over (walls, doors, windows, furniture). */
   rings: readonly (readonly Pt[])[];
+  /** The same boxes and outlines on a grid (`labels/rect-index.ts`), for a plan with many: asked instead of the lists, which then hold only what the grids do not. */
+  rectIndex?: RectIndex;
+  ringIndex?: RectIndex<readonly Pt[]>;
 }
 
 export interface RoomPoint {
@@ -55,6 +59,10 @@ export function roomLabelPoint(ring: readonly Pt[], w: number, h: number, avoid:
       if (best && d <= best.d + 1e-9) continue;
       if (!rectInsideRing(r, ring)) continue;
       if (avoid.rects.some((o) => rectsOverlap(r, o)) || avoid.rings.some((o) => rectHitsRing(r, o))) continue;
+      if (avoid.rectIndex?.any(r)) continue;
+      let onRing = false;
+      avoid.ringIndex?.query(r, (_, ring2) => (onRing = rectHitsRing(r, ring2)));
+      if (onRing) continue;
       best = { p, d };
     }
   }

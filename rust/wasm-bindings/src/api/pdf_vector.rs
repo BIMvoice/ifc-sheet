@@ -76,7 +76,7 @@ mod tests {
     fn issue_4406_wire_clip_is_separate_from_the_public_rust_page_shape() {
         let page = serde_json::json!({
             "pdfSha256": "a".repeat(64),
-            "decoderVersion": "6.3.289",
+            "decoderVersion": "6.4.299",
             "pdfFormatVersion": "2.0",
             "pageNumber": 1,
             "viewBox": [0.0, 0.0, 100.0, 100.0],

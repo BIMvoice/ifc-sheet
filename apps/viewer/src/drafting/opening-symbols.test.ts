@@ -5,6 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { MeshData } from '@ifc-lite/geometry';
+import type { DoorOperation } from '@bimvoice/ifcsheet';
 import { minAreaRect, openingSymbols } from './opening-symbols';
 
 /** A box mesh (corners only), world = origin + positions. */
@@ -78,4 +79,76 @@ describe('openingSymbols', () => {
     assert.ok(arcs.every((a) => a.type === 'arc' && Math.abs(a.r - 0.8) < 1e-6));
     assert.deepEqual(arcs.map((a) => (a.type === 'arc' ? Math.round(a.c.x * 100) / 100 : 0)).sort(), [4.2, 5.8]);
   });
+
+  it('takes an element by its height over all its meshes: a door split across the cut is drawn', () => {
+    const lower = box('IfcDoor', [-0.45, 0, -0.03], [0.45, 1, 0.03], [5, 0, 2]);
+    const upper = box('IfcDoor', [-0.45, 1.4, -0.03], [0.45, 2.1, 0.03], [5, 0, 2]);
+    const [door] = openingSymbols([lower, upper], plan);
+    assert.equal(door?.kind, 'door', 'neither mesh alone spans the cut at 1.2, the element does');
+    assert.equal(door.heavy?.length, 1);
+  });
+
+  it('reads no more than the heights of a door on another storey (#154)', () => {
+    // Every read of a position that is not a height (x or z) counts: projecting the mesh needs them, its height range does not.
+    let planReads = 0;
+    const upstairs = box('IfcDoor', [-0.45, 4, -0.03], [0.45, 6, 0.03], [9, 0, 2]);
+    const raw = upstairs.positions as Float32Array;
+    const counted = new Proxy(raw, {
+      get(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key) && Number(key) % 3 !== 1) planReads++;
+        const v = Reflect.get(target, key, target);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    const here = box('IfcDoor', [-0.45, -1.05, -0.03], [0.45, 1.05, 0.03], [5, 1.05, 2]);
+    const symbols = openingSymbols([{ ...upstairs, expressId: 9, positions: counted } as unknown as MeshData, here], plan);
+    assert.deepEqual(symbols.map((s) => s.id), [7], 'only the door the cut passes through');
+    assert.equal(planReads, 0, 'the door upstairs is not projected onto the plan');
+  });
 });
+
+/** #486: the swing follows the door's stated operation, read against its placement (IFC4.3 IfcDoorTypeOperationEnum: LEFT = hinges on local -X seen along +Y, the leaf opens to +Y). */
+describe('openingSymbols with a stated operation', () => {
+  const plan = { axis: 'y' as const, position: 1.2, flipped: false };
+  const left: DoorOperation = { hinge: 'left', leaves: 1, doubleActing: false };
+  const right: DoorOperation = { ...left, hinge: 'right' };
+  /** Row-major localToWorld (renderer frame): IFC local X = column 0, IFC local Y = minus column 2. `mx`: X mirrored; `my`: Y mirrored. */
+  const placed = (mx = false, my = false): MeshData => ({
+    ...box('IfcDoor', [-0.45, -1.05, -0.03], [0.45, 1.05, 0.03], [5, 1.05, 2]),
+    localToWorld: [mx ? -1 : 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, my ? -1 : 1, 0, 0, 0, 0, 1],
+  } as unknown as MeshData);
+  const read = (mesh: MeshData, op: DoorOperation | null, flips = 0) => {
+    const [door] = openingSymbols([mesh], plan, () => flips, () => null, () => op);
+    const arc = door.shapes.find((x) => x.type === 'arc');
+    const leaf = door.heavy?.[0];
+    if (arc?.type !== 'arc' || leaf?.type !== 'polyline') throw new Error('no door symbol');
+    return { hingeX: arc.c.x, tipY: leaf.pts[1].y - leaf.pts[0].y };
+  };
+
+  it('hinges LEFT on the placement\'s -X jamb and RIGHT on its +X jamb', () => {
+    assert.ok(Math.abs(read(placed(), left).hingeX - 4.55) < 1e-6);
+    assert.ok(Math.abs(read(placed(), right).hingeX - 5.45) < 1e-6);
+  });
+
+  it('swings to the placement\'s +Y, whichever hand the door has', () => {
+    // IFC +Y is renderer -Z: the drawing's -y here.
+    assert.ok(read(placed(), left).tipY < 0 && read(placed(), right).tipY < 0);
+    assert.ok(read(placed(false, true), left).tipY > 0, 'a placement with Y reversed swings the other way');
+  });
+
+  it('mirrors the hand with a mirrored placement (negative determinant)', () => {
+    assert.ok(Math.abs(read(placed(true), left).hingeX - 5.45) < 1e-6);
+    assert.ok(Math.abs(read(placed(true), right).hingeX - 4.55) < 1e-6);
+  });
+
+  it('lets a manual flip toggle the stated hand, and draws as before when the model states none', () => {
+    assert.ok(Math.abs(read(placed(), left, 1).hingeX - 5.45) < 1e-6);
+    assert.ok(Math.abs(read(placed(), null).hingeX - 4.55) < 1e-6);
+  });
+
+  it('draws the pair a DOUBLE_DOOR states even in a narrow opening', () => {
+    const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => ({ hinge: null, leaves: 2, doubleActing: false }));
+    assert.equal(door.heavy?.length, 2);
+  });
+});
+

@@ -16,7 +16,7 @@ const sheet = (id: string, number: string, name: string, count: number): SheetCh
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: false });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: null });
   useWhatChanged.setState({ running: false, message: 'Compared with the reference model: 4 elements changed in the model.', result: { changed: 4, unread: 0, clouds: 5, sheets: [sheet('s1', 'A-101', 'Ground floor', 3), sheet('s2', 'A-201', 'Elevations', 1), sheet('s3', 'A-301', 'Sections', 0)] } });
 });
 afterEach(() => { cleanup(); useWhatChanged.setState({ result: null, message: null }); });

@@ -20,8 +20,9 @@ import { drawingAreaIn, frameOf, type Rect } from './sheet-frame.js';
 import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
 import { freshProjectId } from './ids.js';
+import { viewCentre } from './view-centre.js';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering.js';
-import type { ElevationDirection, NumberingScheme, Paper, PaperSize, PlanProjectView, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
+import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
@@ -55,11 +56,8 @@ function startOf(template: SheetTemplate | undefined, paper: PaperSize): Pick<Pr
   return template ? templateFields(template) : { paper, orientation: 'landscape' };
 }
 
-/** The lowest plan: the one a set's sections are drawn on. */
-export function groundPlan(views: readonly ProjectView[]): PlanProjectView | null {
-  const plans = views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.site);
-  return plans.sort((a, b) => a.level.elevation - b.level.elevation)[0] ?? null;
-}
+export { GROUND_TOLERANCE_M, groundPlan } from './ground-plan.js';
+export { viewCentre } from './view-centre.js';
 
 /** Width and height a view's drawing takes, metres, estimated from the model's extent. */
 export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number; h: number } {
@@ -150,12 +148,16 @@ export function choosePaper(rows: readonly (readonly { w: number; h: number }[])
 /**
  * Viewports for `views` across the drawing area of `layout` at `scale`: in one
  * row on a landscape area, one above the other on a portrait one, centred,
- * each centred on its drawing.
+ * each centred on its drawing. With the model's `extent`, a view that has a
+ * centre (`viewCentre`) is centred on that instead, the point its `sizes` were
+ * measured around.
  */
-export function placeViewports(views: readonly Pick<ProjectView, 'id'>[], sizes: readonly { w: number; h: number }[], scale: number, layout: SheetLayout = SET_PAPER): SheetViewport[] {
+export function placeViewports(views: readonly (Pick<ProjectView, 'id'> | ProjectView)[], sizes: readonly { w: number; h: number }[], scale: number, layout: SheetLayout = SET_PAPER, extent?: ModelExtent | null): SheetViewport[] {
   const area = drawingArea(layout);
   const k = 1000 / scale;
-  const make = (view: Pick<ProjectView, 'id'>, x: number, y: number): SheetViewport => ({ id: freshProjectId('viewport'), viewId: view.id, x, y, scale, width: 0, height: 0, center: null });
+  const make = (view: Pick<ProjectView, 'id'> | ProjectView, x: number, y: number): SheetViewport => ({
+    id: freshProjectId('viewport'), viewId: view.id, x, y, scale, width: 0, height: 0, center: extent && 'kind' in view ? viewCentre(view, extent) : null,
+  });
   if (arrangementOf(area) === 'column') {
     const heights = sizes.map((s) => s.h * k + TITLE_ROOM_MM);
     const total = heights.reduce((a, b) => a + b, 0) + GAP_MM * Math.max(0, views.length - 1);
@@ -210,14 +212,14 @@ export interface SetInput {
 }
 
 /** One sheet of the set to be: its group, name and the drawings it holds. */
-interface SetRow {
+export interface SetRow {
   group: SetGroup;
   name: string;
   members: ProjectView[];
 }
 
 /** The rows of the starting set, in reading order: plans bottom storey first, elevations in pairs, sections in pairs. A group with nothing to show has no row. */
-function setRows(allViews: readonly ProjectView[]): SetRow[] {
+export function setRows(allViews: readonly ProjectView[]): SetRow[] {
   const rows: SetRow[] = [];
   // A detail, and the site plan, are hung where they are made, not by the starting set.
   const views = allViews.filter((v) => !v.detail && !(v.kind === 'plan' && v.site));
@@ -263,7 +265,7 @@ export function buildDrawingSet({ views, extent, now = Date.now(), templates = {
     const sizes = members.map((v) => viewExtent(v, extent));
     return {
       id: freshProjectId('sheet'), number: '', series: group, name, createdAt: now, ...start,
-      viewports: placeViewports(members, sizes, scaleOn(sizes, start), start),
+      viewports: placeViewports(members, sizes, scaleOn(sizes, start), start, extent),
     };
   });
   const numbers = numberSheets(sheets, scheme);
@@ -316,7 +318,7 @@ export function withViewHung(
   if (!group) return null;
   const layOut = (sheet: ProjectSheet, members: ProjectView[]): ProjectSheet => {
     const sizes = members.map((v) => viewExtent(v, extent));
-    return { ...sheet, viewports: placeViewports(members, sizes, scaleOn(sizes, sheet), sheet) };
+    return { ...sheet, viewports: placeViewports(members, sizes, scaleOn(sizes, sheet), sheet, extent) };
   };
   const inGroup = sheets.filter((s) => sheetGroup(s) === group);
   const last = inGroup.at(-1);
@@ -361,7 +363,7 @@ function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, exte
   const start = startOf(template, choosePaper([sizes]).paper);
   const sheet: ProjectSheet = {
     id: freshProjectId('sheet'), number: nextNumber(sheets, 'details', scheme), series: 'details', name: view.name, createdAt: now, ...start,
-    viewports: placeViewports([view], sizes, scaleOn(sizes, start, view.scale), start),
+    viewports: placeViewports([view], sizes, scaleOn(sizes, start, view.scale), start, extent),
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
 }

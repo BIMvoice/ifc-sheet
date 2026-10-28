@@ -19,6 +19,7 @@ import type { CustomSectionPlane } from '@/store/section-types';
 import { useProjectStore } from '@/project/project-store';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import type { PlanProjectView, ProjectLevel, ProjectView, SectionProjectView } from '@/project/types';
+import { withAnnotationScreenUp } from './annotation';
 import { sectionPlaneFromLine } from './section-create';
 import { drawingToWorld, worldToDrawing, type Vec3 } from './frame';
 import { sectionLink, sectionMarkOf, sectionSymbolShapes } from './section-symbol';
@@ -84,8 +85,9 @@ function sameShape(s: EntityShape, t: EntityShape): boolean {
  * line was dragged the stems, arrows and names are brought back to it. The
  * parts keep their ids, layers and parameters. `null` when they already match.
  */
-export function redrawSymbol(parts: readonly DraftEntity[], placement: SymbolPlacement, mark: string): DraftEntity[] | null {
-  const shapes = sectionSymbolShapes(placement.a, placement.b, placement.side, mark, symbolTextHeight(parts, 0.25));
+export function redrawSymbol(parts: readonly DraftEntity[], placement: SymbolPlacement, mark: string, screenUp: 1 | -1 = -1): DraftEntity[] | null {
+  // The letter's box grows up on the screen of the plan the symbol is on, whichever view the session is in (#297).
+  const shapes = withAnnotationScreenUp(screenUp, () => sectionSymbolShapes(placement.a, placement.b, placement.side, mark, symbolTextHeight(parts, 0.25)));
   if (shapes.length !== parts.length) return null;
   if (parts.every((p, i) => sameShape(p.shape, shapes[i]))) return null;
   return parts.map((p, i) => ({ ...p, shape: shapes[i] }));
@@ -155,6 +157,9 @@ function planConfigOf(planId: string, state: SectionLinkState): SectionPlaneConf
   return plan ? viewPlaneConfig(plan, state.levels, null) : null;
 }
 
+/** Plans draw drawing-y downward on screen, so their text grows toward -y; the other views the other way. */
+const planScreenUp = (plan: SectionPlaneConfig): 1 | -1 => (plan.axis === 'y' ? -1 : 1);
+
 /**
  * Bring sections and their symbols into line after a change from `previous`
  * to `next`. A section whose plane changed while its symbol did not moves its
@@ -176,7 +181,7 @@ export function reconcileSectionLinks(previous: SectionLinkState, next: SectionL
     const symbolMoved = symbolParts(previous.drafts, view.id).some((p, i) => p !== parts[i]);
     const mark = sectionMarkOf(view.name);
     if (planeMoved && !symbolMoved) {
-      const redrawn = redrawSymbol(parts, placementForPlane(plan, placement, view.plane.custom), mark);
+      const redrawn = redrawSymbol(parts, placementForPlane(plan, placement, view.plane.custom), mark, planScreenUp(plan));
       if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], redrawn);
       continue;
     }
@@ -185,7 +190,7 @@ export function reconcileSectionLinks(previous: SectionLinkState, next: SectionL
       const moved: SectionProjectView = { ...view, plane: { ...view.plane, offset: plane.distance, custom: plane } };
       views = (views ?? [...next.views]).map((v) => (v.id === view.id ? moved : v));
     }
-    const redrawn = redrawSymbol(parts, placement, mark);
+    const redrawn = redrawSymbol(parts, placement, mark, planScreenUp(plan));
     if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], redrawn);
   }
   if (!views && !drafts) return null;

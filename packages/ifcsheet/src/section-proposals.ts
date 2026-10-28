@@ -21,6 +21,10 @@ export interface Footprint {
 export interface RoomFootprint extends Footprint {
   /** What a person calls it: the room's LongName, else its Name. */
   name: string;
+  /** What tells it from every other room: its GlobalId, else an express id. Rooms of one name are keyed by it. */
+  id?: string;
+  /** The storey it is on, as a person reads it; tells rooms of one name apart in the tray. */
+  storey?: string;
 }
 
 export interface ProposalInput {
@@ -31,9 +35,9 @@ export interface ProposalInput {
 }
 
 export interface SectionProposal {
-  /** Stable for the same input: `stair-0`, `room-<name>`. */
+  /** Unique within a set and stable for the same input: `stair-0`, `room-<id>`. */
   key: string;
-  /** "Through the stair", "Through Living Room". */
+  /** "Through the stair", "Through Living Room"; rooms of one name add their storey and, if still alike, a number: "Through Office (Level 2, 1)". Unique within a set. */
   label: string;
   /** What the cut passes through: `stair` or the room's name. */
   through: string;
@@ -49,6 +53,19 @@ export const CUT_OVERHANG_M = 1;
 export const SAME_CUT_M = 0.6;
 /** Rooms smaller than this (m²) are not worth a section of their own. */
 export const SMALLEST_ROOM_M2 = 2;
+
+/** The part of a label that tells a room from its namesakes: its storey, and its number when the storey is shared too. */
+function roomLabels(rooms: readonly RoomFootprint[]): string[] {
+  const byName = new Map<string, RoomFootprint[]>();
+  for (const r of rooms) byName.set(r.name, [...(byName.get(r.name) ?? []), r]);
+  return rooms.map((r) => {
+    const same = byName.get(r.name) ?? [];
+    if (same.length < 2) return `Through ${r.name}`;
+    const sameStorey = same.filter((o) => o.storey === r.storey);
+    const parts = [...(r.storey ? [r.storey] : []), ...(sameStorey.length > 1 ? [String(sameStorey.indexOf(r) + 1)] : [])];
+    return parts.length ? `Through ${r.name} (${parts.join(', ')})` : `Through ${r.name}`;
+  });
+}
 
 const area = (f: Footprint): number => (f.max.x - f.min.x) * (f.max.z - f.min.z);
 const centre = (f: Footprint): { x: number; z: number } => ({ x: (f.min.x + f.max.x) / 2, z: (f.min.z + f.max.z) / 2 });
@@ -80,9 +97,22 @@ export function proposeSections(input: ProposalInput): SectionProposal[] {
     taken.push(t);
     out.push({ key, label, through, ...cutAt(t) });
   };
-  input.stairs.forEach((s, i) => add(`stair-${i}`, 'Through the stair', 'stair', position(s)));
-  const rooms = input.rooms.filter((r) => area(r) >= SMALLEST_ROOM_M2).sort((p, q) => area(q) - area(p) || p.name.localeCompare(q.name));
-  for (const room of rooms) add(`room-${room.name}`, `Through ${room.name}`, room.name, position(room));
+  input.stairs.forEach((s, i) => add(`stair-${i}`, input.stairs.length > 1 ? `Through the stair (${i + 1})` : 'Through the stair', 'stair', position(s)));
+  // Largest first; equal rooms by place and id, so the numbering below does not depend on the order they arrive in.
+  const rooms = input.rooms.filter((r) => area(r) >= SMALLEST_ROOM_M2)
+    .sort((p, q) => area(q) - area(p) || p.name.localeCompare(q.name) || position(p) - position(q) || (p.id ?? '').localeCompare(q.id ?? ''));
+  const labels = roomLabels(rooms);
+  const seen = new Map<string, number>();
+  const usedKeys = new Set<string>(input.stairs.map((_, i) => `stair-${i}`));
+  rooms.forEach((room, i) => {
+    // Without an id the key is the name and the room's number among its namesakes.
+    const n = (seen.get(room.name) ?? 0) + 1;
+    seen.set(room.name, n);
+    let key = `room-${room.id ?? `${room.name}-${n}`}`;
+    for (let again = 2; usedKeys.has(key); again++) key = `room-${room.id ?? room.name}-${again}`; // two rooms given one id still get two keys
+    usedKeys.add(key);
+    add(key, labels[i], room.name, position(room));
+  });
   // A model with no rooms and no stair still gets a cut: through the middle.
   if (out.length === 0) add('middle', 'Through the middle', 'middle', alongX ? (building.min.x + building.max.x) / 2 : (building.min.z + building.max.z) / 2);
   return out;

@@ -11,11 +11,9 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { getCommandRuntime, useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { routePlanPointer } from '@/components/viewer/plan/PlanPointer';
-import { ghostFootprints } from '@/components/viewer/plan/plan-ghost';
 import { aimSessionAtPlan, localScreenMap, type LocalScreenMap } from '@/project/model-command-bridge';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import type { ProjectView } from '@/project/types';

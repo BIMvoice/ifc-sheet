@@ -2,7 +2,7 @@
   "name": "@bimvoice/ifcsheet",
   "version": "0.1.0",
   "private": true,
-  "description": "The IfcSheet drawing-set engine: the project document, the starting set of views and sheets, and headless PDF and DXF export, in Node or the browser",
+  "description": "IfcSheet: drawing sets (PDF and DXF) from IFC models. The ifcsheet command line and the drawing-set engine, in Node or the browser",
   "type": "module",
   "bin": {
     "ifcsheet": "./dist/bin.js"
@@ -20,31 +20,155 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./readiness": {
+      "types": "./dist/readiness.d.ts",
+      "import": "./dist/readiness.js",
+      "default": "./dist/readiness.js"
+    },
+    "./boq-words": {
+      "types": "./dist/boq-words.d.ts",
+      "import": "./dist/boq-words.js",
+      "default": "./dist/boq-words.js"
+    },
+    "./pac-words": {
+      "types": "./dist/pac-words.d.ts",
+      "import": "./dist/pac-words.js",
+      "default": "./dist/pac-words.js"
+    },
+    "./readiness-read": {
+      "types": "./dist/readiness-read.d.ts",
+      "import": "./dist/readiness-read.js",
+      "default": "./dist/readiness-read.js"
+    },
+    "./clip": {
+      "types": "./dist/clip.d.ts",
+      "import": "./dist/clip.js",
+      "default": "./dist/clip.js"
+    },
+    "./colour-scheme": {
+      "types": "./dist/colour-scheme.d.ts",
+      "import": "./dist/colour-scheme.js",
+      "default": "./dist/colour-scheme.js"
+    },
+    "./colour-fills": {
+      "types": "./dist/colour-fills.d.ts",
+      "import": "./dist/colour-fills.js",
+      "default": "./dist/colour-fills.js"
+    },
+    "./materials": {
+      "types": "./dist/materials.d.ts",
+      "import": "./dist/materials.js",
+      "default": "./dist/materials.js"
+    },
+    "./footprint": {
+      "types": "./dist/footprint.d.ts",
+      "import": "./dist/footprint.js",
+      "default": "./dist/footprint.js"
+    },
+    "./project": {
+      "types": "./dist/project.d.ts",
+      "import": "./dist/project.js",
+      "default": "./dist/project.js"
+    },
     "./headless": {
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js",
       "default": "./dist/headless.js"
+    },
+    "./sheet-file-name": {
+      "types": "./dist/sheet-file-name.d.ts",
+      "import": "./dist/sheet-file-name.js",
+      "default": "./dist/sheet-file-name.js"
+    },
+    "./cli-boq": {
+      "types": "./dist/cli-boq.d.ts",
+      "import": "./dist/cli-boq.js",
+      "default": "./dist/cli-boq.js"
+    },
+    "./cli-rooms": {
+      "types": "./dist/cli-rooms.d.ts",
+      "import": "./dist/cli-rooms.js",
+      "default": "./dist/cli-rooms.js"
+    },
+    "./cli-materials": {
+      "types": "./dist/cli-materials.d.ts",
+      "import": "./dist/cli-materials.js",
+      "default": "./dist/cli-materials.js"
+    },
+    "./cli-list": {
+      "types": "./dist/cli-list.d.ts",
+      "import": "./dist/cli-list.js",
+      "default": "./dist/cli-list.js"
+    },
+    "./cli-classify": {
+      "types": "./dist/cli-classify.d.ts",
+      "import": "./dist/cli-classify.js",
+      "default": "./dist/cli-classify.js"
+    },
+    "./handover": {
+      "types": "./dist/handover.d.ts",
+      "import": "./dist/handover.js",
+      "default": "./dist/handover.js"
+    },
+    "./axonometric": {
+      "types": "./dist/axonometric.d.ts",
+      "import": "./dist/axonometric.js",
+      "default": "./dist/axonometric.js"
+    },
+    "./annotated-ifc": {
+      "types": "./dist/annotated-ifc.d.ts",
+      "import": "./dist/annotated-ifc.js",
+      "default": "./dist/annotated-ifc.js"
+    },
+    "./list-projection": {
+      "types": "./dist/list-projection.d.ts",
+      "import": "./dist/list-projection.js",
+      "default": "./dist/list-projection.js"
+    },
+    "./urban": {
+      "types": "./dist/urban.d.ts",
+      "import": "./dist/urban.js",
+      "default": "./dist/urban.js"
+    },
+    "./list-words": {
+      "types": "./dist/list-words.d.ts",
+      "import": "./dist/list-words.js",
+      "default": "./dist/list-words.js"
     }
   },
   "scripts": {
     "build": "pnpm exec tsc",
     "typecheck": "node ../../scripts/typecheck-tests.mjs",
     "dev": "pnpm exec tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark": "vitest run src/golden-sheets.models.test.ts",
+    "benchmark:update": "IFCSHEET_BENCHMARK_UPDATE=1 vitest run src/golden-sheets.models.test.ts",
+    "prepack": "node ../../scripts/copy-package-legal.mjs",
+    "postpack": "node ../../scripts/copy-package-legal.mjs --clean"
   },
   "dependencies": {
+    "@ifc-lite/create": "workspace:^",
     "@ifc-lite/data": "workspace:^",
     "@ifc-lite/drawing-2d": "workspace:^",
+    "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/lists": "workspace:^",
+    "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
+    "@ifc-lite/rules": "workspace:^",
+    "@ifc-lite/wasm": "workspace:^",
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "dxf-parser": "1.1.2",
-    "pdfjs-dist": "6.3.289",
+    "pdfjs-dist": "6.4.299",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.13"
   },
   "license": "MPL-2.0",
   "author": "BIMvoice",
@@ -53,17 +177,29 @@
     "url": "https://github.com/BIMvoice/ifcsheet.git",
     "directory": "packages/ifcsheet"
   },
+  "homepage": "https://github.com/BIMvoice/ifcsheet#readme",
+  "bugs": "https://github.com/BIMvoice/ifcsheet/issues",
   "keywords": [
     "ifc",
     "bim",
+    "openbim",
     "drawings",
     "sheets",
     "pdf",
-    "dxf"
+    "dxf",
+    "cli",
+    "architecture",
+    "aec"
   ],
   "files": [
     "dist",
+    "!dist/**/*.map",
     "fonts",
-    "README.md"
-  ]
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -30,6 +30,8 @@ interface Props {
   box: { width: number; height: number };
   drawing: Drawing2D | null;
   pan: Pan;
+  /** A schedule's grips: the smallest box that holds one band whole. The table is re-wrapped to the new box, so the drawing's place is not kept. */
+  min?: { width: number; height: number };
 }
 
 const GRIP_PX = 12;
@@ -41,13 +43,14 @@ const AT: Record<ResizeHandle, { x: number; y: number }> = {
   nw: { x: 0, y: 0 }, n: { x: 0.5, y: 0 }, ne: { x: 1, y: 0 }, e: { x: 1, y: 0.5 }, se: { x: 1, y: 1 }, s: { x: 0.5, y: 1 }, sw: { x: 0, y: 1 }, w: { x: 0, y: 0.5 },
 };
 
-export function ViewportHandles({ sheet, vp, box, drawing, pan }: Props) {
+export function ViewportHandles({ sheet, vp, box, drawing, pan, min }: Props) {
   const { t } = useTranslation();
   const layer = useRef<HTMLDivElement>(null);
   const drag = useRef<{ handle: ResizeHandle; vp: SheetViewport; box: { width: number; height: number }; sheet: ProjectSheet } | null>(null);
 
   /** Frame maths for the viewport as it is now: the drawing's place on the paper, which a resize must not change. */
   const frameFor = (handle: ResizeHandle, current: SheetViewport, size: { width: number; height: number }, to: { x: number; y: number }): ViewportFrame => {
+    if (min) return resizedFrame(current, size, handle, to, sheetDrawingArea(sheet), { x: 0, y: 0 }, { x: 1, y: 1 }, min);
     const axis = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
     const tr = viewportTransform(current, drawing, axis);
     return resizedFrame(current, size, handle, to, sheetDrawingArea(sheet), { x: tr.x, y: tr.y }, { x: axis === 'side' ? -1 : 1, y: axis !== 'down' ? -1 : 1 });

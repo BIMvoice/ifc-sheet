@@ -144,6 +144,23 @@ describe('the Wall\'s dimension tool (#141)', () => {
     assert.equal(backs, 0);
   });
 
+  it('ends the chain and lets go of the tool from the card\'s Done button, with no Esc (#166)', () => {
+    const ui = stepIn();
+    pickDimension(ui);
+    act(() => {
+      clickDrawing({ x: 0, y: 0 }, TOL, false);
+      clickDrawing({ x: 4, y: 0 }, TOL, false);
+      clickDrawing({ x: 2, y: -1 }, TOL, false);
+    });
+    const done = [...ui.querySelectorAll('aside button')].find((b) => b.textContent?.trim() === 'Done');
+    assert.ok(done, 'the tool\'s card offers Done');
+    act(() => click(done));
+    assert.equal(runningCommand(), null, 'the chain is over and no new one started');
+    assert.equal(dimensions().length, 1, 'what was placed stays');
+    assert.ok(![...ui.querySelectorAll('button[aria-pressed="true"]')].some((b) => b.textContent?.trim() === 'Dimension'), 'the rail let go of the tool');
+    assert.equal(backs, 0);
+  });
+
   it('lets go of the tool when another command ends: only a finished dimension chain restarts', () => {
     const ui = stepIn();
     pickDimension(ui);

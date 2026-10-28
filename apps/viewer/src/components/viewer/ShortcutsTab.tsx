@@ -6,9 +6,11 @@
  * The Info dialog's Shortcuts tab, generated from the keyboard command table
  * (`lib/commands/keyboard-commands.ts`, #5836). Nothing here lists a key by
  * hand: a row exists because a command declares the key, and its glyphs are
- * formatted for the platform the viewer runs on.
+ * formatted for the platform the viewer runs on. On IfcSheet's face it opens
+ * the keyboard settings, where the Wall's actions are rebound (#166).
  */
 
+import { useState } from 'react';
 import { useTranslation, type TranslationKey, type TranslationParameters } from '@/i18n';
 import { ALT_SHORTCUT_PANELS } from '@/lib/panels/registry';
 import { isApplePlatform } from '@/lib/commands/chord';
@@ -22,6 +24,9 @@ import {
 } from '@/lib/commands/keyboard-commands';
 import { shownOnTheWall } from '@/lib/commands/wall-key-commands';
 import { formatCommandKeys } from '@/lib/commands/shortcut-label';
+import { isWallAction } from '@/lib/commands/action-registry';
+import { effectiveKeys, useKeyBindingsRevision } from '@/lib/commands/key-bindings';
+import { KeyboardSettings } from './wall/KeyboardSettings';
 
 interface ShortcutRow {
   readonly id: string;
@@ -39,9 +44,13 @@ function rowsByCategory(commands: readonly KeyCommandDefinition[], gestures: typ
     rows.set(category, list);
   };
   for (const command of commands) {
+    // The keys in force: a Wall action the person rebound lists its new key (#166).
+    const keys = isWallAction(command.id) ? formatCommandKeys({ ...command, keys: effectiveKeys(command.id) }, apple) : formatCommandKeys(command, apple);
+    // An action with no key (shipped so, or left so) is not a shortcut; the keyboard settings list it.
+    if (!keys) continue;
     push(command.category, {
       id: command.id,
-      keys: formatCommandKeys(command, apple),
+      keys,
       labelKey: command.labelKey,
       params: command.id === 'ui.openPanel' ? panelTitles : undefined,
     });
@@ -63,6 +72,9 @@ function rowsByCategory(commands: readonly KeyCommandDefinition[], gestures: typ
 export function ShortcutsTab({ commands }: { commands?: readonly KeyCommandDefinition[] } = {}) {
   const { t } = useTranslation();
   const wall = isDocsEdition();
+  useKeyBindingsRevision();
+  const [customising, setCustomising] = useState(false);
+  if (customising) return <KeyboardSettings onDone={() => setCustomising(false)} />;
   const rows = commands ?? (wall ? shownOnTheWall(KEY_COMMANDS) : KEY_COMMANDS);
   const apple = isApplePlatform();
   const altPanelTitles = (bottom: boolean) => ALT_SHORTCUT_PANELS
@@ -96,6 +108,11 @@ export function ShortcutsTab({ commands }: { commands?: readonly KeyCommandDefin
           {t('keyboardShortcuts.shortcuts.docsLink')}
         </a>
       </div>
+      {wall ? (
+        <button type="button" className="rounded border border-border px-3 py-1 text-sm hover:bg-muted" onClick={() => setCustomising(true)}>
+          {t('wall.keys.customise')}
+        </button>
+      ) : null}
       {groups.map(({ category, rows }) => (
         <div key={category}>
           <h3 className="text-sm font-medium text-muted-foreground mb-2">

@@ -70,7 +70,7 @@ describe('dragging a label by hand', () => {
   it('follows the label type: switching to never drops it, always keeps one beside the element', () => {
     const type = (leader: 'never' | 'displaced' | 'always'): AnnotationType => ({ id: 'at1', name: 'L', tool: 'label', label: { template: 'W-01', missing: 'question', leader } });
     const el = () => wall();
-    const settle = (drafts: DraftEntity[], leader: 'never' | 'displaced' | 'always') => settleLabels(drafts, [type(leader)], el, () => 0.1);
+    const settle = (drafts: DraftEntity[], leader: 'never' | 'displaced' | 'always') => settleLabels(drafts, [type(leader)], el, 'en', () => 0.1);
     const far = settle([textAt(5, 3)], 'displaced');
     assert.ok(far[0].shape.type === 'text' && far[0].shape.leader);
     const none = settle(far, 'never');

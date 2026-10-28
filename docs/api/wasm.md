@@ -1279,7 +1279,7 @@ without valid spatially distributed held-out correspondences.
 `PreparedPdfVectorPage`. The strict request is the decoder-neutral
 `PdfVectorPage` defined in `rust/processing/src/pdf_vector/types.rs`; the viewer's
 existing PDF worker produces it through its `vectors` job using pinned PDF.js
-6.3.289. It retains original operator indices, page/source identity and the host's
+6.4.299. It retains original operator indices, page/source identity and the host's
 explicit calibrated native-PDF-to-model-plane affine, and it types every
 operation the pinned decoder emits: path construction, colour and line state,
 `save`/`restore`, `transform`, `clip`, `textClip`, `text` (with its estimated

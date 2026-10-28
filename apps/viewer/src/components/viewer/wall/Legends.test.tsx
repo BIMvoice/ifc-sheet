@@ -58,7 +58,7 @@ function OpenSheet({ sheet, chosen, onChoose }: { sheet: NonNullable<ReturnType<
 }
 
 const LABELS: LegendLabels = {
-  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations' },
+  heading: { materials: 'Materials', layers: 'Layers', hatches: 'Hatches', symbols: 'Symbols', annotations: 'Annotations', colours: 'Colours' },
   tool: (tool) => tool,
   continued: (heading) => `${heading} (continued)`,
   membrane: 'membrane',
@@ -88,7 +88,7 @@ const printed = (ui: HTMLElement, number: string) => {
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
 });

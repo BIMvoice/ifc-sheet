@@ -5,13 +5,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
-import { layoutSchedule, scheduleCsv, type ScheduleLabels } from './schedule-layout';
+import { layoutSchedule, type ScheduleLabels } from './schedule-layout';
+import { csvLines, joineryCsv } from './export-test-util';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
+import { PAD } from './paged-table';
 
 const labels: ScheduleLabels = {
-  title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
+  locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
   op: (op) => op,
 };
 
@@ -52,10 +54,15 @@ describe('joinery schedule layout', () => {
   });
 
   it('exports CSV with a column per level', () => {
-    const csv = scheduleCsv(data, labels).trim().split('\n');
+    const csv = csvLines(joineryCsv(data, labels));
     assert.equal(csv[0], 'Mark,Name,Width (mm),Height (mm),Opening,Sill,Ground,Level 1,Total,U,Fire');
     assert.equal(csv[1], 'W1,W,1200,1500,tilt-turn-left + side-right,900,3,2,5,1.1,');
     assert.equal(csv[3].split(',')[0], '—');
+  });
+
+  it('quotes a cell holding the delimiter, so a European-locale Excel (which splits on `;`) keeps the row together', () => {
+    const csv = csvLines(joineryCsv({ levels: [], entries: [entry({ key: 's', mark: 'W2', name: 'Sliding; left' })] }, labels, ';'));
+    assert.ok(csv[1].startsWith('W2;"Sliding; left";'), csv[1]);
   });
 });
 
@@ -124,5 +131,22 @@ describe('joinery schedule with views from the real geometry', () => {
     const views = new Map([['w1', (await elementViews([boxMesh(1.2, 0.2, 1.5)]))!]]);
     const l = layoutSchedule(one, labels, { scale: 20, views });
     assert.ok(l.prims.some((p) => p.kind === 'path' && p.view === 'symbol'));
+  });
+});
+
+describe('the joinery schedule keeps its text inside the viewport clip (#42)', () => {
+  it('the title, and every left-aligned run, starts at least a cell padding from the left edge', () => {
+    for (const options of [{}, { scale: 50, maxWidth: 120 }]) {
+      const runs = layoutSchedule(data, labels, options).prims.flatMap((p) => (p.kind === 'text' ? [p] : []));
+      assert.ok(runs.some((r) => r.text === 'Joinery'), 'the title is on the sheet');
+      for (const r of runs.filter((q) => q.anchor === 'start')) assert.ok(r.x >= PAD - 1e-9, `"${r.text}" starts at ${r.x}, left of the inset ${PAD}`);
+    }
+  });
+
+  it('writes the hands the model states for doors without a configured type (#486)', () => {
+    const doors: ScheduleData = { levels: ['Ground'], entries: [entry({ key: 'u', kind: 'door', spec: null, mark: 'D1', name: 'Door', width: 0.9, height: 2.1, counts: { Ground: 2 }, total: 2, operations: ['swing-left', 'swing-right'] })] };
+    assert.ok(texts(layoutSchedule(doors, labels)).includes('swing-left + swing-right'));
+    const bare: ScheduleData = { levels: ['Ground'], entries: [{ ...doors.entries[0], operations: undefined }] };
+    assert.ok(!texts(layoutSchedule(bare, labels)).includes('swing-left + swing-right'));
   });
 });

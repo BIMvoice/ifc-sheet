@@ -27,6 +27,7 @@ import { extractGridAxesForStorey, type GridAxisSegment } from '@ifc-lite/create
 import type { IfcDataStore } from '@ifc-lite/parser';
 import type { MutablePropertyView } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
+import { liveGraphics } from './view-graphics-live';
 import { buildStoreyWorkplane } from '@/lib/commands/modeling/workplane';
 import type { Workplane } from '@/lib/commands/modeling/types';
 import { worldToDrawing } from '@/drafting/frame';
@@ -57,7 +58,7 @@ export interface ViewGridAxis {
 
 /** A view's grid settings with their defaults: on for plans and sections, off for elevations; bubbles at both ends. */
 export function gridSettings(view: ProjectView): { visible: boolean; ends: GridEnds } {
-  const g = view.graphics?.grid;
+  const g = liveGraphics(view)?.grid;
   return { visible: g?.visible ?? (view.kind === 'plan' || view.kind === 'section'), ends: g?.ends ?? 'both' };
 }
 

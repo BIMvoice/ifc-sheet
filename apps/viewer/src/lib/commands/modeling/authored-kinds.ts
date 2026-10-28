@@ -13,7 +13,7 @@
  * relationship authored this session counts, and a deleted one does not.
  */
 
-import { liveEntityConforms, readRelatedLists, fromNativeLength } from '@ifc-lite/create';
+import { liveEntityConforms, liveEntityConformsForRead, readRelatedLists, readRelatedListsForRead, fromNativeLength } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type IfcAttributeValue, type MutablePropertyView } from '@ifc-lite/mutations';
 import { getAttributeNamesForSchema, getSchemaRegistryForVersion, type IfcDataStore } from '@ifc-lite/parser';
 import { effectiveListStringAttribute } from '@/lib/lists/effective-provider-entities';
@@ -69,7 +69,19 @@ export function commandKind(
 export interface LiveModel {
   readonly dataStore: IfcDataStore;
   readonly view: MutablePropertyView | null | undefined;
+  /**
+   * The caller only READS the model (a drawing's materials): an IFCX model's classes and graph-derived relationships
+   * are then answered instead of refused. Absent, the reads refuse an IFCX model as authoring does, which the
+   * writers and the viewer's guards rely on.
+   */
+  readonly readOnly?: true;
 }
+
+export const liveConforms = (model: LiveModel, id: number, ifcClass: string): boolean =>
+  (model.readOnly ? liveEntityConformsForRead : liveEntityConforms)(model.dataStore, id, ifcClass, model.view);
+
+export const liveRelatedLists = (model: LiveModel, relType: 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial') =>
+  (model.readOnly ? readRelatedListsForRead : readRelatedLists)(model.dataStore, relType, model.view);
 
 export interface NamedEntity {
   readonly expressId: number;
@@ -105,7 +117,7 @@ function named(model: LiveModel, ids: Iterable<number>): NamedEntity[] {
 function liveIdsOf(model: LiveModel, ifcClass: string): number[] {
   const { dataStore, view } = model;
   return Array.from(iterateEffectiveEntityIds(dataStore, view, [ifcClass.toUpperCase()]), (e) => e.expressId)
-    .filter((id) => liveEntityConforms(dataStore, id, ifcClass, view));
+    .filter((id) => liveConforms(model, id, ifcClass));
 }
 
 const REGISTRY_VERSIONS = new Set(['IFC2X3', 'IFC4', 'IFC4X3']);
@@ -132,17 +144,59 @@ export function materialsOf(model: LiveModel): NamedEntity[] {
   return named(model, liveIdsOf(model, 'IfcMaterial'));
 }
 
-function relatingOf(model: LiveModel, relType: 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial', expressId: number): number | null {
-  return readRelatedLists(model.dataStore, relType, model.view).find((rel) => rel.relatedIds.includes(expressId))?.relatingId ?? null;
+type RelType = 'IfcRelDefinesByType' | 'IfcRelAssociatesMaterial';
+
+function relatingOf(model: LiveModel, relType: RelType, expressId: number): number | null {
+  return liveRelatedLists(model, relType).find((rel) => rel.relatedIds.includes(expressId))?.relatingId ?? null;
 }
 
 export function typeOf(model: LiveModel, expressId: number): number | null {
   return relatingOf(model, 'IfcRelDefinesByType', expressId);
 }
 
+/** `relatingOf` for every related object at once. Where one is in more than one relationship, the first wins, as in `relatingOf`. */
+function relatingIndex(model: LiveModel, relType: RelType): Map<number, number | null> {
+  const index = new Map<number, number | null>();
+  for (const rel of liveRelatedLists(model, relType)) {
+    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId ?? null);
+  }
+  return index;
+}
+
+/**
+ * `typeOf` for every typed occurrence at once: one read of the model's
+ * IfcRelDefinesByType instead of one per element. A snapshot: rebuild it when
+ * the overlay changes.
+ */
+export function typeIndex(model: LiveModel): Map<number, number | null> {
+  return relatingIndex(model, 'IfcRelDefinesByType');
+}
+
+/** How `layerSetOf` finds an element's relationships. */
+export interface RelationReads {
+  relatingOf(relType: RelType, expressId: number): number | null;
+}
+
+/**
+ * Relationship reads for a pass over many elements of one model (a drawing's
+ * materials): each kind of relationship is read once, on first use, instead
+ * of once per element. A snapshot: use it within one pass, while the overlay
+ * cannot change.
+ */
+export function relationSnapshot(model: LiveModel): RelationReads {
+  const built = new Map<RelType, Map<number, number | null>>();
+  return {
+    relatingOf(relType, expressId) {
+      let index = built.get(relType);
+      if (!index) built.set(relType, (index = relatingIndex(model, relType)));
+      return index.get(expressId) ?? null;
+    },
+  };
+}
+
 /** The occurrences a type object types (IfcRelDefinesByType.RelatedObjects). */
 export function occurrencesOf(model: LiveModel, typeId: number): number[] {
-  return readRelatedLists(model.dataStore, 'IfcRelDefinesByType', model.view)
+  return liveRelatedLists(model, 'IfcRelDefinesByType')
     .filter((rel) => rel.relatingId === typeId)
     .flatMap((rel) => rel.relatedIds);
 }
@@ -183,7 +237,7 @@ export interface LiveLayerSet {
 
 /** The layers of an IfcMaterialLayerSet, outermost first, in metres. */
 export function readLayerSet(model: LiveModel, layerSetId: number): LayerRow[] | null {
-  if (!liveEntityConforms(model.dataStore, layerSetId, 'IfcMaterialLayerSet', model.view)) return null;
+  if (!liveConforms(model, layerSetId, 'IfcMaterialLayerSet')) return null;
   const refs = liveAttributes(model, layerSetId)?.[0];
   if (!Array.isArray(refs)) return null;
   const unit = { lengthUnitScale: getModelLengthUnitScale(model.dataStore) };
@@ -196,17 +250,21 @@ export function readLayerSet(model: LiveModel, layerSetId: number): LayerRow[] |
 /** An associated IfcMaterialLayerSetUsage or IfcMaterialLayerSet, resolved to the set. */
 export function layerSetBehind(model: LiveModel, materialId: number | null): number | null {
   if (materialId === null) return null;
-  if (liveEntityConforms(model.dataStore, materialId, 'IfcMaterialLayerSetUsage', model.view)) {
+  if (liveConforms(model, materialId, 'IfcMaterialLayerSetUsage')) {
     return refId(liveAttributes(model, materialId)?.[0]);
   }
-  return liveEntityConforms(model.dataStore, materialId, 'IfcMaterialLayerSet', model.view) ? materialId : null;
+  return liveConforms(model, materialId, 'IfcMaterialLayerSet') ? materialId : null;
 }
 
 /** The element's layer set: its own association first, then its type's. */
-export function layerSetOf(model: LiveModel, expressId: number): LiveLayerSet | null {
-  const own = layerSetBehind(model, relatingOf(model, 'IfcRelAssociatesMaterial', expressId));
-  const typeId = own === null ? typeOf(model, expressId) : null;
-  const inherited = typeId === null ? null : layerSetBehind(model, relatingOf(model, 'IfcRelAssociatesMaterial', typeId));
+export function layerSetOf(
+  model: LiveModel,
+  expressId: number,
+  relations: RelationReads = { relatingOf: (relType, id) => relatingOf(model, relType, id) },
+): LiveLayerSet | null {
+  const own = layerSetBehind(model, relations.relatingOf('IfcRelAssociatesMaterial', expressId));
+  const typeId = own === null ? relations.relatingOf('IfcRelDefinesByType', expressId) : null;
+  const inherited = typeId === null ? null : layerSetBehind(model, relations.relatingOf('IfcRelAssociatesMaterial', typeId));
   const layerSetId = own ?? inherited;
   const layers = layerSetId === null ? null : readLayerSet(model, layerSetId);
   return layerSetId === null || !layers ? null : { layerSetId, layers, via: own !== null ? 'element' : 'type' };

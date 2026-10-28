@@ -156,6 +156,60 @@ function staticStringValues(expr) {
   return lit === null ? [] : [lit];
 }
 
+/** `toast` methods whose first argument is the message shown to the user
+ *  (`toast(...)` itself, sonner's `message`/`warning`/`loading`, and this
+ *  app's `success`/`error`/`info`/`infoLive`/`transientError`). */
+const TOAST_METHODS = new Set(['success', 'error', 'info', 'warning', 'message', 'loading', 'infoLive', 'transientError']);
+
+/** Local names the toast object is bound to: `toast` itself, plus an alias
+ *  from `import { toast as paletteToast } from '.../toast'` (or `sonner`). */
+function toastLocalNames(sourceFile) {
+  const names = new Set(['toast']);
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+    const bindings = stmt.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      if ((el.propertyName ?? el.name).text === 'toast') names.add(el.name.text);
+    }
+  }
+  return names;
+}
+
+/** `toast(...)` or `toast.<message method>(...)`. */
+function isToastCall(callee, names) {
+  if (ts.isIdentifier(callee)) return names.has(callee.text);
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    ts.isIdentifier(callee.expression) &&
+    names.has(callee.expression.text) &&
+    TOAST_METHODS.has(callee.name.text)
+  );
+}
+
+/** Static strings of a toast message, looking through `() => 'text'` (the
+ *  `infoLive` form). A call such as `t('key')` yields nothing. */
+function toastTextValues(expr) {
+  if (ts.isArrowFunction(expr) && !ts.isBlock(expr.body)) return staticStringValues(expr.body);
+  return staticStringValues(expr);
+}
+
+/** Feed `emit` every literal that reaches the user from a toast call: the
+ *  first argument, and `description` in an options object (second argument,
+ *  or first when the message is itself an object). */
+function collectToastCopy(call, emit) {
+  const [first, second] = call.arguments;
+  if (first) for (const lit of toastTextValues(first)) emit(lit);
+  for (const arg of [first, second]) {
+    if (!arg || !ts.isObjectLiteralExpression(arg)) continue;
+    for (const prop of arg.properties) {
+      if (ts.isPropertyAssignment(prop) && prop.name.getText() === 'description') {
+        for (const lit of toastTextValues(prop.initializer)) emit(lit);
+      }
+    }
+  }
+}
+
 /**
  * Parse `source` as TSX and return every candidate literal: `JsxText`
  * nodes with non-whitespace content, a JSX-CHILD-position `JsxExpression`
@@ -163,12 +217,17 @@ function staticStringValues(expr) {
  * attribute/prop value, which is a `JsxExpression` in a different AST
  * position entirely), and `aria-label`/`title`/`placeholder`/`alt`
  * `JsxAttribute`s set to a string literal (plain or expression-wrapped) —
- * BEFORE allowlist filtering. Exported mainly for the detector's own
+ * BEFORE allowlist filtering. Also, with `toasts` on (default), the literal
+ * message and `description` of every `toast(...)` / `toast.<method>(...)`
+ * call (kind `toast`); `jsx: false` restricts the walk to those. Exported mainly for the detector's own
  * tests.
  */
-export function findLiterals(source, fileName = 'fixture.tsx') {
+export function findLiterals(source, fileName = 'fixture.tsx', { jsx = true, toasts = true } = {}) {
   const found = [];
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  // `.ts` is not TSX: `<T>(x) => x` and `<T>value` are generics/assertions there.
+  const kind = /\.ts$/.test(fileName) ? ts.ScriptKind.TS : ts.ScriptKind.TSX;
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
+  const toastNames = toasts ? toastLocalNames(sourceFile) : new Set();
 
   function pushIfText(kind, raw) {
     const text = raw.replace(/\s+/g, ' ').trim();
@@ -176,7 +235,12 @@ export function findLiterals(source, fileName = 'fixture.tsx') {
   }
 
   function visit(node) {
-    if (ts.isJsxText(node)) {
+    if (toasts && ts.isCallExpression(node) && isToastCall(node.expression, toastNames)) {
+      collectToastCopy(node, (lit) => pushIfText('toast', lit));
+    }
+    if (!jsx) {
+      // Toast-only mode (files outside the JSX components tree): skip the JSX branches.
+    } else if (ts.isJsxText(node)) {
       // TypeScript keeps entity spellings verbatim in JsxText; decode them so
       // `&times;` / `&middot;` reach the symbol allowlist as `×` / `·`.
       pushIfText('jsx-text', decodeJsxEntities(node.text));
@@ -213,6 +277,6 @@ export function findLiterals(source, fileName = 'fixture.tsx') {
 
 /** Count of non-allowlisted literals in `source` — what the per-file
  *  baseline records and the gate compares against. */
-export function countLiterals(source, fileName = 'fixture.tsx') {
-  return findLiterals(source, fileName).filter((lit) => !isAllowlistedLiteral(lit.text)).length;
+export function countLiterals(source, fileName = 'fixture.tsx', opts) {
+  return findLiterals(source, fileName, opts).filter((lit) => !isAllowlistedLiteral(lit.text)).length;
 }

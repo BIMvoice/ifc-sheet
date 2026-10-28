@@ -8,12 +8,13 @@
  * drawing or schedule not yet on this sheet, to place on it.
  */
 
+import { templateKindOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
-import { runAsOneUndoStep } from '@/drafting/draft-store';
-import { addViewport, removeViewport, updateViewport } from '@/project/sheets';
+import { addViewport, editViewport, removeViewport } from '@/project/sheets';
 import { isResizable } from '@/project/viewport-resize';
+import { isFittedSchedule } from '@/project/schedule-fit';
 import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
@@ -21,13 +22,26 @@ import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import type { ModelExtent } from '@/project/drawing-set';
+import { ScheduleContentCard } from './ScheduleContentCard';
+import { ScheduleExportCard } from './ScheduleExportCard';
+import { ScheduleFilterSection } from './ScheduleFilterCard';
+import { ScheduleTextCard } from './ScheduleTextCard';
+import { SubReportCard } from './SubReportCard';
+import { TypeClassificationCard } from './TypeClassificationCard';
+import { BoqCard } from '../boq/BoqCard';
+import { ListScheduleCard } from '../lists/ListScheduleCard';
 import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
+import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
+import { GraphicsCard } from './GraphicsCard';
+import { HiddenElementsSection } from './HiddenElementsSection';
 import { startWhenAttached } from './wall-actions';
 import { addKeyPlan, drawPlotBoundary } from '@/siteplan/site-actions';
+import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1.5 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 
 interface ViewportCardProps {
   sheet: ProjectSheet;
@@ -36,9 +50,11 @@ interface ViewportCardProps {
   onChoose: (viewportId: string | null) => void;
   /** The chosen drawing's extent, metres, once generated: says when it does not fit the sheet. */
   drawingBounds?: { min: { x: number; y: number }; max: { x: number; y: number } } | null;
+  /** The model's extent: a scale change lays the sheet out again (`ScaleField`). */
+  extent?: ModelExtent | null;
 }
 
-export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null }: ViewportCardProps) {
+export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null }: ViewportCardProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
@@ -67,46 +83,58 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   };
 
   return (
-    <aside className="w-[340px] rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
+    <aside className={WALL_CARD}>
       {slot ? (
         <>
-          <p className="m-0 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-400">{t('wall.vp.eyebrow')}</p>
-          <label className="mt-2 block text-sm text-sky-200">
+          <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('wall.vp.eyebrow')}</p>
+          <label className="mt-2 block text-xs text-sky-200">
             {t('wall.project.rename')}
             <input key={slot.viewId} className={field} defaultValue={name} onBlur={(e) => renameProjectItem(slot.viewId, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           </label>
           {legend ? <LegendCard legend={legend} /> : (
             <>
-              <label className="mt-4 block text-sm text-sky-200">
+              <label className="mt-4 block text-xs text-sky-200">
                 {t('wall.vp.drawingNumber')}
                 <input
                   key={`${slot.id}:${slot.drawingNumber ?? ''}`} className={field} defaultValue={slot.drawingNumber ?? ''}
                   placeholder={drawingNumbers({ viewports: (sheet.viewports ?? []).map((vp) => (vp.id === slot.id ? { ...vp, drawingNumber: undefined } : vp)) }, new Set(views.map((v) => v.id))).get(slot.id) ?? ''}
-                  onBlur={(e) => updateViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
+                  onBlur={(e) => editViewport(sheet.id, slot.id, { drawingNumber: e.target.value.trim() || undefined })}
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                 />
               </label>
-              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} extent={extent} /> : null}
             </>
           )}
+          {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
+          {schedule ? <TypeClassificationCard key={`${schedule.id}:class`} schedule={schedule} /> : null}
+          {schedule ? <ListScheduleCard key={`${schedule.id}:list`} schedule={schedule} /> : null}
+          {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
+          {view ? <GraphicsCard key={`${view.id}:${slot.id}`} sheet={sheet} slot={slot} view={view} /> : null}
+          {view && templateKindOf(view) !== null ? <HiddenElementsSection key={`${view.id}:hidden`} view={view} /> : null}
+          {canBeColoured(view) ? <ColourSchemeCard key={view.id} sheet={sheet} view={view} /> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {view ? <button type="button" className={quiet} onClick={() => onOpen(slot)}>{t('wall.vp.open')}</button> : null}
-            {isResizable(view) && slot.width > 0 && slot.height > 0 ? (
-              <button type="button" className={quiet} onClick={() => runAsOneUndoStep(() => updateViewport(sheet.id, slot.id, { width: 0, height: 0, center: null }))}>{t('wall.vp.fit')}</button>
+            {(isResizable(view) || (isFittedSchedule(schedule) && (slot.page ?? 0) === 0)) && slot.width > 0 && slot.height > 0 ? (
+              <button type="button" className={quiet} onClick={() => editViewport(sheet.id, slot.id, { width: 0, height: 0, center: null })}>{t('wall.vp.fit')}</button>
             ) : null}
             {view?.kind === 'plan' && view.site ? <button type="button" className={quiet} onClick={() => { drawPlotBoundary(slot.viewId, startWhenAttached); onOpen(slot); }}>{t('site.drawBoundary')}</button> : null}
             {view?.kind === 'plan' && !slot.keyPlanOf ? <button type="button" className={quiet} onClick={() => onChoose(addKeyPlan(sheet, slot, drawingBounds))}>{t('site.keyPlan.add')}</button> : null}
             <button type="button" className={quiet} onClick={() => { removeViewport(sheet.id, slot.id); onChoose(null); }}>{t('wall.vp.remove')}</button>
+            <button type="button" className={quiet} onClick={() => onChoose(null)}>{t('wall.vp.done')}</button>
           </div>
         </>
       ) : (
         <p className="m-0 text-sm text-sky-200">{t('wall.vp.none')}</p>
       )}
       {placeable.length > 0 ? (
-        <label className="mt-5 block border-t border-sky-300/20 pt-4 text-sm text-sky-200">
+        <label className="mt-5 block border-t border-sky-300/20 pt-4 text-xs text-sky-200">
           {t('wall.vp.place')}
           <select className={field} value="" onChange={(e) => e.target.value && place(e.target.value)}>
             <option value="">{t('wall.vp.placePick')}</option>

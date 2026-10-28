@@ -7,6 +7,9 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, render } from '@/test/render.js';
 import { setEditionForTests } from '@/edition';
+import { registerLocale, setLocale } from '@/i18n';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
+import ro from '@/i18n/locales/ro';
 import { KEY_COMMANDS } from '@/lib/commands/keyboard-commands';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { WALL_KEY_COMMANDS } from '@/lib/commands/wall-key-commands';
@@ -24,10 +27,12 @@ const shown = (ui: HTMLElement) => new Map([...ui.querySelectorAll('[data-shortc
   .map((row) => [row.getAttribute('data-shortcut-command') ?? '', row.querySelector('kbd')?.textContent ?? '']));
 
 describe('the shortcut list on IfcSheet\'s face', () => {
-  it('has a row for every entry of the Wall in the keymap, with the keymap\'s keys', () => {
+  it('has a row for every entry of the Wall in the keymap that has a key, with the keymap\'s keys', () => {
     setEditionForTests('docs');
     const rows = shown(render(<ShortcutsTab />));
-    for (const c of WALL_KEY_COMMANDS) assert.equal(rows.get(c.id), shortcutLabel(c.id), c.id);
+    // An action that ships with no key (#166) is not a shortcut: the keyboard settings list it instead.
+    for (const c of WALL_KEY_COMMANDS) assert.equal(rows.get(c.id), c.keys.length > 0 ? shortcutLabel(c.id) : undefined, c.id);
+    assert.ok(WALL_KEY_COMMANDS.some((c) => c.keys.length === 0), 'the control has an unbound row to skip');
     assert.ok(rows.has('ui.commandPalette') && rows.has('help.shortcuts'));
     assert.equal(rows.has('walk.move'), false, 'no key of the 3D viewer');
   });
@@ -39,6 +44,18 @@ describe('the shortcut list on IfcSheet\'s face', () => {
     assert.equal(rows.get('drafting.undo'), 'Ctrl+Z');
     assert.equal(rows.get('drafting.snap'), 'F3');
     assert.equal(rows.get('drafting.ortho'), 'F8');
+  });
+
+  it('states the Escape rule of the drafting tools in English and Romanian (#453)', () => {
+    setEditionForTests('docs');
+    const text = () => render(<ShortcutsTab />).querySelector('[data-shortcut-command="drafting.cancel"]')?.textContent ?? '';
+    assert.match(text(), /end the current tool.*Back to sheet.*text field keeps its own Escape/);
+    cleanup();
+    try {
+      registerLocale('ro', checkCatalogue(ro).catalogue);
+      setLocale('ro');
+      assert.match(text(), /încheie instrumentul curent.*Înapoi la planșă.*text.*propriul Esc/);
+    } finally { setLocale('en'); }
   });
 
   it('adds a row when an entry is added to the table', () => {
@@ -55,6 +72,6 @@ describe('the shortcut list on IfcSheet\'s face', () => {
   it('keeps the whole keymap in the full edition', () => {
     setEditionForTests('full');
     const rows = shown(render(<ShortcutsTab />));
-    for (const c of KEY_COMMANDS) assert.ok(rows.has(c.id), c.id);
+    for (const c of KEY_COMMANDS) assert.equal(rows.has(c.id), c.keys.length > 0, c.id);
   });
 });

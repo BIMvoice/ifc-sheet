@@ -54,3 +54,34 @@ export function clipPolyline(points: readonly Point2D[], box: Rect): Point2D[][]
   if (run.length > 1) out.push(run);
   return out;
 }
+
+/**
+ * A closed loop clipped to `box` as a shape (Sutherland-Hodgman against the four sides): what is left is still one closed loop,
+ * where a clipped outline would be open runs. Fewer than three points left means nothing of it shows. The loop is not repeated
+ * at its end. For the fills of a coloured plan (#92), which must stay closed where a viewport cuts them.
+ */
+export function clipPolygon(loop: readonly Point2D[], box: Rect): Point2D[] {
+  const [x0, y0, x1, y1] = [box.x, box.y, box.x + box.w, box.y + box.h];
+  const sides: { inside: (p: Point2D) => boolean; at: (a: Point2D, b: Point2D) => Point2D }[] = [
+    { inside: (p) => p.x >= x0, at: (a, b) => ({ x: x0, y: a.y + ((b.y - a.y) * (x0 - a.x)) / (b.x - a.x) }) },
+    { inside: (p) => p.x <= x1, at: (a, b) => ({ x: x1, y: a.y + ((b.y - a.y) * (x1 - a.x)) / (b.x - a.x) }) },
+    { inside: (p) => p.y >= y0, at: (a, b) => ({ x: a.x + ((b.x - a.x) * (y0 - a.y)) / (b.y - a.y), y: y0 }) },
+    { inside: (p) => p.y <= y1, at: (a, b) => ({ x: a.x + ((b.x - a.x) * (y1 - a.y)) / (b.y - a.y), y: y1 }) },
+  ];
+  let out = [...loop];
+  for (const side of sides) {
+    const input = out;
+    out = [];
+    input.forEach((cur, i) => {
+      const prev = input[(i + input.length - 1) % input.length];
+      if (side.inside(cur)) {
+        if (!side.inside(prev)) out.push(side.at(prev, cur));
+        out.push(cur);
+      } else if (side.inside(prev)) {
+        out.push(side.at(prev, cur));
+      }
+    });
+    if (out.length < 3) return [];
+  }
+  return out;
+}

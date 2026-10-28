@@ -1,0 +1,55 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { TranslationValue } from '../types';
+import { BOQ_WORDS_RO } from '@bimvoice/ifcsheet/boq-words';
+
+/** Romanian (#75): the bill of quantities, as `boq.en.ts` says it. Term choices: `../ro-glossary.md`. */
+export const boqRo = {
+  ...BOQ_WORDS_RO,
+  'boq.newName': 'Antemăsurătoare',
+  'wall.project.addBoq': '+ Antemăsurătoare (liste de cantități)',
+  'library.kind.viewTemplates': 'Șabloane de vedere',
+  'library.kind.boqArticles': 'Articole de antemăsurătoare',
+  'boq.card.title': 'Antemăsurătoare',
+  'boq.card.summary': '{count} articole',
+  'boq.card.summaryEmpty': 'Niciun articol încă',
+  'boq.card.hint': 'Leagă tipurile, materialele și clasele din model de articolele de deviz ale biroului dumneavoastră și adună cantitățile pe care le declară modelul. Tabelul se salvează cu proiectul și circulă într-un fișier de bibliotecă.',
+  'boq.card.edit': 'Editați tabelul de corespondență',
+  'boq.card.detail': 'Câte un rând pe tip sub fiecare articol',
+  'boq.card.missing': '{count} elemente nu au o cantitate pe care o ia un articol; sunt lăsate în afară, nu sunt numărate ca zero.',
+  'boq.editor.title': 'Tabel de corespondență',
+  'boq.editor.intro': 'Fiecare articol alege elemente după tip, material sau clasă IFC, ia o cantitate pe care o declară modelul, o înmulțește cu un factor și adaugă pierderile. IfcSheet nu livrează norme sau coduri de articole: introduceți-le pe ale dumneavoastră.',
+  'boq.editor.empty': 'Niciun articol încă. Adăugați-l pe primul.',
+  'boq.editor.add': 'Adăugați un articol',
+  'boq.editor.close': 'Închide',
+  'boq.editor.remove': 'Eliminați articolul {code}',
+  'boq.editor.article': 'Articolul {n}',
+  'boq.editor.unnamed': 'fără cod încă',
+  'boq.field.code': 'Cod articol',
+  'boq.field.description': 'Denumire',
+  'boq.field.unit': 'U.M.',
+  'boq.field.type': 'Tip',
+  'boq.field.material': 'Material',
+  'boq.field.class': 'Clasă IFC',
+  'boq.field.quantity': 'Cantitate',
+  'boq.field.factor': 'Factor',
+  'boq.field.waste': 'Pierderi %',
+  'boq.field.any': 'oricare',
+  'boq.field.picks': 'Alege elemente după',
+  'boq.field.formula': 'Formulă',
+  'boq.field.filter': 'Doar elementele a căror proprietate',
+  'boq.result.total': '{total} {unit}',
+  'boq.result.counts': '{matched} elemente alese, {counted} cu cantitatea',
+  'boq.result.missing': '{count} fără {quantity}: lăsate în afară, nu zero',
+  'boq.result.none': 'Niciun element nu este ales.',
+  'boq.result.noQuantity': 'Niciunul dintre cele {matched} elemente alese nu declară {quantity}.',
+  'boq.preview.title': 'Totaluri pe articole',
+  'boq.preview.empty': 'Nu e nimic de adunat încă.',
+  'boq.view.place': 'Așezați sumarul pe o planșă',
+  'boq.view.placed': 'Sumarul este pe planșa {number}.',
+  'boq.view.noModel': 'Deschideți un model pentru a aduna cantitățile.',
+  'ready.boqMissingQuantity': '{count} elemente nu au o cantitate pe care o ia un articol din antemăsurătoare: {list}.',
+  'ready.boqMissingQuantity.effect': 'Antemăsurătoarea le lasă în afara totalurilor acelor articole. Nu sunt numărate ca zero: cantitățile articolelor sunt mai mici cu cât dețin aceste elemente.',
+} as const satisfies Record<string, TranslationValue>;

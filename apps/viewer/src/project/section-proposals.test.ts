@@ -64,4 +64,51 @@ describe('proposeSections', () => {
   it('proposes nothing for an empty extent', () => {
     assert.deepEqual(proposeSections({ building: { min: { x: 0, z: 0 }, max: { x: 0, z: 0 } }, rooms: [], stairs: [] }), []);
   });
+
+  describe('rooms that share a name (#219)', () => {
+    const room = (id: string, storey: string | undefined, x: number): ProposalInput['rooms'][number] => ({
+      id, ...(storey ? { storey } : {}), name: 'OPEN OFFICE', min: { x, z: 0 }, max: { x: x + 3, z: 4 },
+    });
+    const input = (rooms: ProposalInput['rooms']): ProposalInput => ({ building: { min: { x: 0, z: 0 }, max: { x: 40, z: 7 } }, rooms, stairs: [] });
+
+    it('keys each room by its own id, so no two entries share a key', () => {
+      const proposals = proposeSections(input([room('g1', 'Level 1', 0), room('g2', 'Level 1', 10), room('g3', 'Level 2', 20)]));
+      assert.equal(proposals.length, 3);
+      assert.deepEqual(proposals.map((p) => p.key).sort(), ['room-g1', 'room-g2', 'room-g3']);
+      assert.equal(new Set(proposals.map((p) => p.key)).size, proposals.length);
+    });
+
+    it('tells same-named rooms apart by storey, and by number when the storey is shared too', () => {
+      const proposals = proposeSections(input([room('g1', 'Level 1', 0), room('g2', 'Level 2', 10), room('g3', 'Level 2', 20)]));
+      const labels = proposals.map((p) => p.label);
+      assert.equal(new Set(labels).size, 3, labels.join(' | '));
+      assert.ok(labels.includes('Through OPEN OFFICE (Level 1)'));
+      assert.ok(labels.includes('Through OPEN OFFICE (Level 2, 1)') && labels.includes('Through OPEN OFFICE (Level 2, 2)'), labels.join(' | '));
+    });
+
+    it('numbers same-named rooms when no storey is known, and leaves a unique name plain', () => {
+      const proposals = proposeSections(input([room('g1', undefined, 0), room('g2', undefined, 10), { ...room('g3', undefined, 20), name: 'Kitchen' }]));
+      const labels = proposals.map((p) => p.label).sort();
+      assert.deepEqual(labels, ['Through Kitchen', 'Through OPEN OFFICE (1)', 'Through OPEN OFFICE (2)']);
+    });
+
+    it('is stable: the same input gives the same keys and labels, whatever order the rooms arrive in', () => {
+      const rooms = [room('g1', 'Level 1', 0), room('g2', 'Level 1', 10), room('g3', 'Level 1', 20)];
+      const a = proposeSections(input(rooms)).map((p) => [p.key, p.label]);
+      const b = proposeSections(input([...rooms].reverse())).map((p) => [p.key, p.label]);
+      assert.deepEqual(b.sort(), a.sort());
+    });
+
+    it('keys rooms without an id by name and the number among its namesakes', () => {
+      const proposals = proposeSections(input([{ ...room('x', undefined, 0), id: undefined }, { ...room('y', undefined, 10), id: undefined }]));
+      assert.equal(new Set(proposals.map((p) => p.key)).size, 2);
+    });
+
+    it('numbers several stairs apart, and leaves a single stair plain', () => {
+      const stairs = [{ min: { x: 2, z: 3 }, max: { x: 3, z: 5 } }, { min: { x: 20, z: 3 }, max: { x: 21, z: 5 } }];
+      const two = proposeSections({ ...input([]), stairs });
+      assert.deepEqual(two.map((p) => p.label), ['Through the stair (1)', 'Through the stair (2)']);
+      assert.deepEqual(proposeSections({ ...input([]), stairs: [stairs[0]] }).map((p) => p.label), ['Through the stair']);
+    });
+  });
 });

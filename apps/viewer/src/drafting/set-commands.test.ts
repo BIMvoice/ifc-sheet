@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { parseIssueArgs } from '@/issue/run.js';
-import { attachDraftingView, cancelCommand, pressEnter, startDraftCommand, submitCommandLine, useDraftingSession } from './session.js';
+import { attachDraftingView, cancelCommand, pressEnter, runningCommand, startDraftCommand, submitCommandLine, useDraftingSession } from './session.js';
 import { draftCommandByName } from './commands/registry.js';
 
 const history = () => useDraftingSession.getState().history.map((h) => h.key);
@@ -61,6 +61,38 @@ describe('the set commands are registered', () => {
   it('is not startable by id without a view only when it works on a view', () => {
     assert.equal(startDraftCommand('checkset'), true);
     assert.equal(startDraftCommand('dimall'), false);
+  });
+});
+
+describe('WHATCHANGED is a registered command', () => {
+  it('named on the command line, taking CLEAR or ACCEPT after its name', () => {
+    assert.equal(draftCommandByName('WHATCHANGED')?.id, 'whatchanged');
+    assert.equal(draftCommandByName('WHATCHANGED')?.takesArgs, true);
+  });
+
+  it('says plainly that no model is loaded, once its module has loaded', async () => {
+    submitCommandLine('WHATCHANGED', null);
+    await tick();
+    assert.equal(history()[0], 'whatchanged.cmd');
+    const line = useDraftingSession.getState().history.find((h) => h.key === 'whatchanged.msg.line');
+    assert.match(String(line?.params?.text), /No model is loaded/);
+  });
+
+  it('refuses a word it does not know, naming it', async () => {
+    submitCommandLine('WHATCHANGED soon', null);
+    await tick();
+    assert.match(String(useDraftingSession.getState().history.find((h) => h.key === 'whatchanged.msg.line')?.params?.text), /not "soon"/);
+  });
+
+  it('runs while another tool is active: starting it cancels the tool, nothing reaches it as a coordinate', async () => {
+    attachDraftingView('v1', 'down', () => []);
+    assert.equal(startDraftCommand('line'), true);
+    assert.ok(runningCommand(), 'LINE is running');
+    assert.equal(startDraftCommand('whatchanged'), true);
+    await tick();
+    assert.equal(runningCommand(), null);
+    assert.ok(history().includes('whatchanged.msg.line'));
+    assert.ok(!history().includes('drafting.msg.invalidInput'));
   });
 });
 

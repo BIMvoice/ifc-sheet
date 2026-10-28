@@ -77,7 +77,7 @@ export async function startScanDrawingSet(models: ReadonlyMap<string, FederatedM
     }
     useScanState.setState({ phase: 'ready', progress: 1, bounds: points.bounds, points: points.count, gatherMs });
     if (useProjectStore.getState().sheets.some(isSetSheet)) return false;
-    return startDrawingSet(null, points.bounds, { scan: { levels, centre: scanCentre(points) } });
+    return startDrawingSet(null, points.bounds, undefined, { scan: { levels, centre: scanCentre(points) } });
   } catch (err) {
     console.warn('[ifcsheet] the scan could not be read for drawing', err);
     useScanState.setState({ phase: 'error', error: err instanceof Error ? err.message : String(err) });

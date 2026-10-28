@@ -18,8 +18,9 @@ import { useTranslation } from '@/i18n';
 import { LibraryExport } from './LibraryExport';
 import { LibraryImport, readLibraryText, type ImportState } from './LibraryImport';
 import { libraryAction } from './library-style';
+import { SetTemplateSave } from './SetTemplate';
 
-type Mode = 'import' | 'export' | null;
+type Mode = 'import' | 'export' | 'setTemplate' | null;
 
 export function LibraryPanel() {
   const { t } = useTranslation();
@@ -45,6 +46,7 @@ export function LibraryPanel() {
       <div className="flex flex-wrap gap-1.5">
         <button type="button" className={libraryAction} aria-pressed={mode === 'import'} onClick={() => toggle('import')}>{t('wall.lib.import')}</button>
         <button type="button" className={libraryAction} aria-pressed={mode === 'export'} onClick={() => toggle('export')}>{t('wall.lib.export')}</button>
+        <button type="button" className={libraryAction} aria-pressed={mode === 'setTemplate'} onClick={() => toggle('setTemplate')}>{t('wall.setTemplate.save')}</button>
         <input
           ref={input}
           type="file"
@@ -63,6 +65,7 @@ export function LibraryPanel() {
         />
       </div>
       {mode === 'export' ? <LibraryExport /> : null}
+      {mode === 'setTemplate' ? <SetTemplateSave /> : null}
       {mode === 'import' ? <LibraryImport state={state} onState={setState} onChoose={choose} /> : null}
     </div>
   );

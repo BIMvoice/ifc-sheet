@@ -8,19 +8,34 @@
  * viewport's drawing at its scale, each drawing's title under it. The PDF and
  * DXF writers draw from this one layout, so they cannot disagree.
  *
- * Headless and unstyled. The web app draws its sheets as SVG through React
- * (`components/viewer/sheets/`), with pens, hatches, symbols, annotation and
- * the full title block; this layout carries the geometry of the same sheet
- * and the fields the engine knows (project, sheet number and name, scale,
- * date). Moving the app's sheet composition here is a follow-up.
+ * Headless. Each viewport's faces and lines carry the pens the web app's sheet
+ * gives them (`pens`): styled by the view's one styler (`view-style.ts`) and
+ * grouped by `penGroups`, as the app's `viewport-pens.ts` does, so the same
+ * view has the same colours, weights, dashes and fills in the app and here.
+ * The web app draws its sheets as SVG through React (`components/viewer/sheets/`),
+ * with hatches, symbols and annotation on top; this
+ * layout carries the geometry and pens of the same sheet and the title block
+ * the app prints (its layout, the fields the model fills, the revision, the logo). Moving the
+ * app's hatches and symbols here is a follow-up.
  */
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
-import { clipPolyline } from './clip.js';
+import { sheetScaleLine } from './sheet-scale.js';
+import { clipPolygon, clipPolyline } from './clip.js';
+import type { SchemeResult } from './colour-fills.js';
+import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { viewExtent, type ModelExtent } from './drawing-set.js';
-import { frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
+import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
+import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
+import { LOGO_FIELD } from './title-block-fields.js';
+import { printTitleBlock, sheetLookup } from './title-block-print.js';
+import { standardTitleBlock } from './title-block-standard.js';
+import { resolveViewGraphics } from './view-templates.js';
+import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
+import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
+import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
+import { sheetNoteLines } from './sheet-notes.js';
 
 export type Polyline = readonly Point2D[];
 
@@ -30,6 +45,32 @@ export interface SheetText {
   /** Text height, paper mm. */
   size: number;
   align?: 'left' | 'center';
+  /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
+  angle?: number;
+}
+
+/** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
+export interface SheetPen {
+  layer: PenLayer;
+  stroke: string | null;
+  /** Paper mm; 0 for a fill. */
+  width: number;
+  fill: string | null;
+  /** Paper mm; absent: solid. */
+  dash?: readonly number[];
+  /** A stroke's runs, clipped to the viewport. */
+  runs: Polyline[];
+  /** A fill's regions, clipped to the viewport; each loop ends where it starts. */
+  regions: Polyline[][];
+}
+
+/** An image on the paper, fitted whole and centred in `box` (paper mm): the title block's logo. */
+export interface SheetImage {
+  /** A PNG or JPEG data URL. */
+  src: string;
+  box: Rect;
+  /** Degrees counter-clockwise: 90 for a logo in a strip down the frame's side, which reads upward; absent is level. */
+  angle?: 90;
 }
 
 export interface SheetGraphic {
@@ -40,11 +81,19 @@ export interface SheetGraphic {
   paper: { w: number; h: number };
   /** The frame line, the title block's box and its rule; each rectangle ends where it starts. */
   frame: Polyline[];
+  /** The regions a view's colour scheme fills (#92), under every line: its rooms and elements, and the swatches of its legend. */
+  fills: SheetFill[];
   /** The outlines of cut faces, clipped to their viewport; a ring wholly inside ends where it starts. */
   cut: Polyline[];
   /** Every other visible line of the drawings, clipped to their viewport. */
   lines: Polyline[];
+  /** What the PDF and DXF draw of the viewports' drawings: their faces and lines by pen, as the app's sheet pens them, in paint order. */
+  pens: SheetPen[];
+  /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
+  marks: Polyline[];
   texts: SheetText[];
+  /** The images the sheet carries: the title block's logo. */
+  images: SheetImage[];
   /** The box each viewport's drawing is clipped to, paper mm: the room the layout made for it. */
   viewports: { viewId: string; box: Rect }[];
 }
@@ -52,32 +101,46 @@ export interface SheetGraphic {
 /** A rectangle as a closed run of points (the first repeated last), so it reads whole in an open-polyline layer. */
 const rect = (r: { x: number; y: number; w: number; h: number }): Polyline => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }, { x: r.x, y: r.y }];
 
-/** The title block: its box, a rule under the project, and the fields the engine knows. */
-function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scales: readonly number[]): { frame: Polyline[]; texts: SheetText[] } {
-  const tb = titleBlockRect(paper, frameOf(sheet));
-  const fields = { ...doc.titleBlock, ...sheet.titleBlock };
-  const pad = 4;
-  const strip = tb.h > tb.w;
-  const ruleY = tb.y + (strip ? 40 : 16);
-  const line = (i: number) => ruleY + 8 + i * 7;
-  const scale = scales.length ? scales.map((s) => `1:${s}`).join(', ') : '';
-  return {
-    frame: [rect(tb), [{ x: tb.x, y: ruleY }, { x: tb.x + tb.w, y: ruleY }]],
-    texts: [
-      { at: { x: tb.x + pad, y: tb.y + 10 }, text: fields.project || doc.name, size: 5 },
-      { at: { x: tb.x + pad, y: line(0) }, text: sheet.number, size: 6 },
-      { at: { x: tb.x + pad, y: line(1) }, text: sheet.name, size: 3.5 },
-      { at: { x: tb.x + pad, y: line(2) }, text: [scale, fields.date ?? ''].filter(Boolean).join('   '), size: 2.5 },
-    ].filter((t) => t.text),
-  };
+/** The logo as the PDF can draw it: a PNG or JPEG data URL. An SVG logo, which the app shows, is not drawn here yet. */
+export function printableLogo(src: string | undefined): string | undefined {
+  return src && /^data:image\/(png|jpeg);base64,/i.test(src) ? src : undefined;
 }
 
-/** `drawing` mapped onto the paper: centred on the viewport (or on its `center` point), drawing metres to paper mm at the viewport's scale, y up to y down. */
-export function placer(drawing: Pick<Drawing2D, 'bounds'>, vp: NonNullable<ProjectSheet['viewports']>[number]): (p: Point2D) => Point2D {
+/**
+ * The title block: the layout the project keeps (`doc.titleBlockTemplate`: the Romanian one, or any the app edited),
+ * else the standard one, as the app does (`title-block-standard.ts`). `projectFields` are the project's fields
+ * resolved from the model (`title-block-sources.ts`); without them the document's typed values are all there is.
+ */
+function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>, language?: string): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
+  const tb = titleBlockRect(paper, frameOf(sheet));
+  const template = doc.titleBlockTemplate ?? standardTitleBlock();
+  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields, language), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
+}
+
+/**
+ * Which way each drawing axis runs on the paper, by the axis the drawing is cut
+ * along: a plan (`y`) keeps its second axis pointing down the paper (a point
+ * further south is lower), an elevation or section (`z`, `x`) points it up; a
+ * drawing looking along `x` (east and west elevations) also mirrors its first
+ * axis. The sheet in the app reads the same signs (`screenSigns` in
+ * `drafting/frame.ts`), so a drawing is on the sheet the way it is in the PDF.
+ */
+export function paperSigns(axis: 'x' | 'y' | 'z'): { kx: 1 | -1; ky: 1 | -1 } {
+  return { kx: axis === 'x' ? -1 : 1, ky: axis === 'y' ? 1 : -1 };
+}
+
+/**
+ * `drawing` mapped onto the paper: its centre (the viewport's `center`, a plan's
+ * extent centre from `viewCentre`, else the middle of its bounds) at the
+ * viewport's position, drawing metres to paper mm at the viewport's scale, the
+ * axes signed by the cut (`paperSigns`).
+ */
+export function placer(drawing: Pick<Drawing2D, 'bounds'> & { config: Pick<Drawing2D['config'], 'plane'> }, vp: NonNullable<ProjectSheet['viewports']>[number], centre: Point2D | null = null): (p: Point2D) => Point2D {
   const k = 1000 / vp.scale;
-  const cx = vp.center?.x ?? (drawing.bounds.min.x + drawing.bounds.max.x) / 2;
-  const cy = vp.center?.y ?? (drawing.bounds.min.y + drawing.bounds.max.y) / 2;
-  return (p) => ({ x: vp.x + (p.x - cx) * k, y: vp.y - (p.y - cy) * k });
+  const { kx, ky } = paperSigns(drawing.config.plane.axis);
+  const cx = vp.center?.x ?? centre?.x ?? (drawing.bounds.min.x + drawing.bounds.max.x) / 2;
+  const cy = vp.center?.y ?? centre?.y ?? (drawing.bounds.min.y + drawing.bounds.max.y) / 2;
+  return (p) => ({ x: vp.x + (p.x - cx) * kx * k, y: vp.y + (p.y - cy) * ky * k });
 }
 
 const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[0]] : pts);
@@ -89,29 +152,77 @@ const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[
  * view, so a drawing larger than the building (the site around it) cannot run
  * into its neighbour; without it, to the drawing's own extent.
  */
-export function sheetGraphic(sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null): SheetGraphic {
+export function sheetGraphic(
+  sheet: ProjectSheet, doc: ProjectDocument, drawings: ReadonlyMap<string, Drawing2D>, extent?: ModelExtent | null, schemes: ReadonlyMap<string, SchemeResult> = new Map(),
+  globalIdOf?: (entityId: number) => string | undefined,
+  /** An element's properties, for a preset's property rules (`view-style.ts`). */
+  propertiesOf?: ViewStyleInputs['propertiesOf'],
+  pens: PenTable = PEN_TABLE,
+  /** The IfcMaterial a cut band is, for a template's material rules (#31). */
+  materialOf?: ViewStyleInputs['materialOf'],
+  /** The project's title block fields as the model fills them (`projectTitleFields`); absent: the document's typed values. */
+  projectFields?: Record<string, string>,
+  /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
+  language?: string,
+): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], cut: [], lines: [], texts: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
-    const drawing = drawings.get(vp.viewId);
+    const made = drawings.get(vp.viewId);
     const k = 1000 / vp.scale;
+    const graphics = resolveViewGraphics(view, doc.viewTemplates);
+    // The detail level (#444): the viewport's scale decides it unless the view's graphics (or its template's) name one; the app's sheets call the same function.
+    const drawing = made && atDetailLevel(made, resolveDetailLevel(graphics, vp.scale));
     const size = view && extent ? viewExtent(view, extent)
       : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
     if (box) out.viewports.push({ viewId: vp.viewId, box });
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
-      const at = placer(drawing, vp);
-      for (const polygon of drawing.cutPolygons) {
+      const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      const scheme = schemes.get(vp.viewId);
+      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
+      // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
+      // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
+      // GlobalId (`globalIdOf`), never by the express id the drawing carries.
+      const styler = viewStyler({ graphics, pens, globalIdOf, propertiesOf, materialOf });
+      for (const polygon of drawing.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
-      for (const line of drawing.lines) if (line.visibility !== 'hidden') out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      for (const line of drawing.lines) {
+        if (line.visibility === 'hidden' || !styler.line(line).visible) continue;
+        out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
+      }
+      // A face a colour scheme paints is in `fills` already (`viewportFills`), under the linework.
+      const painted = scheme?.elementColours;
+      for (const g of penGroups(drawing.cutPolygons.filter((p) => !painted?.has(p.entityId)), drawing.lines, styler)) {
+        const regions = g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map((l) => clipPolygon(l.map(at), box)).filter((l) => l.length >= 3).map(closeRing)).filter((r) => r.length > 0);
+        const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
+        if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
+      }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }
-  const block = titleBlock(sheet, doc, paper, [...new Set(vps.map((v) => v.scale))]);
+  // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner (the viewports and their titles are not free).
+  const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
+  taken.push(titleBlockRect(paper, frameOf(sheet)));
+  for (const vp of vps) {
+    const view = doc.views.find((v) => v.id === vp.viewId);
+    const entries = schemes.get(vp.viewId)?.entries;
+    const scheme = view?.graphics?.colourScheme;
+    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title) : null;
+    if (!legend) continue;
+    taken.push(legend.box);
+    out.fills.push(...legend.fills);
+    out.marks.push(...legend.lines);
+    out.texts.push(...legend.texts);
+  }
+  out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
+  const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields, language);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);
+  out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
+  out.images.push(...block.images);
   return out;
 }

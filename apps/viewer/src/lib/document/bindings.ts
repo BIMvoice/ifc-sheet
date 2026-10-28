@@ -26,10 +26,11 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import { normalizeIfcTypeName } from '@ifc-lite/parser';
 import { EntityFlags, IfcTypeEnum, IfcTypeEnumFromString, type SpatialNode } from '@ifc-lite/data';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
+import { sheetLevel } from '@bimvoice/ifcsheet/names';
 import { createListDataProvider } from '../lists/adapter.js';
 import type { ListDataProvider } from '@ifc-lite/lists';
 import { iterateEffectiveChartRows } from '../charts/datasets/effective-elements.js';
-import { effectiveAttribute, effectiveProperty, effectivePropertyPaths, findEffectiveElementId } from './effective-binding-fields.js';
+import { effectiveAttribute, effectiveProperty, formatBoundValue, effectivePropertyPaths, findEffectiveElementId } from './effective-binding-fields.js';
 import { effectiveSpatialMembers } from '../effective-spatial-members.js';
 import { effectiveStoreyId } from '../effective-storey.js';
 import { spatialBindingNodes } from './spatial-binding-nodes.js';
@@ -49,6 +50,13 @@ export interface BindingContext {
   /** The model unprefixed paths resolve on; the first model when null. */
   activeModelId: string | null;
   today: Date;
+  /**
+   * The language numbers are written in (#269): "+2,70 m" in Romanian,
+   * "+2.70 m" in English. The caller passes the active one and a change of
+   * language builds a new context, so a document re-resolves; nothing here
+   * reads a global. English when left out.
+   */
+  locale?: string;
 }
 
 export interface ResolvedBinding {
@@ -202,7 +210,7 @@ export function resolveBinding(path: string, ctx: BindingContext): ResolvedBindi
     if (!head.selector) return fail(path, 'Element needs a GlobalId, e.g. Element[2Ndyd$OSX7s9A04nc41yye]');
     for (const m of ctx.models) {
       const expressId = findEffectiveElementId(m, head.selector);
-      if (expressId > 0) return elementAttribute(path, m, expressId, rest);
+      if (expressId > 0) return elementAttribute(path, ctx, m, expressId, rest);
     }
     return fail(path, ctx.models.length === 0 ? 'no model loaded' : `no element with GlobalId ${head.selector} in the loaded models`);
   }
@@ -213,7 +221,7 @@ export function resolveBinding(path: string, ctx: BindingContext): ResolvedBindi
     if (!hierarchy) return fail(path, 'the model has no spatial structure');
     const node = spatialNode(active, head);
     if (!node) return fail(path, head.selector ? `no ${head.name} "${head.selector}"` : `no ${head.name} in the model`);
-    return spatialAttribute(path, active, node, rest[0]?.name, rest.length);
+    return spatialAttribute(path, ctx, active, node, rest[0]?.name, rest.length);
   }
 
   return fail(path, `unknown root "${head.name}"`);
@@ -232,7 +240,7 @@ function spatialNode(model: BindingModel, head: Segment): SpatialNode | null {
   }) ?? null;
 }
 
-function spatialAttribute(path: string, model: BindingModel, node: SpatialNode, attr: string | undefined, depth: number): ResolvedBinding {
+function spatialAttribute(path: string, ctx: BindingContext, model: BindingModel, node: SpatialNode, attr: string | undefined, depth: number): ResolvedBinding {
   if (depth !== 1) return fail(path, 'expected exactly one attribute, e.g. IfcProject.Name');
   const { entities } = model.store;
   if (model.view) {
@@ -245,7 +253,7 @@ function spatialAttribute(path: string, model: BindingModel, node: SpatialNode, 
           ?? node.elevation ?? effectiveAttribute(model, node.expressId, 'Elevation');
         const raw = edited ?? source;
         const elevation = raw === undefined || raw === '' ? undefined : Number(raw);
-        return elevation === undefined || !Number.isFinite(elevation) ? fail(path, 'no elevation') : succeed(path, `${elevation.toFixed(2)} m`);
+        return elevation === undefined || !Number.isFinite(elevation) ? fail(path, 'no elevation') : succeed(path, `${sheetLevel(ctx.locale ?? 'en', elevation)} m`);
       }
       case 'Elements': return succeed(path, String(countElements(node, model)));
     }
@@ -258,7 +266,7 @@ function spatialAttribute(path: string, model: BindingModel, node: SpatialNode, 
     case 'GlobalId': return succeed(path, entities.getGlobalId(node.expressId));
     case 'Elevation': {
       const elevation = model.store.spatialHierarchy?.storeyElevations.get(node.expressId) ?? node.elevation;
-      return elevation === undefined ? fail(path, 'no elevation') : succeed(path, `${elevation.toFixed(2)} m`);
+      return elevation === undefined ? fail(path, 'no elevation') : succeed(path, `${sheetLevel(ctx.locale ?? 'en', elevation)} m`);
     }
     case 'Elements': return succeed(path, String(countElements(node, model)));
     default: return fail(path, `unknown attribute "${attr ?? ''}"`);
@@ -273,7 +281,7 @@ function countElements(node: SpatialNode, model: BindingModel): number {
   return n;
 }
 
-function elementAttribute(path: string, model: BindingModel, expressId: number, rest: Segment[]): ResolvedBinding {
+function elementAttribute(path: string, ctx: BindingContext, model: BindingModel, expressId: number, rest: Segment[]): ResolvedBinding {
   const provider = providerFor(model);
   if (rest.length === 1) {
     if (model.view && ['Name', 'Description', 'ObjectType', 'Tag', 'GlobalId'].includes(rest[0].name)) {
@@ -301,28 +309,21 @@ function elementAttribute(path: string, model: BindingModel, expressId: number, 
     const setName = rest[0].name;
     const propName = rest.slice(1).map((s) => s.name).join('.');
     if (model.view) {
-      const value = effectiveProperty(model, expressId, setName, propName);
+      const value = effectiveProperty(model, expressId, setName, propName, ctx.locale);
       return value === undefined ? fail(path, `no ${setName}.${propName} on this element`) : succeed(path, value);
     }
     for (const set of [...provider.getPropertySets(expressId), ...(provider.getTypePropertySets?.(expressId) ?? [])]) {
       if (set.name !== setName) continue;
       const prop = set.properties.find((p) => p.name === propName);
-      if (prop) return succeed(path, formatValue(prop.value));
+      if (prop) return succeed(path, formatBoundValue(prop.value, ctx.locale));
     }
     for (const set of [...provider.getQuantitySets(expressId), ...(provider.getTypeQuantitySets?.(expressId) ?? [])]) {
       if (set.name !== setName) continue;
       const q = set.quantities.find((p) => p.name === propName);
-      if (q) return succeed(path, q.unit ? `${formatValue(q.value)} ${q.unit}` : formatValue(q.value));
+      if (q) return succeed(path, q.unit ? `${formatBoundValue(q.value, ctx.locale)} ${q.unit}` : formatBoundValue(q.value, ctx.locale));
     }
     return fail(path, `no ${setName}.${propName} on this element`);
   }
   return fail(path, `unknown attribute "${rest[0]?.name ?? ''}"`);
 }
 
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (Array.isArray(value)) return value.map(formatValue).join(', ');
-  return String(value);
-}

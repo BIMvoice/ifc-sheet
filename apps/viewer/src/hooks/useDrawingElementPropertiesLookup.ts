@@ -54,6 +54,7 @@ import { useViewerStore } from '@/store';
 import { useIfc } from './useIfc';
 import { fromGlobalIdFromModels } from '@/store/globalId';
 import { extractPropertiesOnDemand } from '@ifc-lite/parser';
+import { elementProperties } from '@bimvoice/ifcsheet';
 import type { Drawing2D, ElementData, GraphicOverrideEngine, OverrideCriteria, OverrideCriterion } from '@ifc-lite/drawing-2d';
 
 /** A cheap, synchronous `entityId -> properties` lookup, safe to call from
@@ -80,14 +81,14 @@ function engineNeedsProperties(engine: GraphicOverrideEngine): boolean {
  */
 export function useDrawingElementPropertiesLookup(
   drawing: Drawing2D | null,
-  overrideEngine: GraphicOverrideEngine,
+  overrideEngine: GraphicOverrideEngine | undefined,
   overridesEnabled: boolean,
 ): ElementPropertiesLookup {
   const models = useViewerStore((s) => s.models);
   const { ifcDataStore } = useIfc();
 
   return useMemo(() => {
-    if (!overridesEnabled || !drawing || !engineNeedsProperties(overrideEngine)) return NO_PROPERTIES;
+    if (!overridesEnabled || !drawing || !overrideEngine || !engineNeedsProperties(overrideEngine)) return NO_PROPERTIES;
 
     const cache = new Map<number, ElementData['properties']>();
     for (const polygon of drawing.cutPolygons) {
@@ -98,33 +99,11 @@ export function useDrawingElementPropertiesLookup(
         cache.set(polygon.entityId, undefined);
         continue;
       }
-      // One entity routinely carries two property sets with the SAME name —
-      // one from the type definition and one from the occurrence, each via
-      // its own `IfcRelDefinesByProperties` — and `extractPropertiesOnDemand`
-      // returns one entry per set without merging them. Keying the record by
-      // set name and assigning outright would let the second set erase the
-      // first and every property in it, which is the #3465/#3468 duplicate-pset
-      // defect in another shape (and `scripts/check-pset-name-find.mjs` does
-      // not catch it — it looks for a two-step `.find`, not for record-keying).
-      // Same-named sets are merged instead, the earlier set's value winning a
-      // key collision: the same semantics `PropertyTable.getProperties`
-      // (`packages/query/src/property-table.ts`, #3463) settled for the other
-      // record-keyed-by-set-name reader, and the order `findPropertyInSets`
-      // (`packages/query/src/pset-lookup.ts`) scans in.
-      // Accumulating in a `Map` rather than assigning into an object literal
-      // keeps a set literally named `__proto__` from aliasing `Object.prototype`.
-      const bySetName = new Map<string, Record<string, unknown>>();
-      for (const pset of extractPropertiesOnDemand(store, ref.expressId)) {
-        let values = bySetName.get(pset.name);
-        if (!values) {
-          values = {};
-          bySetName.set(pset.name, values);
-        }
-        for (const prop of pset.properties) {
-          if (!Object.hasOwn(values, prop.name)) values[prop.name] = prop.value;
-        }
-      }
-      cache.set(polygon.entityId, Object.fromEntries(bySetName));
+      // One entity routinely carries two property sets with the SAME name (one from the type, one from the occurrence, each via
+      // its own `IfcRelDefinesByProperties`); `elementProperties` merges them, the earlier set winning a key collision (the
+      // #3465/#3468 duplicate-pset semantics `PropertyTable.getProperties` settled), keyed through a `Map` so a set literally named
+      // `__proto__` cannot alias `Object.prototype`. The view styler's reader (`project/view-styler.ts`) merges through the same function.
+      cache.set(polygon.entityId, elementProperties(extractPropertiesOnDemand(store, ref.expressId)));
     }
     return (entityId: number) => cache.get(entityId);
   }, [drawing, models, ifcDataStore, overrideEngine, overridesEnabled]);

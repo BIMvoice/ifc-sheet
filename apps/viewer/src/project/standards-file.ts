@@ -38,6 +38,7 @@ function readDim(v: Raw): DimStyle {
     extGap: num(v.extGap, d.extGap), extOver: num(v.extOver, d.extOver),
     placement: oneOf<TextPlacement>(v.placement, ['above', 'centered', 'below'], d.placement), textGap: num(v.textGap, d.textGap),
     precision: Math.round(num(v.precision, d.precision)), unit: oneOf<LengthUnit>(v.unit, ['m', 'cm', 'mm'], d.unit), ...color(v.color),
+    ...(v.allOffset === undefined ? {} : { allOffset: Math.max(0, num(v.allOffset, d.allOffset ?? 0)) }),
   };
 }
 
@@ -45,16 +46,27 @@ function withStandard<T extends { id: string }>(list: T[], standard: T): T[] {
   return list.some((s) => s.id === STANDARD) ? list : [{ ...standard }, ...list];
 }
 
+const listOf = (raw: Raw, key: string) => (Array.isArray(raw[key]) ? (raw[key] as unknown[]).filter(isObject) : []);
+
+/** Kept as named, known or not: loading the project falls back to the default for an unknown id, and says so (`loadProjectDocument`). */
+export function readGraphicStandard(raw: Raw): string | undefined {
+  return typeof raw.graphicStandard === 'string' && raw.graphicStandard !== DEFAULT_GRAPHIC_STANDARD.id ? raw.graphicStandard : undefined;
+}
+
+export const readTextStyles = (raw: Raw): TextStyle[] => withStandard(listOf(raw, 'textStyles').map(readText), DEFAULT_TEXT_STYLE);
+export const readDimStyles = (raw: Raw): DimStyle[] => withStandard(listOf(raw, 'dimStyles').map(readDim), DEFAULT_DIM_STYLE);
+
+export const readLayerGroups = (raw: Raw): LayerGroup[] =>
+  listOf(raw, 'layerGroups').filter((g) => typeof g.id === 'string').map((g) => ({
+    id: g.id as string, name: str(g.name, 'Group'), visible: g.visible !== false, locked: g.locked === true,
+  }));
+
 export function readStandards(raw: Raw): { textStyles: TextStyle[]; dimStyles: DimStyle[]; layerGroups: LayerGroup[]; graphicStandard?: string } {
-  const list = (key: string) => (Array.isArray(raw[key]) ? (raw[key] as unknown[]).filter(isObject) : []);
-  // Kept as named, known or not: loading the project falls back to the default for an unknown id, and says so (`loadProjectDocument`).
-  const standard = typeof raw.graphicStandard === 'string' && raw.graphicStandard !== DEFAULT_GRAPHIC_STANDARD.id ? raw.graphicStandard : undefined;
+  const standard = readGraphicStandard(raw);
   return {
     ...(standard ? { graphicStandard: standard } : {}),
-    textStyles: withStandard(list('textStyles').map(readText), DEFAULT_TEXT_STYLE),
-    dimStyles: withStandard(list('dimStyles').map(readDim), DEFAULT_DIM_STYLE),
-    layerGroups: list('layerGroups').filter((g) => typeof g.id === 'string').map((g) => ({
-      id: g.id as string, name: str(g.name, 'Group'), visible: g.visible !== false, locked: g.locked === true,
-    })),
+    textStyles: readTextStyles(raw),
+    dimStyles: readDimStyles(raw),
+    layerGroups: readLayerGroups(raw),
   };
 }

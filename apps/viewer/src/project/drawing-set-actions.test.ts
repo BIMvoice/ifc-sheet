@@ -48,8 +48,8 @@ describe('ensureDrawingSet', () => {
     updateProjectView(south.id, { planeOffset: 150 });
     run();
     const offset = (d: string) => (state().views.find((v) => v.kind === 'elevation' && v.direction === d) as { planeOffset: number }).planeOffset;
-    assert.ok(Math.abs(offset('north') - 200.05) < 1e-9);
-    assert.ok(Math.abs(offset('east') - 111.95) < 1e-9);
+    assert.ok(Math.abs(offset('north') - 199.5) < 1e-9);
+    assert.ok(Math.abs(offset('east') - 112.5) < 1e-9);
     assert.equal(offset('south'), 150);
   });
 
@@ -86,10 +86,10 @@ describe('ensureDrawingSet', () => {
   it('gives views a default depth, and a plan the scale of its sheet', () => {
     run();
     const depth = (name: string) => state().views.find((v) => v.name === name)?.viewDepth;
-    // The section looks +x from the middle of 12 m: 6 m to the far wall + 1 m. North / south see through 10 m, east / west through 12 m, each + 1 m.
+    // The section looks +x from the middle of 12 m: 6 m to the far wall + 1 m. North / south see through 10 m, east / west through 12 m, each + 1 m, and 0.5 m more from the plane outside the facade.
     assert.equal(sections()[0].viewDepth, 7);
-    assert.equal(depth('North Elevation'), 11);
-    assert.equal(depth('East Elevation'), 13);
+    assert.equal(depth('North Elevation'), 11.5);
+    assert.equal(depth('East Elevation'), 13.5);
     assert.equal(state().views.find((v) => v.kind === 'plan')?.scale, 100);
   });
 
@@ -125,16 +125,23 @@ describe('ensureDrawingSet', () => {
     assert.deepEqual(projectDocument(), after);
   });
 
-  it('undoing the set removes only what it added; what came after stays, and Redo puts the set back', () => {
+  it('undoing the set removes only what it added; a section made after it is a step of its own (view and symbol together), and what came after stays', () => {
     run();
+    const [fromSet] = sections();
     const mine = makeHallSection();
-    const sheet = addProjectSheet('Details');
+    // Added outside the history (addProjectSheet is a step of its own since #51), as anything that is not an undo step is.
+    const sheet = 'later-sheet';
+    useProjectStore.setState((s) => ({ sheets: [...s.sheets, { id: sheet, number: 'Z-1', series: 'other', name: 'Details', createdAt: 1 } as never] }));
     assert.equal(undoDrafts(), true, 'the section');
+    assert.deepEqual(sections().map((v) => v.id), [fromSet.id], 'one undo takes the person\'s section view and its symbol, and only that');
+    assert.equal(state().drafts.some((d) => d.params.sectionOf === mine), false, 'its symbol is gone with it');
     assert.equal(undoDrafts(), true, 'the set');
-    assert.deepEqual(sections().map((v) => v.id), [mine], 'the set\'s section is gone, the person\'s own stays');
+    assert.deepEqual(sections().map((v) => v.id), [], 'the set\'s section is gone');
     assert.ok(state().sheets.some((s) => s.id === sheet), 'the sheet added later is still there');
     assert.equal(redoDrafts(), true);
-    assert.equal(sections().length, 2);
+    assert.equal(sections().length, 1);
+    assert.equal(redoDrafts(), true);
+    assert.deepEqual(sections().map((v) => v.id).sort(), [fromSet.id, mine].sort());
     assert.ok(state().sheets.some((s) => s.id === sheet));
   });
 

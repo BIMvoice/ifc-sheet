@@ -15,8 +15,9 @@ import type { TranslationValue } from '../types';
 export const namesEn = {
   // The names the drawing-set engine gives what it makes; its English is the one copy (`@bimvoice/ifcsheet` `names.ts`).
   ...ENGINE_NAMES_EN,
-  'names.view.detail': 'Detail {number} - {source}',
   'names.scan.level': 'Level {n}',
   'names.scan.sectionAlongX': 'Through the scan, west to east',
   'names.scan.sectionAlongZ': 'Through the scan, north to south',
+  // The default name of an issue (#294). The number is the identity: `nextIssueName` reads it back from every language.
+  'names.issue.default': 'Issue {n}',
 } as const satisfies Record<string, TranslationValue>;

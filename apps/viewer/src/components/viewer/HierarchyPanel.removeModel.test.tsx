@@ -19,11 +19,11 @@ import { useViewerStore } from '@/store';
 import { fixtureModel, fixtureModels } from '@/test/store-fixture.js';
 import { SourceHostProvider } from '@/services/sources/SourceHostProvider';
 import { HierarchyPanel } from './HierarchyPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
 // The Models list is virtualized; happy-dom reports no layout, so give the
 // scroll container a plausible size (pattern from HierarchyPanel.federation.test.tsx).
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 function removeButton(container: HTMLElement, modelName: string): HTMLButtonElement {
   const btn = container.querySelector<HTMLButtonElement>(`button[aria-label="Remove model ${modelName}"]`);

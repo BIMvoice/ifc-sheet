@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 export function checkPdfVectorContract(IfcAPI) {
   const api = new IfcAPI();
   const request = {
-    pdfSha256: 'a'.repeat(64), decoderVersion: '6.3.289', pageNumber: 1,
+    pdfSha256: 'a'.repeat(64), decoderVersion: '6.4.299', pageNumber: 1,
     viewBox: [10,20,110,92], userUnit: 2, intrinsicRotation: 90,
     modelMetresFromPdf: [0,-0.002,0.002,0,-0.04,0.22],
     calibrationKey: 'wall-calibration-v1', toleranceMetres: 0.0001,

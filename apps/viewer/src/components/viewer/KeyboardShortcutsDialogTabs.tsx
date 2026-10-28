@@ -11,10 +11,14 @@
  */
 
 import { useState } from 'react';
+import { IFCLITE_URL } from '@/lib/credits';
 import { ChevronDown, ChevronRight, Package, ShieldCheck, ExternalLink } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 
-const GITHUB_URL = 'https://github.com/LTplus-AG/ifc-lite';
+/** IfcSheet's own repository: the GitHub and issue links go here, so IfcSheet reports reach IfcSheet. */
+const GITHUB_URL = 'https://github.com/BIMvoice/ifcsheet';
+/** The engine IfcSheet is built on. */
+const IFCLITE_GITHUB_URL = 'https://github.com/LTplus-AG/ifc-lite';
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -91,12 +95,13 @@ export function AboutTab() {
       <div className="text-center pb-2 border-b">
         <h3 className="text-xl font-bold">{t('keyboardShortcuts.about.appName')}</h3>
         <p className="text-xs text-muted-foreground mt-0.5">{t('keyboardShortcuts.about.versionLabel', { version: __APP_VERSION__ })} &middot; {formatBuildDate(__BUILD_DATE__)}</p>
+        <p className="text-xs mt-2" data-testid="about-built-on">{t('credits.about.builtOn')}</p>
       </div>
 
       {/* Links */}
       <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1.5 text-xs">
         <a
-          href="https://ifclite.dev"
+          href={IFCLITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
@@ -121,6 +126,15 @@ export function AboutTab() {
         >
           <GithubIcon className="h-3.5 w-3.5" />
           {t('keyboardShortcuts.about.githubLink')}
+        </a>
+        <a
+          href={IFCLITE_GITHUB_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <GithubIcon className="h-3.5 w-3.5" />
+          {t('credits.about.ifcliteGithubLink')}
         </a>
         <a
           href={`${GITHUB_URL}/issues`}

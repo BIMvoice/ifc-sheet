@@ -30,7 +30,7 @@ export function WallWaiting({ scan }: { scan: boolean }) {
             ? t('wall.intro.reading', { percent: percent(progress.percent) })
             : t('wall.intro.waiting');
   return (
-    <div className="flex h-full items-center justify-center px-8 text-center text-lg text-sky-200/80">
+    <div className="flex h-full items-center justify-center px-8 text-center text-base text-sky-200/80">
       <output className="m-0 block max-w-xl">{text}</output>
     </div>
   );

@@ -20,9 +20,16 @@
 #     the pull request changed and their dependents (turbo
 #     `--filter='...[HEAD^1]'`); the viewer shards run unless every change is
 #     docs, Rust or an app other than apps/viewer.
+#   - a change confined to packages the viewer neither depends on nor mentions
+#     (scripts/ci-viewer-affected.mjs decides, and answers "run" on any doubt
+#     or error) skips the viewer shards and the viewer production build.
+#     That script also sets aside test files nothing imports: in a package the
+#     viewer depends on they skip both, in apps/viewer they skip the build only
+#     (#538). Romanian catalogues are not set aside, the viewer imports them.
 # Anything not listed above counts as JavaScript, so an unclassified path runs
 # more, never less. A change under .github/ (this workflow, the shared
-# actions), or to pnpm-lock.yaml or Cargo.lock, runs everything. A push to main
+# actions), or to pnpm-lock.yaml, Cargo.lock or a package manager file (root
+# package.json, pnpm-workspace.yaml, .npmrc, .nvmrc), runs everything. A push to main
 # and a merge-queue entry always run everything, with the full package set.
 #
 # Skipped jobs make the per-job checks unusable as required checks (a skipped
@@ -39,7 +46,10 @@
 #     commit, written only by the Typecheck job on a push to main and read by
 #     every job that runs turbo. Before it is saved it is cut down to the tasks
 #     that run produced, and the @ifc-lite/wasm task is dropped so a turbo hit
-#     can never put an older wasm build over this run's artifact.
+#     can never put an older wasm build over this run's artifact. GITHUB_SHA is
+#     a build input of apps/viewer only (apps/viewer/turbo.json). As a root
+#     `build` input it made every task hash unique per run, so this cache never
+#     hit and each job repeated the ~85 s package build.
 #
 # No secrets are used, so Dependabot and fork pull requests run the same checks.
 # Nothing here is continue-on-error: a failing test is a red check.
@@ -57,11 +67,16 @@
 # it adds. Each test file has its own `node --test` step, and each step runs
 # even when an earlier one failed, so one red check does not hide the others.
 #
+# The Lint job runs `pnpm lint` (changesets, test-glob coverage, unused locals,
+# i18n literals, jsx-a11y, type scale, and a check that the linter linted
+# something) whenever `changes` reports code, that is, on anything but a
+# docs-only pull request, and on every push to main.
+#
 # Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (`pnpm lint`: i18n literals, jsx-a11y; check-refwalk-guards,
-# check-api-surface, the docs checks) and their scripts/*.test.mjs files. Only
-# check-module-size, check-test-wiring and check-source-text-assertions are
-# compared against the base.
+# gates (check-refwalk-guards, check-api-surface, the docs checks) and the
+# scripts/*.test.mjs files that the "Script tests" job leaves out (listed with
+# reasons above that job). Only check-module-size, check-test-wiring and
+# check-source-text-assertions are compared against the base.
 
 name: CI
 
@@ -93,6 +108,7 @@ jobs:
       packages: ${{ steps.flags.outputs.packages }}
       rust: ${{ steps.flags.outputs.rust }}
       viewer: ${{ steps.flags.outputs.viewer }}
+      viewer_build: ${{ steps.flags.outputs.viewer_build }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,7 +125,7 @@ jobs:
           everything() {
             echo "$1: running everything."
             out all true; out ci "$2"; out code true; out docs_only false
-            out packages true; out rust true; out viewer true
+            out packages true; out rust true; out viewer true; out viewer_build true
             exit 0
           }
 
@@ -130,6 +146,11 @@ jobs:
 
           if any '^\.github/'; then everything "A change under .github/" true; fi
           if any '^(pnpm-lock\.yaml|Cargo\.lock)$'; then everything "A lockfile changed" false; fi
+          # The package manager and the toolchain: anything here can change
+          # every job's inputs, so run everything.
+          if any '^(package\.json|pnpm-workspace\.yaml|\.npmrc|\.nvmrc|\.node-version|\.tool-versions|\.pnpmfile\.cjs)$'; then
+            everything "A package manager file changed" false
+          fi
 
           out all false
           out ci false
@@ -139,8 +160,20 @@ jobs:
           # agrees (rust/** is a globalDependency), so they count here.
           if any_but "$DOCS|^apps/"; then out packages true; else out packages false; fi
           if any "$RUST"; then out rust true; else out rust false; fi
-          if any '^apps/viewer/' || any_but "$DOCS|$RUST|^apps/"; then out viewer true
-          else out viewer false; fi
+          # Files that could reach the viewer: not docs, Rust or an app other
+          # than apps/viewer. scripts/ci-viewer-affected.mjs decides per lane
+          # and answers "run" on any doubt or error. The shards and the
+          # production build are decided separately: a test file nothing
+          # imports can change a shard's result but not the bundle. A Romanian
+          # catalogue is NOT skipped: viewer tests and the build import it.
+          candidates="$RUNNER_TEMP/viewer-candidates.txt"
+          grep -vE "$DOCS|$RUST" "$changed" | awk '!/^apps\// || /^apps\/viewer\//' > "$candidates" || true
+          for lane in tests build; do
+            if [ ! -s "$candidates" ]; then verdict=false
+            else verdict=$(node scripts/ci-viewer-affected.mjs "$candidates" "$lane" || echo true); fi
+            [ "$verdict" = false ] || verdict=true
+            if [ "$lane" = tests ]; then out viewer "$verdict"; else out viewer_build "$verdict"; fi
+          done
 
   # The engine (packages/wasm/pkg) is not committed and IfcSheet's Rust differs
   # from the published @ifc-lite/wasm, so it is built from source once here and
@@ -185,10 +218,11 @@ jobs:
       - name: The build produced the runtime and its types
         run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+          if-no-files-found: error
           retention-days: 3
 
   typecheck:
@@ -255,6 +289,36 @@ jobs:
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+
+  # `pnpm lint`: changesets, test-glob coverage, unused locals, i18n literals,
+  # Romanian coverage, jsx-a11y, type scale, and a check that the linter linted something. It is
+  # part of "CI passed" through its `needs`. The unused-locals gate runs tsc in
+  # every package, so it needs the same wasm types and built packages as
+  # Typecheck.
+  lint:
+    name: Lint
+    needs: [changes, wasm]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      - run: pnpm turbo run build --filter='./packages/*'
+      - run: pnpm lint
 
   package-tests:
     name: Package tests
@@ -344,6 +408,8 @@ jobs:
     env:
       TEST_SHARD: ${{ matrix.shard }}
       TEST_SHARDS: 8
+      # Test files already run in separate processes; the runner has 4 CPUs.
+      TEST_CONCURRENCY: 2
     steps:
       - uses: actions/checkout@v7
 
@@ -383,7 +449,7 @@ jobs:
   viewer-build:
     name: Viewer production build
     needs: [changes, wasm]
-    if: needs.changes.outputs.viewer == 'true'
+    if: needs.changes.outputs.viewer_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -479,9 +545,276 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node scripts/check-changeset-required.mjs --base "$BASE_SHA"
 
+      - name: Nothing outside the allowlist can be published to npm
+        if: ${{ !cancelled() }}
+        run: node scripts/check-publish-allowlist.mjs
+
       - name: Changesets name workspace packages
         if: ${{ !cancelled() }}
         run: node scripts/check-changesets.mjs
+
+  # Runs the scripts/*.test.mjs files listed below when `changes` reports code
+  # (anything but a docs-only pull request, and every push to main). It is part
+  # of "CI passed" through its `needs`, so it gates the merge.
+  #
+  # One `node --test` line per file, on purpose: scripts/check-test-wiring.mjs
+  # reads literal paths from workflow lines that carry `--test`, so a glob or a
+  # list kept in another file would leave these tests reported as unwired. A
+  # new scripts/**/*.test.mjs is added here by hand (check-test-wiring names it
+  # when it is missing). Left out, and why:
+  #   - scripts/check-census-timeout, check-ci-aggregate-coverage,
+  #     check-ci-path-coverage, check-issue-queue, check-pr-review-signal,
+  #     check-review-posted, check-rust-semver, check-server-bin-targets,
+  #     lib/ci-verdict-replay, lib/pr-review-signal, lib/server-bin-targets-parse,
+  #     release-tag-commit, release-version-changed, scan-dirty-prs,
+  #     review/{build-review-input,lane-canary,post-review,rubric-eval,run-judge,
+  #     run-reviewer,validate-findings}: assert on workflow files that are not in
+  #     this fork (only ci.yml and vercel-deploy.yml exist).
+  #   - check-codegen-sync (rustfmt), lib/revert-oracle-browser-observer
+  #     (Chrome), lib/revert-oracle-python-wheel (Python venv),
+  #     fixtures/upload-fixtures (macOS-only path-guard mismatch, unverified on
+  #     Linux): need tooling this job does not install.
+  #   - check-changeset-bump: no release anchor in this fork's history.
+  scripts-tests:
+    name: Script tests
+    needs: [changes, wasm]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # check-module-size.test.mjs runs the gate against the real repo, and
+          # the gate's merge-base audit needs origin/main and the history.
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-pkg
+          path: packages/wasm/pkg
+      # Some of the tests import packages/*/dist and the wasm runtime.
+      - run: pnpm turbo run build --filter='./packages/*'
+
+      # Every file runs in its own `node --test` process, four at a time, and
+      # every file runs even when another fails, so one run names all. `q` only
+      # queues a line; the runner below executes the queue and fails when any
+      # file failed or when fewer files reported than were queued.
+      - name: node --test, file by file
+        run: |
+          queue="$RUNNER_TEMP/node-tests.txt"; logs="$RUNNER_TEMP/node-test-logs"
+          : > "$queue"; mkdir -p "$logs"
+          q() { printf '%s\n' "$*" >> "$queue"; }
+          q --test scripts/ai-eval/check-ai-eval-invariants.test.mjs
+          q --test scripts/ai-eval/check-ai-eval-manifest.test.mjs
+          q --test scripts/ai-eval/lib/invariants.test.mjs
+          q --test scripts/ai-eval/lib/schema-subset.test.mjs
+          q --test scripts/ai-eval/lib/sse.test.mjs
+          q --test scripts/browser-ab-report.test.mjs
+          q --test scripts/browser-cold-inputs.test.mjs
+          q --test scripts/browser-cold-teardown.test.mjs
+          q --test scripts/browser-cold-wrapper.test.mjs
+          q --test scripts/browser-metadata-readiness.test.mjs
+          q --test scripts/build-rustdoc-index.test.mjs
+          q --test scripts/check-agents-md-size.test.mjs
+          q --test scripts/check-asset-usage.test.mjs
+          q --test scripts/check-base-freshness.test.mjs
+          q --test scripts/check-benchmark-regression.test.mjs
+          q --test scripts/check-clash-degenerate-reason-parity.test.mjs
+          q --test scripts/check-collab-room-model-target.test.mjs
+          q --test scripts/check-css-vars.test.mjs
+          q --test scripts/check-csv-escaper-copies.test.mjs
+          q --test scripts/check-i18n-literals.test.mjs
+          q --test scripts/check-icon-button-adoption.test.mjs
+          q --test scripts/check-isolate-expansion-routing.test.mjs
+          q --test scripts/check-jsx-a11y.test.mjs
+          q --test scripts/check-lint-ran.test.mjs
+          q --test scripts/check-publish-allowlist.test.mjs
+          q --test scripts/check-loader-hook-specifier-match.test.mjs
+          q --test scripts/check-module-size.test.mjs
+          q --test scripts/check-overlay-palette.test.mjs
+          q --test scripts/check-ro-coverage.test.mjs
+          q --test scripts/check-partial-close-admission.test.mjs
+          q --test scripts/check-path-case-collisions.test.mjs
+          q --test scripts/check-perf-flags.test.mjs
+          q --test scripts/check-pset-name-find.test.mjs
+          q --test scripts/check-raw-entity-enumeration.test.mjs
+          q --test scripts/check-refwalk-guards.test.mjs
+          q --test scripts/check-release-credential-quota.test.mjs
+          q --test scripts/check-release-late-changesets.test.mjs
+          q --test scripts/check-rtc-frame-copies.test.mjs
+          q --test scripts/check-rust-api-surface.test.mjs
+          q --test scripts/check-rust-major-offset.test.mjs
+          q --test scripts/check-rust-source-text-assertions.test.mjs
+          q --test scripts/check-sdk-canary-coverage.test.mjs
+          q --test scripts/check-server-attr-index-usage.test.mjs
+          q --test scripts/check-server-browser-type-parity.test.mjs
+          q --test scripts/check-source-text-assertions-identity.test.mjs
+          q --test scripts/check-source-text-assertions.test.mjs
+          q --test scripts/check-step-escaper-copies.test.mjs
+          q --test scripts/check-swallowed-push.test.mjs
+          q --test scripts/check-test-glob-coverage.test.mjs
+          q --test scripts/check-test-wiring.test.mjs
+          q --test scripts/check-tla-chunk-await.test.mjs
+          q --test scripts/check-type-scale.test.mjs
+          q --test scripts/check-unused-locals-baseline.test.mjs
+          q --test scripts/check-workflow-report-paths.test.mjs
+          q --test scripts/ci-evidence-guards.test.mjs
+          q --test scripts/ci-viewer-affected.test.mjs
+          q --test scripts/ci-wasm-prebuilt-eligible.test.mjs
+          q --test scripts/docs/check-doc-samples.test.mjs
+          q --test scripts/docs/check-mkdocs-nav.real-tree.test.mjs
+          q --test scripts/docs/check-mkdocs-nav.test.mjs
+          q --test scripts/docs/check-package-readmes.test.mjs
+          q --test scripts/docs/generate-docs-sections.test.mjs
+          q --test scripts/enforce-pipeline-labels.test.mjs
+          q --test scripts/examples-current.test.mjs
+          q --test scripts/fetch-prebuilt-wasm.test.mjs
+          q --test scripts/fixtures/build-manifest.test.mjs
+          q --test scripts/fixtures/download-url.test.mjs
+          q --test scripts/fixtures/fetch-fixtures.test.mjs
+          q --test scripts/fixtures/zip-member.test.mjs
+          q --test scripts/generate-coverage-ledger.test.mjs
+          q --test scripts/generate-ifc2x3-entity-names.test.mjs
+          q --test scripts/generate-server-attr-indices.test.mjs
+          q --test scripts/lib/coderabbit-review-state.test.mjs
+          q --test scripts/lib/count-ratchet.test.mjs
+          q --test scripts/lib/crates-io.test.mjs
+          q --test scripts/lib/deployment-assets-dir.test.mjs
+          q --test scripts/lib/dirty-pr-scan.test.mjs
+          q --test scripts/lib/exists-or-throw.test.mjs
+          q --test scripts/lib/is-main-entry.test.mjs
+          q --test scripts/lib/issue-refs.test.mjs
+          q --test scripts/lib/license-header.test.mjs
+          q --test scripts/lib/list-workspace-packages.test.mjs
+          q --test scripts/lib/module-size-base-audit.test.mjs
+          q --test scripts/lib/module-size-ratchet.test.mjs
+          q --test scripts/lib/npm-pack-output.test.mjs
+          q --test scripts/lib/open-pr-fetch.test.mjs
+          q --test scripts/lib/partial-close-admission.test.mjs
+          q --test scripts/lib/pr-green-sweep.test.mjs
+          q --test scripts/lib/ref-issues-fetch.test.mjs
+          q --test scripts/lib/refwalk-classify.test.mjs
+          q --test scripts/lib/revert-oracle-browser-specs.test.mjs
+          q --test scripts/lib/revert-oracle-browser.test.mjs
+          q --test scripts/lib/revert-oracle-cargo.test.mjs
+          q --test scripts/lib/revert-oracle-comment-only.test.mjs
+          q --test scripts/lib/revert-oracle-compile-failure.test.mjs
+          q --test scripts/lib/revert-oracle-dependabot.test.mjs
+          q --test scripts/lib/revert-oracle-ifc-gitattributes.test.mjs
+          q --test scripts/lib/revert-oracle-json.test.mjs
+          q --test scripts/lib/revert-oracle-ledger.test.mjs
+          q --test scripts/lib/revert-oracle-python.test.mjs
+          q --test scripts/lib/revert-oracle-rename-boundary.test.mjs
+          q --test scripts/lib/revert-oracle-rename.test.mjs
+          q --test scripts/lib/revert-oracle-result.test.mjs
+          q --test scripts/lib/revert-oracle-root-scaffolding.test.mjs
+          q --test scripts/lib/revert-oracle-runtime-evidence.test.mjs
+          q --test scripts/lib/revert-oracle-rust-bin-target.test.mjs
+          q --test scripts/lib/revert-oracle-rust-char-literal.test.mjs
+          q --test scripts/lib/revert-oracle-rust-feature-gate.test.mjs
+          q --test scripts/lib/revert-oracle-rust-features.test.mjs
+          q --test scripts/lib/revert-oracle-rust-siblings.test.mjs
+          q --test scripts/lib/revert-oracle-type-only.test.mjs
+          q --test scripts/lib/revert-oracle-unhandled-cfg.test.mjs
+          q --test scripts/lib/revert-oracle-version-bump.test.mjs
+          q --test scripts/lib/revert-oracle.test.mjs
+          q --test scripts/lib/review-dropped-verdict.test.mjs
+          q --test scripts/lib/review-marker.test.mjs
+          q --test scripts/lib/review-poll-page.test.mjs
+          q --test scripts/lib/review-provenance.test.mjs
+          q --test scripts/lib/rust-major-offset.test.mjs
+          q --test scripts/lib/rust-public-api.test.mjs
+          q --test scripts/lib/unified-diff.test.mjs
+          q --test scripts/lib/unused-locals-classify.test.mjs
+          q --test scripts/lib/vitest-timeout-audit.test.mjs
+          q --test scripts/lib/wasm-export-parity.test.mjs
+          q --test scripts/lib/workflow-triggers.test.mjs
+          q --test scripts/pdf-fidelity-evidence.test.mjs
+          q --test scripts/perf-ratchet/compare.test.mjs
+          q --test scripts/perf-ratchet/lower.test.mjs
+          q --test scripts/perf-ratchet/measure-bundle.test.mjs
+          q --test scripts/perf-ratchet/measure-native-instructions.test.mjs
+          q --test scripts/perf/ab-order.test.mjs
+          q --test scripts/perf/build-csg-work-bundle.test.mjs
+          q --test scripts/perf/csg-work-diagnostic.test.mjs
+          q --test scripts/perf/field-verdict.test.mjs
+          q --test scripts/perf/frame-gpu-rig.test.mjs
+          q --test scripts/perf/hook-census.test.mjs
+          q --test scripts/perf/instructions-replay.test.mjs
+          q --test scripts/perf/instructions-report.test.mjs
+          q --test scripts/perf/opening-work-diagnostic.test.mjs
+          q --test scripts/perf/run-csg-work-bundle.test.mjs
+          q --test scripts/perf/stream-diagnostic.test.mjs
+          q --test scripts/release-crates-order.test.mjs
+          q --test scripts/release-crates.test.mjs
+          q --test scripts/report-scheduled-failure.test.mjs
+          q --test scripts/revert-oracle-cargo-lock-restore.test.mjs
+          q --test scripts/revert-oracle-selfcheck.test.mjs
+          q --test scripts/review/build-context-pack.test.mjs
+          q --test scripts/review/classify-pr-risk.test.mjs
+          q --test scripts/review/classify-review-target.test.mjs
+          q --test scripts/review/dedup-findings.test.mjs
+          q --test scripts/review/ensemble-reviewer.test.mjs
+          q --test scripts/review/eval-commit.test.mjs
+          q --test scripts/review/eval-score-matcher.test.mjs
+          q --test scripts/review/lib/class-applicability.test.mjs
+          q --test scripts/review/lib/eval-cache.test.mjs
+          q --test scripts/review/lib/redact-secrets.test.mjs
+          q --test scripts/review/lib/resolved-threads.test.mjs
+          q --test scripts/review/lib/retry-outcome.test.mjs
+          q --test scripts/review/lib/review-reasoning.test.mjs
+          q --test scripts/review/nested-diff-quote.test.mjs
+          q --test scripts/review/openai-reviewer.test.mjs
+          q --test scripts/review/openrouter-eval-reviewer.test.mjs
+          q --test scripts/review/openrouter-reviewer.test.mjs
+          q --test scripts/review/pr-agent-publish.test.mjs
+          q --test scripts/review/pr-agent-run.test.mjs
+          q --test scripts/review/provider-fallbacks.test.mjs
+          q --test scripts/review/refresh-eval-case.test.mjs
+          q --test scripts/review/semantic-match.test.mjs
+          q --test scripts/sync-versions.test.mjs
+          q --test scripts/tla-sourcemaps.test.mjs
+          q --test scripts/typecheck-tests.test.mjs
+          q --test scripts/vercel-node-heap.test.mjs
+          q --test scripts/vercel-skew-cookie.test.mjs
+          q --test scripts/vercel-sourcemaps.test.mjs
+          q --test scripts/verify-crates-publish.test.mjs
+          q --test scripts/verify-esm-entrypoints.test.mjs
+          q --test scripts/verify-npm-publish.test.mjs
+          q --test scripts/viewer-benchmark-load-counters.test.mjs
+          q --test scripts/viewer-benchmark-span-agreement.test.mjs
+          q --test scripts/viewer-benchmark-span-metrics.test.mjs
+          q --test scripts/xmatch/claims.test.mjs
+          q --test scripts/xmatch/edits.test.mjs
+          q --test scripts/xmatch/rectangle-profile.test.mjs
+
+          run_one() {
+            log="$LOGS/$(printf '%s' "$1" | tr -c 'A-Za-z0-9.-' '_').log"
+            if node $1 > "$log" 2>&1; then echo "ok   $1"; else echo "FAIL $1"; touch "$log.failed"; fi
+          }
+          export -f run_one; export LOGS="$logs"
+          tr '\n' '\0' < "$queue" | xargs -0 -P 4 -n 1 bash -c 'run_one "$1"' _ || true
+
+          fail=0
+          for f in "$logs"/*.log.failed; do
+            [ -e "$f" ] || break
+            echo "::group::output of ${f%.failed}"; cat "${f%.failed}"; echo "::endgroup::"; fail=1
+          done
+          queued=$(wc -l < "$queue"); reported=$(find "$logs" -name '*.log' | wc -l)
+          if [ "$queued" -ne "$reported" ]; then
+            echo "::error::$queued test files queued, $reported reported"; fail=1
+          fi
+          echo "$queued test files, $(find "$logs" -name '*.failed' | wc -l) failed"
+          exit $fail
 
   # Runs when `changes` says Rust changed: always on main and in the merge
   # queue, and on a pull request that touches Rust, Cargo.lock, the pinned
@@ -500,7 +833,7 @@ jobs:
         run: rustup show
 
       - name: Cargo cache
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -516,7 +849,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, wasm, typecheck, package-tests, viewer-tests, viewer-build, gates, rust]
+    needs: [changes, wasm, typecheck, lint, package-tests, viewer-tests, viewer-build, gates, scripts-tests, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

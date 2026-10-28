@@ -36,8 +36,10 @@ export function usePrivacyDisclosure(): void {
     }
     // Defer slightly so the toast doesn't fight with the splash UI.
     const handle = window.setTimeout(() => {
-      toast.info(analyticsConfigured ? t('settings.privacy.toastDisclosure') : t('settings.privacy.toastDisclosureLocal'), {
-        label: t('settings.privacy.toastAction'),
+      // Read at render, not here: the toast stays until dismissed, so a language
+      // chosen after it appeared must change it too (#231).
+      toast.infoLive(() => t(analyticsConfigured ? 'settings.privacy.toastDisclosure' : 'settings.privacy.toastDisclosureLocal'), {
+        label: () => t('settings.privacy.toastAction'),
         onClick: () => openSettings('privacy'),
       });
       try {

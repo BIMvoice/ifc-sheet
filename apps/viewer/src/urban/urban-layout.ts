@@ -12,10 +12,15 @@
  * measured by. A figure the model does not give prints as "—".
  */
 
-import type { ScheduleLayout, SchedulePrim } from '@/joinery/schedule-layout';
+import type { ScheduleLayout } from '@/joinery/schedule-layout';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@/joinery/paged-table';
+import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
 import type { UrbanIndicators } from './indicators';
 
 export interface UrbanLabels {
+  /** The language the figures are written in ("120,00" in Romanian); passed in, never read from a global. */
+  locale: SheetLocale;
   title: string;
   level: string;
   elevation: string;
@@ -48,78 +53,62 @@ export interface UrbanLabels {
 }
 
 /** An elevation as drawings write it: +2.70, -1.50, ±0.00. */
-export function signedLevel(v: number): string {
-  const text = Math.abs(v).toFixed(2);
-  return text === '0.00' ? '±0.00' : `${v < 0 ? '-' : '+'}${text}`;
+export function signedLevel(locale: SheetLocale, v: number): string {
+  return sheetLevel(locale, v);
 }
 
-const ROW = 6;
-const TEXT = 2.5;
-const PAD = 1.5;
 const GAP = 4;
-const TITLE_H = 10;
 /** Level, elevation, built, useful, in Ad for CUT; the two-column tables span the same width. */
 const STOREY_COLUMNS = [56, 20, 28, 28, 14] as const;
 /** About the characters a 2 mm note line holds across the table. */
 const NOTE_CHARS = 120;
 const WIDTH = STOREY_COLUMNS.reduce((a, b) => a + b, 0);
 const PAIR_COLUMNS = [WIDTH - 30, 30] as const;
-const PEN = { frame: 0.35, grid: 0.18 } as const;
 
 export const NONE = '—';
-const m2 = (v: number | null): string => (v === null ? NONE : v.toFixed(2));
+const m2Of = (locale: SheetLocale, v: number | null): string => (v === null ? NONE : sheetNumber(locale, v, 2, { kind: 'area' }));
 
-/** One ruled table from `top`, its first row a bold header when `header`; columns after the first are right-aligned figures. Returns its bottom. */
-function table(prims: SchedulePrim[], top: number, columns: readonly number[], rows: readonly string[][], header: boolean): number {
-  const lefts = columns.map((_, i) => columns.slice(0, i).reduce((a, b) => a + b, 0));
-  rows.forEach((cells, r) => {
-    const y = top + r * ROW;
-    const bold = header && r === 0;
-    cells.forEach((text, c) => {
-      const figure = c > 0;
-      prims.push({ kind: 'text', x: figure ? lefts[c] + columns[c] - PAD : lefts[c] + PAD, y: y + ROW / 2 + TEXT * 0.35, text, size: TEXT, anchor: figure ? 'end' : 'start', bold });
-    });
-    prims.push({ kind: 'line', x1: 0, y1: y + ROW, x2: WIDTH, y2: y + ROW, w: (header && r === 0) || r === rows.length - 1 ? PEN.frame : PEN.grid });
-  });
-  const bottom = top + rows.length * ROW;
-  prims.push({ kind: 'line', x1: 0, y1: top, x2: WIDTH, y2: top, w: PEN.frame });
-  for (const x of [...lefts, WIDTH]) prims.push({ kind: 'line', x1: x, y1: top, x2: x, y2: bottom, w: x === 0 || x === WIDTH ? PEN.frame : PEN.grid });
-  return bottom;
+/** One ruled table; columns after the first are right-aligned figures; the last row closes it with the frame pen. */
+function figures(columns: readonly number[], rows: readonly string[][], header: boolean): TableItem {
+  const body = header ? rows.slice(1) : rows;
+  const block: TableBlock = {
+    columns, header: header ? rows[0] : undefined, numeric: (c) => c > 0,
+    rows: body.map((cells, i) => ({ cells, rule: i === body.length - 1 ? PEN.frame : PEN.grid })),
+  };
+  return { kind: 'table', block };
 }
 
-export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels): ScheduleLayout {
+export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels, paging: PagedOptions = {}): ScheduleLayout {
+  const { locale } = labels;
+  const m2 = (v: number | null) => m2Of(locale, v);
   const low = (text: string, atLeast: boolean) => (atLeast && text !== NONE ? labels.atLeast(text) : text);
-  const prims: SchedulePrim[] = [{ kind: 'text', x: 0, y: TITLE_H - 3, text: labels.title, size: 4, anchor: 'start', bold: true }];
-  let y = table(prims, TITLE_H, STOREY_COLUMNS, [
+  const items: TableItem[] = [figures(STOREY_COLUMNS, [
     [labels.level, labels.elevation, labels.built, labels.useful, labels.inCut],
     ...r.storeys.map((s) => [
       s.belowGround ? labels.belowGround(s.name) : s.ground ? labels.ground(s.name) : s.name,
-      signedLevel(s.elevation), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea), s.inCut ? labels.yes : labels.no,
+      signedLevel(locale, s.elevation), low(m2(s.builtArea), s.unmeasured > 0), m2(s.usefulArea), s.inCut ? labels.yes : labels.no,
     ]),
-  ], true);
+  ], true)];
   if (r.auByCategory.length) {
-    y = table(prims, y + GAP, PAIR_COLUMNS, [[labels.category, labels.area], ...r.auByCategory.map((c) => [c.category, m2(c.area)])], true);
+    items.push({ kind: 'gap', h: GAP }, figures(PAIR_COLUMNS, [[labels.category, labels.area], ...r.auByCategory.map((c) => [c.category, m2(c.area)])], true));
   }
-  y = table(prims, y + GAP, PAIR_COLUMNS, [
+  items.push({ kind: 'gap', h: GAP }, figures(PAIR_COLUMNS, [
     [labels.ac, low(m2(r.ac), r.acAtLeast)],
     [labels.ad, low(m2(r.ad), r.adAtLeast)],
     [labels.adCut, low(m2(r.adCut), r.adCutAtLeast)],
     [labels.au, m2(r.au)],
     [labels.site, m2(r.siteArea)],
-    [labels.pot, low(r.pot === null ? NONE : `${r.pot.toFixed(2)} %`, r.acAtLeast)],
-    [labels.cut, low(r.cut === null ? NONE : r.cut.toFixed(2), r.adCutAtLeast)],
-  ], false);
+    [labels.pot, low(r.pot === null ? NONE : `${sheetNumber(locale, r.pot)} %`, r.acAtLeast)],
+    [labels.cut, low(r.cut === null ? NONE : sheetNumber(locale, r.cut), r.adCutAtLeast)],
+  ], false));
   const notes = [
     ...labels.rules(r),
     ...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)),
     ...(labels.note ? [labels.note] : []),
   ].flatMap((note) => wrapNote(note));
-  for (const note of notes) {
-    y += GAP;
-    prims.push({ kind: 'text', x: 0, y, text: note, size: 2, anchor: 'start' });
-  }
-  if (notes.length) y += 1;
-  return { width: WIDTH, height: y, prims };
+  // Each note is a 2 mm line under a GAP; the last leaves 1 mm.
+  for (const text of notes) items.push({ kind: 'text', h: GAP, dy: GAP, size: 2, text });
+  return layoutPagedTable(labels.title, 4, items, { ...paging, tail: notes.length ? 1 : 0 });
 }
 
 /** A note broken at spaces into lines of about `chars` characters (2 mm text). */
@@ -132,4 +121,33 @@ export function wrapNote(note: string, chars = NOTE_CHARS): string[] {
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/**
+ * The indicators as the table of the CSV and XLSX: the blocks the sheet prints one under the other (storeys, useful area by category,
+ * Ac to CUT), each with its own heading row, areas as numbers, then the rules and notes. A figure that is a lower bound stays text
+ * (`≥ 120`), as on paper: a bare number would claim more than the model gives.
+ */
+export function urbanTable(r: UrbanIndicators, labels: UrbanLabels): ExportTable {
+  const figure = (v: number | null, atLeast = false): ExportCell => (v === null ? null : atLeast ? labels.atLeast(String(v)) : v);
+  const rows: ExportCell[][] = [[labels.level, labels.elevation, labels.built, labels.useful, labels.inCut]];
+  const bold = [0];
+  for (const s of r.storeys) {
+    rows.push([s.belowGround ? labels.belowGround(s.name) : s.ground ? labels.ground(s.name) : s.name, s.elevation, figure(s.builtArea, s.unmeasured > 0), s.usefulArea, s.inCut ? labels.yes : labels.no]);
+  }
+  if (r.auByCategory.length) {
+    rows.push([], [labels.category, labels.area]);
+    bold.push(rows.length - 1);
+    for (const c of r.auByCategory) rows.push([c.category, c.area]);
+  }
+  rows.push([], [labels.ac, figure(r.ac, r.acAtLeast)], [labels.ad, figure(r.ad, r.adAtLeast)], [labels.adCut, figure(r.adCut, r.adCutAtLeast)], [labels.au, r.au], [labels.site, r.siteArea],
+    [labels.pot, figure(r.pot, r.acAtLeast)], [labels.cut, figure(r.cut, r.adCutAtLeast)]);
+  return {
+    name: labels.title || labels.level, header: [], rows, bold, numeric: [1, 2, 3],
+    notes: [
+      ...labels.rules(r),
+      ...r.storeys.filter((s) => s.unmeasured > 0).map((s) => labels.unmeasured(s.unmeasured, s.name)),
+      ...(labels.note ? [labels.note] : []),
+    ],
+  };
 }

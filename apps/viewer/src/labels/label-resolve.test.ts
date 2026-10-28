@@ -8,7 +8,7 @@ import { resolveTemplate } from './label-resolve.js';
 import { parseTemplate } from './label-template.js';
 import { wall } from './label-fixture.js';
 
-const run = (text: string, missing?: 'empty' | 'question' | 'field', el = wall()) => resolveTemplate(parseTemplate(text), el, missing);
+const run = (text: string, missing?: 'empty' | 'question' | 'field', el = wall()) => resolveTemplate(parseTemplate(text), el, 'en', missing);
 
 describe('resolveTemplate', () => {
   it('reads attributes, class, type, material and storey', () => {

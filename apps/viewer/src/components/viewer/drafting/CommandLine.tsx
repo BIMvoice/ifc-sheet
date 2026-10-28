@@ -10,7 +10,7 @@
 
 import { forwardRef } from 'react';
 import { useTranslation } from '@/i18n';
-import { submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { endCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 
 interface CommandLineProps {
   value: string;
@@ -23,6 +23,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
   const { t } = useTranslation();
   const history = useDraftingSession((s) => s.history);
   const prompt = useDraftingSession((s) => s.prompt);
+  const running = useDraftingSession((s) => s.commandId !== null);
   const recent = history.slice(-3);
   const promptText = prompt ? t(prompt.key, prompt.params) : t('drafting.prompt.idle');
   return (
@@ -36,7 +37,7 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
         ))}
       </div>
       {prompt?.choices?.length ? (
-        <div className="flex flex-wrap gap-1 px-3 pb-1" role="group" aria-label={promptText}>
+        <fieldset className="m-0 flex min-w-0 flex-wrap gap-1 border-0 px-3 pb-1" aria-label={promptText}>
           {prompt.choices.map((c) => (
             <button
               key={c.value}
@@ -47,13 +48,14 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
               {c.value} <span className="text-zinc-500 dark:text-zinc-400">{c.count}</span>
             </button>
           ))}
-        </div>
+        </fieldset>
       ) : null}
       <label className="flex items-center gap-2 px-3 py-1.5">
         {/* A long prompt truncates (whole in its tooltip): it must never widen the drawing above. */}
         <span className="min-w-0 truncate text-zinc-800 dark:text-zinc-200" title={promptText}>{promptText}</span>
         <input
           ref={ref}
+          data-command-line=""
           aria-label={t('drafting.commandLine')}
           className="min-w-32 flex-1 bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
           value={value}
@@ -74,6 +76,8 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
             }
           }}
         />
+        {/* Esc and Enter end a command; this button is for a keyboard without them (#166). */}
+        {running ? <button type="button" className="shrink-0 rounded border border-zinc-300 dark:border-zinc-700 px-1.5 py-0.5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800" onClick={endCommand}>{t('drafting.done')}</button> : null}
       </label>
     </div>
   );

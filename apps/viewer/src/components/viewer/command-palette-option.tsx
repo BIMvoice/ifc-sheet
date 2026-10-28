@@ -67,7 +67,7 @@ function OptionChrome({ owner, icon: Icon, label, detail, shortcut, index, selec
       <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
       <span className="flex-1 truncate">{label}</span>
       {detail && <span className="text-xs text-muted-foreground shrink-0">{detail}</span>}
-      {shortcut && <kbd className="ml-auto hidden sm:inline-flex h-5 min-w-[20px] items-center justify-center rounded border bg-muted px-1.5 text-xs font-medium text-muted-foreground shrink-0">
+      {shortcut && shortcutLabel(shortcut) && <kbd className="ml-auto hidden sm:inline-flex h-5 min-w-[20px] items-center justify-center rounded border bg-muted px-1.5 text-xs font-medium text-muted-foreground shrink-0">
         {shortcutLabel(shortcut)}
       </kbd>}
     </button>

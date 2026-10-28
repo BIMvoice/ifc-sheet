@@ -2,13 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import type { TitleSource } from './title-block-sources';
 import type { TitleBlockParam } from './title-block-params';
 import type { TitleBlockTemplate } from './title-block-template';
 import type { ModelSnapshot } from '@/whatchanged/snapshot';
 import type { PhaseSource } from './phases';
-import type { UrbanSettings } from '@/urban/indicators';
-import type { ScanLevel } from '@/scan/scan-levels';
+import type { ProjectSchedule } from '@bimvoice/ifcsheet';
 import type { JoineryMapping } from '@/joinery/symbol-mapping';
 import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
@@ -17,8 +15,8 @@ import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '
 import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
+import type { CustomLineType } from '@/drafting/line-types';
 import type { ProjectIssue } from '@/issue/types';
-import type { ReviewComment } from '@/review/types';
 import type { ProjectCivilDrawing, ProjectMaterial, ProjectTypicalSection, SavedSectionCut } from './project-records';
 import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, SheetTemplate, TemplateSeries } from '@bimvoice/ifcsheet';
 
@@ -35,8 +33,8 @@ import type { ProjectDocument as EngineDocument, NumberingScheme, ProjectView, S
  */
 
 export type {
-  AxonometricPreset, CategoryGraphics, CategoryLineWeight, CustomPaper, DraftingProjectView, ElevationDirection, ElevationProjectView,
-  ElongatedPaper, GridEnds, GroupPattern, InteriorElevation, NumberGroup, NumberingScheme, Paper, PaperSize, PhaseId, PhaseStyle,
+  AxonometricPreset, CategoryGraphics, CategoryLineWeight, CustomPaper, DraftingProjectView, ElementGraphics, ElementLineStyle, ElevationDirection, ElevationProjectView,
+  ElongatedPaper, GridEnds, GroupPattern, InteriorElevation, NumberGroup, NumberingScheme, Paper, PaperSize, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
   PlanProjectView, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, ProjectViewBase, ProjectViewKind, SectionProjectPlane,
   SectionProjectView, SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition,
   ViewDetail, ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster,
@@ -53,24 +51,20 @@ export type ProjectViewPatch = ProjectView extends infer V
   ? V extends ProjectView ? Partial<Omit<V, 'id' | 'kind'>> : never
   : never;
 
-/** A joinery schedule (door / window list): a project document of its own, placeable on sheets. */
-export interface ProjectSchedule {
-  id: string;
-  name: string;
-  /** What it lists: doors and windows (joinery), the materials with their quantities (a takeoff), the quantities by element type, the finishes of each room, the set's own sheets (the drawing register, derived from the sheets on every draw), or the permit's areas and urban indicators (`urban/`). */
-  kind: 'door' | 'window' | 'all' | 'materials' | 'types' | 'finishes' | 'register' | 'urban';
-  createdAt: number;
-  /** Scale of its drawings (50 = 1:50). */
-  scale?: number;
-}
+/** A joinery schedule (door / window list): a project document of its own, placeable on sheets. The engine's type, so the headless project reader and the app read the same shape. */
+export type { ProjectSchedule } from '@bimvoice/ifcsheet';
 
-export interface ProjectDocument extends EngineDocument {
+/**
+ * The types of the document fields that live with their field (#144): a field file in `./fields/` adds its key here
+ * with `declare module '../types' { interface ProjectFieldTypes { ... } }`, next to its reader and its sample, so a
+ * new field does not edit this file. Type only: nothing runs. A field not yet moved is still declared below.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface ProjectFieldTypes {}
+
+export interface ProjectDocument extends EngineDocument, ProjectFieldTypes {
   /** Title block fields every sheet prints (project, client, drawn by, date, revision, logo…), filled once (`title-block.ts`). */
   titleBlock?: Record<string, string>;
-  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
-  titleBlockSources?: Record<string, TitleSource[]>;
-  /** The project's revisions, oldest first (`revisions.ts`); a sheet's table lists the ones it is named by. */
-  revisions?: ProjectRevision[];
   /** The user's own title block parameters, in order, each with its project-wide value (`title-block-params.ts`). */
   titleBlockParams?: TitleBlockParam[];
   /** The title block's layout once edited; absent: the standard layout (`title-block-template.ts`). */
@@ -84,6 +78,8 @@ export interface ProjectDocument extends EngineDocument {
   textStyles?: TextStyle[];
   dimStyles?: DimStyle[];
   layerGroups?: LayerGroup[];
+  /** The project's own line types (dash patterns in paper mm) layers and drafted lines can name; the built-in ones are in code. */
+  lineTypes?: CustomLineType[];
   /** The built-in graphic standard (pens and text sizes) the sheets draw with, by id (`drafting/graphic-standard.ts`); absent: the IfcSheet default. */
   graphicStandard?: string;
   /** Door and window opening symbols in elevation: apex at the handle (default, window makers' sketches) or at the hinges (DIN 1356). */
@@ -105,12 +101,6 @@ export interface ProjectDocument extends EngineDocument {
   sheetTemplates?: SheetTemplate[];
   /** The template new sheets of a series start from, by template id; a series without one is made on the smallest paper that fits. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
-  /** The site (plot) area in m² the user entered; absent: the model's IfcSite area, if it states one (`urban/`). */
-  siteArea?: number;
-  /** The urban indicators' terrain level, ±0.00 and the storeys left out of Ad for CUT (`urban/indicators.ts`). */
-  urbanSettings?: UrbanSettings;
-  /** A scan's levels as the user set them (name and floor height, drawing frame); its plans cut above them (`scan/`). Absent: no scan was drawn. */
-  scanLevels?: ScanLevel[];
   /** The project's structure profile library (retaining walls, tunnels, decks, barriers… and drawn shapes). */
   structureProfiles?: StructureProfile[];
   /** Road drawings: longitudinal profiles and cross-section sets. */
@@ -141,20 +131,9 @@ export interface ProjectDocument extends EngineDocument {
   sheetNumbering?: NumberingScheme;
   /** The model as the project last knew it: what a new version is compared with (`whatchanged/`). */
   modelState?: ModelSnapshot;
-  /** Review comments pinned on sheets (`review/`). */
-  comments?: ReviewComment[];
 }
 
-/** One revision of the set: a letter or number, when, what changed, who made it. */
-export interface ProjectRevision {
-  id: string;
-  /** `A`, `B`, `01`: what the title block reads. */
-  code: string;
-  /** `YYYY-MM-DD`, or empty. */
-  date: string;
-  description: string;
-  by: string;
-}
+export type { ProjectRevision } from './fields/revisions';
 
 // The issue records live with the issue code; re-exported so the document's types stay in one import.
 export type { IssuedSheet, ProjectIssue } from '@/issue/types';

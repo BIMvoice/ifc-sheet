@@ -28,6 +28,8 @@ import { getContributionCullConfig } from '../../utils/renderCullConfig.js';
 import { getLodScreenPx } from '../../utils/lodConfig.js';
 import { runGpuUpload } from './gpu-upload-guard';
 import { fieldTelemetry } from '@/lib/perf/fieldTelemetryLoader';
+import { isViewportCovered, onViewportCoverChange } from './viewport-cover';
+import { createRenderThrottle } from './render-throttle';
 /** Sun cast-shadow render options, driven by the Environment panel (#2670). */
 export interface SunShadowSettings {
   enabled: boolean;
@@ -140,36 +142,15 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
     let residencyRestoreErrorLogged = false;
     let renderErrorLogged = false;
 
-    // Adaptive render throttle: cap the continuous-render cadence (interaction
-    // + inertia) from the MEASURED cost of recent renders, not a triangle-count
-    // guess. The old tiers (25ms above 1M triangles, 33ms above 5M) capped
-    // orbiting at 40/30 fps even when frames were cheap — culling means a 6M-
-    // triangle model can render in a few ms, and the cap itself was the
-    // choppiness on CATIA-class models. renderer.render() wall time covers
-    // encoder work AND swap-chain backpressure (getCurrentTexture blocks when
-    // the GPU falls behind), so genuinely heavy scenes still degrade to the
-    // same 40/30 fps floors within a few frames; a 200K-mesh model that takes
-    // 30ms a frame cannot overwhelm the main thread any more than before.
-    let continuousThrottleMs = 0; // 0 = no throttle
-    let emaRenderMs = 0;          // EMA of render() wall time, rendered frames only
-
-    function updateThrottle(renderMs: number) {
-      emaRenderMs = emaRenderMs === 0 ? renderMs : renderMs * 0.2 + emaRenderMs * 0.8;
-      // Hysteresis ladder — engage above, release below, hold in between,
-      // so the cadence doesn't flap around a band edge mid-gesture.
-      if (emaRenderMs >= 26) {
-        continuousThrottleMs = 33; // ~30 fps
-      } else if (emaRenderMs >= 14) {
-        if (continuousThrottleMs !== 33 || emaRenderMs < 20) {
-          continuousThrottleMs = 25; // ~40 fps
-        }
-      } else if (emaRenderMs <= 10) {
-        continuousThrottleMs = 0;
-      }
-    }
+    const throttle = createRenderThrottle(); // adaptive cadence cap for continuous rendering
 
     const animate = (currentTime: number) => {
       if (aborted) return;
+      // Covered (the Wall is in front, #154): draw nothing and arm no further frame; `onViewportCoverChange` re-arms it.
+      if (isViewportCovered()) {
+        animationFrameRef.current = null;
+        return;
+      }
 
       const deltaTime = currentTime - lastFrameTimeRef.current;
       lastFrameTimeRef.current = currentTime;
@@ -191,6 +172,10 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
         }
       }
 
+      // 1a. The scene upload held back while the viewport was covered (#154) is owed to the first frame since it lifted.
+      const upDevice = renderer.getGPUDevice(); const upPipeline = renderer.getPipeline();
+      if (upDevice && upPipeline && scene.takeDeferredBatchUpload()
+        && runGpuUpload('rebuildPendingBatches:uncovered', () => { scene.rebuildPendingBatches(upDevice, upPipeline); return true; })) renderer.clearCaches();
       // 1b. Rebuild GPU-evicted batches the last frame asked for (residency
       // budget, issue #1682 phase 3a). Time-budgeted; requests a render so
       // the restored batches appear on the next frame. Guarded like the
@@ -234,8 +219,8 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
       // after mouseup, each requiring a full GPU render pass.
       const isContinuousRender = isInteractingRef.current || isAnimating;
       const throttled = isContinuousRender &&
-        continuousThrottleMs > 0 &&
-        (currentTime - lastRenderTime) < continuousThrottleMs;
+        throttle.ms > 0 &&
+        (currentTime - lastRenderTime) < throttle.ms;
       // Render continuously while the user is interacting (issue #1394), not
       // just when a pointermove happens to set the dirty flag. Pointer events
       // can arrive sparsely (coalesced / slow drag), which left the swap chain
@@ -275,7 +260,7 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
             isInteracting: isInteractingRef.current || isAnimating,
             // Let the effects governor judge missed frames against the
             // intentional large-model throttle instead of display refresh.
-            interactionFrameIntervalMs: continuousThrottleMs || undefined,
+            interactionFrameIntervalMs: throttle.ms || undefined,
             contributionCull,
             lod,
             buildingRotation: coordinateInfoRef.current?.buildingRotation,
@@ -313,7 +298,7 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
             );
           }
         }
-        updateThrottle(performance.now() - renderStart);
+        throttle.update(performance.now() - renderStart);
         lastRenderTime = currentTime;
         // Snapshot the renderer's current model bounds so the section
         // face-pick handler can compute a correct cardinal-fallback
@@ -384,11 +369,26 @@ export function useAnimationLoop(params: UseAnimationLoopParams): void {
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
+    // Pause while something covers the viewport and pick up on return. Nothing is lost: the renderer keeps its
+    // scene, camera and pending dirty flag; the mesh queue simply waits, and one render is asked for on the way back.
+    const offCover = onViewportCoverChange(() => {
+      if (aborted) return;
+      if (isViewportCovered()) {
+        if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      } else if (animationFrameRef.current === null) {
+        lastFrameTimeRef.current = performance.now(); // no jump in the camera's animation for the time spent hidden
+        renderer.requestRender();
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
+    });
+
     lastFrameTimeRef.current = performance.now();
-    animationFrameRef.current = requestAnimationFrame(animate);
+    if (!isViewportCovered()) animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
       aborted = true;
+      offCover();
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;

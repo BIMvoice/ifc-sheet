@@ -18,7 +18,7 @@ import { entitySkeleton } from '../annotation';
 import type { Pt } from '../types';
 import type { DraftCommandDef } from './types';
 
-const FIELDS: Record<string, TagField> = { MARK: 'mark', NAME: 'name', CLASS: 'class', TYPE: 'class' };
+const FIELDS: Record<string, TagField> = { MARK: 'mark', NAME: 'name', CLASS: 'class', TYPE: 'class', CODE: 'classification', CODETITLE: 'classificationTitle' };
 
 export const tagCommand: DraftCommandDef = {
   id: 'tag',

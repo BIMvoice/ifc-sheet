@@ -17,7 +17,9 @@ import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
+import { decimalsOf, lengthUnitOf, sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { textBlock, type TextFrame } from './text-block';
+import { naturalDecimals, unitFactor } from './styles';
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
 export interface DimensionLayout {
@@ -34,13 +36,15 @@ export interface DimensionLayout {
 const EXT_GAP = 0.1;
 const EXT_OVER = 0.15;
 
-export function formatLength(m: number): string {
-  return m.toFixed(2);
+export function formatLength(locale: SheetLocale, m: number): string {
+  // Metres with two decimals unless the project names its length unit (#88): then that unit, with the places such a unit is drawn to.
+  const unit = lengthUnitOf(locale, 'm');
+  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', naturalDecimals(unit)), { group: false });
 }
 
-export function formatLevel(m: number): string {
-  if (Math.abs(m) < 0.005) return '±0.00';
-  return `${m > 0 ? '+' : '−'}${Math.abs(m).toFixed(2)}`;
+/** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
+export function formatLevel(locale: SheetLocale, m: number): string {
+  return sheetLevel(locale, m, { minus: '−' });
 }
 
 function unit(v: Pt): Pt {
@@ -64,11 +68,17 @@ export interface LayoutOptions {
   extGap?: number;
   extOver?: number;
   format?: (metres: number) => string;
+  /**
+   * The language of the default `format`. Left out by the callers that read
+   * only the lines and the text position of a layout; whatever draws the
+   * label passes `format` itself.
+   */
+  locale?: SheetLocale;
 }
 
 /** A linear / aligned dimension: extension lines from the points to the dimension line through `at`. */
 function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text: string | undefined, o: LayoutOptions): DimensionLayout {
-  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? formatLength;
+  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
   let dir: Pt;
   if (variant === 'aligned') {
     dir = unit(sub(b, a));
@@ -96,7 +106,7 @@ function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text:
 }
 
 export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {
-  const format = o.format ?? formatLength;
+  const format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
   if (shape.type === 'dimension') {
     const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
     return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
@@ -132,7 +142,7 @@ export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimensi
     ticks: [],
     textAt: { x: shape.c.x + r * Math.cos(mid), y: shape.c.y + r * Math.sin(mid) },
     textAngle: mid + Math.PI / 2,
-    label: `${((Math.abs(sweep) * 180) / Math.PI).toFixed(1)}°`,
+    label: `${sheetNumber(o.locale ?? 'en', (Math.abs(sweep) * 180) / Math.PI, 1, { group: false })}°`,
   };
 }
 
@@ -146,10 +156,39 @@ export function setAnnotationScreenUp(sign: 1 | -1): void {
   screenUp = sign;
 }
 
+/**
+ * Run `fn` with the screen-up direction of the view an entity lives in, then
+ * put the session's back. Anything derived from an entity's text box (a
+ * leader's tip, a section symbol's letter) is measured with this, so it comes
+ * out the same whichever view the session happens to be looking at: on a page
+ * that has just opened a project, none.
+ */
+export function withAnnotationScreenUp<T>(sign: 1 | -1, fn: () => T): T {
+  const was = screenUp;
+  screenUp = sign;
+  try {
+    return fn();
+  } finally {
+    screenUp = was;
+  }
+}
+
 /** Which way drawing x runs on screen for the view being annotated (-1: mirrored, as in a side view). */
 let screenRight: 1 | -1 = 1;
 export function setAnnotationScreenRight(sign: 1 | -1): void {
   screenRight = sign;
+}
+export const annotationScreenRight = (): 1 | -1 => screenRight;
+
+/** Run `fn` as drafting on a view whose screen-up and screen-right are these, then put the session's back (the batch annotating views that are not open, #333). */
+export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): T {
+  const [wasUp, wasRight] = [screenUp, screenRight];
+  [screenUp, screenRight] = [up, right];
+  try {
+    return fn();
+  } finally {
+    [screenUp, screenRight] = [wasUp, wasRight];
+  }
 }
 
 /** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */

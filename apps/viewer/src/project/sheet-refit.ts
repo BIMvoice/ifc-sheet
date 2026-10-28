@@ -28,12 +28,12 @@ export function relaidOnPaper(sheet: ProjectSheet, views: readonly ProjectView[]
   const sizes = drawn.map(({ view }) => viewExtent(view, extent));
   const first = drawn[0]?.view;
   const scale = scaleOn(sizes, sheet, drawn.length === 1 && first?.detail ? first.scale : undefined);
-  const placed = new Map(placeViewports(drawn.map((d) => d.view), sizes, scale, sheet).map((p, i) => [drawn[i].vp.id, p] as const));
+  const placed = new Map(placeViewports(drawn.map((d) => d.view), sizes, scale, sheet, extent).map((p, i) => [drawn[i].vp.id, p] as const));
   return {
     ...sheet,
     viewports: vps.map((vp) => {
       const p = placed.get(vp.id);
-      return p ? { ...vp, x: p.x, y: p.y, scale, width: 0, height: 0 } : vp;
+      return p ? { ...vp, x: p.x, y: p.y, scale, width: 0, height: 0, center: vp.center ?? p.center } : vp;
     }),
   };
 }

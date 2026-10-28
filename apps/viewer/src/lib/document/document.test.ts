@@ -116,7 +116,7 @@ describe('bindings', () => {
     assert.equal(v('IfcProject.Description'), 'Desc');
     assert.equal(v('IfcSite.Name'), 'Site');
     assert.equal(v('IfcBuilding.Name'), 'Building');
-    assert.equal(v('IfcBuildingStorey["Level 2"].Elevation'), '3.00 m');
+    assert.equal(v('IfcBuildingStorey["Level 2"].Elevation'), '+3.00 m');
     assert.equal(v('IfcBuildingStorey[1].Name'), 'Level 1');
     assert.equal(v('IfcBuildingStorey["Level 1"].Elements'), '2');
     assert.equal(v(`Element[${WALL}].Name`), 'Wall A');

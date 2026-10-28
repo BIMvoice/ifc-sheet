@@ -38,7 +38,8 @@ function tokenFor(ref: FieldRef, pattern: string): string {
 /** A length is offered with its unit (it reads in metres), another fractional number with two decimals. */
 function field(ref: FieldRef, el: LabelElement, label: string, numeric = false): PickableField | null {
   const { value, length } = readFieldValue(ref, el);
-  const sample = formatValue(value, length ? { decimals: 3, thousands: false, unit: 'm' } : undefined);
+  // The field picker's sample in the editor; never printed on a sheet, so it keeps the pattern's own English spelling.
+  const sample = formatValue(value, length ? { decimals: 3, thousands: false, unit: 'm' } : undefined, 'en');
   if (sample === null) return null;
   const fractional = numeric && typeof value === 'number' && !Number.isInteger(value);
   return { token: tokenFor(ref, length ? '0.00 m' : fractional ? '0.00' : ''), label, sample };

@@ -16,7 +16,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
-import { drawingAsViewShows } from '@/project/view-appearance';
 import { useViewerStore } from '@/store';
 import { useIfc } from '@/hooks/useIfc';
 import { useDrawingGeneration } from '@/hooks/useDrawingGeneration';
@@ -25,6 +24,7 @@ import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useProjectStore } from '@/project/project-store';
 import { phaseHiddenIds, phaseViewOf } from '@/project/phase-view';
 import { sectionPlaneForView } from '@/project/view-plane';
+import { drawingShownBy } from '@/project/view-shown';
 import { dropViewDrawing, generatesFromModel, patchViewDrawing, planeKey, useViewDrawings, viewDisplayOverrides } from '@/project/view-drawings';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
@@ -83,13 +83,20 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
   // The generator's drawing is kept whole; the view stores it as it shows it (hidden lines, outline).
   const generated = useRef<Drawing2D | null>(null);
   const interior = view.kind === 'elevation' ? view.interior : undefined;
+  // A discipline plan is framed on what its filter keeps (#257); `drawingShownBy` is the one place that says how.
+  const discipline = view.kind === 'plan' ? view.discipline : undefined;
+  const disciplineLevel = view.kind === 'plan' ? view.level.elevation : undefined;
+  const shownOf = useCallback((d: Drawing2D) => drawingShownBy(view, d),
+    // `view` is read through `drawingShownBy`; it is re-read when one of the parts of it that decide the drawing changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view.kind, view.showHidden, view.detail, interior, discipline, disciplineLevel]);
   const setDrawing = useCallback((d: Drawing2D | null) => {
     generated.current = d;
-    patchViewDrawing(viewId, { drawing: d ? drawingAsViewShows(d, { kind: view.kind, showHidden: view.showHidden, detail: view.detail, interior }) : null });
-  }, [viewId, view.kind, view.showHidden, view.detail, interior]);
+    patchViewDrawing(viewId, { drawing: d ? shownOf(d) : null });
+  }, [viewId, shownOf]);
   useEffect(() => {
-    if (generated.current) patchViewDrawing(viewId, { drawing: drawingAsViewShows(generated.current, { kind: view.kind, showHidden: view.showHidden, detail: view.detail, interior }) });
-  }, [viewId, view.kind, view.showHidden, view.detail, interior]);
+    if (generated.current) patchViewDrawing(viewId, { drawing: shownOf(generated.current) });
+  }, [viewId, shownOf]);
   const setDrawingStatus = useCallback((status: 'idle' | 'generating' | 'ready' | 'error') => patchViewDrawing(viewId, { status }), [viewId]);
   const setDrawingProgress = useCallback((progress: number, phase: string) => patchViewDrawing(viewId, { progress, phase }), [viewId]);
   const setDrawingError = useCallback((error: string | null) => patchViewDrawing(viewId, { error, ...(error ? { status: 'error' as const } : {}) }), [viewId]);

@@ -21,10 +21,12 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
 import { totalYupOffset } from '@/lib/geo/coordinate-frame';
 import type { SectionAxisName, Vec3 } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
-import { formatLocaleNumber, useTranslation } from '@/i18n';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { useTranslation } from '@/i18n';
 import { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from './true-north';
 import { drawingPointToLocal, drawingPointToMap, type MapAnchor } from './map-coordinates';
 import type { LiveSymbolContext } from './live-symbols';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 export interface SiteFrame {
   /** True north in project XY: the model's TrueNorth, else grid north of its map conversion, else `null` (project north, +Y). */
@@ -64,9 +66,6 @@ export function useSiteFrame(): SiteFrame {
   }, [anchor, models, legacyStore, legacyInfo]);
 }
 
-/** Map coordinates are printed to the centimetre. */
-const COORDINATE_DIGITS = { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false } as const;
-
 /** Builds the coordinate label lines, given how to translate them. */
 export type CoordinateLabeller = (kind: 'map' | 'local', a: string, b: string) => string[];
 
@@ -76,9 +75,10 @@ export type CoordinateLabeller = (kind: 'map' | 'local', a: string, b: string) =
  */
 export function liveSymbolContext(
   frame: SiteFrame, plane: SectionPlaneConfig | null | undefined, axis: SectionAxisName, scale: number,
-  locale: string, label: CoordinateLabeller,
+  locale: SheetLocale, label: CoordinateLabeller,
 ): LiveSymbolContext {
-  const fmt = (v: number) => formatLocaleNumber(locale, v, COORDINATE_DIGITS);
+  /** Map coordinates are printed to the centimetre, ungrouped. */
+  const fmt = (v: number) => sheetNumber(locale, v, 2, { group: false });
   const coordinates = plane
     ? (p: Pt): string[] => {
         if (frame.anchor) {
@@ -94,14 +94,15 @@ export function liveSymbolContext(
     // No north stated: project north (+Y) is the model's only claim.
     north: plane ? northArrowRotation(plane, axis, frame.north ?? { x: 0, y: 1 }) : null,
     coordinates,
-    format: (v) => formatLocaleNumber(locale, v, { maximumFractionDigits: 2 }),
+    format: (v) => sheetNumber(locale, v, 2, { trim: true }),
   };
 }
 
 /** `liveSymbolContext` with the active locale and the coordinate labels translated. */
 export function useLiveSymbolContext(plane: SectionPlaneConfig | null | undefined, axis: SectionAxisName, scale: number): LiveSymbolContext {
   const frame = useSiteFrame();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
   return useMemo(() => liveSymbolContext(frame, plane, axis, scale, locale, (kind, a, b) => (kind === 'map'
     ? [t('site.coordinates.e', { value: a }), t('site.coordinates.n', { value: b })]
     : [t('site.coordinates.x', { value: a }), t('site.coordinates.y', { value: b })])), [frame, plane, axis, scale, locale, t]);

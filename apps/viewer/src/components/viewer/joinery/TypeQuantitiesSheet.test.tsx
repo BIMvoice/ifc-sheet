@@ -15,6 +15,7 @@ import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { startDrawingSet, addScheduleToSet } from '@/project/drawing-set-actions';
+import { updateViewport } from '@/project/sheets';
 import { typeQuantities } from '@/joinery/type-quantities';
 import { collectTypeElements } from '@/joinery/type-quantities-models';
 import { WallSheet } from '../wall/WallSheet';
@@ -62,5 +63,37 @@ describe('quantities by type on a sheet', () => {
       assert.ok(dxf.includes(r.typeName!), `${r.typeName} in the DXF`);
       assert.ok(dxf.includes(r.total.volume!.toFixed(2)), `${r.typeName} volume in the DXF`);
     }
+  });
+
+  // #186: a box shorter than the table continues it on A-6xx.1…, the sheet's own effect adding the sheets, and each page holds its rows.
+  it('continues on further sheets when its viewport is shorter than the table, every type on one page', async () => {
+    const store = await parseStep(new Uint8Array(readFileSync(new URL('../../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url))));
+    useViewerStore.setState({ models: new Map([['fzk', { id: 'fzk', name: 'fzk', ifcDataStore: store, visible: true } as never]]) });
+    startDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } });
+    const sheetId = addScheduleToSet('types', 'Quantities by type');
+    const first = useProjectStore.getState().sheets.find((s) => s.id === sheetId)!;
+    const vp = first.viewports![0];
+    assert.ok(vp.width > 0 && vp.height > 0, 'hung with a box: the drawing area');
+    // A box 40 mm tall holds a few lines of a table that has more.
+    updateViewport(first.id, vp.id, { height: 40, y: vp.y - vp.height / 2 + 20 });
+    const held = () => useProjectStore.getState().sheets.filter((s) => (s.viewports ?? []).some((v) => v.viewId === vp.viewId)).sort((a, b) => a.number.localeCompare(b.number));
+    const pagesText = held().map((sheet) => {
+      const ui = render(<WallSheet sheet={sheet} width={1000} />);
+      const svg = ui.querySelector<SVGSVGElement>(`svg[data-sheet-id="${sheet.id}"]`)!;
+      const text = sheetSvgText(svg, sheet);
+      cleanup();
+      return text;
+    });
+    assert.ok(held().length > 1, `the table continues on further sheets (${held().length})`);
+    assert.equal(pagesText.length, 1, 'only the first sheet existed when it was drawn; the effect added the rest');
+    const all = held().map((sheet) => {
+      const ui = render(<WallSheet sheet={sheet} width={1000} />);
+      const text = sheetSvgText(ui.querySelector<SVGSVGElement>(`svg[data-sheet-id="${sheet.id}"]`)!, sheet);
+      cleanup();
+      return text;
+    });
+    const walls = typeQuantities(collectTypeElements()).rows.filter((r) => r.className === 'IfcWallType');
+    for (const r of walls) assert.equal(all.filter((t) => t.includes(`>${r.typeName}<`)).length, 1, `${r.typeName} is on exactly one page`);
+    assert.ok(all.every((t) => t.includes('Quantities by type')), 'every page carries the title');
   });
 });

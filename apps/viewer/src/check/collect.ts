@@ -8,7 +8,9 @@ import { labelTargets } from '@/labels/label-all';
 import { viewElements } from '@/labels/view-elements';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
+import { snapshotElements } from '@/whatchanged/snapshot';
 import { effectiveTitleBlock } from '@/project/title-block-model';
+import { useViewerStore } from '@/store';
 import { useViewDrawings } from '@/project/view-drawings';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
@@ -27,10 +29,25 @@ function planElements(viewId: string): PlanElement[] | null {
   return [...openings, ...rooms];
 }
 
+/** What the recorded model state (the reference WHATCHANGED compares with) knew of an element: its name and class. */
+function lastKnown(guid: string): { name?: string; className?: string } | undefined {
+  const state = useProjectStore.getState().modelState;
+  if (!state) return undefined;
+  try {
+    const e = snapshotElements(state).find((x) => x.k === guid);
+    return e ? { ...(e.n ? { name: e.n } : {}), className: e.t.replace(/^Ifc/i, '') } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether any model has data to look an element up in: before that every GlobalId is unknown, and none of them is gone (a typed cell value must not be called orphaned then). */
+const modelsLoaded = (): boolean => [...useViewerStore.getState().models.values()].some((m) => m.ifcDataStore);
+
 export function collectInput(): CheckInput {
-  const { views, sheets, drafts, name } = useProjectStore.getState();
+  const { views, sheets, drafts, name, schedules } = useProjectStore.getState();
   const titleBlock = effectiveTitleBlock();
-  return { views, sheets, drafts, titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null };
+  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
 }
 
 /** What is missing from the project as it stands. */

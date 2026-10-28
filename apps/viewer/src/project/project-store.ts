@@ -12,27 +12,30 @@
  * lives in `open-view.ts` / `project-sync.ts`.
  */
 
-import { resolve } from '@/i18n/registry';
-import { DEFAULT_JOINERY_MAPPING } from '@/joinery/symbol-mapping';
+import { resolve, setProjectNameLanguageSource } from '@/i18n/registry';
 import { setSymbolLibrary } from '@/drafting/symbols';
-import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { relabelSectionSymbol } from '@/drafting/section-symbol';
 import { settleDetailMarks } from '@/drafting/detail-mark';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { resetWallView } from '@/wall/wall-view';
 import { create } from 'zustand';
+import { draftsAtViewScale } from './viewport-annotation';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf } from './numbering';
 import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
-import { upgradeTagAllTypes } from '@/tagall/types';
+import { DEFAULT_DRAFT_LAYER, DOCUMENT_FIELDS, emptyDocument, loadedFields } from './fields';
 import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
 import { warnUnknownGraphicStandard } from './graphic-standard-notice';
+import { readHandoverPattern } from '@bimvoice/ifcsheet/handover';
+import { assignDefaultTemplates, type PacIntervention, type PacMode, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { defaultViews, freshProjectId, levelsFromStoreys, syncDefaultViews, uniqueViewName, type StoreyInput } from './view-defaults';
 import type { NewProjectView, ProjectViewPatch, ProjectDocument, ProjectLevel, ProjectModelRef, ProjectSheet, ProjectView, NumberGroup, NumberingScheme } from './types';
 import type { UrbanSettings } from '@/urban/indicators';
+import { readUnitsAndNumbers, type UnitsAndNumbers } from '@bimvoice/ifcsheet/names';
 
 export interface ProjectState extends ProjectDocument {
   /** Levels of the currently loaded models (derived, never persisted). */
@@ -43,14 +46,10 @@ export interface ProjectState extends ProjectDocument {
   dirty: boolean;
 }
 
-export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
+export { DEFAULT_DRAFT_LAYER };
 
-export const EMPTY_PROJECT: ProjectDocument = {
-  name: 'Untitled project', models: [], views: [], sheets: [], titleBlock: {}, titleBlockSources: undefined, revisions: [], titleBlockParams: undefined, titleBlockTemplate: undefined, drafts: [], draftLayers: [{ ...DEFAULT_DRAFT_LAYER }], hatchPatterns: '', symbolFlips: {},
-  textStyles: [{ ...DEFAULT_TEXT_STYLE }], dimStyles: [{ ...DEFAULT_DIM_STYLE }], layerGroups: [],
-  joineryTypes: [], currentJoinery: {}, joineryMapping: { ...DEFAULT_JOINERY_MAPPING }, elementTypes: [], currentTypes: {}, schedules: [], structureProfiles: [], civilDrawings: [], typicalSections: [], materials: [], cadLayers: [], savedSectionCuts: [], sheetTemplates: [], seriesTemplates: {},
-  annotationTypes: [], symbols: [], legends: [], details: [], issues: [], comments: [], modelState: undefined, tagFields: undefined, sheetNumbering: undefined, phaseSource: undefined, graphicStandard: undefined, siteArea: undefined, urbanSettings: undefined, scanLevels: undefined,
-};
+/** A new project. Built from the field registry (`fields/index.ts`), which says what each field holds in one. */
+export const EMPTY_PROJECT: ProjectDocument = emptyDocument();
 
 export const useProjectStore = create<ProjectState>()(() => ({
   ...EMPTY_PROJECT,
@@ -59,61 +58,29 @@ export const useProjectStore = create<ProjectState>()(() => ({
   dirty: false,
 }));
 
+// Names the app generates later are in the language the project recorded when its names were first made, whatever the interface shows.
+setProjectNameLanguageSource(() => useProjectStore.getState().language);
+
 // Symbol instances look their definition up in this library (`drafting/symbols.ts`): keep it the project's.
 useProjectStore.subscribe((s, previous) => {
   if (s.symbols !== previous.symbols) setSymbolLibrary(s.symbols);
 });
 
-/** Every field of the project document, once: a field added to `ProjectDocument` and not listed here does not compile. */
-const DOCUMENT_FIELDS = {
-  name: true, models: true, views: true, sheets: true, titleBlock: true, drafts: true, draftLayers: true, hatchPatterns: true,
-  symbolFlips: true, openingLines: true, textStyles: true, dimStyles: true, layerGroups: true, joineryTypes: true, currentJoinery: true,
-  schedules: true, joineryMapping: true, elementTypes: true, currentTypes: true, structureProfiles: true, civilDrawings: true,
-  typicalSections: true, materials: true, savedSectionCuts: true, annotationTypes: true, symbols: true, legends: true, issues: true,
-  modelState: true,
-  cadLayers: true,
-  details: true,
-  tagFields: true,
-  sheetTemplates: true,
-  seriesTemplates: true,
-  titleBlockSources: true,
-  titleBlockParams: true,
-  titleBlockTemplate: true,
-  sheetNumbering: true,
-  phaseSource: true,
-  graphicStandard: true,
-  comments: true,
-  revisions: true,
-  siteArea: true,
-  urbanSettings: true,
-  scanLevels: true,
-} as const satisfies Record<keyof ProjectDocument, true>;
-
 /**
  * The fields the project file, the autosave and the change detection all go by: `projectDocument` builds the
  * document from them and `autosave-watch.ts` saves when any of them changes, so the two cannot name different fields.
+ * Listed once, in file order, in `fields/index.ts`: a field added to `ProjectDocument` and not listed there does not compile.
  */
-export const PROJECT_DOCUMENT_KEYS = Object.keys(DOCUMENT_FIELDS) as (keyof ProjectDocument)[];
+export const PROJECT_DOCUMENT_KEYS = DOCUMENT_FIELDS.map((field) => field.key);
 
-/** What a field holds when the store has none (an older file, a project not yet touched). */
-const DOCUMENT_DEFAULTS: { [K in keyof ProjectDocument]?: () => ProjectDocument[K] } = {
-  titleBlock: () => ({}), hatchPatterns: () => '', symbolFlips: () => ({}), openingLines: () => 'handle',
-  textStyles: () => [], dimStyles: () => [], layerGroups: () => [], joineryTypes: () => [], currentJoinery: () => ({}),
-  schedules: () => [], joineryMapping: () => ({ ...DEFAULT_JOINERY_MAPPING }), elementTypes: () => [], currentTypes: () => ({}),
-  structureProfiles: () => [], civilDrawings: () => [], typicalSections: () => [], materials: () => [], savedSectionCuts: () => [],
-  annotationTypes: () => [], symbols: () => [], legends: () => [], issues: () => [],
-  cadLayers: () => [],
-  details: () => [],
-  sheetTemplates: () => [], seriesTemplates: () => ({}),
-  comments: () => [],
-  revisions: () => [],
-};
+/** What a field holds when the store has none (an older file, a project not yet touched): each field's `fallback`. */
+const DOCUMENT_DEFAULTS = new Map(DOCUMENT_FIELDS.flatMap((field) => (field.fallback ? [[field.key, field.fallback] as const] : [])));
 
 /** The persisted part of the store. */
 export function projectDocument(state: ProjectState = useProjectStore.getState()): ProjectDocument {
   const doc: Record<string, unknown> = {};
   for (const key of PROJECT_DOCUMENT_KEYS) {
-    const value = state[key] ?? DOCUMENT_DEFAULTS[key]?.();
+    const value = state[key] ?? DOCUMENT_DEFAULTS.get(key)?.();
     if (value !== undefined) doc[key] = value;
   }
   return doc as unknown as ProjectDocument;
@@ -123,6 +90,21 @@ export function projectDocument(state: ProjectState = useProjectStore.getState()
  * Replace the document (file import, autosave restore). Only the document: noting a file as the last
  * one opened for these models is the caller's (`openProjectDocument` in `project-file.ts`).
  */
+/**
+ * `after` with each view that is not in `before` given the project's default template for its kind (#44), when the project has one
+ * (`assignDefaultTemplates`: a view that has a template, or is of no kind a template is for, is left alone; a project with no
+ * templates, an older one, assigns none). The ONE place a view made after the set was built takes its template: every way a view is
+ * made (`addProjectView`, a copy, a plan for a level that appears later, a section on a plan, Add a drawing, the levels folder, a set
+ * built from a template) ends here, so no path can forget it.
+ */
+export function withDefaultTemplates<V extends ProjectView>(before: readonly ProjectView[], after: readonly V[], templates: readonly ProjectViewTemplate[] | undefined): V[] {
+  if (!templates || templates.length === 0) return [...after];
+  const known = new Set<ProjectView>(before);
+  const fresh = assignDefaultTemplates(after.filter((v) => !known.has(v)), templates);
+  let next = 0;
+  return after.map((v) => (known.has(v) ? v : fresh[next++]!));
+}
+
 export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: boolean } = {}): void {
   const { levels } = useProjectStore.getState();
   // Saved before the title block was the project's: each sheet's copy becomes the project's.
@@ -134,46 +116,11 @@ export function loadProjectDocument(saved: ProjectDocument, options: { dirty?: b
   resetWallView();
   useProjectStore.setState({
     ...doc,
-    symbolFlips: doc.symbolFlips ?? {},
-    openingLines: doc.openingLines ?? 'handle',
-    textStyles: doc.textStyles?.length ? doc.textStyles : [{ ...DEFAULT_TEXT_STYLE }],
-    dimStyles: doc.dimStyles?.length ? doc.dimStyles : [{ ...DEFAULT_DIM_STYLE }],
-    layerGroups: doc.layerGroups ?? [],
-    joineryTypes: doc.joineryTypes ?? [],
-    currentJoinery: doc.currentJoinery ?? {},
-    joineryMapping: doc.joineryMapping ?? { ...DEFAULT_JOINERY_MAPPING },
-    elementTypes: doc.elementTypes ?? [],
-    currentTypes: doc.currentTypes ?? {},
-    schedules: doc.schedules ?? [],
-    structureProfiles: doc.structureProfiles ?? [],
-    civilDrawings: doc.civilDrawings ?? [],
-    typicalSections: doc.typicalSections ?? [],
-    materials: doc.materials ?? [],
-    cadLayers: doc.cadLayers ?? [],
-    savedSectionCuts: doc.savedSectionCuts ?? [],
-    sheetTemplates: doc.sheetTemplates ?? [],
-    seriesTemplates: doc.seriesTemplates ?? {},
-    phaseSource: doc.phaseSource,
-    // A project made before the room label read the tag name takes the new template (`tagall/types.ts`).
-    annotationTypes: upgradeTagAllTypes(doc.annotationTypes ?? []),
-    symbols: doc.symbols ?? [],
-    legends: doc.legends ?? [],
-    details: doc.details ?? [],
-    issues: doc.issues ?? [],
-    tagFields: doc.tagFields,
-    sheetNumbering: doc.sheetNumbering,
-    comments: doc.comments ?? [],
-    revisions: doc.revisions ?? [],
-    modelState: doc.modelState,
-    titleBlockSources: doc.titleBlockSources,
-    titleBlockParams: doc.titleBlockParams,
-    titleBlockTemplate: doc.titleBlockTemplate,
+    // Each field's own load step (`fields/index.ts`): its default when the file has none, and any lift of an older form.
+    ...loadedFields(doc),
     graphicStandard: standard.id,
-    siteArea: doc.siteArea,
-    urbanSettings: doc.urbanSettings,
-    scanLevels: doc.scanLevels,
     draftLayers: doc.draftLayers.length > 0 ? doc.draftLayers : [{ ...DEFAULT_DRAFT_LAYER }],
-    views: [...syncDefaultViews(doc.views, levels)],
+    views: withDefaultTemplates(doc.views, syncDefaultViews(doc.views, levels), doc.viewTemplates),
     activeItemId: null,
     dirty: options.dirty ?? false,
   });
@@ -193,7 +140,7 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
   useProjectStore.setState({
     levels,
     models: modelsChanged ? mergeModels(state.models, models) : state.models,
-    views: views === state.views ? state.views : [...views],
+    views: views === state.views ? state.views : withDefaultTemplates(state.views, views, state.viewTemplates),
     dirty: state.dirty || views !== state.views || modelsChanged,
   });
 }
@@ -202,6 +149,65 @@ export function syncProjectWithModels(models: ProjectModelRef[], storeys: readon
 export function setProjectSiteArea(area: number | null): void {
   const siteArea = area !== null && Number.isFinite(area) && area > 0 ? area : undefined;
   if (siteArea !== useProjectStore.getState().siteArea) useProjectStore.setState({ siteArea, dirty: true });
+}
+
+/** "Include far-away elements in framing" (`@bimvoice/ifcsheet` `framing.ts`): off is stored as absent, so a project that never touched it saves exactly as before. */
+export function setIncludeFarElements(on: boolean): void {
+  if (on !== (useProjectStore.getState().includeFarElements === true)) useProjectStore.setState({ includeFarElements: on ? true : undefined, dirty: true });
+}
+
+/** The pattern the handover package names its files by (`@bimvoice/ifcsheet/handover`); empty or unusable goes back to the default, stored as absent. */
+export function setHandoverPattern(pattern: string): void {
+  const next = readHandoverPattern(pattern);
+  if (next !== useProjectStore.getState().handoverPattern) useProjectStore.setState({ handoverPattern: next, dirty: true });
+}
+
+/** The works the permit project (PAC) is for; a new building is the default and is stored as absent, so a project that never chose saves as before. */
+export function setPacIntervention(works: PacIntervention): void {
+  const next = works === 'new' ? undefined : works;
+  if (next !== useProjectStore.getState().pacIntervention) useProjectStore.setState({ pacIntervention: next, dirty: true });
+}
+
+/** The permit pack a project follows: the full permit project (the default), the rural one (`pacMode`), or the Norwegian building application (`norwayPermit`). */
+export type PermitPack = 'pacFull' | 'pacRural' | 'norway';
+
+/** The pack of a project's two fields; a file that somehow holds both reads as Norway, so every part of the app agrees on one. */
+export function permitPackOf(s: { norwayPermit?: true; pacMode?: PacMode }): PermitPack {
+  return s.norwayPermit === true ? 'norway' : s.pacMode === 'rural' ? 'pacRural' : 'pacFull';
+}
+
+/**
+ * Choose the permit pack: ONE of the three, written to both fields in one update so they cannot both be on. The default pack and
+ * "Norway off" are stored as absent, so a project that never chose saves as before.
+ */
+export function setPermitPack(pack: PermitPack): void {
+  const state = useProjectStore.getState();
+  const norwayPermit = pack === 'norway' ? true as const : undefined;
+  const pacMode = pack === 'pacRural' ? 'rural' as const : undefined;
+  if (norwayPermit !== state.norwayPermit || pacMode !== state.pacMode) useProjectStore.setState({ norwayPermit, pacMode, dirty: true });
+}
+
+/** Whether the project is a Norwegian building application (byggesak). On turns the PAC mode off; off goes back to the full permit project. */
+export function setNorwayPermit(on: boolean): void {
+  const pack = permitPackOf(useProjectStore.getState());
+  setPermitPack(on ? 'norway' : pack === 'norway' ? 'pacFull' : pack);
+}
+
+/** Which PAC permit project the project makes; choosing one turns the Norwegian mode off. */
+export function setPacMode(mode: PacMode): void {
+  setPermitPack(mode === 'rural' ? 'pacRural' : 'pacFull');
+}
+
+/**
+ * Change the project's units and number format (#88). A field set to undefined goes back to following the language and the
+ * drawing's own style; a setting with nothing left is stored as absent, so a project that never needed it saves as before.
+ */
+export function setUnitsAndNumbers(patch: Partial<UnitsAndNumbers>): void {
+  const merged: UnitsAndNumbers = { ...useProjectStore.getState().unitsAndNumbers, ...patch };
+  const decimals = Object.fromEntries(Object.entries(merged.decimals ?? {}).filter(([, v]) => v !== undefined));
+  for (const key of Object.keys(merged) as (keyof UnitsAndNumbers)[]) if (merged[key] === undefined) delete merged[key];
+  if (Object.keys(decimals).length) merged.decimals = decimals; else delete merged.decimals;
+  useProjectStore.setState({ unitsAndNumbers: readUnitsAndNumbers(merged), dirty: true });
 }
 
 /** Change the urban indicators' settings; a field set to undefined goes back to its default. */
@@ -233,19 +239,34 @@ export function toggleSymbolFlips(globalIds: readonly string[], bit: 1 | 2): voi
   useProjectStore.setState({ symbolFlips: flips, dirty: true });
 }
 
+/** Each edit below is one undo step (#51): `runAsOneUndoStep` keeps a call made inside another step part of it. */
+function asStep<T>(edit: () => T): T {
+  let result!: T;
+  runAsOneUndoStep(() => { result = edit(); });
+  return result;
+}
+export const renameProjectItem = (id: string, name: string): void => asStep(() => renameProjectItemNow(id, name));
+export const updateProjectView = (id: string, patch: ProjectViewPatch): void => asStep(() => updateProjectViewNow(id, patch));
+export const removeProjectItem = (id: string): void => asStep(() => removeProjectItemNow(id));
+export const addProjectSheet = (name = 'Unnamed', group?: NumberGroup, templateId?: string): string => asStep(() => addProjectSheetNow(name, group, templateId));
+export const duplicateProjectSheet = (id: string): string | null => asStep(() => duplicateProjectSheetNow(id));
+export const addProjectView = (view: NewProjectView): string => asStep(() => addProjectViewNow(view));
+export const duplicateProjectView = (id: string): string | null => asStep(() => duplicateProjectViewNow(id));
+export const setSheetNumber = (id: string, number: string): void => asStep(() => setSheetNumberNow(id, number));
+
 export function setActiveProjectItem(id: string | null): void {
   useProjectStore.setState({ activeItemId: id });
 }
 
-export function addProjectView(view: NewProjectView): string {
+function addProjectViewNow(view: NewProjectView): string {
   const state = useProjectStore.getState();
   const id = view.id ?? freshProjectId('view');
   const created = { ...view, id, name: uniqueViewName(view.name, state.views), createdAt: Date.now() } as ProjectView;
-  useProjectStore.setState({ views: [...state.views, created], dirty: true });
+  useProjectStore.setState({ views: withDefaultTemplates(state.views, [...state.views, created], state.viewTemplates), dirty: true });
   return id;
 }
 
-export function renameProjectItem(id: string, name: string): void {
+function renameProjectItemNow(id: string, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) return;
   const state = useProjectStore.getState();
@@ -274,16 +295,16 @@ export function renameProjectItem(id: string, name: string): void {
 }
 
 /** Change a view's settings (cut height, view depth, section plane…). Its id and kind never change. */
-export function updateProjectView(id: string, patch: ProjectViewPatch): void {
+function updateProjectViewNow(id: string, patch: ProjectViewPatch): void {
   const state = useProjectStore.getState();
-  if (!state.views.some((v) => v.id === id)) return;
-  useProjectStore.setState({
-    views: state.views.map((v) => (v.id === id ? ({ ...v, ...patch, id: v.id, kind: v.kind } as ProjectView) : v)),
-    dirty: true,
-  });
+  const before = state.views.find((v) => v.id === id);
+  if (!before) return;
+  // A new scale re-expresses the view's annotation sizes (stored in model metres) so they keep their paper size (#488).
+  const drafts = draftsAtViewScale(state.drafts, id, before.scale, patch.scale);
+  useProjectStore.setState({ views: state.views.map((v) => (v.id === id ? ({ ...v, ...patch, id: v.id, kind: v.kind } as ProjectView) : v)), drafts, dirty: true });
 }
 
-export function duplicateProjectView(id: string): string | null {
+function duplicateProjectViewNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.views.find((v) => v.id === id);
   if (!source) return null;
@@ -293,11 +314,11 @@ export function duplicateProjectView(id: string): string | null {
   if (clone.detail) clone.detail = { ...clone.detail, number: nextDetailNumber(state.views) };
   const copy = { ...clone, id: freshProjectId('view'), name: uniqueViewName(`${source.name} Copy`, state.views), auto: false, createdAt: Date.now() };
   const at = state.views.indexOf(source) + 1;
-  useProjectStore.setState({ views: [...state.views.slice(0, at), copy, ...state.views.slice(at)], dirty: true });
+  useProjectStore.setState({ views: withDefaultTemplates(state.views, [...state.views.slice(0, at), copy, ...state.views.slice(at)], state.viewTemplates), dirty: true });
   return copy.id;
 }
 
-export function removeProjectItem(id: string): void {
+function removeProjectItemNow(id: string): void {
   const state = useProjectStore.getState();
   useProjectStore.setState({
     views: state.views.filter((v) => v.id !== id),
@@ -323,7 +344,7 @@ export const numberingScheme = (state: Pick<ProjectDocument, 'sheetNumbering'> =
  * next plan number until a view is placed on it, then it is numbered by what
  * it holds. It starts from the template if one is named.
  */
-export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateId?: string): string {
+function addProjectSheetNow(name: string, group: NumberGroup | undefined, templateId: string | undefined): string {
   const state = useProjectStore.getState();
   const series = group ?? 'plans';
   const template = findTemplate(templateId, state.sheetTemplates);
@@ -333,7 +354,7 @@ export function addProjectSheet(name = 'Unnamed', group?: NumberGroup, templateI
 }
 
 /** Copy a sheet under the next free number, right after it. */
-export function duplicateProjectSheet(id: string): string | null {
+function duplicateProjectSheetNow(id: string): string | null {
   const state = useProjectStore.getState();
   const source = state.sheets.find((s) => s.id === id);
   if (!source) return null;
@@ -347,7 +368,7 @@ export function duplicateProjectSheet(id: string): string | null {
   return copy.id;
 }
 
-export function setSheetNumber(id: string, number: string): void {
+function setSheetNumberNow(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
   useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));

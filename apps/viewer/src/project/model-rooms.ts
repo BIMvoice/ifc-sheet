@@ -10,11 +10,14 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { IfcTypeEnum, type SpatialNode } from '@ifc-lite/data';
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { storeyOfElement } from '@/project/effective-storey';
-import { createEntityBoundsLookup, unionEntityBounds, type BoundingBox3D } from '@/utils/viewportUtils';
+import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUtils';
+import { farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
+import type { FarElementFact } from '@bimvoice/ifcsheet/readiness';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals';
 import type { ProjectLevel } from './types';
@@ -55,9 +58,11 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
     const offset = model.idOffset ?? 0;
     const storeys = findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''));
     const storeyIds = new Set(storeys.map((n) => n.expressId));
-    for (const space of storeys.flatMap((n) => spacesUnder(n))) {
-      const b = boundsOf(space.expressId + offset);
-      if (b) rooms.push({ name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+    for (const storey of storeys) {
+      for (const space of spacesUnder(storey)) {
+        const b = boundsOf(space.expressId + offset);
+        if (b) rooms.push({ id: store.entities.getGlobalId(space.expressId) || `${modelId}#${space.expressId}`, storey: storey.longName || storey.name || undefined, name: space.longName || space.name || `Room ${space.expressId}`, ...footprint(b) });
+      }
     }
     const mv = s.mutationViews.get(modelId) ?? null;
     for (const { expressId } of iterateEffectiveEntityIds(store, mv, ['IFCSTAIR', 'IFCSTAIRFLIGHT'])) {
@@ -70,24 +75,49 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
   return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs };
 }
 
+/** The building's frame and the small elements it leaves out for lying far from it, named for a message. */
+export interface BuildingFraming {
+  extent: AxisBounds | null;
+  far: FarElementFact[];
+}
+
 /**
  * The extent of the building itself: what the storeys of `levels` contain,
- * without the site, terrain or anything else around it. The set's scales and
- * the sections' cuts are measured on it; `null` when no storey element has
- * geometry yet.
+ * without the site, terrain or anything else around it, and without the small
+ * stray elements far from it (a survey point, an origin cube: `frameEntities`
+ * in `@bimvoice/ifcsheet`, the rule the command line frames by too). The set's
+ * scales and the sections' cuts are measured on it; `extent` is `null` when no
+ * storey element has geometry yet. With `includeFar` (the project setting
+ * "include far-away elements in framing") nothing is left out.
  */
-export function buildingExtent(levels: readonly ProjectLevel[], meshes: MeshData[] | null): AxisBounds | null {
+export function buildingFraming(levels: readonly ProjectLevel[], meshes: MeshData[] | null, includeFar = false): BuildingFraming {
   const s = useViewerStore.getState();
   const wanted = new Set(levels.flatMap((l) => l.storeyGlobalIds));
   const ids: number[] = [];
+  const owner = new Map<number, { store: IfcDataStore; expressId: number }>();
   for (const model of s.models.values()) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
     if (!store || !hierarchy || model.visible === false) continue;
     const offset = model.idOffset ?? 0;
     for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''))) {
-      for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) ids.push(id + offset);
+      for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) {
+        ids.push(id + offset);
+        owner.set(id + offset, { store, expressId: id });
+      }
     }
   }
-  return ids.length ? unionEntityBounds(meshes, ids, () => null) : null;
+  if (ids.length === 0) return { extent: null, far: [] };
+  const framing = frameEntities(meshes, ids, { includeFar });
+  const far = framing.farElements.map((f) => {
+    const at = owner.get(f.key);
+    const label = at ? farElementLabel({ name: at.store.entities.getName(at.expressId), type: at.store.entities.getTypeName(at.expressId), globalId: at.store.entities.getGlobalId(at.expressId) }) : `#${f.key}`;
+    return { label, distance: f.distance };
+  });
+  return { extent: framing.extent, far };
+}
+
+/** {@link buildingFraming}'s extent. */
+export function buildingExtent(levels: readonly ProjectLevel[], meshes: MeshData[] | null, includeFar = false): AxisBounds | null {
+  return buildingFraming(levels, meshes, includeFar).extent;
 }

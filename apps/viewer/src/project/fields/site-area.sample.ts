@@ -1,0 +1,10 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { ProjectDocument } from '../types';
+
+/** A value of `siteArea` that is not its default: the round trip test (`../project-roundtrip.test.ts`) puts every field's sample in one project. */
+export const sample = {
+  siteArea: 1250.5,
+} satisfies Required<Pick<ProjectDocument, 'siteArea'>>;

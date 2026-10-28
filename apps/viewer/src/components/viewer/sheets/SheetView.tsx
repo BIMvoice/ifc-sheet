@@ -12,6 +12,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '@/project/project-store';
 import { addViewport, paperOf, removeViewport, updateViewport } from '@/project/sheets';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { capturePointer } from '@/lib/pointer-capture';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
@@ -24,7 +25,8 @@ import { exportSheetDxf } from './sheet-dxf';
 import { useSheetDrafting } from './useSheetDrafting';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
-import { pressEscape, submitCommandLine } from '@/drafting/session';
+import { pressEscape } from '@/drafting/session';
+import { submitTypedLine } from '../drafting/typed-line';
 
 interface Pan { x: number; y: number; k: number }
 
@@ -38,7 +40,17 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan] = useState<Pan>({ x: 20, y: 20, k: 1 });
   const [selected, setSelected] = useState<string | null>(null);
-  const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport } | null>(null);
+  const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport; sheet?: ProjectSheet; last?: { x: number; y: number } } | null>(null);
+  // The live drag wrote the sheet step by step; the history gets the one move, from the start to the end.
+  const endDrag = (): void => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.kind === 'move' && d.vp && d.sheet && d.last) {
+      const { vp: from, last, sheet: start } = d;
+      useProjectStore.setState((s) => ({ sheets: s.sheets.map((o) => (o.id === start.id ? start : o)) }));
+      runAsOneUndoStep(() => updateViewport(start.id, from.id, last));
+    }
+  };
   const paper = paperOf(sheet);
 
   // Fit the paper into the view on open and when the paper changes.
@@ -93,7 +105,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const lastPaper = useRef<{ x: number; y: number } | null>(null);
-  useDraftingKeys({ inputRef, setText, submit: () => submitCommandLine('', lastPaper.current) });
+  useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', lastPaper.current) });
 
   const selectedVp = (sheet.viewports ?? []).find((v) => v.id === selected) ?? null;
   return (
@@ -125,7 +137,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
             }
             const vp = e.button === 0 ? viewportAt(p) : null;
             setSelected(vp?.id ?? null);
-            drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined };
+            drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined, sheet };
           }}
           onPointerMove={(e) => {
             lastPaper.current = toPaper(e.clientX, e.clientY);
@@ -135,9 +147,9 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
             const dx = e.clientX - d.sx;
             const dy = e.clientY - d.sy;
             if (d.kind === 'pan') setPan({ ...d.start, x: d.start.x + dx, y: d.start.y + dy });
-            else if (d.vp) updateViewport(sheet.id, d.vp.id, { x: d.vp.x + dx / pan.k, y: d.vp.y + dy / pan.k });
+            else if (d.vp) { const to = { x: d.vp.x + dx / pan.k, y: d.vp.y + dy / pan.k }; d.last = to; updateViewport(sheet.id, d.vp.id, to); }
           }}
-          onPointerUp={() => { drag.current = null; }}
+          onPointerUp={endDrag}
         >
           <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
             <SheetPaper
@@ -154,7 +166,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
           </div>
           {sheetDrafting.overlay}
         </div>
-        <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitCommandLine(text, lastPaper.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
+        <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={() => { submitTypedLine(text, lastPaper.current); setText(''); }} onEscape={() => { setText(''); pressEscape(); }} />
       </div>
       <SheetPanel
         sheet={sheet}

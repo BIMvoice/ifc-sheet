@@ -14,11 +14,13 @@ import { useProjectStore } from '@/project/project-store';
 import { addRevision, removeRevision, revisionCloudCount, updateRevision } from '@/project/revision-actions';
 import { chooseCloudRevision, cloudRevisionNow, useRevisionTool } from '@/project/revision-tool';
 import { sheetRevisions } from '@/project/revisions';
+import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { addSheetRevision, removeSheetRevision } from '@/project/sheets';
 import type { ProjectRevision, ProjectSheet } from '@/project/types';
+import { WALL_CARD, WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-sm text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 
 function Text({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
   return (
@@ -69,13 +71,13 @@ export function RevisionsCard({ sheet, onClose }: { sheet: ProjectSheet; onClose
   const drafts = useProjectStore((s) => s.drafts);
   const named = new Set(sheetRevisions({ ...sheet, revisionIds: [] }, { revisions, drafts }).map((r) => r.id));
   return (
-    <aside aria-label={t('revision.title')} className="max-h-[calc(100vh-12rem)] w-[340px] overflow-y-auto rounded-2xl border border-sky-300/20 bg-[#0b2348]/95 p-6 text-sky-100 shadow-2xl backdrop-blur">
-      <p className="m-0 text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('revision.title')}</p>
+    <aside aria-label={t('revision.title')} className={`max-h-[calc(100vh-12rem)] overflow-y-auto ${WALL_CARD}`}>
+      <p className="m-0 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('revision.title')}</p>
       <p className="mb-2 mt-2 text-sm leading-relaxed text-sky-200">{t('revision.card.hint')}</p>
       {revisions.length === 0 ? <p className="m-0 text-sm">{t('revision.empty')}</p> : null}
       <ul className="m-0 list-none p-0">{revisions.map((r) => <Record key={r.id} record={r} sheet={sheet} byCloud={named.has(r.id)} />)}</ul>
       <div className="mt-4 flex gap-2">
-        <button type="button" className={quiet} onClick={() => { const id = addRevision(); addSheetRevision(sheet.id, id); }}>{t('revision.add')}</button>
+        <button type="button" className={quiet} onClick={() => runAsOneUndoStep(() => addSheetRevision(sheet.id, addRevision()))}>{t('revision.add')}</button>
         <button type="button" className={quiet} onClick={onClose}>{t('revision.done')}</button>
       </div>
     </aside>
@@ -89,7 +91,7 @@ export function RevisionPick() {
   useRevisionTool((s) => s.revisionId);
   if (revisions.length === 0) return <p className="m-0 mt-3 text-sm text-amber-300">{t('revision.msg.none')}</p>;
   return (
-    <label className="mt-3 block text-sm text-sky-200">
+    <label className="mt-3 block text-xs text-sky-200">
       {t('revision.cloudFor')}
       <select className={field} value={cloudRevisionNow() ?? ''} onChange={(e) => chooseCloudRevision(e.target.value)}>
         {revisions.map((r) => <option key={r.id} value={r.id}>{r.code}{r.description ? ` · ${r.description}` : ''}</option>)}

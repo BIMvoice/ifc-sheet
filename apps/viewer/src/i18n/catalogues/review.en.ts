@@ -28,9 +28,16 @@ export const reviewEn = {
   'review.empty': 'No open comments.',
   'review.bcf.export': 'Export BCF',
   'review.bcf.import': 'Import BCF',
-  'review.bcf.exported': '{count} of {total} comments sit on a model element and went into the BCF file.',
+  // The count is the number of comments (what the noun agrees with), so Romanian can pick its plural form by it.
+  'review.bcf.exported': {
+    one: 'The comment sits on a model element and went into the BCF file.',
+    other: 'Comments on a model element went into the BCF file: {onElement} of {count}.',
+  },
   'review.bcf.none': 'No comment sits on a model element, so there is nothing to export.',
-  'review.bcf.imported': '{count} topics became comments and {merged} brought replies or a status to comments already here; {unplaced} show no element on any sheet and were left out.',
+  'review.bcf.imported': {
+    one: '{count} topic became a comment and {merged} brought replies or a status to comments already here; {unplaced} show no element on any sheet and were left out.',
+    other: '{count} topics became comments and {merged} brought replies or a status to comments already here; {unplaced} show no element on any sheet and were left out.',
+  },
   'review.bcf.failed': 'Could not read that BCF file.',
   'review.bcf.exportFailed': 'The BCF file could not be written: {reason}',
 } as const satisfies Record<string, TranslationValue>;

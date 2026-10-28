@@ -24,17 +24,17 @@ describe('planDimensions', () => {
     close(lengths(inner).reduce((a, b) => a + b, 0), 12);
   });
 
-  it('puts a middle string between the cross-wall axes and stacks 12 mm, then 8 mm apart on paper', () => {
+  it('puts a middle string between the cross-wall axes and stacks 20 mm, then 8 mm apart on paper', () => {
     const plan = planDimensions(house(), settings);
     const south = plan.strings.filter((s) => Math.round(s.outward.y) === -1);
     assert.deepEqual(south.map((s) => s.kind), ['inner', 'middle', 'overall']);
-    assert.deepEqual(south.map((s) => +(s.offset / 0.1).toFixed(6)), [12, 20, 28]);
+    assert.deepEqual(south.map((s) => +(s.offset / 0.1).toFixed(6)), [20, 28, 36]);
     assert.deepEqual(lengths(south[1]), [7.52, 4.48]);
   });
 
   it('stacks by paper distance at another scale', () => {
     const plan = planDimensions(house(), { paperUnit: 0.05, textHeight: 0.1 });
-    close(plan.strings[0].offset, 0.6, 1e-9);
+    close(plan.strings[0].offset, 1, 1e-9);
   });
 
   it('skips the sides with nothing to dimension', () => {
@@ -50,7 +50,9 @@ describe('planDimensions', () => {
   });
 
   it('is deterministic', () => {
-    assert.deepEqual(planDimensions(house(), settings), planDimensions(house(), settings));
+    // The same parts (part ids are the elements' own, so a fresh house would be other elements).
+    const parts = house();
+    assert.deepEqual(planDimensions(parts, settings), planDimensions(parts, settings));
   });
 
   it('dimensions each straight run of an L-shaped outline', () => {

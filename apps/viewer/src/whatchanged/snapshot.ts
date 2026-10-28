@@ -43,12 +43,35 @@ export interface SnapElement {
   p?: string;
 }
 
-export interface ModelSnapshot {
+export interface SnapshotBody {
   takenAt: number;
   /** How many elements `rows` holds. */
   count: number;
   /** The elements, compact JSON (`encodeRows`). */
   rows: string;
+}
+
+/**
+ * The project's model state: the reference a new version is compared with, and, riding with it so that it is
+ * saved, autosaved and recovered wherever the reference is, the model as the LAST issue went out (#335).
+ */
+export interface ModelSnapshot extends SnapshotBody {
+  issued?: {
+    /** The issue (`ProjectIssue.id`) this is the model of. */
+    issueId: string;
+    /** The model as issued; absent when it is the reference itself, which is then not kept twice. */
+    state?: SnapshotBody;
+  };
+}
+
+/**
+ * `next` as the reference. The model as issued goes on riding with it, and is kept in full when it was the old
+ * reference itself: replacing the reference must not lose what the last issue was compared against.
+ */
+export function replaceReference(old: ModelSnapshot | undefined, next: ModelSnapshot): ModelSnapshot {
+  if (!old?.issued) return next;
+  const { issued, ...body } = old;
+  return { ...next, issued: issued.state ? issued : { issueId: issued.issueId, state: body } };
 }
 
 const KEPT_COMPONENTS = ['attr:core', 'type-assignment'] as const;
@@ -90,10 +113,10 @@ export function decodeRows(text: string): SnapElement[] {
   });
 }
 
-const decoded = new WeakMap<ModelSnapshot, SnapElement[]>();
+const decoded = new WeakMap<SnapshotBody, SnapElement[]>();
 
 /** The elements of a snapshot (decoded once). */
-export function snapshotElements(snapshot: ModelSnapshot): SnapElement[] {
+export function snapshotElements(snapshot: SnapshotBody): SnapElement[] {
   let list = decoded.get(snapshot);
   if (!list) { list = decodeRows(snapshot.rows); decoded.set(snapshot, list); }
   return list;
@@ -121,7 +144,7 @@ export function snapshotOf(fingerprints: readonly EntityFingerprint<unknown>[], 
   return snapshotFromElements(elements, takenAt);
 }
 
-export function fingerprintsOf(snapshot: ModelSnapshot): EntityFingerprint<null>[] {
+export function fingerprintsOf(snapshot: SnapshotBody): EntityFingerprint<null>[] {
   return snapshotElements(snapshot).map((e): EntityFingerprint<null> => ({
     key: e.k, ifcType: e.t, dataHash: e.d,
     ...(e.c ? { components: e.c } : {}),

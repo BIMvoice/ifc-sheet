@@ -27,6 +27,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useViewerStore } from '@/store';
 import { groupClashes, summarizeClashes, type Clash, type ClashElementRef, type ClashResult } from '@ifc-lite/clash';
 import { ClashPanel } from './ClashPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
 function ref(key: string, ref: number): ClashElementRef {
   return { key, ref, model: 'm1', tag: 'IfcBeam', name: key };
@@ -85,8 +86,7 @@ function bridgeAbutmentResult(): ClashResult {
 // (no real layout engine) always reports 0, so with no stub every virtualized
 // row silently fails to render — the panel would look empty regardless of
 // what's under test. Give it a plausible viewport once, globally.
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 400 });
+stubBoxSize(400, 600);
 
 const mounted: Array<{ root: Root; container: HTMLElement }> = [];
 

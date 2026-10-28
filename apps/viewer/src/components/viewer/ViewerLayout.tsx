@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n';
 import { styleInterpolatedValues } from '@/i18n/richInterpolate';
 import { IfcSheetShell } from './ifcsheet/IfcSheetShell';
+import { CoveredEngine } from './ifcsheet/CoveredEngine';
 import { MobileToolbar } from './MobileToolbar';
 import { RibbonToolbar } from './ribbon/RibbonToolbar';
 import { HierarchyPanel } from './HierarchyPanel';
@@ -45,7 +46,7 @@ import { LEFT_PANEL_DEFAULT_SIZE } from '@/store/layoutReset';
 import { useOverlayCompositor } from './schedule/useOverlayCompositor';
 import { CommandPalette } from './CommandPalette';
 import { SearchModal } from './SearchModal';
-import { can, isDocsEdition } from '@/edition';
+import { isDocsEdition } from '@/edition';
 import { TourHost } from '@/components/tours/TourHost';
 import { SidebarDock } from './sidebar/SidebarDock';
 import { FloatingPanelHost } from './dock/FloatingPanelHost';
@@ -275,6 +276,7 @@ export function ViewerLayout() {
             dropdown is open. Same host pattern as `FlavorDialog` in
             `StatusBar.tsx`; `toolbar/export-commands.ts` owns the `trigger` one. */}
         <AnonymizedExportDialog surface="context_menu" />
+        <CoveredEngine>
         {/* The compact mobile controls and the desktop ribbon share command homes. */}
         {isMobile
           ? <MobileToolbar />
@@ -447,6 +449,7 @@ export function ViewerLayout() {
         {/* Panels popped out into OS / PiP windows (#1208) — portalled into the
             child documents; live-synced via the shared store. */}
         <PanelWindowHost />
+        </CoveredEngine>
 
         {/* IfcSheet's own face over the engine's interface, which stays mounted underneath for its
             drawing runtime (#20).

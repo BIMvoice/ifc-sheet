@@ -22,14 +22,15 @@ import { render, cleanup, click, press, type, blur } from '@/test/render.js';
 import { useViewerStore, type FederatedModel } from '@/store';
 import { getDefaultSectionPlane } from '@/store/slices/sectionSlice.js';
 import { fixtureModel } from '@/test/store-fixture.js';
+import { fixtureStoreys, sheetCutHeights } from '@/test/close-storeys-fixture.js';
 import { ViewportHud } from '../../viewport-ui/hud/ViewportHud.js';
 import { ToolOverlays } from '../ToolOverlays.js';
 import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
 
 const s = () => useViewerStore.getState();
 
-/** One model over a [0,10] x [-1,3] x [0,8] box with two storeys at 0 m and 2.8 m. */
-function boundedModel(): FederatedModel {
+/** One model over a [0,10] x [-1,3] x [0,8] box with two storeys, by default at 0 m and 2.8 m. */
+function boundedModel(elevations: readonly [number, number] = [0, 2.8]): FederatedModel {
   const base = fixtureModel('m');
   return {
     ...base,
@@ -46,7 +47,7 @@ function boundedModel(): FederatedModel {
       ...base.ifcDataStore,
       spatialHierarchy: {
         byStorey: new Map([[10, []], [11, []]]),
-        storeyElevations: new Map([[10, 0], [11, 2.8]]),
+        storeyElevations: new Map([[10, elevations[0]], [11, elevations[1]]]),
       },
       entities: { ...base.ifcDataStore!.entities, getName: (id: number) => (id === 10 ? 'Ground floor' : id === 11 ? 'First floor' : null) },
     },
@@ -221,9 +222,38 @@ describe('Section bar controls drive the store', () => {
     assert.equal(menu.querySelector('button[aria-current="true"]'), null);
     assert.equal(menu.querySelector('button[aria-current="true"]'), null, '1.00 m is 0.2 m off the ground-floor cut: nothing current');
     click(rows[0].querySelector('button')!);
-    // 2.8 + 1.2 = 4 m is the top of the Y range: 100 %.
-    assert.equal(s().sectionPlane.position, 100);
+    // The menu places the cut unclamped (#232b): first floor 2.8 m + the plan cut = 4.0 m, where the
+    // rule (#256: the storeys are 2.8 m apart, more than 1.7 m, so exactly 1.2 m) gives 1.2 m; that is above the model top (Y max 3 m) on the [-1, 3] range: (4.0 - (-1)) / (3 - (-1)) * 100 = 125 %.
+    assert.ok(Math.abs(s().sectionPlane.position - ((2.8 + 1.2 - -1) / (3 - -1)) * 100) < 1e-9);
     assert.equal(s().sectionPlane.axis, 'down');
+    // A storey whose cut is inside the model is unchanged: ground floor 0 m + 1.2 m = 1.2 m, (1.2 + 1) / 4 * 100 = 55 %.
+    // The popover stays open after a pick; reopen it only if it closed.
+    if (!document.querySelector('[data-testid="section-storeys"]')) click(bar().querySelector('button[aria-label="Cut at a storey"]')!);
+    const again = [...document.querySelectorAll<HTMLElement>('[data-testid="section-storeys"] li')];
+    click(again[1].querySelector('button')!);
+    assert.ok(Math.abs(s().sectionPlane.position - ((0 + 1.2 - -1) / (3 - -1)) * 100) < 1e-9);
+  });
+
+  it('the storey menu cuts where the sheet plan does on storeys 1.0 m apart (#256)', () => {
+    const storeys = fixtureStoreys();
+    const sheet = sheetCutHeights();
+    assert.deepEqual(storeys.map((x) => x.elevation), [0, 1], 'the fixture: Lower at 0.0 m, Upper 1.0 m above');
+    assert.equal(sheet.Lower, 0.5, 'the sheet plan: min(1.2, max(1.0 - 0.5, 1.0 / 2)) = 0.5 m');
+    reset([boundedModel([storeys[0].elevation, storeys[1].elevation])]);
+    renderTool();
+    click(bar().querySelector('button[aria-label="Cut at a storey"]')!);
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="section-storeys"] li')];
+    assert.equal(rows.length, 2);
+    // [-1, 3]: Lower (row 1) cuts at 0 + 0.5 = 0.5 m -> 37.5 %, not 0 + 1.2 m = 1.2 m -> 55 %.
+    click(rows[1].querySelector('button')!);
+    assert.ok(Math.abs(s().sectionPlane.position - 37.5) < 1e-9, `Lower: ${s().sectionPlane.position}`);
+    assert.ok(Math.abs(s().sectionPlane.position - ((storeys[0].elevation + sheet.Lower + 1) / 4) * 100) < 1e-9, 'where the sheet plan cuts');
+    // Upper is the top storey: no next one, so exactly 1.2 m: 1.0 + 1.2 = 2.2 m -> 80 %.
+    if (!document.querySelector('[data-testid="section-storeys"]')) click(bar().querySelector('button[aria-label="Cut at a storey"]')!);
+    const again = [...document.querySelectorAll<HTMLElement>('[data-testid="section-storeys"] li')];
+    click(again[0].querySelector('button')!);
+    assert.ok(Math.abs(s().sectionPlane.position - 80) < 1e-9, `Upper: ${s().sectionPlane.position}`);
+    assert.equal(sheet.Upper, 1.2);
   });
 
   it('the storey menu is absent for a vertical cut and without storeys', () => {

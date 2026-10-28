@@ -8,10 +8,13 @@
  * by sheet, then the project-wide ones.
  */
 
+import { entityBounds } from '@/drafting/annotation';
+import { anchorsOf } from '@/drafting/dimension-anchor';
 import { sectionLink } from '@/drafting/section-symbol';
 import type { DraftEntity } from '@/drafting/types';
 import { titleBlockOf } from '@/project/title-block';
 import type { ProjectSheet } from '@/project/types';
+import { orphanedCellOverrides } from './override-findings';
 import type { CheckInput, Finding } from './types';
 
 type View = CheckInput['views'][number];
@@ -87,13 +90,34 @@ export function detailsOnNoSheet(input: CheckInput): Finding[] {
   return input.views.filter((v) => isDetail(v) && !onSheet(input, v)).map((v): Finding => ({ kind: 'detailOffSheet', key: 'check.detailOffSheet', viewId: v.id, params: { view: v.name } }));
 }
 
-/** A tag or label whose element is no longer in the model. (A dimension is measured from drawn points and names no element.) */
+/** What an annotation that names an element is called: the element it names (a GlobalId), and what kind of annotation it is. */
+const NAMED: readonly [param: string, what: 'tag' | 'label' | 'dimension'][] = [['tagOf', 'tag'], ['labelOf', 'label'], ['measures', 'dimension']];
+
+/**
+ * A tag or label whose element is no longer in the model, and a dimension DIMALL placed to measure a door or window that is gone
+ * (it is stamped with what it measures: `params.measures`). A dimension snapped to model geometry is stamped with the elements at its ends (`anchorA`, `anchorB`); a free one names no element.
+ *
+ * One finding per annotation, named by what it was: its text, the element's last known name and class (`lastKnown`) and
+ * GlobalId, and every sheet that shows its view (a view on two sheets is still one annotation, so one finding listing both).
+ */
 export function danglingAnnotations(input: CheckInput): Finding[] {
   return input.drafts.flatMap((d): Finding[] => {
-    const guid = [d.params.labelOf, d.params.tagOf].find((g): g is string => typeof g === 'string');
-    if (!guid || input.elementExists(guid)) return [];
+    const named = NAMED.map(([param, what]) => ({ guid: d.params[param], what })).filter((x): x is { guid: string; what: 'tag' | 'label' | 'dimension' } => typeof x.guid === 'string');
+    // A dimension snapped to model geometry is attached to the elements at its ends (#459): either one gone is a dimension that no longer measures anything.
+    const attached = anchorsOf(d).map(({ anchor }) => ({ guid: anchor.g, what: 'dimension' as const }));
+    const found = named.length > 0 ? (input.elementExists(named[0].guid) ? undefined : named[0]) : attached.find((x) => !input.elementExists(x.guid));
+    if (!found) return [];
     const view = input.views.find((v) => v.id === d.viewId);
-    return [{ kind: 'danglingAnnotation', key: 'check.danglingAnnotation', viewId: d.viewId, sheetId: view ? onSheet(input, view)?.id : undefined, draftId: d.id, guids: [guid], params: { view: view?.name ?? '' } }];
+    const sheets = view ? input.sheets.filter((s) => (s.viewports ?? []).some((vp) => vp.viewId === view.id)) : [];
+    const known = input.lastKnown?.(found.guid);
+    const shape = d.shape;
+    const written = ('text' in shape && typeof shape.text === 'string' ? shape.text : '').trim();
+    const element = [known?.className, known?.name ? `"${known.name}"` : '', found.guid].filter(Boolean).join(' · ');
+    return [{
+      kind: 'danglingAnnotation', key: 'check.danglingAnnotation', viewId: d.viewId, sheetId: sheets[0]?.id, draftId: d.id, guids: [found.guid],
+      box: entityBounds(shape), remedies: found.what === 'dimension' ? ['delete'] : ['delete', 'reattach'],
+      params: { what: found.what, text: written || known?.name || found.guid, element, view: view?.name ?? '', sheet: [...new Set(sheets.map((s) => s.number))].join(', ') },
+    }];
   });
 }
 
@@ -103,7 +127,7 @@ export function checkSet(input: CheckInput): Finding[] {
   const all = [
     ...emptyTitleBlocks(input), ...duplicateNumbers(input), ...emptySheets(input),
     ...untaggedElements(input), ...plansWithoutDimensions(input), ...viewsWithoutLevelMarks(input),
-    ...viewsOnNoSheet(input), ...sectionsMarkedOnNoSheetPlan(input), ...detailsOnNoSheet(input), ...danglingAnnotations(input),
+    ...viewsOnNoSheet(input), ...sectionsMarkedOnNoSheetPlan(input), ...detailsOnNoSheet(input), ...danglingAnnotations(input), ...orphanedCellOverrides(input),
   ];
   // Sheet by sheet in the order of the set, then what belongs to no sheet; the order of the checks within.
   return all.map((f, i) => ({ f, i })).sort((a, b) => sheetRank(input, a.f) - sheetRank(input, b.f) || a.i - b.i).map((x) => x.f);

@@ -26,6 +26,7 @@ import { NOOP_LOAD_TRACE } from '@ifc-lite/load-trace';
 import { toast } from '../ui/toast.js';
 import { reshapeSceneKeepingPresentInstanced } from './geometry-rebuild';
 import { runGpuUpload } from './gpu-upload-guard';
+import { isViewportCovered } from './viewport-cover';
 import { geometryMeshKey } from './geometry-mesh-key';
 import { createRobustFitBoundsAccumulator } from './robustFitBoundsAccumulator.js';
 import { liftNewInstancedOccurrences, placeNewMeshesAtCurrentLevel } from '@/lib/level-arrival';
@@ -500,13 +501,12 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
           // pump active so large native loads still finish offscreen.
           ensureQueuePump();
         } else {
-          // Non-streaming: process immediately (visibility toggles, etc.)
-          // The production crash path: this effect is where a failed
-          // createBuffer escaped into React's commit phase and unmounted the
-          // viewport, blanking the canvas.
+          // Non-streaming: process immediately (visibility toggles, etc.), except the GPU upload while the viewport is
+          // covered (the Wall, #154): the render loop owes it to the first frame after the cover lifts.
+          // The production crash path: this effect is where a failed createBuffer escaped into React's commit
+          // phase and unmounted the viewport, blanking the canvas.
           const uploaded = runGpuUpload('appendToBatches:non-streaming', () => {
-            scene.appendToBatches(newMeshes, device, pipeline, false);
-            return true;
+            scene.appendToBatches(newMeshes, device, pipeline, false, isViewportCovered()); return true;
           }) ?? false;
           if (uploaded) {
             renderer.clearCaches();

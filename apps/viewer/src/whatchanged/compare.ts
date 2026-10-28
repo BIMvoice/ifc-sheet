@@ -12,7 +12,7 @@
  */
 
 import { diffModels } from '@ifc-lite/diff';
-import { fingerprintsOf, snapshotElements, type ModelSnapshot } from './snapshot';
+import { fingerprintsOf, snapshotElements, type SnapshotBody } from './snapshot';
 
 export const CHANGE_KINDS = ['added', 'removed', 'moved', 'reshaped', 'property', 'type'] as const;
 export type ChangeKind = (typeof CHANGE_KINDS)[number];
@@ -51,7 +51,7 @@ function geometryKinds(before: Box | undefined, after: Box | undefined, toleranc
 
 const setName = (component: string): string => (component === 'attr:core' ? 'attributes' : component.replace(/^(pset|qset):/, ''));
 
-export function compareStates(base: ModelSnapshot, head: ModelSnapshot, tolerance = DEFAULT_TOLERANCE_M): ModelChange[] {
+export function compareStates(base: SnapshotBody, head: SnapshotBody, tolerance = DEFAULT_TOLERANCE_M): ModelChange[] {
   const names = new Map([...snapshotElements(base), ...snapshotElements(head)].map((e) => [e.k, e.n ?? ''] as const));
   const diff = diffModels(fingerprintsOf(base), fingerprintsOf(head), { scope: 'both' });
   const out: ModelChange[] = [];

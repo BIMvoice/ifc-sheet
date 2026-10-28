@@ -20,12 +20,13 @@
 
 import '@/test/setup-dom.js';
 import { installLayout } from '@/test/dom-layout.js';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { GraphicOverrideEngine } from '@ifc-lite/drawing-2d';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { registerLocale, setLocale } from '@/i18n';
 import { Drawing2DCanvas, type Measure2DResultData } from './Drawing2DCanvas.js';
 
 installLayout();
@@ -160,6 +161,48 @@ describe('Drawing2DCanvas unitDisplayOverrides (#2199 slice)', () => {
         stub.fillTextCalls.includes('1.000 m'),
         `expected the unconverted "1.000 m" label; got ${JSON.stringify(stub.fillTextCalls)}`,
       );
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+describe('Drawing2DCanvas measure labels follow the language (#269)', () => {
+  afterEach(() => setLocale('en'));
+
+  it('writes the on-canvas distance with a comma in Romanian, as the exported drawing does', () => {
+    registerLocale('ro', {});
+    setLocale('ro');
+    const stub = installCanvasStub();
+    try {
+      renderCanvas(undefined);
+      assert.ok(stub.fillTextCalls.includes('1,000 m'), `got ${JSON.stringify(stub.fillTextCalls)}`);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it('keeps a unit override and writes its number in the language', () => {
+    registerLocale('ro', {});
+    setLocale('ro');
+    const stub = installCanvasStub();
+    try {
+      renderCanvas({ LENGTHUNIT: 'ft' });
+      assert.ok(stub.fillTextCalls.includes('3,2808 ft'), `got ${JSON.stringify(stub.fillTextCalls)}`);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it('repaints in the new language when it switches', () => {
+    registerLocale('ro', {});
+    setLocale('en');
+    const stub = installCanvasStub();
+    try {
+      renderCanvas(undefined);
+      assert.ok(stub.fillTextCalls.includes('1.000 m'));
+      act(() => { setLocale('ro'); });
+      assert.ok(stub.fillTextCalls.includes('1,000 m'), `got ${JSON.stringify(stub.fillTextCalls)}`);
     } finally {
       stub.restore();
     }
