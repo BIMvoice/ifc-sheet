@@ -1,5 +1,4 @@
 ---
-"@ifc-lite/viewer": minor
 "@bimvoice/ifcsheet": minor
 ---
 

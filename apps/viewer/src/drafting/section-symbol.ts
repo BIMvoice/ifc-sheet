@@ -10,7 +10,7 @@
  */
 
 import type { MarkStyle } from '@bimvoice/ifcsheet';
-import { registeredTranslations, resolve } from '@/i18n/registry';
+import { registeredTranslations, resolveName } from '@/i18n/registry';
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
 import { DETAIL_LINK, detailLink, isDetailMark, PART } from './detail-mark';
@@ -122,7 +122,7 @@ const LINK = 'sectionOf';
 
 /** `Section A-A`: how drawings name a section view. */
 export function sectionViewName(mark: string): string {
-  return resolve('names.view.section', { mark });
+  return resolveName('names.view.section', { mark });
 }
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
