@@ -49,7 +49,7 @@ export function FindingList({ nav, skin, readOnMount = false, onLeave }: Props) 
                     {f.remedies?.length ? (
                       <span className="flex shrink-0 gap-1">
                         {f.remedies.includes('reattach') ? <button type="button" className={skin.fixButton} disabled={busy} title={t('check.remedy.reattachHint')} onClick={() => { onLeave?.(); void reattach(f, nav); }}>{t('check.remedy.reattach')}</button> : null}
-                        {f.remedies.includes('delete') ? <button type="button" className={skin.fixButton} disabled={busy} title={t('check.remedy.deleteHint')} onClick={() => remove(f)}>{t('check.remedy.delete')}</button> : null}
+                        {f.remedies.includes('delete') ? <button type="button" className={skin.fixButton} disabled={busy} title={t(f.kind === 'orphanedOverride' ? 'check.remedy.dropHint' : 'check.remedy.deleteHint')} onClick={() => remove(f)}>{t('check.remedy.delete')}</button> : null}
                       </span>
                     ) : null}
                     {f.fix ? <button type="button" className={skin.fixButton} disabled={busy} onClick={() => { onLeave?.(); void fix(f, nav); }}>{t('check.fix')} {f.fix}</button> : null}

@@ -46,6 +46,7 @@ import { matrixText, printedUnderlays, underlayMatrix } from '@/underlay/underla
 import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
+import { CellMarks } from './CellMarks';
 import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
@@ -246,7 +247,7 @@ function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout:
   return (
     <g data-viewport-id={vp.id}>
       {layout.fit ? <clipPath id={clipId}><rect x={box.x} y={box.y} width={box.w} height={box.h} /></clipPath> : null}
-      <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /></g>
+      <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /><CellMarks layout={layout} scheduleId={vp.viewId} x={box.x} y={box.y} /></g>
       <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="transparent"
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
     </g>

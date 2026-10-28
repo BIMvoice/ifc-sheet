@@ -24,6 +24,7 @@ export const onboardingEn = {
   'onboarding.menu.shortcuts': 'Keyboard shortcuts',
   'onboarding.menu.howTo': 'How to',
   'onboarding.menu.report': 'Report a bug or suggest a feature',
+  'onboarding.menu.github': 'IfcSheet on GitHub',
   'onboarding.menu.tour': 'Tour of the Wall',
   'onboarding.menu.hints': 'Hints in Settings',
 
