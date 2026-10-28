@@ -13,13 +13,13 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import { clipPolygon } from './clip.js';
 import { arcPoints, axisLayout, formatLevel, leaderTextRight, levelWitness } from './dimension-layout.js';
 import { dashOf, type entityPen, type lookOf } from './draft-look.js';
-import type { AnnotationShape, DraftLayer, DraftShape, Pt } from './draft-types.js';
+import type { AnnotationShape, DraftShape, Pt } from './draft-types.js';
 import { hatchSegments } from './hatch-fill.js';
 import { HATCH_UNIT_M, findPattern } from './hatch-library.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
-import { label, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
+import { label, textInk, tickStrokes, type Frame, type SheetStroke, type TextInk } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
 
 /** What a mark is drawn with: the viewport's mapping to the paper, its room, and the draft's layer colour and look. */
@@ -44,10 +44,13 @@ export interface MarkContext {
 const K = 0.25;
 
 /** One label per line, each a line pitch under the one before, in the text's own frame. */
-function lines(text: string, at: Point2D, px: number, deg: number, align: SheetText['align'], shift: number): SheetText[] {
+function lines(text: string, at: Point2D, px: number, deg: number, align: SheetText['align'], shift: number, ink: TextInk): SheetText[] {
   const size = Math.max(px, 1);
-  return text.split('\n').map((line, i) => label(at, line, size, deg, shift + i * 1.25 * size, align));
+  return text.split('\n').map((line, i) => label(at, line, size, deg, shift + i * 1.25 * size, align, ink));
 }
+
+/** A mark's text in its text style, coloured as the app colours it: the style's colour, else the layer's. */
+const markInk = (c: MarkContext): TextInk => textInk(c.look.text, c.look.text.color ?? c.colour);
 
 /** A drafted line, polyline, circle or arc, in the pen the app draws it with (`entityPen`: its layer's, under the element's own overrides). */
 export function drawCurve(shape: DraftShape, pen: Pick<ReturnType<typeof entityPen>, 'color' | 'width' | 'dash'>, c: MarkContext): void {
@@ -65,7 +68,7 @@ export function drawLeader(shape: Extract<AnnotationShape, { type: 'leader' }>, 
   const px = shape.height * c.mmPerMetre;
   c.out.strokes.push({ colour: c.colour, width: K, runs: c.clip(shape.pts.map(c.at)) });
   c.out.strokes.push(...tickStrokes('arrow', [{ p: a, dir: { x: a.x - b.x, y: a.y - b.y } }], Math.max(c.look.dim.arrowSize * 1.2, 4 * K), c.colour, K));
-  c.out.texts.push(...lines(shape.text, { x: end.x + (right ? 3 : -3) * K, y: end.y }, px, 0, right ? 'left' : 'right', px * 0.35));
+  c.out.texts.push(...lines(shape.text, { x: end.x + (right ? 3 : -3) * K, y: end.y }, px, 0, right ? 'left' : 'right', px * 0.35, markInk(c)));
 }
 
 /** A level mark: the dashed line to the point it measures, the triangle, the line over the text, and the level. */
@@ -79,7 +82,7 @@ export function drawLevel(shape: Extract<AnnotationShape, { type: 'level' }>, c:
   c.out.strokes.push({ colour: c.colour, width: 0, runs: [[...triangle, p]], fill: true, opacity: 0.25 });
   c.out.strokes.push({ colour: c.colour, width: K, runs: [[...triangle, p]] });
   c.out.strokes.push({ colour: c.colour, width: K, runs: [[{ x: p.x - h, y: p.y }, { x: p.x + h * 5, y: p.y }]] });
-  c.out.texts.push(...lines(formatLevel(c.locale, shape.value), { x: p.x + h * 1.3, y: p.y - h * 1.15 }, px, 0, 'left', 0));
+  c.out.texts.push(...lines(formatLevel(c.locale, shape.value), { x: p.x + h * 1.3, y: p.y - h * 1.15 }, px, 0, 'left', 0, markInk(c)));
 }
 
 /** A grid axis: its line in its line type, a bubble (circle or square) past the chosen ends, the label in each. */
@@ -94,7 +97,7 @@ export function drawAxis(shape: Extract<AnnotationShape, { type: 'axis' }>, c: M
     const ring = shape.bubble === 'circle' ? arcPoints(p, rp, 0, Math.PI * 2)
       : [{ x: p.x - rp, y: p.y - rp }, { x: p.x + rp, y: p.y - rp }, { x: p.x + rp, y: p.y + rp }, { x: p.x - rp, y: p.y + rp }, { x: p.x - rp, y: p.y - rp }];
     c.out.strokes.push({ colour: c.colour, width: K, runs: c.clip(ring) });
-    c.out.texts.push(...lines(shape.label, p, px, 0, 'center', px * 0.35));
+    c.out.texts.push(...lines(shape.label, p, px, 0, 'center', px * 0.35, markInk(c)));
   }
 }
 

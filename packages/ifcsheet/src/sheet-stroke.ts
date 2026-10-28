@@ -10,7 +10,7 @@
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import { arrowMark } from './dimension-layout.js';
 import { readableDeg } from './draft-look.js';
-import type { ArrowKind } from './draft-styles.js';
+import type { ArrowKind, TextStyle } from './draft-styles.js';
 import type { SheetText } from './sheet-graphic.js';
 
 /** Runs drawn with one pen on the paper: a drafted line's layer pen, a dimension's lines or its filled ticks. */
@@ -40,10 +40,18 @@ export interface Frame {
 /** A drawing-space angle (radians) as the sheet's text angle: screen degrees, y down, folded to read (`readableDeg`). */
 export const readableAngle = (angle: number, { kx, ky }: Frame): number => readableDeg((Math.atan2(Math.sin(angle) * ky, Math.cos(angle) * kx) * 180) / Math.PI);
 
-/** A text on the paper as the sheet's label draws it: at `p`, turned `deg` (screen, clockwise), its baseline moved `shift` in its own frame. */
-export function label(p: Point2D, text: string, size: number, deg: number, shift: number, align: SheetText['align']): SheetText {
+/** How a drafted text is set: its style's weight and face, and its colour. */
+export type TextInk = Pick<SheetText, 'bold' | 'face' | 'colour'>;
+
+/** The ink of a text drawn in `style` and `colour`, as the app's `Label` draws it (`fontWeight`, `fontFamily`, `fontStyle`, `fill`). */
+export function textInk(style: Pick<TextStyle, 'font' | 'bold' | 'italic'>, colour: string): TextInk {
+  return { ...(style.bold ? { bold: true as const } : {}), ...(style.font !== 'sans' || style.italic ? { face: { font: style.font, italic: style.italic } } : {}), colour };
+}
+
+/** A text on the paper as the sheet's label draws it: at `p`, turned `deg` (screen, clockwise), its baseline moved `shift` in its own frame, in `ink`. */
+export function label(p: Point2D, text: string, size: number, deg: number, shift: number, align: SheetText['align'], ink: TextInk = {}): SheetText {
   const r = (deg * Math.PI) / 180;
-  return { at: { x: p.x - shift * Math.sin(r), y: p.y + shift * Math.cos(r) }, text, size, align, ...(deg ? { angle: -deg } : {}) };
+  return { at: { x: p.x - shift * Math.sin(r), y: p.y + shift * Math.cos(r) }, text, size, align, ...(deg ? { angle: -deg } : {}), ...ink };
 }
 
 /** A dot as a closed ring of points, for writers that fill paths. */

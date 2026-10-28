@@ -54,6 +54,8 @@ export interface SheetText {
   bold?: true;
   /** A face other than the sheet's Inter, with its italic (the project's "Tables" text style); absent: Inter. */
   face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
+  /** CSS colour (a drafted text's style colour or its layer's); absent: black. */
+  colour?: string;
 }
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
