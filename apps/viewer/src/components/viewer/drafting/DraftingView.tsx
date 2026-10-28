@@ -24,8 +24,6 @@ import { openStandards } from '@/project/standards-dialog-store';
 
 import { useTranslation } from '@/i18n';
 
-import { cn } from '@/lib/utils';
-
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
 
@@ -54,6 +52,8 @@ import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView,
   currentLayerId,
+  baseDraftSettings,
+  patchDraftSettings,
   pressEscape,
   runningCommand,
   setCurrentLayer,
@@ -64,6 +64,7 @@ import {
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
 
@@ -79,6 +80,7 @@ import { submitTypedLine } from './typed-line';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
+import { ModifyBar } from './ModifyBar';
 
 import { gripsOf } from '@/drafting/grips';
 
@@ -161,6 +163,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const orthoToggled = useDraftingSession((s) => s.ortho);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
@@ -296,6 +299,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
         <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
           className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"
@@ -379,22 +383,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
+        {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn('h-6 rounded-sm px-2 font-medium', active ? 'bg-primary/15 text-primary' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900')}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }
