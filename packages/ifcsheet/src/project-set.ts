@@ -15,7 +15,8 @@
 import type { DefaultSet, SetModel } from './default-set.js';
 import type { NumberingScheme, ProjectSheet, ProjectView, ProjectViewTemplate } from './document.js';
 import type { DimStyle, TextStyle } from './draft-styles.js';
-import type { LayerGroup } from './draft-look.js';
+import type { CustomLineType, LayerGroup } from './draft-look.js';
+import { readLineType } from './line-types-read.js';
 import { readDraft, readDraftLayer } from './draft-read.js';
 import type { DraftEntity, DraftLayer } from './draft-types.js';
 import { nameOf } from './names.js';
@@ -35,6 +36,8 @@ export interface ProjectSet {
   textStyles: TextStyle[];
   dimStyles: DimStyle[];
   layerGroups: LayerGroup[];
+  /** The project's own line types (#496); empty when it has none. */
+  lineTypes: CustomLineType[];
   viewTemplates: ProjectViewTemplate[];
   sheetNumbering?: NumberingScheme;
 }
@@ -48,7 +51,7 @@ export function readProjectSet(raw: Json): ProjectSet {
   const draftLayers = at('draftLayers', readDraftLayer);
   const sheetNumbering = raw.sheetNumbering !== undefined ? readNumberingScheme(raw.sheetNumbering) : undefined;
   return {
-    views, sheets, drafts, draftLayers,
+    views, sheets, drafts, draftLayers, lineTypes: at('lineTypes', readLineType),
     textStyles: readTextStyles(raw), dimStyles: readDimStyles(raw), layerGroups: readLayerGroups(raw),
     viewTemplates: readViewTemplates(raw.viewTemplates),
     ...(sheetNumbering ? { sheetNumbering } : {}),

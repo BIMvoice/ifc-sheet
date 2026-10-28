@@ -19,11 +19,11 @@ import {
   addLayer, addLayerGroup, removeLayer, removeLayerGroup, toggleViewLayers, updateLayer, updateLayerGroup,
 } from '@/project/drafting-standards';
 import { currentLayerId, setCurrentLayer, useDraftingSession } from '@/drafting/session';
-import type { LineType } from '@/drafting/styles';
+import { LineTypesEditor } from './LineTypesEditor';
 import type { DraftLayer } from '@/drafting/types';
 
 const WEIGHTS = [0.09, 0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 1, 1.4];
-const TYPES: readonly LineType[] = ['continuous', 'dashed', 'dotted', 'dashdot'];
+const TYPES: readonly string[] = ['continuous', 'dashed', 'dotted', 'dashdot'];
 const INPUT = 'h-7 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
 
 function Toggle({ on, label, onClick, icons }: { on: boolean; label: string; onClick: () => void; icons: [React.ReactNode, React.ReactNode] }) {
@@ -41,6 +41,7 @@ export function LayersTab() {
   const groups = useProjectStore((s) => s.layerGroups) ?? [];
   const activeId = useDocumentTabs((s) => s.activeId);
   const view = useProjectStore((s) => s.views.find((v) => v.id === activeId && v.kind !== '3d'));
+  const lineTypes = useProjectStore((s) => s.lineTypes) ?? [];
   const current = currentLayerId();
   const sections = [
     ...groups.map((g) => ({ group: g, layers: layers.filter((l) => l.group === g.id) })),
@@ -63,8 +64,9 @@ export function LayersTab() {
         </select>
       </td>
       <td className="py-1">
-        <select aria-label={`${l.name} · ${t('standards.layer.type')}`} className={INPUT} value={l.lineType ?? 'continuous'} onChange={(e) => updateLayer(l.id, { lineType: e.target.value as LineType })}>
+        <select aria-label={`${l.name} · ${t('standards.layer.type')}`} className={INPUT} value={l.lineType ?? 'continuous'} onChange={(e) => updateLayer(l.id, { lineType: e.target.value })}>
           {TYPES.map((k) => <option key={k} value={k}>{t(`standards.layer.type.${k}` as TranslationKey)}</option>)}
+          {lineTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </td>
       <td className="py-1">
@@ -72,6 +74,9 @@ export function LayersTab() {
           <option value="">{t('standards.layer.ungrouped')}</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
+      </td>
+      <td className="py-1 text-center">
+        <input type="checkbox" aria-label={`${l.name} · ${t('standards.layer.print')}`} title={t('standards.layer.printHint')} checked={l.print !== false} onChange={(e) => updateLayer(l.id, { print: e.target.checked ? undefined : false })} />
       </td>
       <td className="py-1 whitespace-nowrap">
         <Toggle on={l.visible} label={`${l.name} · ${t('standards.layer.visible')}`} onClick={() => updateLayer(l.id, { visible: !l.visible })} icons={[<Eye key="on" className="size-3.5" />, <EyeOff key="off" className="size-3.5 text-zinc-400" />]} />
@@ -111,6 +116,7 @@ export function LayersTab() {
             <th className="py-1 font-medium">{t('standards.layer.weight')}</th>
             <th className="py-1 font-medium">{t('standards.layer.type')}</th>
             <th className="py-1 font-medium">{t('standards.layer.group')}</th>
+            <th className="py-1 font-medium">{t('standards.layer.print')}</th>
             <th className="py-1 font-medium">{t('standards.layer.visible')}</th>
             {view ? <th className="py-1 font-medium text-center">{t('standards.layer.inView', { view: view.name })}</th> : null}
             <th><span className="sr-only">{t('standards.layer.delete', { name: '' })}</span></th>
@@ -119,7 +125,7 @@ export function LayersTab() {
         {sections.map(({ group, layers: members }) => (
           <tbody key={group?.id ?? 'ungrouped'}>
             <tr className="bg-zinc-50 dark:bg-zinc-900">
-              <td colSpan={view ? 9 : 8} className="py-1 px-1">
+              <td colSpan={view ? 10 : 9} className="py-1 px-1">
                 <div className="flex items-center gap-2 font-semibold">
                   {group ? (
                     <>
@@ -145,6 +151,7 @@ export function LayersTab() {
           </tbody>
         ))}
       </table>
+      <LineTypesEditor />
     </div>
   );
 }

@@ -142,4 +142,11 @@ describe('the joinery schedule keeps its text inside the viewport clip (#42)', (
       for (const r of runs.filter((q) => q.anchor === 'start')) assert.ok(r.x >= PAD - 1e-9, `"${r.text}" starts at ${r.x}, left of the inset ${PAD}`);
     }
   });
+
+  it('writes the hands the model states for doors without a configured type (#486)', () => {
+    const doors: ScheduleData = { levels: ['Ground'], entries: [entry({ key: 'u', kind: 'door', spec: null, mark: 'D1', name: 'Door', width: 0.9, height: 2.1, counts: { Ground: 2 }, total: 2, operations: ['swing-left', 'swing-right'] })] };
+    assert.ok(texts(layoutSchedule(doors, labels)).includes('swing-left + swing-right'));
+    const bare: ScheduleData = { levels: ['Ground'], entries: [{ ...doors.entries[0], operations: undefined }] };
+    assert.ok(!texts(layoutSchedule(bare, labels)).includes('swing-left + swing-right'));
+  });
 });
