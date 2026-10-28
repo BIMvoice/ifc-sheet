@@ -4,12 +4,13 @@
 
 /**
  * Which annotations lost or changed their element when the model changed: a
- * tag (`tagOf`), a label (`labelOf`), a DIMALL dimension of a door or window width (`measures`; each a GlobalId) and a level mark that
+ * tag (`tagOf`), a label (`labelOf`), a DIMALL dimension of a door or window width (`measures`; each a GlobalId), a dimension snapped to model geometry (`anchorA`, `anchorB`: one impact per element at its ends) and a level mark that
  * reads a storey (`ref.storey`, a GlobalId or the storey's name). Section marks
  * name views (`sectionOf`), not model elements, so they have no element to lose
  * (`main` has no detail marks). Pure.
  */
 
+import { anchorsOf } from '@/drafting/dimension-anchor';
 import type { DraftEntity } from '@/drafting/types';
 import type { ModelChange } from './compare';
 
@@ -23,17 +24,18 @@ export interface AnnotationImpact {
   kinds: ModelChange['kinds'];
 }
 
-function elementOf(d: DraftEntity): string | null {
+/** The elements an annotation names: one, or for a dimension snapped to model geometry (`anchorA`, `anchorB`) the element at each end. */
+function elementsOf(d: DraftEntity): string[] {
   const guid = [d.params.labelOf, d.params.tagOf, d.params.measures].find((g): g is string => typeof g === 'string');
-  if (guid) return guid;
-  return d.shape.type === 'level' && typeof d.shape.ref?.storey === 'string' ? d.shape.ref.storey : null;
+  if (guid) return [guid];
+  if (d.shape.type === 'level') return typeof d.shape.ref?.storey === 'string' ? [d.shape.ref.storey] : [];
+  return [...new Set(anchorsOf(d).map(({ anchor }) => anchor.g))];
 }
 
 export function annotationImpacts(drafts: readonly DraftEntity[], changes: readonly ModelChange[]): AnnotationImpact[] {
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
-  return drafts.flatMap((d): AnnotationImpact[] => {
-    const guid = elementOf(d);
-    const change = guid ? byGuid.get(guid) : undefined;
-    return guid && change ? [{ draftId: d.id, viewId: d.viewId, guid, how: change.kinds.includes('removed') ? 'lost' : 'changed', kinds: change.kinds }] : [];
-  });
+  return drafts.flatMap((d): AnnotationImpact[] => elementsOf(d).flatMap((guid): AnnotationImpact[] => {
+    const change = byGuid.get(guid);
+    return change ? [{ draftId: d.id, viewId: d.viewId, guid, how: change.kinds.includes('removed') ? 'lost' : 'changed', kinds: change.kinds }] : [];
+  }));
 }

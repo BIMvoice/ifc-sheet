@@ -54,6 +54,7 @@ import { classificationMappingsField } from './classification-mappings';
 import { commentsField } from './comments';
 import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
+import { languageField } from './language';
 import { revisionsField } from './revisions';
 import { norwayPermitField } from './norway-permit';
 import { pacInterventionField } from './pac-intervention';
@@ -133,6 +134,8 @@ const DOCUMENT_FIELD_DEFS = [
   classificationMappingsField,
   // The standards pack installed in the project and the values it replaced (#365); absent: none.
   installedStandardField,
+  // The language the generated names were made in (set when the starting set is made); absent: not recorded.
+  languageField,
   // The works the permit project is for (#364); absent: a new building.
   pacInterventionField,
   // The project is a Norwegian building application (#372); absent: it is not.
