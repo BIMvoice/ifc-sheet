@@ -100,3 +100,41 @@ describe('chain dimensions', () => {
     assert.equal(drafts(), before);
   });
 });
+
+/** Review of #511: every test above used exactly collinear points, so a chain whose snapped points are a millimetre off line was never one. */
+describe('a chain of aligned dimensions whose points are not exactly in line', () => {
+  /** DIMALIGNED through `pts` (the dimension line clicked at (2, 1)), after clearing the chain `beforeEach` drew. */
+  function drawn(pts: [number, number][]): string[] {
+    resetProject();
+    clearDraftHistory();
+    startDraftCommand('dimaligned');
+    click(...pts[0]); click(...pts[1]); click(2, 1);
+    for (const p of pts.slice(2)) click(...p);
+    pressEnter();
+    return dimIds();
+  }
+
+  it('is one chain when the points are 1 mm off line, and its edits work', () => {
+    const ids = drawn([[0, 0], [4, 0.001], [9, -0.001], [12, 0.001]]);
+    assert.equal(ids.length, 3);
+    for (const id of ids) assert.equal(chainOf(drafts(), id).length, 3, 'every span finds the whole chain');
+    edit('dimsplit', [9, -0.001]);
+    assert.equal(chainOf(drafts(), ids[0]).length, 2);
+    assert.equal(chainOf(drafts(), ids[2]).length, 1);
+  });
+
+  it('removes a witness point from a chain 1 mm off line instead of reporting no change', () => {
+    const ids = drawn([[0, 0], [4, 0.001], [9, -0.001], [12, 0.001]]);
+    edit('dimremovepoint', [4, 0.001]);
+    assert.equal(chainOf(drafts(), ids[0]).length, 2);
+  });
+
+  it('is not one chain when a span is clearly off the line (5 cm, or leaning 5 degrees)', () => {
+    let ids = drawn([[0, 0], [4, 0], [9, 0.05], [12, 0.05]]);
+    assert.equal(chainOf(drafts(), ids[0]).length, 1);
+    ids = drawn([[0, 0], [4, 0], [9, 0.4375], [12, 0.4375]]);
+    assert.equal(chainOf(drafts(), ids[0]).length, 1);
+    ids = drawn([[0, 0], [4, 0], [8, 0.35]]);
+    assert.equal(chainOf(drafts(), ids[0]).length, 1);
+  });
+});

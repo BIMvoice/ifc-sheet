@@ -16,7 +16,7 @@ import { dimensionLayout } from './annotation';
 import { anchorParams } from './dimension-anchor';
 import { continueDimension, type DimensionShape } from './dimension-chain';
 import type { DraftEntity, Pt } from './types';
-import { COINCIDENT, add, dist, dot, scale, sub } from './vec';
+import { CHAIN_TOLERANCE, COINCIDENT, add, dist, dot, scale, sub } from './vec';
 
 /** The param that marks a dimension as the first of its chain, though it starts where another ends. */
 export const CHAIN_BREAK = 'chainBreak';
@@ -32,12 +32,17 @@ function frameOf(d: DimensionShape): { a: Pt; dir: Pt; n: Pt } | null {
   return { a: line.a, dir, n: { x: -dir.y, y: dir.x } };
 }
 
-/** `next` continues `prev`: it starts at `prev`'s end, on `prev`'s line, and is not a marked start. */
+/**
+ * `next` continues `prev`: it starts at `prev`'s end, its dimension line lies on `prev`'s (both of its ends within `CHAIN_TOLERANCE` of it,
+ * so a chain whose snapped points are a millimetre off line is still one chain; a span that merely leans away is not), and it is not a marked start.
+ */
 function continues(prev: Dim, next: Dim): boolean {
   if (next.params[CHAIN_BREAK] === true || prev.viewId !== next.viewId || prev.shape.variant !== next.shape.variant) return false;
-  if (dist(prev.shape.b, next.shape.a) > COINCIDENT) return false;
+  if (dist(prev.shape.b, next.shape.a) > CHAIN_TOLERANCE) return false;
   const p = frameOf(prev.shape), q = frameOf(next.shape);
-  return !!p && !!q && Math.abs(dot(sub(q.a, p.a), p.n)) < COINCIDENT && Math.abs(dot(q.dir, p.n)) < 1e-6;
+  if (!p || !q || Math.abs(dot(q.dir, p.n)) > 0.1) return false;
+  const far = dimensionLayout(next.shape).lines[2].b;
+  return Math.abs(dot(sub(q.a, p.a), p.n)) <= CHAIN_TOLERANCE && Math.abs(dot(sub(far, p.a), p.n)) <= CHAIN_TOLERANCE;
 }
 
 /** The chain `id` belongs to, in order from its start; empty when `id` is no dimension. */
