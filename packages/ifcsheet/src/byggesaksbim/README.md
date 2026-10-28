@@ -4,7 +4,7 @@
 
 Source: the DiBK P13 eByggesak report (ARK, Forprosjekt, IFC4 ADD2 TC1 links), cross-checked with the mvdXML DiBK publishes with it (`status="sample"`). DiBK publishes no IDS; this is our reading of the report, not an official DiBK artefact. Read 2026-10-26.
 
-The 24 Advarsel (warning) items are not shipped: IDS has no severity level, so they would read as failures.
+The 24 of the 27 Advarsel (warning) items that IDS can express are not shipped: IDS has no severity level, so they would read as failures.
 
 ## Hard requirements (`byggesaksbim.ids`)
 
