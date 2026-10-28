@@ -207,5 +207,6 @@ export const joineryEn = {
   'joinery.draft.title': 'Drawing on the {view} of {mark} {name}',
   'joinery.draft.done': 'Back to the schedule',
   'joinery.draft.hint': 'Everything drawn here belongs to the type and prints on every schedule that shows it. Lines, arcs, circles, text and hatches are kept.',
+  'joinery.draft.refused': 'Not available in a schedule view; draw lines, arcs, text or hatches.',
   'joinery.draft.enter': 'Double-click a view of a type to draw on it',
 } as const satisfies Record<string, TranslationValue>;
