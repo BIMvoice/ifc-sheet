@@ -18,7 +18,7 @@
  * the issue say which.
  */
 
-import { DxfR2000 } from './dxf-r2000';
+import { DxfR2000, type TablesFace } from './dxf-r2000';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { paperOf } from '@/project/sheets';
 import { useProjectStore } from '@/project/project-store';
@@ -39,6 +39,12 @@ const STRAIGHT = /^[MLHVZmlhvz0-9eE.,\s+-]*$/;
 
 function layerOf(el: Element): string {
   return el.closest('[data-dxf-layer]')?.getAttribute('data-dxf-layer') ?? 'SHEET';
+}
+
+/** The face a table's text is set in (`data-dxf-font`, #500); absent on every other text, which stays in Standard. */
+function tablesFaceOf(el: Element): TablesFace | undefined {
+  const face = el.getAttribute('data-dxf-font');
+  return face === 'sans' || face === 'serif' || face === 'mono' ? face : undefined;
 }
 
 const tag = (el: Element, name: string) => el.closest(`[data-dxf-${name}]`)?.getAttribute(`data-dxf-${name}`) ?? undefined;
@@ -252,6 +258,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
         rotationDeg: (-Math.atan2(m.b, m.a) * 180) / Math.PI,
         align: anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left',
         pen: pens.own,
+        tablesFace: tablesFaceOf(el),
       });
       continue;
     }
