@@ -151,6 +151,8 @@ export function summariseListRows(
   const summaryTallies = tallies(sumIds);
   for (const row of rows) for (const s of sumIndices) tallyValue(summaryTallies[s.id], row.values[s.idx]);
   const summary: ListSummary = { count: rows.length, sums: tallyTotals(summaryTallies) };
+  const missing = Object.fromEntries(sumIds.map((id) => [id, rows.length - summaryTallies[id].counted]).filter(([, n]) => (n as number) > 0));
+  if (Object.keys(missing).length > 0) summary.missing = missing;
 
   // Recursive per-level bucketing, preserving first-seen order within a level,
   // then ordered largest-group-first (stable default) before flattening.
