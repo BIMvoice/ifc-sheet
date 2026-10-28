@@ -696,7 +696,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro).\n"
+  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro, de).\n"
  },
  {
   "argv": [
@@ -707,7 +707,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro).\n"
+  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro, de).\n"
  },
  {
   "argv": [
