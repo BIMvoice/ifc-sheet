@@ -43,6 +43,17 @@ function inOtherField(target: EventTarget | null, input: HTMLInputElement | null
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
+/**
+ * A form control that has no use for Escape: a select (its list closes on the key before the page ever sees it), a number
+ * or a choice. Escape from one still ends the running tool, as from the canvas (#453): a tool card's pattern list must not
+ * keep it alive. Free text keeps its Escape.
+ */
+function isPlainControl(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement) || target.closest('[data-owns-keys]')) return false;
+  if (target.tagName === 'SELECT') return true;
+  return target instanceof HTMLInputElement && ['number', 'range', 'checkbox', 'radio', 'button'].includes(target.type);
+}
+
 /** A control that acts on Enter or Space itself: a button, a link, a role=button, a form control. */
 const INTERACTIVE = 'button, a[href], [role="button"], select, textarea, input, [contenteditable]:not([contenteditable="false"])';
 
@@ -61,7 +72,7 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const input = inputRef.current;
-      if (inOtherField(e.target, input)) return;
+      if (inOtherField(e.target, input) && !(e.key === 'Escape' && isPlainControl(e.target))) return;
       // An open dialog or menu owns the keyboard, as it does for the viewer's own keys (the dispatcher).
       if (openKeyboardOverlay()) return;
       // A running BIM tool owns the keys (Enter, Escape, typed lengths: its own bindings).

@@ -14,7 +14,7 @@ import type { DraftLayer } from '@/drafting/types';
 import type { LineType } from '@/drafting/styles';
 import type { CadKind } from '@/project/cad-layers';
 
-export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined> & Partial<Record<`data-dxf-${'class' | 'material' | 'kind'}`, string | undefined>>;
+export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined> & Partial<Record<`data-dxf-${'own-lw' | 'own-ltype' | 'print'}`, string | undefined>> & Partial<Record<`data-dxf-${'class' | 'material' | 'kind'}`, string | undefined>>;
 
 /**
  * What the CAD layer standard (`project/cad-layers.ts`) matches on, beyond the
@@ -33,6 +33,16 @@ export function layerTags(layer: DraftLayer | undefined, kind?: string): DxfTags
     'data-dxf-color': layer?.color ?? '#000000',
     'data-dxf-lw': String(layer?.lineWeight ?? 0.25),
     'data-dxf-ltype': layer?.lineType ?? 'continuous',
+    'data-dxf-print': layer?.print === false ? '0' : undefined,
+  };
+}
+
+/** A drafted line's tags: its layer's, and the weight and line type the element overrides (`entityPen`), which the DXF writes on the entity itself. */
+export function lineTags(layer: DraftLayer | undefined, own: { lineWeight?: number; lineType?: string }): DxfTags {
+  return {
+    ...layerTags(layer),
+    'data-dxf-own-lw': own.lineWeight !== undefined ? String(own.lineWeight) : undefined,
+    'data-dxf-own-ltype': own.lineType,
   };
 }
 

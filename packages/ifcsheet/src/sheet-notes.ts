@@ -44,6 +44,9 @@ export function rescaledNote(locale: string | undefined, paper: string, wanted: 
     : `Scale 1:${used}: the drawing does not fit ${paper} at 1:${wanted}.`;
 }
 
+/** Whether `text` is a note `rescaledNote` wrote (in either language): a layout at a scale that fits drops it. */
+export const isRescaledNote = (text: string): boolean => /^Scale 1:\d+: the drawing does not fit .+ at 1:\d+\.$/.test(text) || /^Scara 1:\d+: desenul nu încape pe .+ la 1:\d+\.$/.test(text);
+
 /**
  * The note lines of `sheet`, in the frame's bottom-left corner: the last line on the bottom, the others above it. With the
  * title block across the bottom right (the default) that strip of the frame is free of drawings, which stop above the title
