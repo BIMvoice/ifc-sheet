@@ -160,6 +160,7 @@ export function projectSchema(): Schema {
       handoverPattern: str,
       unitsAndNumbers: obj,
       hatchPatterns: { type: 'string', description: "The project's own hatch patterns as .pat text (the built-in ones are not stored); a colour scheme's hatches may name them." },
+      language: { type: 'string', enum: ['en', 'ro'], description: 'The language (ro or en) the generated names (sheets, views) were made in; the app and a command-line build name a new sheet, view or set in it. Any other value is ignored.' },
       [SCHEDULES_KEY]: { type: 'array', items: schedule, description: 'The schedule sheets of the set (room schedule, bill of quantities, list from the Lists engine).' },
     },
     additionalProperties: true,

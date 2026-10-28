@@ -24,6 +24,7 @@ type P = { x: number; y: number };
 /** Skeleton handles: the LTYPE and LAYER tables, model space's block record, the plot-style placeholder. */
 const LTYPE_TABLE = '2';
 const LAYER_TABLE = '1';
+const STYLE_TABLE = '5';
 const MODEL_SPACE = '17';
 const PLOT_STYLE = '13';
 const FIRST_HANDLE = 0x100;
@@ -73,6 +74,11 @@ const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString()
 const safeName = (s: string) => s.replace(/[<>/\\":;?*|=`]/g, '_').trim().slice(0, 255) || '0';
 const LINE_TYPE_NAME: Record<LineType, string> = { continuous: 'Continuous', dashed: 'DASHED', dotted: 'DOT', dashdot: 'DASHDOT' };
 
+/** The DXF text style the tables use (#500) and the font file each face names; a CAD program substitutes where it lacks the file. */
+export const TABLES_DXF_STYLE = 'Tables';
+const TABLES_FONT_FILE = { sans: 'arial.ttf', serif: 'times.ttf', mono: 'cour.ttf' } as const;
+export type TablesFace = keyof typeof TABLES_FONT_FILE;
+
 export interface PenSpec {
   color: string;
   lineType?: LineType;
@@ -86,6 +92,7 @@ export class DxfR2000 {
   private readonly layers = new Map<string, Layer>();
   private readonly out: string[] = [];
   private handle = FIRST_HANDLE;
+  private tablesFace: TablesFace | undefined;
 
   /** `patternScale` multiplies line-type dash lengths (paper mm): the view's scale for a 1:1 model export. */
   constructor(private readonly patternScale = 1) {}
@@ -167,12 +174,13 @@ export class DxfR2000 {
     this.out.push('98', '0');
   }
 
-  text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec } = {}): void {
+  text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec; tablesFace?: TablesFace } = {}): void {
     const clean = value.replace(/[\r\n]+/g, ' ').trim();
     if (!clean || !(height > 0)) return;
     const h = options.align === 'center' ? 1 : options.align === 'right' ? 2 : 0;
     this.out.push(...this.head('TEXT', layer, options.pen), '100', 'AcDbText', '10', fmt(at.x), '20', fmt(at.y), '30', '0', '40', fmt(height), '1', clean,
-      '50', fmt(options.rotationDeg ?? 0), '7', 'Standard');
+      '50', fmt(options.rotationDeg ?? 0), '7', options.tablesFace ? TABLES_DXF_STYLE : 'Standard');
+    if (options.tablesFace) this.tablesFace = options.tablesFace;
     if (h) this.out.push('72', String(h), '11', fmt(at.x), '21', fmt(at.y), '31', '0');
     this.out.push('100', 'AcDbText');
   }
@@ -203,11 +211,15 @@ export class DxfR2000 {
   bytes(comment: string): Uint8Array {
     const ltypes = this.lineTypes();
     const layers = this.layerTable();
+    const styles = this.tablesFace
+      ? ['0', 'STYLE', '5', this.next(), '330', STYLE_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbTextStyleTableRecord', '2', TABLES_DXF_STYLE, '70', '0', '40', '0.0', '41', '1.0', '50', '0.0', '71', '0', '42', '2.5', '3', TABLES_FONT_FILE[this.tablesFace], '4', '']
+      : [];
     const pairs = (list: string[]) => list.map((v, i) => (i % 2 === 0 ? v.padStart(3) : v)).join('\n');
     const text = skeleton
       .replace(/^999\n[^\n]*\n/, `999\n${comment.replace(/\n/g, ' ')}\n`)
       .replace('{{LTYPES}}\n', ltypes.length ? `${pairs(ltypes)}\n` : '')
       .replace('{{LAYERS}}\n', layers.length ? `${pairs(layers)}\n` : '')
+      .replace('{{STYLES}}\n', styles.length ? `${pairs(styles)}\n` : '')
       .replace('{{ENTITIES}}\n', this.out.length ? `${pairs(this.out)}\n` : '')
       .replace('{{HANDSEED}}', this.handle.toString(16).toUpperCase());
     return encodeDxfCp1252(text).bytes;

@@ -7,12 +7,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
+import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
 import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from '../pac-set.js';
-import { PAC_DEFAULT_LOCALE, pacPages, pacTemplateFor } from '../cli-pac.js';
+import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { type CliIo } from '../cli-command.js';
@@ -48,7 +49,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: cannot read ${args.model}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
     return EXIT.failed;
   }
-  let setTemplate: SetTemplate | undefined = args.pac ? pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE) : undefined;
+  let setTemplate: SetTemplate | undefined;
   if (args.template !== undefined) {
     try {
       setTemplate = parseSetTemplate(await readFile(args.template, 'utf8'));
@@ -70,12 +71,14 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
       return EXIT.failed;
     }
   }
+  // The one language of the run: the project's recorded language, else --locale, else Romanian for a PAC submission and English otherwise. It names the sheets and views, and with --pac the PAC words and the opis.
+  const { language, notes } = resolveLanguage({ project, locale: args.locale, pac: args.pac });
+  for (const note of notes) io.stderr(note);
   // The permit project: --pac-mode, else the project file's (the mode the app saved), else the full one.
   const pacMode: PacMode = args.pacMode ?? project?.pacMode ?? 'full';
-  if (args.pac) setTemplate = pacTemplateFor(args.locale ?? PAC_DEFAULT_LOCALE, pacMode);
+  if (args.pac) setTemplate = pacTemplateFor(language, pacMode);
   // A permit project is a Romanian one: Ordinul 975/2026 asks for the cartuș F_01, so --pac draws the Romanian standard's
   // title block unless --standard names one (that wins) or the project has a title block of its own.
-  const language = args.pac ? args.locale ?? PAC_DEFAULT_LOCALE : undefined;
   const standardId = args.standard ?? (args.pac && language === 'ro' && !project?.titleBlockTemplate ? 'ro' : undefined);
   const standard = buildStandard(standardId, project);
   if (!standard) {
@@ -85,14 +88,14 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), ...(language ? { locale: language } : {}) });
+  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), ...(language ? { language } : {}) });
-  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, args.locale ?? PAC_DEFAULT_LOCALE, args.intervention, pacMode) : sheets, { title: set.document.name });
+  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), language });
+  const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
   if (args.out) {
@@ -126,7 +129,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   if (project) {
     // The starting set has no schedule sheet (the app composes those): the project's list schedules are printed as text, the table `ifcsheet list` gives.
     try {
-      for (const { table } of listSchedulesOn(model, project.schedules, 'en', basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table, sheetFormat('en', standard.unitsAndNumbers))}`);
+      for (const { table } of listSchedulesOn(model, project.schedules, language, basename(args.model), project.classificationMappings)) io.stdout(`\n${listTableText(table, sheetFormat(language, standard.unitsAndNumbers))}`);
     } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;
@@ -138,7 +141,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>] [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -148,11 +151,18 @@ export const buildCommand: CliCommand = {
           rules the app applies, a rule the model cannot meet skipped and said.
           With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
           one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
+          The sheets and views (and with --pac the opis) are in the language the project records, else --locale
+          (ro or en), else English (Romanian with --pac).
           A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
           larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.`,
   async run(rest, values, io) {
-    if (values.csv || values.detail || (values.locale !== undefined && !values.pac)) {
-      io.stderr('ifcsheet build has no --csv or --detail, and --locale only with --pac; they are options of boq and rooms.\n');
+    if (values.csv || values.detail) {
+      io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
+      return EXIT.usage;
+    }
+    const badLocale = localeProblem(values.locale);
+    if (badLocale) {
+      io.stderr(badLocale);
       return EXIT.usage;
     }
     if (values.json) {
