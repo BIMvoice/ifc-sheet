@@ -28,7 +28,7 @@ import { prepareListProviders } from './prepare-providers';
 const FZK = resolve(import.meta.dirname, '../../test/__fixtures__/AC20-FZK-Haus.ifc');
 const TYPE_240 = 'Leichtbeton 102890359 240';
 const TYPE_300 = 'Leichtbeton 102890359 300';
-const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No' };
+const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No', missing: 'The total of {column} leaves out {missing} of {rows} rows with no value' };
 
 const CODE = { id: 'code', source: 'officeClassification', propertyName: 'Code' } as const;
 const TITLE = { id: 'title', source: 'officeClassification', propertyName: 'Title' } as const;
