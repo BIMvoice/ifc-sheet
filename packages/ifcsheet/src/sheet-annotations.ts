@@ -20,7 +20,7 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
-import { formatDimension, layerPen, layerShows, lookOf, readableDeg, type LayerGroup, type StyleBook } from './draft-look.js';
+import { formatDimension, layerShows, lookOf, type LayerGroup, type StyleBook } from './draft-look.js';
 import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
