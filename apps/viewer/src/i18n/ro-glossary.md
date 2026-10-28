@@ -84,6 +84,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Layer / line type / weight (drafting standards) | Strat / tip de linie / grosime | `standards.layer.*` (#513); "Activ" for a layer that is on; line types Continuă, Întreruptă, Punctată, Linie-punct |
 | Text style / text height | Stil de text / înălțimea textului | "Stil de cotare" for a dimension style; `standards.text.*`, `standards.dim.*` |
 | Font (sans serif / serif / monospace) | Font (fără serife / cu serife / monospațiat) | "Font" is the same word in both languages; font names (Inter, Times, Courier) are never translated |
+| Tables style (the text style schedules, reports and the register follow) | Stil pentru tabele | "Tabele" names the style, as in the generated sheet names; the register is "registrul de desene" |
 | Extension gap / extension beyond | Distanța liniei de ajutor / depășirea liniei de ajutor | |
 | Library | Bibliotecă | |
 | Project navigator | Navigatorul de proiect | |

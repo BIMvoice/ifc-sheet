@@ -6,6 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { anchorOf, encodeAnchor } from '@/drafting/dimension-anchor';
 import { newDraft } from '@/drafting/draft-store';
 import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet } from '@/project/types';
@@ -161,6 +162,17 @@ describe('danglingAnnotations, named', () => {
     const f = danglingAnnotations(base({ drafts: [tag('plan', 'Haustuer', 'H')], elementExists: () => false, sheets: [sheet('s1', 'A-101', ['plan']), sheet('s2', 'A-102', ['plan'])] }));
     assert.equal(f.length, 1);
     assert.equal(f[0].params.sheet, 'A-101, A-102');
+  });
+  it('lists a dimension snapped to a wall that is gone, and not one whose walls are all there or one drawn in the open (#459)', () => {
+    const rect = { x0: 0, y0: 0, x1: 4, y1: 0.2 };
+    const shape = { type: 'dimension' as const, variant: 'aligned' as const, a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, at: { x: 2, y: -1 }, height: 0.25 };
+    const end = (guid: string, x: number) => encodeAnchor(anchorOf({ x, y: 0 }, { guid, rect })!);
+    const toGone = newDraft('plan', 'l', shape, { anchorA: end('HERE', 0), anchorB: end('GONE', 4) });
+    const toBoth = newDraft('plan', 'l', shape, { anchorA: end('HERE', 0), anchorB: end('HERE', 4) });
+    const free = newDraft('plan', 'l', shape);
+    const f = danglingAnnotations(base({ drafts: [toGone, toBoth, free], elementExists: (g) => g === 'HERE', lastKnown: (g) => (g === 'GONE' ? { className: 'IfcWall', name: 'W2' } : undefined) }));
+    assert.deepEqual(f.map((x) => [x.draftId, x.guids, x.params.what, x.remedies]), [[toGone.id, ['GONE'], 'dimension', ['delete']]]);
+    assert.equal(f[0].params.element, 'IfcWall · "W2" · GONE');
   });
   it('offers a dimension only the delete remedy, and a tag with no sheet says so', () => {
     const m = newDraft('plan', 'l', { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, at: { x: 0, y: 1 }, height: 0.25 }, { measures: 'H' });

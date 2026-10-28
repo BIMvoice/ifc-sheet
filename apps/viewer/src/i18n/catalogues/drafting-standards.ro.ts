@@ -62,4 +62,7 @@ export const draftingStandardsRo = {
   'standards.dim.rule': 'Valorile se citesc mereu de la stânga la dreapta, iar pe liniile verticale de jos în sus; „Deasupra” le pune în stânga unei linii verticale.',
   'standards.el.byStyle': 'După stil',
   'standards.el.overridden': 'Modificat pe acest element',
+  'standards.tables.name': 'Tabele',
+  'standards.tables.make': 'Adăugați un stil pentru tabele',
+  'standards.tables.fontsNote': 'Tabelele, rapoartele și registrul de desene urmează acest stil (font și cursiv). Sunt oferite doar cele trei familii de caractere pe care PDF-ul le poate scrie: fără serife (Inter), cu serife (Times) și monospațiat (Courier). Dimensiunile rămân neschimbate.',
 } as const satisfies Record<string, TranslationValue>;

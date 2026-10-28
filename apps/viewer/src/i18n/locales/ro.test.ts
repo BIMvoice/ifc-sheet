@@ -39,7 +39,7 @@ const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'libra
 const IN_SCOPE_KEYS = new Set<string>([
   // The drafting standards dialog's layers, text styles and dimension styles (#513): every key of its English file. Not the dialog's other tabs (`standards.tab.types`, `.symbols`, `.library`, `.cad`).
   ...Object.keys(draftingStandardsEn),
-  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.text.bold', 'standards.text.italic',
+  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.el.resetTag', 'standards.el.tagOverridden', 'standards.text.bold', 'standards.text.italic',
   'standards.dim.placement.above', 'standards.dim.placement.centered', 'standards.dim.placement.below',
   'standards.dim.arrow', 'standards.dim.arrow.tick', 'standards.dim.arrow.arrow', 'standards.dim.arrow.dot', 'standards.dim.arrow.none',
   'drafting.snap', 'drafting.sectionDepth', 'viewerShell.file.ifcxOverlayRequiresIfcx',
