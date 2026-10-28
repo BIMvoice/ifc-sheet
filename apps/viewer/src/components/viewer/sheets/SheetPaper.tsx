@@ -26,8 +26,8 @@ import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/pro
 import { hasTrueScale } from '@/project/axonometric';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
-import { cadKindOf, layerTags, penTags } from './dxf-tags';
-import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { cadKindOf, layerTags, lineTags, penTags } from './dxf-tags';
+import { entityPen, layerShows, lookOf, overrideKey } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
 import { resolvedDraft } from '@/project/parametric-text';
 import { TitleBlockGraphic } from './TitleBlockGraphic';
@@ -201,8 +201,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
           const color = layerColor.get(e.layerId);
           if (color === null) return null;
           return isGeometry(e.shape)
-            ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
+            ? <PenPath key={e.id} layer={layerById.get(e.layerId)} params={e.params} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
       {marks ? <ViewportMarks shapes={marks} /> : null}
@@ -289,10 +289,16 @@ function useDraftingStandards() {
 }
 
 /** A drafted line on paper with its layer's pen (weight and line type, millimetres). */
-function PenPath({ layer, d, color }: { layer: DraftLayer | undefined; d: string; color: string }) {
-  const pen = layerPen(layer);
-  return <path {...layerTags(layer)} d={d} stroke={color} strokeWidth={pen.width} strokeDasharray={pen.dash.length ? pen.dash.join(' ') : undefined} fill="none" />;
+function PenPath({ layer, params, d, color }: { layer: DraftLayer | undefined; params: DraftEntity['params']; d: string; color: string }) {
+  const lineTypes = useProjectStore((s) => s.lineTypes);
+  // The layer's pen, and over it what the element sets itself; a colour the layer gives is the layer's (it is `color`), the element's own wins.
+  const pen = entityPen(layer, params, lineTypes ?? []);
+  const own = typeof params[overrideKey('color')] === 'string' && params[overrideKey('color')] !== '' ? pen.color : color;
+  return <path {...lineTags(layer, pen.own)} {...printOnly(layer)} d={d} stroke={own} strokeWidth={pen.width} strokeDasharray={pen.dash.length ? pen.dash.join(' ') : undefined} fill="none" />;
 }
+
+/** What marks an element of a layer that does not print: the print and PDF export leave it out (`sheetSvgText`), the screen and the DXF keep it. */
+export const printOnly = (layer: DraftLayer | undefined) => (layer?.print === false ? { 'data-print-ignore': 'true' } : {});
 
 /** The sheet's own lines and annotations, on the paper. */
 function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; issueDate?: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
@@ -308,8 +314,8 @@ function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPat
         const color = colour.get(e.layerId);
         if (color === null) return null;
         return isGeometry(e.shape)
-          ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, PAPER, 'down')} color={color ?? '#000'} />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
+          ? <PenPath key={e.id} layer={layerById.get(e.layerId)} params={e.params} d={shapePath(e.shape, PAPER, 'down')} color={color ?? '#000'} />
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
       })}
     </g>
   );

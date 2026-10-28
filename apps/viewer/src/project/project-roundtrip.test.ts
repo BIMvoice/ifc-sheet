@@ -154,7 +154,7 @@ const legend: Required<ProjectLegend> = {
   columns: 2, rowHeight: 9, swatchWidth: 22, textStyle: 'big', headings: false,
 };
 
-const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
+const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'lt-centre', group: 'g1', print: false };
 
 const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, placed: true, placedPages: [{ page: 3, x: 120, y: 80 }], keyPlanOf: 'vp0', northArrow: false, scaleBar: true, drawingNumber: '7',
@@ -275,6 +275,7 @@ const FULL = {
     id: 'arch', name: 'Arch', textStyle: 'big', arrow: 'arrow', arrowSize: 2, extGap: 0.5, extOver: 2, placement: 'below', textGap: 0.8, precision: 0, unit: 'mm', color: '#0000aa',
   }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],
+  lineTypes: [{ id: 'lt-centre', name: 'Centre', dash: [6, 2, 0, 2] }],
   graphicStandard: 'ro-practice',
   openingLines: 'hinge',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
