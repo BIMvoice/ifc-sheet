@@ -153,6 +153,8 @@ export const GERMAN_PRACTICE: GraphicStandard = {
   // practice: the engine's default dimension style (arrow and gaps) under the pack's own text style; DIN 1356-1's dimensioning conventions were not checked.
   dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'de-dim', name: 'Dimensions 2.5', textStyle: 'de-text-25' }],
   current: { textStyle: 'de-text-25', dimStyle: 'de-dim' },
+  // Unchanged from before the setting existed: no German source for the direction was checked.
+  openingLines: 'towardsHandle',
 };
 
 export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE, GERMAN_PRACTICE];
