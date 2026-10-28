@@ -17,6 +17,7 @@ import { clearDraftHistory, draftsOfView, lastDraftStepAt, undoDrafts } from '@/
 import { labelTargets } from '@/labels/label-all';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
+import { drawingShownBy } from '@/project/view-shown';
 import { modelLevels } from '@/project/model-levels';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
@@ -30,7 +31,7 @@ import { ALL_CHOICES } from './choices';
 import { annotateSet, targetViews } from './annotate-set';
 import { effectiveOptions, presetsOfProject, saveAnnotationPreset, type AnnotationOptions } from './presets';
 import { applyAnnotationPreset, useAnnotatePanel } from './store';
-import { contextForView, type AnnotatableView } from './run-view';
+import { contextForView, runCommandOnView, type AnnotatableView } from './run-view';
 import { choicesFrom } from './choices';
 
 /** Door tags and room names; no window tags, no dimensions, no level marks. */
@@ -112,6 +113,30 @@ describe('annotation presets on AC20-FZK-Haus', { skip: planModelMissing(FZK_HAU
     // The window tags the full TAGALL would add exist, so the preset's absence of them is its choice.
     await apply({ on: { tagall: true, dimall: false, levelall: false }, tagParts: ALL_TAG_PARTS });
     assert.ok(plans.map(carried).some((t) => t.windowMarks > 0), 'the house has windows to tag');
+  });
+
+  it('on the drawings the views store (drawingShownBy), the full TAGALL tags the doors, the windows and the rooms, and a plan whose drawing omits doors and windows gets none', async () => {
+    const views = await layOutSet();
+    // The drawing a view stores is the generated one as the view shows it (`ViewDrawingHost`): a plain plan leaves nothing out, a discipline plan only what its filter drops.
+    for (const view of views) {
+      const stored = useViewDrawings.getState().byView[view.id].drawing!;
+      useViewDrawings.setState((s) => ({ byView: { ...s.byView, [view.id]: { ...EMPTY_VIEW_DRAWING, drawing: drawingShownBy(view, stored), status: 'ready' } } }));
+    }
+    await apply({ on: { tagall: true, dimall: false, levelall: false }, tagParts: ALL_TAG_PARTS });
+    const plans = views.filter((v) => v.kind === 'plan').map(carried);
+    assert.ok(plans.some((c) => c.doorMarks > 0), 'doors are tagged');
+    assert.ok(plans.some((c) => c.windowMarks > 0), 'windows are tagged');
+    assert.ok(plans.some((c) => c.rooms > 0), 'rooms are named');
+    // A plan whose drawing leaves the doors and windows out (what a discipline plan's omit predicate does, `viewOmits`) gets no door or window tag: TAGALL labels what the stored drawing holds.
+    const ground = views.find((v) => v.kind === 'plan' && v.name === 'Erdgeschoss')!;
+    const bare = await model.planOf(ground, { omits: 'view' });
+    assert.ok(drawings.get(`plan:${ground.name}`)!.cutPolygons.length > bare.cutPolygons.length, 'the omit predicate drops elements of the generated drawing');
+    const probe: AnnotatableView = { ...ground, id: 'omits-probe' };
+    useViewDrawings.setState((st) => ({ byView: { ...st.byView, [probe.id]: { ...EMPTY_VIEW_DRAWING, drawing: bare, status: 'ready' } } }));
+    runCommandOnView(probe, bare, 'tagall', ALL_TAG_PARTS);
+    const c = carried(probe);
+    assert.equal(c.doorMarks + c.windowMarks, 0, 'no door or window tag where the drawing holds none');
+    assert.ok(c.rooms > 0, 'rooms are still named');
   });
 
   it('a preset of window tags alone places no door tag, no room name and nothing else', async () => {
