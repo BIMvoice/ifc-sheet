@@ -291,11 +291,11 @@ function Prim({ p, face, onPick }: { p: SchedulePrim; face: ReturnType<typeof ta
     const path = <path {...penTags('SCHEDULE-SYMBOLS', p.w, !!p.dashed)} d={d} fill="none" stroke="#000" strokeWidth={p.w} strokeDasharray={p.dashed ? '1.2 0.8' : undefined} strokeLinejoin="round" />;
     const pick = p.pick;
     if (!onPick || !pick) return path;
-    // A wide invisible stroke to hit; left out of exports (the SVG and DXF read the drawn paths).
+    // A wide invisible stroke to hit; `data-export-ignore` leaves it out of the SVG and the DXF, which read the drawn paths.
     return (
       <g>
         {path}
-        <path data-export-ignore-dxf="true" data-pick-line={pick.line} d={d} fill="none" stroke="transparent" strokeWidth={Math.max(1.2, p.w * 4)} style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={() => onPick(pick.type, pick.line)} />
+        <path data-export-ignore="true" data-pick-line={pick.line} d={d} fill="none" stroke="transparent" strokeWidth={Math.max(1.2, p.w * 4)} style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={() => onPick(pick.type, pick.line)} />
       </g>
     );
   }
