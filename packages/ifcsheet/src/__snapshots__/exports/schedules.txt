@@ -27,6 +27,8 @@ CheckPart: type (type-only)
 ClassifiableListProvider: type (type-only)
 ContentEntry: type (type-only)
 DEFAULT_JOINERY_MAPPING: value
+Dir2: type (type-only)
+DoorOperation: type (type-only)
 DuplicateType: type (type-only)
 EXTERIOR: value
 ElementFacts: type (type-only)
@@ -138,6 +140,8 @@ csvDelimiter: value
 declared: value
 describeBoqProblem: value
 describeReadiness: value
+doorOperationOf: value
+doorSwingFlips: value
 elementCount: value
 estimatedAreas: value
 exportCsv: value
@@ -169,6 +173,7 @@ orderedRows: value
 orphanCells: value
 orphanedOverrides: value
 overrideOf: value
+parseDoorOperation: value
 partsOf: value
 passesElementFilter: value
 passesPropertyTest: value
