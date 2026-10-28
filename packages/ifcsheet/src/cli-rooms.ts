@@ -9,12 +9,12 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { openModel, readRooms } from './headless.js';
+import { openModel, readRooms, type OpenedModel } from './headless.js';
 import { roomSchedule, roomScheduleCsv, roomScheduleLines, roomScheduleText, roomScheduleWords, type RoomSchedule } from './room-schedule.js';
 import type { CliIo } from './cli.js';
 import type { RoomsRead } from './room-read.js';
 import { readProjectFile } from './project-read.js';
-import { sheetFormat } from './units-and-numbers.js';
+import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 
 export interface RoomsArgs {
   model: string;
@@ -25,10 +25,10 @@ export interface RoomsArgs {
   project?: string;
 }
 
-/** The schedule as JSON: plain numbers, each room with where its area comes from, and the rooms the area rule leaves out. */
-function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, locale: string): string {
+/** The schedule as a JSON value: plain numbers, each room with where its area comes from, and the rooms the area rule leaves out. */
+function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, locale: string) {
   const words = roomScheduleWords(locale);
-  return JSON.stringify({
+  return {
     file,
     levels: schedule.levels.map((l) => ({ name: l.name || words.noLevel, total: l.total, rooms: l.rooms.map((r) => ({ number: r.number, name: r.name, area: r.area, perimeter: r.perimeter, source: r.source })) })),
     total: schedule.total,
@@ -37,7 +37,34 @@ function scheduleJson(file: string, schedule: RoomSchedule, read: RoomsRead, loc
     withoutArea: schedule.withoutArea,
     leftOut: read.leftOut,
     lines: roomScheduleLines(schedule, words).length,
-  }, null, 2);
+  };
+}
+
+/** Everything `ifcsheet rooms` prints for a model, as values: the one computation of the command and of the MCP tool `ifcsheet_rooms`. */
+export interface RoomsOutput {
+  schedule: RoomSchedule;
+  read: RoomsRead;
+  /** What `--json` prints (before it is written as text). */
+  json: ReturnType<typeof scheduleJson>;
+  /** What `--csv` prints. */
+  csv: string;
+  /** What the plain run prints: the table in the project's "Units and numbers" format, then the line saying where the areas come from. */
+  text: string;
+}
+
+/** The room schedule of an opened model; null when it has no rooms (IfcSpace) to list. */
+export function roomsOutput(file: string, model: OpenedModel, locale: string, units?: UnitsAndNumbers): RoomsOutput | null {
+  const read = readRooms(model.dataStore, model.meshes);
+  const schedule = roomSchedule(read.levels, read.rooms);
+  if (schedule.rooms === 0) return null;
+  const words = roomScheduleWords(locale);
+  const summary = `${schedule.rooms} rooms; areas from ${schedule.rooms - schedule.fromGeometry - schedule.withoutArea} ${words.quantity}, ${schedule.fromGeometry} ${words.geometry}${schedule.withoutArea ? `, ${schedule.withoutArea} none` : ''}. Left out: ${read.leftOut.external} external, ${read.leftOut.gfa} area-scheme (GFA), ${read.leftOut.parents} split into rooms of their own.`;
+  return {
+    schedule, read,
+    json: scheduleJson(file, schedule, read, locale),
+    csv: roomScheduleCsv(schedule, locale),
+    text: `${roomScheduleText(schedule, sheetFormat(locale, units))}\n\n${summary}\n`,
+  };
 }
 
 /** `ifcsheet rooms`: exit 0 with the schedule, 1 when the file cannot be read or has no rooms. */
@@ -69,18 +96,13 @@ export async function rooms(args: RoomsArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: the geometry could not be read (${(error as Error).message}); rooms the model gives no area are listed without one\n`);
     model = await openModel(bytes, { geometry: false });
   }
-  const read = readRooms(model.dataStore, model.meshes);
-  const schedule = roomSchedule(read.levels, read.rooms);
-  if (schedule.rooms === 0) {
+  const out = roomsOutput(args.model, model, args.locale, units);
+  if (!out) {
     io.stderr(`ifcsheet: ${args.model} has no rooms (IfcSpace) to list.\n`);
     return 1;
   }
-  if (args.json) io.stdout(`${scheduleJson(args.model, schedule, read, args.locale)}\n`);
-  else if (args.csv) io.stdout(`${roomScheduleCsv(schedule, args.locale)}\n`);
-  else {
-    io.stdout(`${roomScheduleText(schedule, sheetFormat(args.locale, units))}\n`);
-    const words = roomScheduleWords(args.locale);
-    io.stdout(`\n${schedule.rooms} rooms; areas from ${schedule.rooms - schedule.fromGeometry - schedule.withoutArea} ${words.quantity}, ${schedule.fromGeometry} ${words.geometry}${schedule.withoutArea ? `, ${schedule.withoutArea} none` : ''}. Left out: ${read.leftOut.external} external, ${read.leftOut.gfa} area-scheme (GFA), ${read.leftOut.parents} split into rooms of their own.\n`);
-  }
+  if (args.json) io.stdout(`${JSON.stringify(out.json, null, 2)}\n`);
+  else if (args.csv) io.stdout(`${out.csv}\n`);
+  else io.stdout(out.text);
   return 0;
 }

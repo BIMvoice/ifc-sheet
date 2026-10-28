@@ -51,9 +51,10 @@ type T = ReturnType<typeof useTranslation>['t'];
 
 /** The schedule's labels, in the user's language and the project's number style. Pure: the Wall's export builds them too. */
 export function roomScheduleLabelsOf(t: T, locale: SheetLocale, title: string, data: RoomScheduleData | null, summary: AreaSummary | null = null): RoomScheduleLabels {
-  const notes = [t('roomSched.note.source'), t('roomSum.note.perimeter')];
+  // The legend of the `*` comes first, directly under the table it marks.
+  const notes = data && data.schedule.fromGeometry > 0 ? [t('roomSched.note.geometry', { count: data.schedule.fromGeometry })] : [];
+  notes.push(t('roomSched.note.source'), t('roomSum.note.perimeter'));
   if (data) {
-    if (data.schedule.fromGeometry > 0) notes.push(t('roomSched.note.geometry', { count: data.schedule.fromGeometry }));
     if (data.schedule.withoutArea > 0) notes.push(t('roomSched.note.none', { count: data.schedule.withoutArea }));
     notes.push(t('roomSched.note.leftOut', data.leftOut));
   }
