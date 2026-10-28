@@ -61,6 +61,8 @@ interface DraftOverlayProps {
   preview: readonly DraftShape[];
   snap: SnapHit | null;
   cursor: Pt | null;
+  /** The ortho lock beside the cursor while a point is being drawn from a base point (#454): null shows nothing. */
+  orthoLabel?: string | null;
   window: { a: Pt; b: Pt } | null;
   /** Outlines of the selected model elements. */
   highlight: readonly DraftShape[];
@@ -122,7 +124,7 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
-  const { entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
+  const { orthoLabel = null, entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
   const clipId = useId().replace(/:/g, '');
   const clipPoints = crop ? [crop.min, { x: crop.max.x, y: crop.min.y }, crop.max, { x: crop.min.x, y: crop.max.y }].map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : null;
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -184,6 +186,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
       {window ? <SelectionWindow window={window} t={t} axis={axis} /> : null}
       {snap ? <SnapMarker snap={snap} t={t} axis={axis} /> : null}
       {cursor ? <Crosshair p={drawingToScreen(cursor, t, axis)} /> : null}
+      {cursor && orthoLabel ? <text data-testid="ortho-cursor-label" x={drawingToScreen(cursor, t, axis).x + 18} y={drawingToScreen(cursor, t, axis).y - 10} fontSize={11} fill="#52525b" stroke="#fff" strokeWidth={3} paintOrder="stroke">{orthoLabel}</text> : null}
     </svg>
   );
 });

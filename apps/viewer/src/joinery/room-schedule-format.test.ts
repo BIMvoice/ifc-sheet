@@ -20,16 +20,16 @@ const areas = (locale: RoomScheduleLabels['locale']) => roomScheduleCells(SCHEDU
 
 describe('the room schedule follows the project\'s units and numbers (#88)', () => {
   it('the language alone, as before', () => {
-    assert.deepEqual(areas('en'), ['1,234.57', '1,234.57', '1,234.57']);
-    assert.deepEqual(areas('ro'), ['1.234,57', '1.234,57', '1.234,57']);
+    assert.deepEqual(areas('en'), ['1,234.57 m²', '1,234.57 m²', '1,234.57 m²']);
+    assert.deepEqual(areas('ro'), ['1.234,57 m²', '1.234,57 m²', '1.234,57 m²']);
   });
   it('the separator, the area decimals and the grouping the project sets', () => {
-    assert.equal(areas(sheetFormat('en', { separator: 'comma' }))[0], '1.234,57');
-    assert.equal(areas(sheetFormat('en', { decimals: { area: 1 } }))[0], '1,234.6');
-    assert.equal(areas(sheetFormat('en', { group: false }))[0], '1234.57');
-    assert.equal(areas(sheetFormat('ro', { separator: 'point', group: false, decimals: { area: 0 } }))[0], '1235');
+    assert.equal(areas(sheetFormat('en', { separator: 'comma' }))[0], '1.234,57 m²');
+    assert.equal(areas(sheetFormat('en', { decimals: { area: 1 } }))[0], '1,234.6 m²');
+    assert.equal(areas(sheetFormat('en', { group: false }))[0], '1234.57 m²');
+    assert.equal(areas(sheetFormat('ro', { separator: 'point', group: false, decimals: { area: 0 } }))[0], '1235 m²');
   });
   it('a decimals setting for lengths leaves areas alone', () => {
-    assert.equal(areas(sheetFormat('en', { decimals: { length: 4 } }))[0], '1,234.57');
+    assert.equal(areas(sheetFormat('en', { decimals: { length: 4 } }))[0], '1,234.57 m²');
   });
 });
