@@ -73,7 +73,7 @@ import { useDraftingProviders } from './useDraftingProviders';
 
 import { CommandLine } from './CommandLine';
 
-import { useDraftingPointer } from './useDraftingPointer';
+import { gripCursor, useDraftingPointer } from './useDraftingPointer';
 
 import { useDraftingKeys } from './useDraftingKeys';
 import { submitTypedLine } from './typed-line';
@@ -102,6 +102,8 @@ import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
+import { UnderlayLayer } from './UnderlayLayer';
+import { UnderlayPanel } from './UnderlayPanel';
 
 import { roofAtPoint } from '@/project/roof-plan';
 
@@ -157,6 +159,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const views = useProjectStore((s) => s.views);
   const selection = useDraftingSession((s) => s.selection);
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
+  const orthoToggled = useDraftingSession((s) => s.ortho);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const dimAlign = baseDraftSettings().dimAlign;
@@ -304,6 +307,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         >
           {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
+        <UnderlayPanel viewId={view.id} />
         <IconButton label={t('standards.open')} className="size-7" onClick={() => openStandards('layers')}><Layers className="size-4" /></IconButton>
         <IconButton label={t('drafting.undo')} className="size-7" onClick={undoLatest}><Undo2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.redo')} className="size-7" onClick={redoEarliest}><Redo2 className="size-4" /></IconButton>
@@ -314,7 +318,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         ref={containerRef}
         data-drafting-canvas
         // Always white paper, as the drawing canvas paints it: drafted ink stays visible in dark mode.
-        className="relative min-h-0 flex-1 overflow-hidden bg-white cursor-none touch-none"
+        className={`relative min-h-0 flex-1 overflow-hidden bg-white touch-none ${gripCursor(state) === 'grabbing' ? 'cursor-grabbing' : gripCursor(state) === 'grab' ? 'cursor-grab' : 'cursor-none'}`}
+        data-grip-cursor={gripCursor(state) ?? undefined}
         {...pointer}
         onDoubleClick={(e) => {
           // Double-click an annotation: select it and edit its text in place.
@@ -342,6 +347,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             sectionAxis={axis}
           />
         ) : null}
+        <UnderlayLayer viewId={view.id} transform={viewTransform} axis={axis} />
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
@@ -358,6 +364,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           preview={preview}
           snap={state.snap}
           cursor={state.cursor}
+          orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
           window={state.window}
           highlight={highlight}
           extraPatterns={extraPatterns}

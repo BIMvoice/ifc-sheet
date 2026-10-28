@@ -16,7 +16,7 @@ export const roomScheduleEn = {
   'roomSched.noLevel': 'No level',
   'roomSched.empty': 'The loaded models have no rooms (IfcSpace).',
   'roomSched.note.source': 'Area: the model\'s NetFloorArea, else GrossFloorArea (Qto_SpaceBaseQuantities, else any quantity set). The building total is Au on the urban indicators sheet: the same rooms, the same areas.',
-  'roomSched.note.geometry': '* The model states no area for this room: the footprint of its geometry is used ({count} rooms).',
+  'roomSched.note.geometry': '* Estimated area: the model states no NetFloorArea or GrossFloorArea for this room, so the footprint of its geometry is used ({count} rooms).',
   'roomSched.note.none': '{count} rooms have no area (the model states none and they have no geometry); they are listed and not in the totals.',
   'roomSched.note.leftOut': 'Left out: {external} external (balconies, terraces), {gfa} area-scheme (GFA), {parents} split into rooms of their own.',
   'ready.estimatedAreas.go': 'Go to the first room',

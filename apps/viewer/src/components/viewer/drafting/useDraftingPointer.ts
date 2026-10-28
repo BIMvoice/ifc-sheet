@@ -59,6 +59,13 @@ export interface DraftingPointerState {
   window: { a: Pt; b: Pt } | null;
   /** A grip being dragged, and where to. */
   gripDrag: { grip: Grip; at: Pt } | null;
+  /** The grip under the cursor while nothing runs and none is held (#454): the canvas shows it can be picked up. */
+  gripHover: Grip | null;
+}
+
+/** The canvas cursor over a grip: an open hand to pick it up by click or drag, a closed one while it is carried; null elsewhere. */
+export function gripCursor(state: Pick<DraftingPointerState, 'gripDrag' | 'gripHover'>): 'grab' | 'grabbing' | null {
+  return state.gripDrag ? 'grabbing' : state.gripHover ? 'grab' : null;
 }
 
 /** A dimension line dragged near another dimension line goes onto it, unless the toggle is off (`dimAlign`). */
@@ -68,7 +75,9 @@ function alignedDragPoint(grip: Grip, p: Pt): Pt {
 
 export function useDraftingPointer({ containerRef, transform, setTransform, axis, entityShapes, references, grips = [] }: Params) {
   const snapOn = useDraftingSession((s) => s.snap);
-  const [state, setState] = useState<DraftingPointerState>({ cursor: null, snap: null, hoverId: null, window: null, gripDrag: null });
+  const [state, setState] = useState<DraftingPointerState>({ cursor: null, snap: null, hoverId: null, window: null, gripDrag: null, gripHover: null });
+  /** A grip picked up by a click and carried until the next click drops it (#454). */
+  const carry = useRef<Grip | null>(null);
   const drag = useRef<{ kind: 'pan' | 'window' | 'grip'; startScreen: Pt; startDrawing: Pt; startTransform: ViewTransform; grip?: Grip } | null>(null);
 
   const local = (e: { clientX: number; clientY: number }): Pt => {
@@ -91,8 +100,27 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     return hit ? { point: hit.point, snap: hit } : { point: constrainPoint(raw), snap: null };
   }, [snapOn, transform.scale, entityShapes, references]);
 
+  /** Applies a dragged or carried grip: the section depth, a detail's crop, or the entity's own shape. One undo step. */
+  const commitGrip = useCallback((grip: Grip, target: { at: Pt } | null) => {
+    setState((prev) => ({ ...prev, gripDrag: null }));
+    if (grip.section) {
+      // The depth handle sets the section view's depth: one undo step per drag.
+      const depth = target ? depthFromPoint(grip.section, target.at) : null;
+      if (depth !== null) runAsOneUndoStep(() => updateProjectView(grip.section!.viewId, { viewDepth: depth }));
+      return;
+    }
+    if (grip.detail) {
+      // A crop grip changes the detail's area; its mark follows. One undo step per drag.
+      const rect = target ? moveDetailGrip(grip.detail.rect, grip.key, target.at) : null;
+      if (rect) setDetailRect(grip.detail.viewId, rect);
+      return;
+    }
+    const entity = useProjectStore.getState().drafts.find((x) => x.id === grip.id);
+    if (target && entity) editDrafts({ update: new Map([[entity.id, moveGrip(entity.shape, grip.key, target.at, resolveLevelRef)]]) });
+  }, []);
+
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    setOrthoHeld(e.ctrlKey);
+    setOrthoHeld(e.ctrlKey || e.shiftKey);
     const s = local(e);
     const d = drag.current;
     if (d?.kind === 'pan') {
@@ -100,25 +128,27 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       return;
     }
     const raw = screenToDrawing(s, transform, axis);
-    if (d?.kind === 'grip' && d.grip) {
+    const held = d?.kind === 'grip' ? d.grip : carry.current;
+    if (held) {
       // A dragged grip snaps like a point does, and keeps to horizontal / vertical from where it started under the ortho lock
       // (a detail's crop corner moves freely on both axes, and a section's depth is measured along the section's normal,
       // which a horizontal / vertical hold would only project onto, so neither is held).
       const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
       const free = hit?.point ?? raw;
-      const at = d.grip.detail || d.grip.section ? free : alignedDragPoint(d.grip, constrainFrom(d.grip.at, free));
-      setState({ cursor: at, snap: hit, hoverId: null, window: null, gripDrag: { grip: d.grip, at } });
+      const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(held.at, free));
+      setState({ cursor: at, snap: hit, hoverId: null, window: null, gripDrag: { grip: held, at }, gripHover: null });
       return;
     }
     const { point, snap } = resolve(raw);
     const command = runningCommand();
     const hoverId = !command || command.input() === 'pick' ? pickEntity(raw, PICK_PX / transform.scale)?.id ?? null : null;
     const window = d?.kind === 'window' && Math.hypot(s.x - d.startScreen.x, s.y - d.startScreen.y) > DRAG_PX ? { a: d.startDrawing, b: raw } : null;
-    setState({ cursor: point, snap, hoverId, window, gripDrag: null });
-  }, [transform, axis, resolve, setTransform, snapOn, entityShapes]);
+    const gripHover = !command && !d ? gripAt(grips, raw, GRIP_PX / transform.scale) : null;
+    setState({ cursor: point, snap, hoverId, window, gripDrag: null, gripHover });
+  }, [transform, axis, resolve, setTransform, snapOn, entityShapes, grips]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    setOrthoHeld(e.ctrlKey);
+    setOrthoHeld(e.ctrlKey || e.shiftKey);
     const s = local(e);
     capturePointer(e.currentTarget as HTMLElement, e.pointerId);
     if (e.button === 1) {
@@ -128,6 +158,13 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     }
     if (e.button !== 0) return;
     const raw = screenToDrawing(s, transform, axis);
+    if (carry.current) {
+      // The second click of a click-click move drops the carried grip where it now is.
+      const grip = carry.current;
+      carry.current = null;
+      commitGrip(grip, state.gripDrag);
+      return;
+    }
     const command = runningCommand();
     if (command && command.input() === 'point') {
       clickDrawing(resolve(raw).point, PICK_PX / transform.scale, e.shiftKey);
@@ -143,31 +180,21 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       return;
     }
     drag.current = { kind: 'window', startScreen: s, startDrawing: raw, startTransform: transform };
-  }, [transform, axis, resolve, grips]);
+  }, [transform, axis, resolve, grips, state.gripDrag, commitGrip]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
     if (!d || d.kind === 'pan') return;
     if (d.kind === 'grip' && d.grip) {
-      const target = state.gripDrag;
-      if (d.grip.section) {
-        // The depth handle sets the section view's depth: one undo step per drag.
-        const depth = target ? depthFromPoint(d.grip.section, target.at) : null;
-        if (depth !== null) runAsOneUndoStep(() => updateProjectView(d.grip!.section!.viewId, { viewDepth: depth }));
-        setState((prev) => ({ ...prev, gripDrag: null }));
+      const at = local(e);
+      if (Math.hypot(at.x - d.startScreen.x, at.y - d.startScreen.y) <= DRAG_PX) {
+        // A click, not a drag: the grip is picked up and follows the cursor until the next click drops it.
+        carry.current = d.grip;
+        setState((prev) => ({ ...prev, gripDrag: { grip: d.grip!, at: d.grip!.at }, gripHover: null }));
         return;
       }
-      if (d.grip.detail) {
-        // A crop grip changes the detail's area; its mark follows. One undo step per drag.
-        const rect = target ? moveDetailGrip(d.grip.detail.rect, d.grip.key, target.at) : null;
-        if (rect) setDetailRect(d.grip.detail.viewId, rect);
-        setState((prev) => ({ ...prev, gripDrag: null }));
-        return;
-      }
-      const entity = useProjectStore.getState().drafts.find((x) => x.id === d.grip?.id);
-      if (target && entity) editDrafts({ update: new Map([[entity.id, moveGrip(entity.shape, d.grip.key, target.at, resolveLevelRef)]]) });
-      setState((prev) => ({ ...prev, gripDrag: null }));
+      commitGrip(d.grip, state.gripDrag);
       return;
     }
     const s = local(e);
@@ -179,9 +206,9 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       clickDrawing(raw, PICK_PX / transform.scale, e.shiftKey);
     }
     setState((prev) => ({ ...prev, window: null }));
-  }, [transform, axis, state.gripDrag]);
+  }, [transform, axis, state.gripDrag, commitGrip]);
 
-  const onPointerLeave = useCallback(() => setState((prev) => ({ ...prev, cursor: null, snap: null, hoverId: null })), []);
+  const onPointerLeave = useCallback(() => setState((prev) => ({ ...prev, cursor: null, snap: null, hoverId: null, gripHover: null })), []);
 
   // Wheel zoom about the cursor (native: React's wheel listener is passive).
   useEffect(() => {
