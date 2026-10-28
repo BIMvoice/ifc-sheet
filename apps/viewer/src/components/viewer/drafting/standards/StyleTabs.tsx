@@ -17,12 +17,12 @@ import { IconButton } from '@/components/ui/icon-button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useProjectStore } from '@/project/project-store';
 import {
-  addDimStyle, addTextStyle, removeDimStyle, removeTextStyle, updateDimStyle, updateTextStyle,
+  addDimStyle, addTablesStyle, addTextStyle, removeDimStyle, removeTextStyle, updateDimStyle, updateTextStyle,
 } from '@/project/drafting-standards';
 import { useStandardsDialog } from '@/project/standards-dialog-store';
 import { currentStyles, setCurrentStyles, useDraftingSession } from '@/drafting/session';
 import {
-  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD,
+  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD, TABLES_STYLE_ID, TABLE_FONTS,
   type ArrowKind, type DimStyle, type FontKind, type LengthUnit, type TextPlacement, type TextStyle,
 } from '@/drafting/styles';
 import type { AnnotationShape } from '@/drafting/types';
@@ -96,22 +96,28 @@ export function TextStylesTab() {
     updateTextStyle(style.id, patch);
     if (patch.height && currentStyles().textStyle === style.id) setCurrentStyles({ textHeightMm: patch.height });
   };
+  const tables = style.id === TABLES_STYLE_ID;
+  const hasTables = styles.some((s) => s.id === TABLES_STYLE_ID);
   return (
     <div className="flex gap-4 text-xs">
-      <StyleList styles={styles} selected={selected} current={currentStyles().textStyle} onSelect={select}
-        onDuplicate={(s) => select(addTextStyle(s, t('standards.style.copyName', { name: s.name })))} onDelete={removeTextStyle} />
+      <div className="w-48 shrink-0 space-y-2">
+        <StyleList styles={styles} selected={selected} current={currentStyles().textStyle} onSelect={select}
+          onDuplicate={(s) => select(addTextStyle(s, t('standards.style.copyName', { name: s.name })))} onDelete={removeTextStyle} />
+        {hasTables ? null : <Button size="sm" variant="outline" onClick={() => select(addTablesStyle(t('standards.tables.name')))}>{t('standards.tables.make')}</Button>}
+      </div>
       <div className="flex-1 space-y-1">
         <Row label={t('standards.style.name')}>
           <input aria-label={t('standards.style.name')} className={INPUT} defaultValue={style.name} key={style.id + style.name} onBlur={(e) => e.target.value.trim() && set({ name: e.target.value.trim() })} />
         </Row>
-        <Row label={t('standards.text.height')}><NumberField label={t('standards.text.height')} value={style.height} min={0.5} onCommit={(height) => set({ height })} /></Row>
+        {tables ? null : <Row label={t('standards.text.height')}><NumberField label={t('standards.text.height')} value={style.height} min={0.5} onCommit={(height) => set({ height })} /></Row>}
         <Row label={t('standards.text.font')}>
           <SegmentedControl size="sm" label={t('standards.text.font')} value={style.font} onValueChange={(font: FontKind) => set({ font })}
-            options={(['sans', 'serif', 'mono'] as const).map((f) => ({ value: f, label: t(`standards.text.font.${f}` as TranslationKey) }))} />
+            options={(tables ? TABLE_FONTS : (['sans', 'serif', 'mono'] as const)).map((f) => ({ value: f, label: t(`standards.text.font.${f}` as TranslationKey) }))} />
         </Row>
-        <Row label={t('standards.text.bold')}><input type="checkbox" checked={style.bold} onChange={(e) => set({ bold: e.target.checked })} /></Row>
+        {tables ? <p className="text-2xs text-zinc-500">{t('standards.tables.fontsNote')}</p> : null}
+        {tables ? null : <Row label={t('standards.text.bold')}><input type="checkbox" checked={style.bold} onChange={(e) => set({ bold: e.target.checked })} /></Row>}
         <Row label={t('standards.text.italic')}><input type="checkbox" checked={style.italic} onChange={(e) => set({ italic: e.target.checked })} /></Row>
-        <Row label={t('standards.text.color')}><ColorChoice label={t('standards.text.color')} value={style.color} onChange={(color) => set({ color })} /></Row>
+        {tables ? null : <Row label={t('standards.text.color')}><ColorChoice label={t('standards.text.color')} value={style.color} onChange={(color) => set({ color })} /></Row>}
         <Button size="sm" variant="outline" disabled={currentStyles().textStyle === style.id} onClick={() => setCurrentStyles({ textStyle: style.id, textHeightMm: style.height })}>
           {t('standards.style.makeCurrent')}
         </Button>
