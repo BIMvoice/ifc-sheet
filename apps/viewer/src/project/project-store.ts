@@ -26,6 +26,7 @@ import { sheetGroupOfView, withoutAutoNumber } from './sheet-numbers';
 import { findTemplate, templateFields } from './sheet-templates';
 import { nextDetailNumber } from './detail';
 import { DEFAULT_DRAFT_LAYER, DOCUMENT_FIELDS, emptyDocument, loadedFields } from './fields';
+import { knowsAll, mergeModels, sameLevels } from './model-sync';
 import { liftTypedRevisions, sheetRevisions } from './revisions';
 import { carryIssueFingerprints } from './sheet-fingerprint';
 import { liftSheetTitleBlocks } from './title-block';
@@ -385,22 +386,6 @@ function setSheetNumberNow(id: string, number: string): void {
   const trimmed = number.trim();
   if (!trimmed) return;
   useProjectStore.setState((s) => ({ sheets: s.sheets.map((sh) => (sh.id === id ? { ...withoutAutoNumber(sh), number: trimmed, series: numberGroupOf(sh), numberOverride: true } : sh)), dirty: true }));
-}
-
-/** Whether every loaded model is already in the project's model list. */
-function knowsAll(known: readonly ProjectModelRef[], loaded: readonly ProjectModelRef[]): boolean {
-  return loaded.every((m) => known.some((k) => k.key === m.key));
-}
-
-/** Keep models the project already knew (a file may name models not loaded yet), add new ones. */
-function mergeModels(known: readonly ProjectModelRef[], loaded: readonly ProjectModelRef[]): ProjectModelRef[] {
-  const merged = [...known];
-  for (const model of loaded) if (!merged.some((m) => m.key === model.key)) merged.push(model);
-  return merged;
-}
-
-function sameLevels(a: readonly ProjectLevel[], b: readonly ProjectLevel[]): boolean {
-  return a.length === b.length && a.every((l, i) => l.name === b[i].name && l.elevation === b[i].elevation && l.floorY === b[i].floorY);
 }
 
 // A detail mark's label is the detail's drawing number on its sheet and that sheet's number: derived, so it follows
