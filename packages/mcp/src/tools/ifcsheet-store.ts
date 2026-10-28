@@ -147,12 +147,17 @@ export function hasSheetModel(ctx: ToolContext, id: string): boolean {
   return storeOf(ctx).models.has(id);
 }
 
-/** Puts a model back under the id it had in an earlier request (hosted sessions); the counters move past it so a new handle never repeats an id. */
-export function restoreSheetModel(ctx: ToolContext, entry: SheetModelEntry, counters: { nextModel: number; nextSet: number }): void {
+/** Moves the id counters past those of an earlier request (hosted sessions), so a handle made now never repeats one the session already named. */
+export function advanceSheetCounters(ctx: ToolContext, counters: { nextModel: number; nextSet: number }): void {
   const store = storeOf(ctx);
-  store.models.set(entry.id, entry);
   store.nextModel = Math.max(store.nextModel, counters.nextModel);
   store.nextSet = Math.max(store.nextSet, counters.nextSet);
+}
+
+/** Puts a model back under the id it had in an earlier request (hosted sessions); the counters move past it so a new handle never repeats an id. */
+export function restoreSheetModel(ctx: ToolContext, entry: SheetModelEntry, counters: { nextModel: number; nextSet: number }): void {
+  storeOf(ctx).models.set(entry.id, entry);
+  advanceSheetCounters(ctx, counters);
 }
 
 /** Puts a set back under its earlier id, on a model `restoreSheetModel` already put back; it starts with an empty undo history. */

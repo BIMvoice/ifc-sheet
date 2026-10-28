@@ -23,7 +23,7 @@ import type { DefaultSet } from '@bimvoice/ifcsheet';
 import type { ToolContext } from '../context.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { CallToolResult } from '../protocol/index.js';
-import { hasSheetModel, restoreSheetModel, restoreSheetSet, storeContents, type SetSchedule, type SheetModelEntry } from '../tools/ifcsheet-store.js';
+import { advanceSheetCounters, hasSheetModel, restoreSheetModel, restoreSheetSet, storeContents, type SetSchedule, type SheetModelEntry } from '../tools/ifcsheet-store.js';
 import { hostedModelCache, sha256Hex } from '../tools/hosted-model-cache.js';
 import type { Tool } from '../tools/types.js';
 
@@ -159,6 +159,9 @@ export function withSessions(tools: Tool[], options: { secret?: string; now?: ()
           if (typeof token !== 'string') return fail('session_token must be a string: the one a previous result returned.');
           session.open(token);
         }
+        // A model or set made by this call takes an id the session has not used: without this, opening a
+        // second model in a later request would be handed `sheetmodel-1` again and replace the first in the token.
+        if (session.token !== undefined) advanceSheetCounters(ctx, session.base);
         const names = typeof rest.model_id === 'string' || typeof rest.document_id === 'string';
         if (names && session.token !== undefined) await session.restore(rest, ctx);
         // With a model_id or document_id the bytes only restore the model; the tool itself takes a handle.

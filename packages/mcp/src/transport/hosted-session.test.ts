@@ -7,6 +7,7 @@
  * by a signed token the client holds, with the server stateless.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -153,6 +154,20 @@ describe.skipIf(missing !== null)('hosted MCP sessions: a project across request
     };
     expect(await viewsOf(addA)).toContain('Only in A');
     expect(await viewsOf(gb)).not.toContain('Only in A');
+  });
+
+  it('gives a model opened later in a session a new id, so it does not replace the first one or take over its sets', async () => {
+    const opened = await started();
+    const generated = await call('ifcsheet_generate_set', { model_id: opened.structuredContent.model_id, session_token: opened.structuredContent.session_token, ifc_base64: ifc_base64() });
+    const ROOMS = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/rooms-with-finishes.ifc', import.meta.url));
+    const second = await call('ifcsheet_open_model', { ifc_base64: readFileSync(ROOMS).toString('base64'), session_token: generated.structuredContent.session_token });
+    expect(second.isError).toBeFalsy();
+    expect(second.structuredContent.model_id).not.toBe(opened.structuredContent.model_id);
+    const state = verifyToken(second.structuredContent.session_token, SECRET, clock);
+    expect(state.models.map((m) => m.id)).toEqual([opened.structuredContent.model_id, second.structuredContent.model_id]);
+    const first = state.models.find((m) => m.id === opened.structuredContent.model_id)!;
+    expect(first.sha256).toBe(createHash('sha256').update(readFileSync(FZK)).digest('hex'));
+    expect(state.sets.find((s) => s.id === generated.structuredContent.document_id)!.modelId).toBe(opened.structuredContent.model_id);
   });
 
   it('refuses two sessions in one batch', async () => {
