@@ -12,6 +12,7 @@
  */
 
 import { escapeCsvCell } from '@ifc-lite/export';
+import { emptyTally, tallyTotal, tallyValue } from '@ifc-lite/lists';
 import { sheetNumber } from './sheet-number.js';
 import { languageOf, type SheetLocale } from './units-and-numbers.js';
 import type { AreaSource } from './room-areas.js';
@@ -60,10 +61,11 @@ export interface RoomSchedule {
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
+/** The rooms' areas by the one rule for a quantity that may be missing (`SumTally`): a room with no area is left out, no known area at all is `null`. */
 const sum = (rooms: readonly RoomRecord[]): number | null => {
-  let total: number | null = null;
-  for (const r of rooms) if (r.area !== null && Number.isFinite(r.area)) total = (total ?? 0) + r.area;
-  return total;
+  const tally = emptyTally();
+  for (const r of rooms) tallyValue(tally, r.area);
+  return tallyTotal(tally);
 };
 
 /** The schedule of `rooms` over `levels`: levels low to high (unknown elevation last, then rooms on none), rooms by number then name. */
