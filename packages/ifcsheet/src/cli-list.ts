@@ -13,7 +13,7 @@ import { basename } from 'node:path';
 import type { ClassificationMapping } from './classification.js';
 import { openModel, type OpenedModel } from './model.js';
 import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty } from './list-headless.js';
-import { readProjectFile } from './project-read.js';
+import { readProjectFile, type ProjectFacts } from './project-read.js';
 import { listTableText } from './list-figures.js';
 import { sheetFormat } from './units-and-numbers.js';
 import type { ListScheduleTable } from './list-schedule.js';
@@ -42,6 +42,41 @@ export function listSchedulesOn(model: OpenedModel, schedules: readonly ProjectS
   return schedules.filter(isList).map((schedule) => ({ schedule, table: listScheduleTableOn(model, { id: schedule.id, name: schedule.name, list: schedule.list }, locale, { modelName, classificationMappings }) }));
 }
 
+type ListSchedule = ProjectSchedule & { list: NonNullable<ProjectSchedule['list']> };
+
+/** The list schedule a project's `schedule` names (its id or name; absent: the only one), or the sentence saying why there is none. */
+export function chooseListSchedule(projectName: string, schedules: readonly ProjectSchedule[], schedule: string | undefined): { found: ListSchedule } | { error: string } {
+  const lists = schedules.filter(isList);
+  if (lists.length === 0) return { error: `${projectName} holds no list schedules; build one in the app (Schedule from the model) and save the project.` };
+  const found = schedule === undefined ? (lists.length === 1 ? lists[0] : undefined) : lists.find((s) => s.id === schedule) ?? lists.find((s) => s.name === schedule);
+  if (!found) return { error: `${schedule === undefined ? 'the project holds more than one list schedule; name one with --schedule' : `no list schedule "${schedule}"`}: ${lists.map((s) => `${s.id} (${s.name})`).join(', ')}` };
+  return { found };
+}
+
+/** Everything `ifcsheet list` prints for a schedule on a model, as values: the one computation of the command and of the MCP tool `ifcsheet_list`. */
+export interface ListOutput {
+  table: ListScheduleTable;
+  /** True when no element of the model matches the list: the command prints nothing and exits 1. */
+  empty: boolean;
+  /** What `--json` prints (before it is written as text). */
+  json: { file: string; project: string; schedule: { id: string; name: string }; header: string[]; rows: ListScheduleTable['rows']; totals: ListScheduleTable['rows'][number] | null; missing: ListScheduleTable['missing']; notes: string[] };
+  csv: string;
+  text: string;
+}
+
+/** The table of list schedule `found` over an opened model, in every form the command writes it. */
+export function listOutput(file: string, projectName: string, model: OpenedModel, project: Pick<ProjectFacts, 'classificationMappings' | 'unitsAndNumbers'>, found: ListSchedule, locale: string): ListOutput {
+  const [{ table }] = listSchedulesOn(model, [found], locale, basename(file), project.classificationMappings);
+  const total = table.bold.length > 0 ? table.bold[0] : -1;
+  return {
+    table,
+    empty: listTableIsEmpty(table),
+    json: { file, project: projectName, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null, missing: table.missing, notes: table.notes },
+    csv: listScheduleCsv(table, locale),
+    text: listTableText(table, sheetFormat(locale, project.unitsAndNumbers)),
+  };
+}
+
 /** `ifcsheet list`: exit 0 with the table, 1 when a file cannot be read, the schedule is not found or the list has no rows. */
 export async function list(args: ListArgs, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
@@ -50,28 +85,20 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   try { projectText = await readFile(args.project, 'utf8'); } catch (error) { io.stderr(cannotRead(args.project, error)); return 1; }
   let project;
   try { project = readProjectFile(projectText); } catch (error) { io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`); return 1; }
-  const lists = project.schedules.filter(isList);
-  if (lists.length === 0) {
-    io.stderr(`ifcsheet: ${args.project} holds no list schedules; build one in the app (Schedule from the model) and save the project.\n`);
-    return 1;
-  }
-  const found = args.schedule === undefined ? (lists.length === 1 ? lists[0] : undefined) : lists.find((s) => s.id === args.schedule) ?? lists.find((s) => s.name === args.schedule);
-  if (!found) {
-    io.stderr(`ifcsheet: ${args.schedule === undefined ? 'the project holds more than one list schedule; name one with --schedule' : `no list schedule "${args.schedule}"`}: ${lists.map((s) => `${s.id} (${s.name})`).join(', ')}\n`);
+  const chosen = chooseListSchedule(args.project, project.schedules, args.schedule);
+  if ('error' in chosen) {
+    io.stderr(`ifcsheet: ${chosen.error}\n`);
     return 1;
   }
   // The values come from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const [{ table }] = listSchedulesOn(model, [found], args.locale, basename(args.model), project.classificationMappings);
-  if (listTableIsEmpty(table)) {
-    io.stderr(`ifcsheet: nothing to list: the elements of "${found.name}" are not in ${args.model}.\n`);
+  const out = listOutput(args.model, args.project, model, project, chosen.found, args.locale);
+  if (out.empty) {
+    io.stderr(`ifcsheet: nothing to list: the elements of "${chosen.found.name}" are not in ${args.model}.\n`);
     return 1;
   }
-  if (args.json) {
-    const total = table.bold.length > 0 ? table.bold[0] : -1;
-    io.stdout(`${JSON.stringify({ file: args.model, project: args.project, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null }, null, 2)}\n`);
-  }
-  else if (args.csv) io.stdout(listScheduleCsv(table, args.locale));
-  else io.stdout(listTableText(table, sheetFormat(args.locale, project.unitsAndNumbers)));
+  if (args.json) io.stdout(`${JSON.stringify(out.json, null, 2)}\n`);
+  else if (args.csv) io.stdout(out.csv);
+  else io.stdout(out.text);
   return 0;
 }
