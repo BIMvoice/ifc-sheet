@@ -25,8 +25,8 @@ import { predefinedTypeText } from './schedule-filter.js';
 import { attributes, type Live } from './joinery-schedule.js';
 
 export interface DoorOperation {
-  /** How the leaf moves: swings on hinges, slides along the wall, folds, or turns about a centre. */
-  motion: 'swing' | 'sliding' | 'folding' | 'revolving';
+  /** How the leaf moves: swings on hinges, slides along the wall, folds, turns about a centre, or lifts / rolls up overhead. */
+  motion: 'swing' | 'sliding' | 'folding' | 'revolving' | 'overhead';
   /** The hinged side seen along the opening direction (+Y) of a swinging door; null for a pair of leaves, which has none, and for the other motions. */
   hinge: 'left' | 'right' | null;
   /** The side a single sliding leaf slides to, or a single folding leaf stacks at, seen along +Y; null for a pair and for the other motions. */
@@ -47,7 +47,9 @@ export interface DoorOperation {
  * - DOUBLE_DOOR_SLIDING: two leaves sliding apart, one to each side;
  * - FOLDING_TO_LEFT / RIGHT: one folding leaf stacking on that side;
  * - DOUBLE_DOOR_FOLDING: two folding leaves, one stacking on each jamb;
- * - REVOLVING: leaves turning about a vertical axis in the middle of the opening.
+ * - REVOLVING / REVOLVING_VERTICAL: leaves turning about a vertical axis in the middle of the opening;
+ * - LIFTING_HORIZONTAL / LIFTING_VERTICAL_* / DOUBLE_DOOR_LIFTING_VERTICAL / ROLLINGUP: a panel that lifts or rolls up overhead: it swings nowhere, so no arc.
+ * - SWING_FIXED_* : a swing leaf beside a fixed panel, drawn as SINGLE_SWING_*; DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_*: a pair of leaves.
  * Left and right are read in the view the swing values name: along the placement's +Y. (The enum's own page could not be fetched
  * when the sliding and folding values were added, so that reading for them follows the swing values, not a quoted definition.)
  */
@@ -55,11 +57,18 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
   const v = predefinedTypeText(value);
   const swing = (hinge: 'left' | 'right' | null, leaves: 1 | 2, doubleActing: boolean): DoorOperation => ({ motion: 'swing', hinge, towards: null, leaves, doubleActing });
   const moving = (motion: 'sliding' | 'folding', towards: 'left' | 'right' | null): DoorOperation => ({ motion, hinge: null, towards, leaves: towards ? 1 : 2, doubleActing: false });
+  const overhead = (leaves: 1 | 2): DoorOperation => ({ motion: 'overhead', hinge: null, towards: null, leaves, doubleActing: false });
   switch (v) {
     case 'SINGLE_SWING_LEFT': return swing('left', 1, false);
     case 'SINGLE_SWING_RIGHT': return swing('right', 1, false);
     case 'DOUBLE_SWING_LEFT': return swing('left', 1, true);
     case 'DOUBLE_SWING_RIGHT': return swing('right', 1, true);
+    // A swing leaf beside a fixed panel: the hand names the leaf's hinge, as SINGLE_SWING_* does and as this repo's writer emits it (joinery-ifc.ts `doorOperation`).
+    case 'SWING_FIXED_LEFT': return swing('left', 1, false);
+    case 'SWING_FIXED_RIGHT': return swing('right', 1, false);
+    // Two leaves, each swinging one way (drawn as a pair, like DOUBLE_DOOR_SINGLE_SWING).
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT':
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT':
     case 'DOUBLE_DOOR_SINGLE_SWING': return swing(null, 2, false);
     case 'DOUBLE_DOOR_DOUBLE_SWING': return swing(null, 2, true);
     case 'SLIDING_TO_LEFT': return moving('sliding', 'left');
@@ -68,6 +77,12 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
     case 'FOLDING_TO_LEFT': return moving('folding', 'left');
     case 'FOLDING_TO_RIGHT': return moving('folding', 'right');
     case 'DOUBLE_DOOR_FOLDING': return moving('folding', null);
+    case 'LIFTING_HORIZONTAL':
+    case 'LIFTING_VERTICAL_LEFT':
+    case 'LIFTING_VERTICAL_RIGHT':
+    case 'ROLLINGUP': return overhead(1);
+    case 'DOUBLE_DOOR_LIFTING_VERTICAL': return overhead(2);
+    case 'REVOLVING_VERTICAL':
     case 'REVOLVING': return { motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false };
     default: return null;
   }

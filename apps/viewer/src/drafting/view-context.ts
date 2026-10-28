@@ -11,6 +11,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import type { DraftContext, DraftSettings } from './commands/types';
+import type { ElementBox } from './dimension-anchor';
 import type { ViewInputs } from './view-inputs';
 import type { DraftEntity, DraftShape, Pt } from './types';
 import type { SectionAxisName } from './frame';
@@ -19,6 +20,8 @@ import type { SectionAxisName } from './frame';
 export interface InteractiveInputs {
   referenceShapes(min: Pt, max: Pt): DraftShape[];
   elementAt(p: Pt): number | null;
+  /** The elements the point is a corner of, with their boxes; absent in a context with no pointer (the set annotator). */
+  elementBoxesAt?(p: Pt): ElementBox[];
 }
 
 /** What the session around the command gives it. */

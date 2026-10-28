@@ -97,7 +97,7 @@ export function statedDoorElevationSymbol(
   op: DoorOperation, world: readonly number[], localToWorld: readonly number[], plane: SectionPlaneConfig, flips = 0,
   options: ElevationPlacementOptions = {},
 ): { thin: DraftShape[]; dashed: DraftShape[] } | null {
-  if (op.motion === 'revolving') return null;
+  if (op.motion === 'revolving' || op.motion === 'overhead') return null;
   const toViewer = towardViewer(plane);
   const m = localToWorld;
   const ex = unit([m[0], m[4], m[8]]);

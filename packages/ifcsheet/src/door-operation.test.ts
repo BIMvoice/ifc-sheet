@@ -53,6 +53,10 @@ describe('parseDoorOperation', () => {
     expect(parseDoorOperation('DOUBLE_SWING_LEFT')).toEqual(swing('left', 1, true));
     expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).toEqual(swing(null, 2, false));
     expect(parseDoorOperation('DOUBLE_DOOR_DOUBLE_SWING')).toEqual(swing(null, 2, true));
+    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual(swing('left', 1, false));
+    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual(swing('right', 1, false));
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual(swing(null, 2, false));
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual(swing(null, 2, false));
   });
 
   it('reads the sliding, folding and revolving values (#486)', () => {
@@ -64,10 +68,17 @@ describe('parseDoorOperation', () => {
     expect(parseDoorOperation('FOLDING_TO_RIGHT')).toEqual(moving('folding', 'right'));
     expect(parseDoorOperation('DOUBLE_DOOR_FOLDING')).toEqual(moving('folding', null));
     expect(parseDoorOperation('REVOLVING')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+    expect(parseDoorOperation('REVOLVING_VERTICAL')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+  });
+
+  it('reads the lifting and rolling-up values as an overhead door, which swings nowhere (#486)', () => {
+    const overhead = (leaves: 1 | 2) => ({ motion: 'overhead', hinge: null, towards: null, leaves, doubleActing: false });
+    for (const v of ['LIFTING_HORIZONTAL', 'LIFTING_VERTICAL_LEFT', 'LIFTING_VERTICAL_RIGHT', 'ROLLINGUP']) expect(parseDoorOperation(v)).toEqual(overhead(1));
+    expect(parseDoorOperation('DOUBLE_DOOR_LIFTING_VERTICAL')).toEqual(overhead(2));
   });
 
   it('draws nothing for the values that state no operation', () => {
-    for (const v of ['NOTDEFINED', 'USERDEFINED', 'ROLLINGUP', null, undefined]) expect(parseDoorOperation(v)).toBeNull();
+    for (const v of ['NOTDEFINED', 'USERDEFINED', null, undefined]) expect(parseDoorOperation(v)).toBeNull();
   });
 });
 

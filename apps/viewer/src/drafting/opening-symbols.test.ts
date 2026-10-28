@@ -174,6 +174,17 @@ describe('openingSymbols with a stated operation on a placement turned across th
     assert.ok(!door.shapes.some((s) => s.type === 'arc'));
   });
 
+  // Review of #522: a lifting or rolling-up door (LIFTING_*, ROLLINGUP) drew as a default swing with a 90 degree arc.
+  it('draws an overhead (lifting, rolling-up) door as a bar and a dashed panel line, with no swing arc', () => {
+    for (const leaves of [1, 2] as const) {
+      const door = symbol({ motion: 'overhead', hinge: null, towards: null, leaves, doubleActing: false });
+      const all = [...door.shapes, ...(door.heavy ?? []), ...(door.dashed ?? [])];
+      assert.ok(!all.some((s) => s.type === 'arc'), 'no swing arc');
+      assert.equal(door.heavy?.length, leaves, 'one bar per leaf');
+      assert.equal(door.dashed?.length, 1);
+    }
+  });
+
   it('still leaves a swinging door as it was drawn', () => {
     const door = symbol({ motion: 'swing', hinge: 'left', towards: null, leaves: 1, doubleActing: false });
     assert.ok(door.shapes.some((s) => s.type === 'arc'));

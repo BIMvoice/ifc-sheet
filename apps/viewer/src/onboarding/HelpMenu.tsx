@@ -4,9 +4,8 @@
 
 /**
  * The "?" menu of IfcSheet's top bar (#455): the keyboard shortcuts, short
- * how-to pages read in the app, the report-or-suggest form (#148), the tour,
- * and the hints setting. There is no community entry: the repository names no
- * community address and has no Discussions, so there is nothing to link to.
+ * how-to pages read in the app, the report-or-suggest form (#148), the project
+ * on GitHub (opened in a new tab), the tour, and the hints setting.
  */
 
 import { useState } from 'react';
@@ -15,10 +14,14 @@ import { useTranslation } from '@/i18n';
 import { openSettings } from '@/lib/settings/open-settings';
 import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { FeedbackDialog } from '@/components/viewer/feedback/FeedbackDialog';
+import { FEEDBACK_REPO } from '@/feedback/feedback-url';
 import { HOWTO_PAGES, howToTitleKey, type HowToId } from './howto-pages';
 import { HowToDialog } from './HowToDialog';
 
 const ITEM = 'cursor-pointer focus:bg-sky-400/20 focus:text-white';
+
+/** IfcSheet's repository: the one the report-or-suggest form files issues in. */
+export const REPO_URL = `https://github.com/${FEEDBACK_REPO}`;
 
 export function HelpMenu({ className, onTour }: { className: string; onTour: () => void }) {
   const { t } = useTranslation();
@@ -39,6 +42,9 @@ export function HelpMenu({ className, onTour }: { className: string; onTour: () 
           ))}
           <DropdownMenuSeparator className="bg-sky-300/20" />
           <DropdownMenuItem className={ITEM} onSelect={() => setFeedback(true)}>{t('onboarding.menu.report')}</DropdownMenuItem>
+          <DropdownMenuItem className={ITEM} asChild>
+            <a href={REPO_URL} target="_blank" rel="noopener noreferrer">{t('onboarding.menu.github')}</a>
+          </DropdownMenuItem>
           <DropdownMenuItem className={ITEM} onSelect={onTour}>{t('onboarding.menu.tour')}</DropdownMenuItem>
           <DropdownMenuItem className={ITEM} onSelect={() => openSettings('general')}>{t('onboarding.menu.hints')}</DropdownMenuItem>
         </DropdownMenuContent>

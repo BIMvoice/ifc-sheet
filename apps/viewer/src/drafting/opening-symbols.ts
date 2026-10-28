@@ -129,7 +129,9 @@ function arrowShapes(a: Pt, b: Pt): DraftShape[] {
  * - DOUBLE_SWING_* / DOUBLE_DOOR_DOUBLE_SWING (double-acting): the same, and the swing to the other side as a dashed arc about the same hinge;
  * - SLIDING_TO_* / DOUBLE_DOOR_SLIDING: each leaf a heavy bar along the wall face, with an arrow along the wall towards the jamb it slides to;
  * - FOLDING_TO_* / DOUBLE_DOOR_FOLDING: each leaf two halves folded in a zig-zag from the jamb it stacks on;
- * - REVOLVING: a thin circle with a heavy cross, the leaves, about the middle of the opening.
+ * - REVOLVING: a thin circle with a heavy cross, the leaves, about the middle of the opening;
+ * - LIFTING_* / ROLLINGUP (overhead): each leaf a heavy bar along the wall face and the panel's retracted position as a dashed line along the
+ *   middle of the opening, with no swing arc (a lifting or rolling panel swings nowhere).
  */
 export function doorSymbol(r: OpeningRect, flips = 0, op?: DoorOperation): { thin: DraftShape[]; heavy: DraftShape[]; dashed: DraftShape[] } {
   const sh = flips & 1 ? 1 : -1;
@@ -140,6 +142,13 @@ export function doorSymbol(r: OpeningRect, flips = 0, op?: DoorOperation): { thi
     const R = r.width / 2;
     thin.push({ type: 'circle', c: r.c, r: R });
     for (const d of [r.u, r.n]) heavy.push({ type: 'line', a: { x: r.c.x - d.x * R, y: r.c.y - d.y * R }, b: { x: r.c.x + d.x * R, y: r.c.y + d.y * R } });
+    return { thin, heavy, dashed };
+  }
+  if (op?.motion === 'overhead') {
+    const face = r.depth / 2, outer = face + t;
+    const parts = op.leaves === 2 ? [[-r.width / 2, 0], [0, r.width / 2]] : [[-r.width / 2, r.width / 2]];
+    for (const [from, to] of parts) heavy.push({ type: 'polyline', closed: true, pts: [at(r, from, face), at(r, to, face), at(r, to, outer), at(r, from, outer)] });
+    dashed.push({ type: 'line', a: at(r, -r.width / 2, 0), b: at(r, r.width / 2, 0) });
     return { thin, heavy, dashed };
   }
   const leaves = (op ? op.leaves : r.width > DOUBLE_LEAF_WIDTH ? 2 : 1) === 2 ? [sh, -sh] : [sh];

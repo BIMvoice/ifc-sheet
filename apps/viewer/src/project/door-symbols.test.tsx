@@ -26,6 +26,7 @@ import type { ProjectView } from './types.js';
 const OPERATIONS = [
   'SINGLE_SWING_LEFT', 'DOUBLE_SWING_LEFT', 'DOUBLE_SWING_RIGHT', 'SLIDING_TO_LEFT', 'SLIDING_TO_RIGHT', 'DOUBLE_DOOR_SLIDING',
   'FOLDING_TO_LEFT', 'FOLDING_TO_RIGHT', 'DOUBLE_DOOR_FOLDING', 'REVOLVING',
+  'REVOLVING_VERTICAL', 'LIFTING_HORIZONTAL', 'DOUBLE_DOOR_LIFTING_VERTICAL', 'ROLLINGUP',
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
 /** A door's express id: its operation's place in the list. */
@@ -138,6 +139,21 @@ describe('door symbols from the operation the model states (#486)', () => {
       assert.ok(circle && circle.type === 'circle');
       near(circle.r, 0.45, 'radius');
       assert.equal(heavy.filter((s) => s.type === 'line').length, 2, 'two leaves crossing');
+    });
+
+    it('REVOLVING_VERTICAL: the same circle and cross as REVOLVING', () => {
+      const { thin, heavy } = plan('REVOLVING_VERTICAL');
+      assert.ok(thin.some((s) => s.type === 'circle'));
+      assert.equal(heavy.filter((s) => s.type === 'line').length, 2);
+    });
+
+    it('LIFTING_*, ROLLINGUP: a bar per leaf and a dashed panel line, with no swing arc', () => {
+      for (const [op, bars] of [['LIFTING_HORIZONTAL', 1], ['ROLLINGUP', 1], ['DOUBLE_DOOR_LIFTING_VERTICAL', 2]] as const) {
+        const { thin, heavy, dashed } = plan(op);
+        assert.ok(![...thin, ...heavy, ...dashed].some((s) => s.type === 'arc'), `${op}: no arc`);
+        assert.equal(heavy.length, bars, `${op}: bars`);
+        assert.equal(dashed.length, 1, `${op}: the dashed panel line`);
+      }
     });
 
     it('DOUBLE_SWING_LEFT / RIGHT: a second, dashed arc about the same hinge on the other face, swinging to the other side', () => {
@@ -256,6 +272,7 @@ describe('door symbols from the operation the model states (#486)', () => {
 
     it('REVOLVING has no opening lines', () => {
       assert.equal(opening('REVOLVING', ELEVATION(true)), null);
+      assert.equal(opening('ROLLINGUP', ELEVATION(true)), null);
     });
   });
 
