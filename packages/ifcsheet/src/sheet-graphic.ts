@@ -32,6 +32,7 @@ import { printTitleBlock, sheetLookup } from './title-block-print.js';
 import { standardTitleBlock } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
+import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
@@ -110,10 +111,10 @@ export function printableLogo(src: string | undefined): string | undefined {
  * else the standard one, as the app does (`title-block-standard.ts`). `projectFields` are the project's fields
  * resolved from the model (`title-block-sources.ts`); without them the document's typed values are all there is.
  */
-function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
+function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>, language?: string): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
   const tb = titleBlockRect(paper, frameOf(sheet));
   const template = doc.titleBlockTemplate ?? standardTitleBlock();
-  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
+  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields, language), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
 }
 
 /**
@@ -161,14 +162,19 @@ export function sheetGraphic(
   materialOf?: ViewStyleInputs['materialOf'],
   /** The project's title block fields as the model fills them (`projectTitleFields`); absent: the document's typed values. */
   projectFields?: Record<string, string>,
+  /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
+  language?: string,
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
-    const drawing = drawings.get(vp.viewId);
+    const made = drawings.get(vp.viewId);
     const k = 1000 / vp.scale;
+    const graphics = resolveViewGraphics(view, doc.viewTemplates);
+    // The detail level (#444): the viewport's scale decides it unless the view's graphics (or its template's) name one; the app's sheets call the same function.
+    const drawing = made && atDetailLevel(made, resolveDetailLevel(graphics, vp.scale));
     const size = view && extent ? viewExtent(view, extent)
       : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
@@ -180,7 +186,7 @@ export function sheetGraphic(
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
-      const styler = viewStyler({ graphics: resolveViewGraphics(view, doc.viewTemplates), pens, globalIdOf, propertiesOf, materialOf });
+      const styler = viewStyler({ graphics, pens, globalIdOf, propertiesOf, materialOf });
       for (const polygon of drawing.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
@@ -213,7 +219,7 @@ export function sheetGraphic(
     out.texts.push(...legend.texts);
   }
   out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
-  const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields);
+  const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields, language);
   out.frame.push(...block.frame);
   out.texts.push(...block.texts);
   out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));

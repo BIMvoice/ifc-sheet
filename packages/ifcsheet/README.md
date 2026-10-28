@@ -2,7 +2,39 @@
 
 The IfcSheet drawing-set engine: the project document, the starting set of views and sheets a model opens with, and PDF and DXF export, without a browser. The IfcSheet web app (`apps/viewer`) is a client of it.
 
-Not published yet (`private`). The design and what is still to move are in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
+Not on npm yet (the package is `private` until the owner decides to publish; see `docs/architecture/npm-publishing.md`). The design and what is still to move are in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
+
+## Install
+
+Once published (not yet), no clone is needed:
+
+```sh
+npx @bimvoice/ifcsheet build model.ifc --out set.pdf
+npm install --global @bimvoice/ifcsheet   # then: ifcsheet build model.ifc --out set.pdf
+```
+
+Node 22.13 or newer. The geometry engine (WebAssembly) arrives with the `@ifc-lite/wasm` dependency; nothing else is downloaded at run time. Until it is published, build from a clone as described under "The `ifcsheet` command".
+
+## Use from an AI assistant (MCP)
+
+The Model Context Protocol server with the IfcSheet tools (open a model, build a set, place views, issue) is `packages/mcp`. It is not published under an IfcSheet name yet (the package name is undecided, see `docs/architecture/npm-publishing.md`). From a clone, after `pnpm turbo run build --filter=@ifc-lite/mcp...`, Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json`) take the same entry:
+
+```json
+{
+  "mcpServers": {
+    "ifcsheet": {
+      "command": "node",
+      "args": ["/path/to/ifcsheet/packages/mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+When a package is published the entry becomes `"command": "npx", "args": ["-y", "<package name>"]`.
+
+## Licence
+
+MPL-2.0. IfcSheet derives from [ifc-lite](https://github.com/LTplus-AG/ifc-lite), also MPL-2.0; source files keep their headers, and the tarball carries `LICENSE` and `NOTICE`. The bundled font, Inter, is under the SIL Open Font License (`fonts/Inter-OFL.txt`).
 
 ## From an IFC to a drawing set, in Node
 

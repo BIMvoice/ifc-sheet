@@ -122,6 +122,7 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
 | Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
+| Quantity takeoff | `ifcsheet_rooms`, `ifcsheet_materials`, `ifcsheet_boq`, `ifcsheet_list`, `ifcsheet_classify` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
 `join_walls` joins two straight walls in the same placement frame through the
@@ -230,6 +231,11 @@ file when `annotated_ifc` is true.
 | `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
 | `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
 | `ifcsheet_check_readiness` | `model_id`; optional `project_path` or `project_json`, `ids` (`byggesaksbim`) | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check`; with `ids: "byggesaksbim"` or a project that opted in, also the ByggesaksBIM (Norway) findings. The opt-in of an earlier `ifcsheet_load_project` is not remembered: pass `project_path`/`project_json` or `ids` on this call. A model that is not IFC4 gets one `byggesaksbimSchema` finding; a check that cannot run is a tool error |
+| `ifcsheet_rooms` | `model_id` or `document_id`, optional `project_path`/`project_json`, `locale` | the room and area schedule of `ifcsheet rooms`: levels, rooms (number, name, `area` m² or null, `perimeter`, `source`), totals, plus `text` and `csv`; the project's "Units and numbers" formats `text` only |
+| `ifcsheet_materials` | `model_id` or `document_id`, optional `project_path`/`project_json` | the materials and how each draws, as `ifcsheet materials --json`, plus `text` |
+| `ifcsheet_boq` | `model_id` or `document_id`, `project_path` or `project_json`, optional `detail`, `locale` | the bill of quantities of `ifcsheet boq`: per article `total` (null when no element has the quantity, never 0), `matched`, `counted`, the `missing` elements, `refused`, `byType`; plus `text` and `csv` |
+| `ifcsheet_list` | `model_id` or `document_id`, `project_path` or `project_json`, optional `schedule`, `locale` | a Lists-engine schedule as `ifcsheet list --json` (`header`, `rows`, `totals`; a missing value is null), plus `text` and `csv` |
+| `ifcsheet_classify` | `model_id` or `document_id`, `project_path` or `project_json`, optional `system` | the types with their classification code and where it came from, as `ifcsheet classify --json`, plus `text` and `csv` |
 
 `dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`,
 `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template`
@@ -317,6 +323,18 @@ ifcsheet_add_schedule    {"document_id": "sheetset-1", "kind": "rooms", "locale"
 ifcsheet_save_project    {"document_id": "sheetset-1", "file_path": "/work/issue/fzk.ifclite-project.json"}
 ifcsheet_issue_set       {"document_id": "sheetset-1", "directory": "/work/issue", "handover": true}
                          -> PDF, dxf/A-101.dxf ... A-601.dxf, register.csv, schedules/A-601.csv, handover.zip
+```
+
+Quantity takeoff on an opened model (read-only). Each tool returns what the command of the same name prints with
+`--json`, numbers as numbers, plus `text` and `csv`:
+
+```text
+ifcsheet_rooms    {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json"}
+                  -> levels, rooms with area (m2) and perimeter (m), total; text in the project's number format
+ifcsheet_boq      {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json"}
+                  -> articles: total in the article's unit, or null with the elements that lack the quantity
+ifcsheet_list     {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json", "schedule": "walls"}
+                  -> header, rows, totals
 ```
 
 A new version of the model: `ifcsheet_open_model` on the new file, then
