@@ -6,13 +6,14 @@
  * Element tags follow their elements: when the model changes (an edit, a
  * load), every tag (`params.tagOf`, a GlobalId) re-reads its element's label
  * and takes it. The text is derived data, so it changes without an undo step.
- * A tag whose element is gone keeps its last text.
+ * A tag whose element is gone keeps its last text, and a tag with a written-over text keeps that.
  */
 
 import { useEffect } from 'react';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
 import { elementLabel, TAG_FIELDS, type TagField } from '@/tagfields/element-tag';
+import { tagTextNow } from '@/drafting/tag-override';
 
 export function refreshElementTags(): void {
   const { drafts } = useProjectStore.getState();
@@ -21,7 +22,8 @@ export function refreshElementTags(): void {
     const guid = d.params.tagOf;
     if (typeof guid !== 'string' || d.shape.type !== 'leader') return d;
     const field = (TAG_FIELDS as readonly string[]).includes(String(d.params.tagField)) ? (d.params.tagField as TagField) : 'mark';
-    const text = elementLabel(guid, field);
+    // A tag the person has written over keeps their text (#445); only the model's is refreshed.
+    const text = tagTextNow(d, elementLabel(guid, field));
     if (text === null || text === d.shape.text) return d;
     changed = true;
     return { ...d, shape: { ...d.shape, text } };
