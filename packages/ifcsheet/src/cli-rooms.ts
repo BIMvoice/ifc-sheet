@@ -61,7 +61,6 @@ export function roomsOutput(file: string, model: OpenedModel, locale: string, un
   const read = readRooms(model.dataStore, model.meshes);
   const schedule = roomSchedule(read.levels, read.rooms);
   if (schedule.rooms === 0) return null;
-  const words = roomScheduleWords(locale);
   const say = cliSayFor(nameLanguageOf(locale) ?? 'en');
   const none = schedule.withoutArea ? say('rooms.none', { count: schedule.withoutArea }) : '';
   const summary = say('rooms.summary', { rooms: schedule.rooms, fromQuantity: schedule.rooms - schedule.fromGeometry - schedule.withoutArea, fromGeometry: schedule.fromGeometry, none, external: read.leftOut.external, gfa: read.leftOut.gfa, parents: read.leftOut.parents });
