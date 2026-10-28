@@ -101,6 +101,8 @@ export interface StyleRule {
   style: StyleRuleStyle;
 }
 
+import type { DetailLevel } from './detail-level.js';
+
 export interface ViewGraphics {
   /** The structural grid's axes and bubbles. */
   grid?: ViewGridGraphics;
@@ -129,6 +131,11 @@ export interface ViewGraphics {
    * category graphics.
    */
   styleRules?: StyleRule[];
+  /**
+   * The detail level of the view (#444): coarse draws walls, slabs and roofs by their outline, fine every material layer. Absent: it
+   * follows the scale (`defaultDetailLevel`). A template carries it; a view's own overrides it.
+   */
+  detailLevel?: DetailLevel;
 }
 
 /** The graphics a view draws with, as `resolveViewGraphics` resolves them: the view's own, plus what only a resolution knows. */

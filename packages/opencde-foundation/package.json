@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/opencde-foundation",
+  "private": true,
   "version": "0.2.0",
   "description": "buildingSMART OpenCDE Foundation API client: version discovery, auth discovery, OAuth2 flows and the shared HTTP client used by every OpenCDE service client",
   "type": "module",

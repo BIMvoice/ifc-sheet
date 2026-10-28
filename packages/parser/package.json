@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/parser",
+  "private": true,
   "version": "9.2.0",
   "description": "IFC/STEP parser for IFC-Lite",
   "type": "module",

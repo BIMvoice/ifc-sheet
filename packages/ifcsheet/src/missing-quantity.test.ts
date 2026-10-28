@@ -28,7 +28,7 @@ function tableOf(rows: ListRow[]): ListScheduleTable {
     title: 't', columns, rows, numericCols: [false, true], columnWidths: [100, 100], generatedAt: '',
     grouping: { columnId: 'type', columnIds: ['type'], sumColumnIds: ['area'], view: 'schedule' } as never,
   });
-  const source = sourceOf({ model, columns } as never, {}, { count: 'Count', total: 'Total' });
+  const source = sourceOf({ model, columns, result: {} } as never, {}, { count: 'Count', total: 'Total', missing: '' });
   return listScheduleTable(source, { columns: [] }, 'Walls', { yes: 'Yes', no: 'No' });
 }
 
