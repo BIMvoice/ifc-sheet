@@ -14,6 +14,7 @@ import { deleteViewTemplate, renameViewTemplate, setTemplateCategory, usersOf } 
 import type { ViewTemplateKind } from '@bimvoice/ifcsheet';
 import { CategoryGraphicsList } from './CategoryGraphicsList';
 import { StyleRulesEditor } from './StyleRulesEditor';
+import { TemplateDetailLevel } from './TemplateDetailLevel';
 
 const KIND_LABEL = { plan: 'wall.group.plans', section: 'wall.group.sections', elevation: 'wall.group.elevations' } as const satisfies Record<ViewTemplateKind, TranslationKey>;
 
@@ -42,6 +43,7 @@ export function ViewTemplatesPanel() {
             <p className="m-0 px-1.5 text-xs text-sky-200">{t(KIND_LABEL[template.kind])} · {t('wall.tpl.usedBy', { count: usersOf(template.id, views).length })}</p>
             <details className="mt-1 px-1.5">
               <summary className="cursor-pointer text-xs text-sky-100">{t('wall.tpl.edit', { name: template.name })}</summary>
+              <TemplateDetailLevel template={template} />
               <CategoryGraphicsList graphics={template.graphics.categories} onChange={(category, patch) => setTemplateCategory(template.id, category, patch)} />
               <StyleRulesEditor template={template} />
             </details>

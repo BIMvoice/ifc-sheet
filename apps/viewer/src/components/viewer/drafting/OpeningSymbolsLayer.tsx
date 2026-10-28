@@ -18,6 +18,7 @@ import type { DraftShape } from '@/drafting/types';
 import { phaseMeshes } from '@/project/phase-view';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes } from '@/project/view-element-filter';
+import type { DetailLevel } from '@bimvoice/ifcsheet';
 import type { ViewGraphics } from '@/project/types';
 import type { PhaseView } from '@/project/view-graphics';
 import { shapePath } from './DraftOverlay';
@@ -35,11 +36,13 @@ interface Props {
   phases?: PhaseView | null;
   /** The view's graphics: a door or window it hides element by element (#33) has no symbol. */
   graphics?: ViewGraphics;
+  /** The view's detail level (#444): coarse and medium simplify the openings. */
+  detail?: DetailLevel;
   transform: ViewTransform;
   axis: SectionAxisName;
 }
 
-export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, phases, graphics, transform, axis }: Props) {
+export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, phases, graphics, detail = 'fine', transform, axis }: Props) {
   const { geometryResult } = useDrawingRuntime();
   const flips = useProjectStore((s) => s.symbolFlips) ?? NO_FLIPS;
   // Symbols follow the catalogue and the symbol mapping too.
@@ -49,11 +52,11 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
     () => {
       if (!plane || !geometryResult?.meshes) return [];
       const meshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult.meshes, phases ?? null), graphics, renderIdGlobalId) ?? geometryResult.meshes;
-      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden);
-      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden) : [];
+      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail);
+      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, detail) : [];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping are read through the project store
-    [plane, drawing, geometryResult, flips, hidden, phases, graphics, catalogue, mapping],
+    [plane, drawing, geometryResult, flips, hidden, phases, graphics, detail, catalogue, mapping],
   );
   if (symbols.length === 0) return null;
   const path = (shapes: DraftShape[]) => shapes.map((s) => shapePath(s, transform, axis)).join('');
