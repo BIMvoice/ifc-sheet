@@ -27,7 +27,7 @@ import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type 
 
 // Resolving an entity's look is the engine's (`packages/ifcsheet/src/draft-look.ts`), so the command line prints what the app draws (#479).
 export {
-  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashOf, dimStyleOf, formatDimension, layerLocked, layerPen, layerShows, lookOf, naturalDecimals, overrideKey,
+  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, PEN_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashFor, dashOf, dimStyleOf, entityPen, formatDimension, layerLocked, layerPen, layerPrints, layerShows, lookOf, naturalDecimals, overrideKey,
   readableDeg, resolveDim, resolveText, textStyleOf, unitFactor, type LayerGroup, type LayerVisibilityScope, type LineType, type StyleBook,
 } from '@bimvoice/ifcsheet';
 

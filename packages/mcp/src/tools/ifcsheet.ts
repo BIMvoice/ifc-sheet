@@ -25,6 +25,7 @@ import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
 import { drawSet } from './ifcsheet-draw.js';
 import { assertWithinLimit, outputPath } from './ifcsheet-shared.js';
+import { hostedModelCache } from './hosted-model-cache.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -65,15 +66,18 @@ async function openEntry(input: Record<string, unknown>, ctx: ToolContext) {
   const { name, bytes, path } = await modelBytes(input, ctx);
   const { openModel } = await import('@bimvoice/ifcsheet/headless');
   let model;
+  let contentHash: string | undefined;
   try {
-    model = await openModel(bytes);
+    // The hosted endpoint keeps parsed models per instance by content hash, so a session that resends a model does not parse it again.
+    if (ctx.config.hosted) ({ model, hash: contentHash } = await hostedModelCache.open(bytes, openModel));
+    else model = await openModel(bytes);
   } catch (err) {
     throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
   }
   if (model.dataStore.entityCount === 0) {
     throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC or IFCX model.` });
   }
-  return addSheetModel(ctx, name, model, { bytes, path });
+  return addSheetModel(ctx, name, model, { bytes, path, contentHash });
 }
 
 export const ifcsheetOpenModel: Tool = {
@@ -183,17 +187,18 @@ export const ifcsheetExportPdf: Tool = {
     const entry = getSheetSet(ctx, input.document_id as string);
     const { set, model, id } = entry;
     const { exportPdf } = await import('@bimvoice/ifcsheet/headless');
-    const { sheets } = await drawSet(entry, model);
+    const { sheets, notes } = await drawSet(entry, model);
     const pdf = await exportPdf(sheets, { title: set.document.name });
     const pages = sheets.length;
-    const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength };
+    const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength, notes };
+    const said = notes.length ? ` Not printed: ${notes.join(' ')}` : '';
     if (typeof input.file_path !== 'string') {
-      return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
+      return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.${said}`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
     }
     const filePath = await outputPath(input.file_path, ctx);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, pdf);
-    return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.`, { ...base, file_path: filePath });
+    return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.${said}`, { ...base, file_path: filePath });
   },
 };
 

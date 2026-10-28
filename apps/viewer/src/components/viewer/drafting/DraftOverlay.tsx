@@ -10,14 +10,16 @@
 
 import { memo, useId, useMemo } from 'react';
 import { arcPoints } from '@bimvoice/ifcsheet';
-import { layerPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
+import { entityPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
 import { SectionDepthBand } from './SectionDepthBand';
 import { DetailCropPreview } from './DetailCropPreview';
-import { resolveLevelRef } from '@/drafting/session';
+import { baseDraftSettings, resolveLevelRef } from '@/drafting/session';
+import { alignDraggedGrip, alignGlyph } from '@/drafting/dimension-align';
 import { useProjectStore } from '@/project/project-store';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import type { CustomLineType } from '@/drafting/line-types';
 import { isGeometry, type DraftEntity, type DraftLayer, type DraftShape, type Pt, type SnapHit } from '@/drafting/types';
 import { entitySkeleton } from '@/drafting/annotation';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
@@ -99,6 +101,7 @@ function SnapMarker({ snap, t, axis }: { snap: SnapHit; t: ViewTransform; axis: 
 }
 
 const NO_GROUPS: LayerGroup[] = [];
+const NO_LINE_TYPES: CustomLineType[] = [];
 const NO_GRIPS: Grip[] = [];
 
 /** The dragged entity as it will be, drawn over the original. */
@@ -109,9 +112,16 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
   const entity = entities.find((e) => e.id === gripDrag.grip.id);
   if (!entity) return null;
   const moved = moveGrip(entity.shape, gripDrag.grip.key, gripDrag.at, resolveLevelRef);
-  return isGeometry(moved)
-    ? <path d={shapePath(moved, t, axis)} fill="none" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="5 3" />
-    : <AnnotationGraphics shape={moved} color="#2563eb" selected transform={t} axis={axis} extraPatterns={extraPatterns} look={look(entity)} paperUnit={paperUnit} />;
+  // A dimension line that has snapped onto another shows the glyph and the line it shares.
+  const glyph = moved.type === 'dimension' && baseDraftSettings().dimAlign ? alignGlyph(alignDraggedGrip(entities, entity.id, gripDrag.grip.key, gripDrag.at), moved.height) : [];
+  return (
+    <>
+      {isGeometry(moved)
+        ? <path d={shapePath(moved, t, axis)} fill="none" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="5 3" />
+        : <AnnotationGraphics shape={moved} color="#2563eb" selected transform={t} axis={axis} extraPatterns={extraPatterns} look={look(entity)} paperUnit={paperUnit} />}
+      {glyph.length > 0 ? <path d={glyph.map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke="#2563eb" strokeWidth={1.25} strokeDasharray="4 3" /> : null}
+    </>
+  );
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
@@ -122,6 +132,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
   const textStyles = useProjectStore((s) => s.textStyles);
   const dimStyles = useProjectStore((s) => s.dimStyles);
   const groups = useProjectStore((s) => s.layerGroups) ?? NO_GROUPS;
+  const lineTypes = useProjectStore((s) => s.lineTypes) ?? NO_LINE_TYPES;
   const book = useMemo(() => ({ textStyles: textStyles ?? [], dimStyles: dimStyles ?? [] }), [textStyles, dimStyles]);
   /** Paper millimetres → screen px. */
   const mm = paperUnit * t.scale;
@@ -151,14 +162,14 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
           );
         }
         // The layer's pen at the view's scale: weight and line type in paper mm, never thinner than a pixel.
-        const pen = layerPen(layer);
+        const pen = entityPen(layer, e.params, lineTypes);
         const dash = pen.dash.length ? pen.dash.map((d) => Math.max(d * mm, 2)).join(' ') : undefined;
         return (
           <path
             key={e.id}
             d={shapePath(e.shape, t, axis)}
             fill="none"
-            stroke={isSelected ? '#2563eb' : isHover ? '#60a5fa' : color}
+            stroke={isSelected ? '#2563eb' : isHover ? '#60a5fa' : pen.color}
             strokeWidth={isSelected || isHover ? 2 : Math.max(pen.width * mm, 1)}
             strokeDasharray={isSelected ? '6 3' : dash}
           />

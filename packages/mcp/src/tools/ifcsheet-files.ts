@@ -19,6 +19,7 @@ import {
   readProjectSet, readSchedule,
   type ProjectDocument, type SetTemplate, type TemplateNoteKey,
 } from '@bimvoice/ifcsheet';
+import { readUnderlays } from '@bimvoice/ifcsheet/underlay-read';
 import { buildHandoverZip, asciiStem, type HandoverPart } from '@bimvoice/ifcsheet/handover';
 import { dxfName } from '@bimvoice/ifcsheet/sheet-file-name';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -41,6 +42,9 @@ async function write(path: string, ctx: ToolContext, data: Uint8Array | string, 
   await writeFile(file, data);
   return { file, bytes: typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength };
 }
+
+/** The sentence that says what a loaded project holds that was not printed; empty when nothing was left out. */
+const notedIn = (notes: readonly string[]): string => (notes.length ? ` Not printed: ${notes.join(' ')}` : '');
 
 // ---- ifcsheet_apply_template ----
 
@@ -116,7 +120,7 @@ export const ifcsheetExportDxf: Tool = {
       const written = await write(join(directory, dxfName(sheet.number, used)), ctx, exportDxf(sheet));
       files.push({ sheet: sheet.number, ...written });
     }
-    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.`, { document_id: entry.id, directory, files });
+    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.${notedIn(drawn.notes)}`, { document_id: entry.id, directory, files, notes: drawn.notes });
   },
 };
 
@@ -191,8 +195,8 @@ export const ifcsheetIssueSet: Tool = {
       zip = { ...written, files: built.files.map((f) => f.name) };
     }
     return okResult(
-      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.`,
-      { document_id: entry.id, directory, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
+      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.${notedIn(drawn.notes)}`,
+      { document_id: entry.id, directory, notes: drawn.notes, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
     );
   },
 };
@@ -246,7 +250,7 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
     }
   }
   const sheetIds = new Set(set.sheets.map((s) => s.id));
-  const { [SCHEDULES_KEY]: savedSchedules, ...rest } = raw;
+  const { [SCHEDULES_KEY]: savedSchedules, underlays: _raw, ...rest } = raw;
   const dropped: string[] = [];
   const schedules: SetSchedule[] = [];
   const articles = readBoqArticles(raw.boqArticles);
@@ -260,7 +264,10 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
       schedules.push({ id: `schedule-${schedules.length + 1}`, kind: s.kind, sheetId: s.sheetId, locale: s.locale, ...(s.kind === 'boq' ? { boqArticles: own } : {}) });
     } else dropped.push('a saved schedule that does not match a sheet');
   }
-  const document = { ...rest, name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: set.views, sheets: set.sheets } as unknown as ProjectDocument;
+  // The same reader as the command-line build: an underlay missing its point or scale is refused with its path, not drawn.
+  let underlays: ReturnType<typeof readUnderlays>;
+  try { underlays = readUnderlays(raw); } catch (e) { throw invalid(e instanceof Error ? e.message : String(e)); }
+  const document = { ...rest, ...(underlays.length > 0 ? { underlays } : {}), name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: set.views, sheets: set.sheets } as unknown as ProjectDocument;
   return { document, schedules, dropped };
 }
 

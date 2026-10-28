@@ -20,7 +20,7 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline, pointInBox } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
-import { formatDimension, layerShows, lookOf, type LayerGroup, type StyleBook } from './draft-look.js';
+import { entityPen, formatDimension, layerPrints, layerShows, lookOf, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
@@ -36,6 +36,8 @@ export interface SheetAnnotations {
   drafts: readonly DraftEntity[];
   layers: readonly DraftLayer[];
   groups: readonly LayerGroup[];
+  /** The project's own line types, which a layer or a drafted line may name (absent: only the built-in ones). */
+  lineTypes?: readonly CustomLineType[];
   book: StyleBook;
   /** The project's own hatch patterns (a pattern the library lacks); a hatch names its pattern. */
   patterns?: readonly HatchPattern[];
@@ -69,11 +71,13 @@ export function viewportAnnotations(
     if (e.viewId !== vp.viewId) continue;
     const layer = layerOf.get(e.layerId);
     if (layer && !layerShows(layer, a.groups, { view: hidden })) continue;
+    // A layer switched off for printing is on the screen only (the app's sheet marks it `data-print-ignore`).
+    if (!layerPrints(layer)) continue;
     const colour = layer?.color ?? '#000';
     const shape = e.shape;
     const mark = context(colour, lookOf(a.book, e.params));
     if (isGeometry(shape)) {
-      drawCurve(shape, layer, mark);
+      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), mark);
       continue;
     }
     const sized = annotationAtFactor(shape, factor);

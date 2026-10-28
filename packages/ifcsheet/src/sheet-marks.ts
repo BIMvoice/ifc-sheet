@@ -12,7 +12,7 @@
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import { clipPolygon } from './clip.js';
 import { arcPoints, axisLayout, formatLevel, leaderTextRight, levelWitness } from './dimension-layout.js';
-import { dashOf, layerPen, type lookOf } from './draft-look.js';
+import { dashOf, type entityPen, type lookOf } from './draft-look.js';
 import type { AnnotationShape, DraftLayer, DraftShape, Pt } from './draft-types.js';
 import { hatchSegments } from './hatch-fill.js';
 import { HATCH_UNIT_M, findPattern } from './hatch-library.js';
@@ -49,13 +49,12 @@ function lines(text: string, at: Point2D, px: number, deg: number, align: SheetT
   return text.split('\n').map((line, i) => label(at, line, size, deg, shift + i * 1.25 * size, align));
 }
 
-/** A drafted line, polyline, circle or arc, in its layer's pen. */
-export function drawCurve(shape: DraftShape, layer: DraftLayer | undefined, c: MarkContext): void {
-  const pen = layerPen(layer);
+/** A drafted line, polyline, circle or arc, in the pen the app draws it with (`entityPen`: its layer's, under the element's own overrides). */
+export function drawCurve(shape: DraftShape, pen: Pick<ReturnType<typeof entityPen>, 'color' | 'width' | 'dash'>, c: MarkContext): void {
   const pts = shape.type === 'line' ? [shape.a, shape.b]
     : shape.type === 'polyline' ? (shape.closed ? [...shape.pts, shape.pts[0]] : shape.pts)
     : shape.type === 'circle' ? arcPoints(shape.c, shape.r, 0, Math.PI * 2) : arcPoints(shape.c, shape.r, shape.start, shape.end);
-  c.out.strokes.push({ colour: c.colour, width: pen.width, ...(pen.dash.length ? { dash: pen.dash } : {}), runs: c.clip(pts.map(c.at)) });
+  c.out.strokes.push({ colour: pen.color, width: pen.width, ...(pen.dash.length ? { dash: pen.dash } : {}), runs: c.clip(pts.map(c.at)) });
 }
 
 /** A leader: its line, an arrow at the tip, the text beyond the end of the last segment. */

@@ -23,6 +23,7 @@ import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStor
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
+import { doorOperationOf } from './door-operation.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -58,6 +59,8 @@ export interface ScheduleEntry {
   counts: Record<string, number>;
   total: number;
   occurrences: ScheduleOccurrence[];
+  /** A group of doors without a configured type: the distinct swing operations the model states for them (`door-operation.ts`), in the order met. The group's key does not change with them (saved filters name it). */
+  operations?: ('swing-left' | 'swing-right' | 'double-acting-left' | 'double-acting-right')[];
 }
 
 export interface ScheduleData {
@@ -308,12 +311,15 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       }
       const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
+      const stated = k === 'door' ? doorOperationOf(live, id, (types ??= typeIndex(live)).get(id) ?? null) : null;
+      const operation = stated?.hinge ? (`${stated.doubleActing ? 'double-acting' : 'swing'}-${stated.hinge}` as NonNullable<ScheduleEntry['operations']>[number]) : undefined;
       const key = `untyped:${k}:${size}`;
       const entry = byKey.get(key) ?? {
         key, kind: k, spec: null, mark: '—', name: k === 'door' ? 'Door' : 'Window',
         width: Number.isFinite(width) ? width : 0, height: Number.isFinite(height) ? height : 0, counts: {}, total: 0, occurrences: [],
       };
       byKey.set(key, entry);
+      if (operation && !entry.operations?.includes(operation)) (entry.operations ??= []).push(operation);
       count(entry, id);
     }
   }
