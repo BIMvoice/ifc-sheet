@@ -77,7 +77,6 @@ export {
 export { layoutBoq, type BoqSheetLabels } from '../boq-layout.js';
 export { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from '../room-schedule-layout.js';
 export { summaryItems, summaryTable, type RoomSummaryBlock, type RoomSummaryWords } from '../room-summary-layout.js';
-export { wrapNote } from '../wrap-note.js';
 export { readIssues } from '../issues-read.js';
 export { readRevisions } from '../revision-read.js';
 export type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from '../issue-types.js';
