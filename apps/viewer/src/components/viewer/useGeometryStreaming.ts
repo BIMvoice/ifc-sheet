@@ -18,51 +18,30 @@ import { flushPlacementGeometry } from '@/lib/model-placement/bounds-revision';
  * issues the actual render() call.
  */
 
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import type { Renderer } from '@ifc-lite/renderer';
-import type { MeshData, CoordinateInfo, DecodedInstance } from '@ifc-lite/geometry';
-import { decodeInstancedShard } from '@ifc-lite/geometry';
+import type { MeshData, CoordinateInfo } from '@ifc-lite/geometry';
 import { NOOP_LOAD_TRACE } from '@ifc-lite/load-trace';
 import { toast } from '../ui/toast.js';
 import { reshapeSceneKeepingPresentInstanced } from './geometry-rebuild';
 import { runGpuUpload } from './gpu-upload-guard';
 import { isViewportCovered } from './viewport-cover';
+import { useNextTaskValue } from '@/hooks/useNextTaskValue';
+import { useViewerStore } from '@/store';
 import { geometryMeshKey } from './geometry-mesh-key';
 import { createRobustFitBoundsAccumulator } from './robustFitBoundsAccumulator.js';
-import { liftNewInstancedOccurrences, placeNewMeshesAtCurrentLevel } from '@/lib/level-arrival';
+import { placeNewMeshesAtCurrentLevel } from '@/lib/level-arrival';
 import { useColorOverlaySync } from './useColorOverlaySync.js';
 import { useMeshEditDrain } from './useMeshEditDrain.js';
+import { useDeferredCameraFit } from './useDeferredCameraFit.js';
+import { useInstancedShardDrain } from './useInstancedShardDrain.js';
+
+export { applyFederationOffsetToShard } from './useInstancedShardDrain.js';
 import { invalidateLandXmlGpuOwnershipAfterSceneClear, takeLandXmlGpuUploaded } from '../../hooks/ingest/landXmlGpuOwnership.js';
 import { computeBounds, userMovedCamera, type Bounds } from './streamingBounds.js';
 import { activeLoadTrace, tracePhaseOnce } from '@/lib/perf/activeLoadTrace';
 
 let linearFitHintShown = false;
-
-/**
- * The instanced half of "every express id is global": re-home, in place, the
- * ids each occurrence of a decoded IFNS shard carries onto its owning model's
- * global id space. The flat half, `applyFederationOffsetToMesh` in
- * `hooks/useIfcLoader.ts`, carries the reasoning and the absence rules; the two
- * must move together because `Scene.getInstancedMeshDataPieces` materializes an
- * occurrence into a `MeshData` and stamps `itemId` onto its `geometryItemId`,
- * so a shard left in local space feeds the flat field a local number.
- *
- * Typed to the one field it touches rather than to `DecodedInstancedShard`, so
- * a header field added to the wire format does not become part of this
- * function's contract, or of every fixture that exercises it.
- */
-export function applyFederationOffsetToShard(
-  shard: { instances: DecodedInstance[] },
-  idOffset: number,
-): void {
-  if (idOffset <= 0) return;
-  for (const instance of shard.instances) {
-    instance.entityId = instance.entityId + idOffset;
-    if (typeof instance.itemId === 'number') {
-      instance.itemId = instance.itemId + idOffset;
-    }
-  }
-}
 
 export interface UseGeometryStreamingParams {
   rendererRef: MutableRefObject<Renderer | null>;
@@ -195,7 +174,31 @@ function traceGeometrySync(message: string): void {
   console.log(`[GeomSync] ${message}`);
 }
 
+/**
+ * The 3D side of a load runs one browser task after the store update that brought the model (#154): the update's
+ * subscribers render in that task, and appending 11,000 meshes, fitting the camera and draining the instanced shards
+ * joined them in one 180 ms long task. Every input goes through `useNextTaskValue` as one bundle, so the effects below
+ * still see one consistent snapshot (a finalize never runs against geometry the main effect has not appended yet), a
+ * burst of streamed batches is one update, and the first render of a mounting viewport is not delayed.
+ */
 export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
+  const pendingMeshEdits = useViewerStore((s) => s.pendingMeshEdits);
+  const geometryUpdateTick = useViewerStore((s) => s.geometryUpdateTick);
+  // The caller passes the same keys on every render, so the dependency list keeps its length.
+  const bundle = useMemo(
+    () => ({ params, pendingMeshEdits, geometryUpdateTick }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [...Object.values(params), pendingMeshEdits, geometryUpdateTick],
+  );
+  const settled = useNextTaskValue(bundle);
+  useSettledGeometryStreaming(settled.params, settled.pendingMeshEdits, settled.geometryUpdateTick);
+}
+
+function useSettledGeometryStreaming(
+  params: UseGeometryStreamingParams,
+  pendingMeshEdits: ReturnType<typeof useViewerStore.getState>['pendingMeshEdits'],
+  geometryUpdateTick: number,
+): void {
   const {
     rendererRef,
     isInitialized,
@@ -277,8 +280,10 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
   // advances the refs below past them (see useMeshEditDrain.ts).
   useMeshEditDrain({
     rendererRef, isInitialized, isStreaming, geometry, pendingMeshRemovals, clearPendingMeshRemovals,
-    pruneGeometryMeshes, lastGeometryLengthRef, lastGeometryRef, processedMeshIdsRef,
+    pruneGeometryMeshes, lastGeometryLengthRef, lastGeometryRef, processedMeshIdsRef, pendingMeshEdits, geometryUpdateTick,
   });
+
+  const { scheduleCameraFit, flushPendingFit, cancelPendingFit } = useDeferredCameraFit();
 
   // ─── Main geometry effect ────────────────────────────────────────────
   // Runs on every geometry change (new file, incremental batch, visibility toggle).
@@ -293,6 +298,7 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
         lastGeometryLengthRef.current = 0;
         lastGeometryRef.current = null;
         processedMeshIdsRef.current.clear();
+        cancelPendingFit();
         cameraFittedRef.current = false;
         finalBoundsRefittedRef.current = false;
         cameraSnapshotRef.current = null;
@@ -545,93 +551,98 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
     // whether the data is actually usable, not just whether the
     // property exists.
     if (!cameraFittedRef.current) {
-      const fitStart = performance.now();
-      // The adaptive fit picks an SE-isometric pose for compact models
-      // (today's behaviour) but switches to a side-on-along-the-alignment
-      // pose for high-aspect-ratio bboxes (railway / road corridors).
-      // Without the switch, a 932 × 0.75 × 428 m alignment auto-fits to a
-      // ~1864 m distance where every 1 m signal projects to a sub-pixel
-      // dot — the user sees a blank viewport even though geometry is in
-      // the scene. See packages/renderer/src/camera-fit-policy.ts.
-      let fitted = false;
-      // Outlier-robust framing takes precedence over the raw wasm AABB when a
-      // sparse far tail would otherwise park the fit target / orbit pivot in
-      // empty space (issue #1394). `robust` is null for models without such a
-      // tail, leaving the shiftedBounds / computeBounds paths below untouched.
-      // `sceneBoundsFull` is the FULL AABB and is what feeds setSceneBounds —
-      // near/far clipping + section ranges must still cover the far meshes.
-      const rbEarly = geometry.length > 0 ? robustFitAccRef.current.update(geometry, { streaming: isStreaming }) : null;
-      const robustEarly = rbEarly?.robust ?? null;
-      let sceneBoundsFull: Bounds | null = null;
-      if (robustEarly) {
-        const canvas = renderer.getCanvas();
-        const canvasShort = Math.min(canvas?.clientHeight ?? 0, canvas?.clientWidth ?? 0); // CSS px (#5383)
-        const policy = renderer.getCamera().fitBoundsAdaptive(
-          robustEarly,
-          { viewportShortPx: canvasShort > 0 ? canvasShort : undefined },
-        );
-        geometryBoundsRef.current = robustEarly;
-        sceneBoundsFull = rbEarly!.full;
-        lastFitPolicyKindRef.current = policy.kind;
-        fitted = true;
-      }
-      const sb = coordinateInfo?.shiftedBounds;
-      if (!fitted && sb) {
-        const maxSize = Math.max(sb.max.x - sb.min.x, sb.max.y - sb.min.y, sb.max.z - sb.min.z);
-        if (maxSize > 0 && Number.isFinite(maxSize)) {
+      const fitCamera = () => {
+        const fitStart = performance.now();
+        // The adaptive fit picks an SE-isometric pose for compact models
+        // (today's behaviour) but switches to a side-on-along-the-alignment
+        // pose for high-aspect-ratio bboxes (railway / road corridors).
+        // Without the switch, a 932 × 0.75 × 428 m alignment auto-fits to a
+        // ~1864 m distance where every 1 m signal projects to a sub-pixel
+        // dot — the user sees a blank viewport even though geometry is in
+        // the scene. See packages/renderer/src/camera-fit-policy.ts.
+        let fitted = false;
+        // Outlier-robust framing takes precedence over the raw wasm AABB when a
+        // sparse far tail would otherwise park the fit target / orbit pivot in
+        // empty space (issue #1394). `robust` is null for models without such a
+        // tail, leaving the shiftedBounds / computeBounds paths below untouched.
+        // `sceneBoundsFull` is the FULL AABB and is what feeds setSceneBounds —
+        // near/far clipping + section ranges must still cover the far meshes.
+        const rbEarly = geometry.length > 0 ? robustFitAccRef.current.update(geometry, { streaming: isStreaming }) : null;
+        const robustEarly = rbEarly?.robust ?? null;
+        let sceneBoundsFull: Bounds | null = null;
+        if (robustEarly) {
           const canvas = renderer.getCanvas();
           const canvasShort = Math.min(canvas?.clientHeight ?? 0, canvas?.clientWidth ?? 0); // CSS px (#5383)
           const policy = renderer.getCamera().fitBoundsAdaptive(
-            { min: sb.min, max: sb.max },
+            robustEarly,
             { viewportShortPx: canvasShort > 0 ? canvasShort : undefined },
           );
-          geometryBoundsRef.current = { min: { ...sb.min }, max: { ...sb.max } };
-          // shiftedBounds is the full wasm AABB.
-          sceneBoundsFull = { min: { ...sb.min }, max: { ...sb.max } };
+          geometryBoundsRef.current = robustEarly;
+          sceneBoundsFull = rbEarly!.full;
           lastFitPolicyKindRef.current = policy.kind;
           fitted = true;
         }
-      }
-      if (!fitted && geometry.length > 0 && !isStreaming) {
-        const bounds = computeBounds(geometry);
-        if (bounds) {
-          const canvas = renderer.getCanvas();
-          const canvasShort = Math.min(canvas?.clientHeight ?? 0, canvas?.clientWidth ?? 0); // CSS px (#5383)
-          const policy = renderer.getCamera().fitBoundsAdaptive(
-            bounds,
-            { viewportShortPx: canvasShort > 0 ? canvasShort : undefined },
-          );
-          geometryBoundsRef.current = bounds;
-          sceneBoundsFull = bounds;
-          lastFitPolicyKindRef.current = policy.kind;
-          fitted = true;
+        const sb = coordinateInfo?.shiftedBounds;
+        if (!fitted && sb) {
+          const maxSize = Math.max(sb.max.x - sb.min.x, sb.max.y - sb.min.y, sb.max.z - sb.min.z);
+          if (maxSize > 0 && Number.isFinite(maxSize)) {
+            const canvas = renderer.getCanvas();
+            const canvasShort = Math.min(canvas?.clientHeight ?? 0, canvas?.clientWidth ?? 0); // CSS px (#5383)
+            const policy = renderer.getCamera().fitBoundsAdaptive(
+              { min: sb.min, max: sb.max },
+              { viewportShortPx: canvasShort > 0 ? canvasShort : undefined },
+            );
+            geometryBoundsRef.current = { min: { ...sb.min }, max: { ...sb.max } };
+            // shiftedBounds is the full wasm AABB.
+            sceneBoundsFull = { min: { ...sb.min }, max: { ...sb.max } };
+            lastFitPolicyKindRef.current = policy.kind;
+            fitted = true;
+          }
         }
-      }
-      if (fitted) {
-        cameraFittedRef.current = true;
-        tracePhaseOnce(activeLoadTrace(), 'camera.fit').record('camera.fit', fitStart, performance.now(), { policy: lastFitPolicyKindRef.current ?? 'none', robust: robustEarly !== null });
-        // Populate the camera's cached scene bounds. The viewer streams meshes
-        // directly (not via Renderer.loadGeometry), so this is the only place
-        // the camera learns the bounds — consumers like the orbit-pivot
-        // fallback (issue #1107) and tight near/far clipping depend on it.
-        // Use the FULL AABB so clipping/section ranges still cover far meshes;
-        // the trimmed robust box only drives framing + the orbit anchor (#1394).
-        renderer.getCamera().setSceneBounds(sceneBoundsFull ?? geometryBoundsRef.current);
-        // Pin (or clear) the robust orbit-pivot anchor for this model (#1394).
-        renderer.getCamera().setOrbitAnchorBounds(robustEarly);
-        const pos = renderer.getCamera().getPosition();
-        const tgt = renderer.getCamera().getTarget();
-        cameraSnapshotRef.current = { px: pos.x, py: pos.y, pz: pos.z, tx: tgt.x, ty: tgt.y, tz: tgt.z };
-        // One-time hint for linear-infrastructure models. The side-on auto-fit
-        // shows a slice of the alignment at a useful zoom — but the FULL
-        // alignment is much longer than what fits on screen, so users need
-        // to know to pan / use Frame Selection to inspect remote stations.
-        // Hint is module-scoped so model swaps within one session don't spam.
-        if (lastFitPolicyKindRef.current === 'linear' && !linearFitHintShown) {
-          linearFitHintShown = true;
-          toast.info('Linear infrastructure — pan along the alignment, or select an element and press F to zoom in');
+        if (!fitted && geometry.length > 0 && !isStreaming) {
+          const bounds = computeBounds(geometry);
+          if (bounds) {
+            const canvas = renderer.getCanvas();
+            const canvasShort = Math.min(canvas?.clientHeight ?? 0, canvas?.clientWidth ?? 0); // CSS px (#5383)
+            const policy = renderer.getCamera().fitBoundsAdaptive(
+              bounds,
+              { viewportShortPx: canvasShort > 0 ? canvasShort : undefined },
+            );
+            geometryBoundsRef.current = bounds;
+            sceneBoundsFull = bounds;
+            lastFitPolicyKindRef.current = policy.kind;
+            fitted = true;
+          }
         }
-      }
+        if (fitted) {
+          cameraFittedRef.current = true;
+          tracePhaseOnce(activeLoadTrace(), 'camera.fit').record('camera.fit', fitStart, performance.now(), { policy: lastFitPolicyKindRef.current ?? 'none', robust: robustEarly !== null });
+          // Populate the camera's cached scene bounds. The viewer streams meshes
+          // directly (not via Renderer.loadGeometry), so this is the only place
+          // the camera learns the bounds — consumers like the orbit-pivot
+          // fallback (issue #1107) and tight near/far clipping depend on it.
+          // Use the FULL AABB so clipping/section ranges still cover far meshes;
+          // the trimmed robust box only drives framing + the orbit anchor (#1394).
+          renderer.getCamera().setSceneBounds(sceneBoundsFull ?? geometryBoundsRef.current);
+          // Pin (or clear) the robust orbit-pivot anchor for this model (#1394).
+          renderer.getCamera().setOrbitAnchorBounds(robustEarly);
+          const pos = renderer.getCamera().getPosition();
+          const tgt = renderer.getCamera().getTarget();
+          cameraSnapshotRef.current = { px: pos.x, py: pos.y, pz: pos.z, tx: tgt.x, ty: tgt.y, tz: tgt.z };
+          // One-time hint for linear-infrastructure models. The side-on auto-fit
+          // shows a slice of the alignment at a useful zoom — but the FULL
+          // alignment is much longer than what fits on screen, so users need
+          // to know to pan / use Frame Selection to inspect remote stations.
+          // Hint is module-scoped so model swaps within one session don't spam.
+          if (lastFitPolicyKindRef.current === 'linear' && !linearFitHintShown) {
+            linearFitHintShown = true;
+            toast.info('Linear infrastructure — pan along the alignment, or select an element and press F to zoom in');
+          }
+        }
+    
+        renderer.requestRender();
+      };
+      scheduleCameraFit(fitCamera);
     }
 
     renderer.requestRender();
@@ -667,6 +678,7 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
 
       const startFinalize = () => {
         timeoutId = globalThis.setTimeout(() => {
+          flushPendingFit(); // the refit below needs the first fit made (#154)
           const r = rendererRef.current;
           if (!r) return;
 
@@ -795,46 +807,8 @@ export function useGeometryStreaming(params: UseGeometryStreamingParams): void {
     }
   }, [pendingMeshColorUpdates, isInitialized, clearPendingMeshColorUpdates]);
 
-  // ─── GPU-instancing shards ───────────────────────────────────────────
-  // The geometry worker collates each batch into an IFNS shard; the loader
-  // pushes the raw bytes into pendingInstancedShards, tagged with the owning
-  // model's id. Drain here: decode, re-home each occurrence's id onto that
-  // model's express-id space, and upload under that model's modelIndex
-  // (#1912 — a federated model's shards used to be dropped before ever
-  // reaching this drain, since the loader only forwarded the primary's).
-  useEffect(() => {
-    if (pendingInstancedShards === null || !isInitialized) return;
-    const renderer = rendererRef.current;
-    if (!renderer) return;
-    const device = renderer.getGPUDevice();
-    const scene = renderer.getScene();
-    if (!device) return;
-
-    if (pendingInstancedShards.length > 0) {
-      const trace = activeLoadTrace(); // #6979: shards only arrive while a load streams
-      for (const { modelId, bytes } of pendingInstancedShards) {
-        // CRITICAL: never let a shard decode/upload throw OUT of this effect.
-        // addInstancedShard creates GPU buffers; on a degraded
-        // backend whose device is being lost (e.g. CI's SwiftShader), createBuffer
-        // throws — and an uncaught throw in a React effect tears down the Viewport
-        // subtree via the error boundary, unmounting the <canvas> entirely. Instanced
-        // overlays are non-essential, so swallow per-shard failures: the flat geometry
-        // still renders.
-        try {
-          const shard = trace.span('instanced.decode', () => decodeInstancedShard(new Uint8Array(bytes)));
-          if (!shard) continue;
-          applyFederationOffsetToShard(shard, modelIdToOffset?.get(modelId) ?? 0);
-          liftNewInstancedOccurrences(shard, currentLevelY ?? new Map());
-          const modelIndex = modelIdToIndex?.get(modelId) ?? 0;
-          trace.span('instanced.upload', () => scene.addInstancedShard(device, shard, modelIndex));
-        } catch (err) {
-          console.warn('[useGeometryStreaming] instanced shard upload failed (device lost?), skipping:', err);
-        }
-      }
-      renderer.requestRender();
-    }
-    clearInstancedShards();
-  }, [pendingInstancedShards, modelIdToIndex, modelIdToOffset, isInitialized, clearInstancedShards]);
+  // ─── GPU-instancing shards (held back while the viewport is covered, #154) ──
+  useInstancedShardDrain({ rendererRef, isInitialized, pendingInstancedShards, modelIdToIndex, modelIdToOffset, currentLevelY, clearInstancedShards });
 
   // ─── Mesh translations (move / gizmo drag / numeric move) ────────────
   // Drain the pending-translation map onto the renderer. Same
