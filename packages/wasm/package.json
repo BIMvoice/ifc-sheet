@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/wasm",
+  "private": true,
   "type": "module",
   "collaborators": [
     "IFC-Lite Contributors"
