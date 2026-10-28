@@ -23,7 +23,7 @@ import { parseProjectFile, serializeProject } from './project-file.js';
 import { isMeshOnlyModel, loadedModels } from './project-sync.js';
 import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store.js';
 import { addUserLevel, moveUserLevel, removeUserLevel, renameUserLevel, replaceUserLevels } from './user-levels.js';
-import { levelFloorY, defaultPlanCutHeight, resolvePlanLevel } from './view-defaults.js';
+import { defaultPlanCutHeight, resolvePlanLevel } from './view-defaults.js';
 import type { PlanProjectView } from './types.js';
 
 /** A flat square of `size` metres at height `y`, facing up. */
