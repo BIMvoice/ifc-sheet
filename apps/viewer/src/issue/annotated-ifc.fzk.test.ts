@@ -57,6 +57,13 @@ const project: AnnotationSource = {
 };
 
 describe('the annotated copy of AC20-FZK-Haus from a project\'s drafts', { skip: !existsSync(FZK) }, () => {
+  it('draws a tag with its text written over the model, but does not write that text back as the element\'s mark (#445)', () => {
+    const over = { ...tag('t5', 'p0', WALL_C, 'D-01*'), params: { tagOf: WALL_C, tagField: 'mark', tagOverride: 'D-01*' } };
+    const c = collectAnnotations({ ...project, drafts: [over] }, { x: 0, y: 0 }, 'en');
+    assert.ok(c.views[0].texts.some((t) => t.text === 'D-01*'), 'the annotation shows what the drawing shows');
+    assert.deepEqual(c.marks, [], 'the element\'s Tag is the model\'s to change, not a tag\'s written text');
+  });
+
   it('collects the plans, the marks and what it leaves out', () => {
     const c = collectAnnotations(project, { x: 0, y: 0 }, 'en');
     assert.deepEqual(c.views.map((v) => [v.name, v.storeyGlobalIds]), [['Ground floor', [GROUND]], ['Roof floor', [ROOF]]]);
