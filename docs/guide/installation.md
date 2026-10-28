@@ -436,3 +436,20 @@ ifc-lite/
 - [Server Guide](server.md) - Set up server-based processing
 - [Browser Requirements](browser-requirements.md) - Check WebGPU support
 - [API Reference](../api/typescript.md) - Explore the API
+
+## Switching the offline app off (operators)
+
+IfcSheet installs a service worker (`/sw.js`) so the app works offline. If a
+release must be pulled back from everyone who already installed it, do not
+delete `sw.js` (a 404 leaves the installed worker running). Use the kill
+switch instead:
+
+1. Set `"disabled": true` in `apps/viewer/public/sw-control.json`.
+2. Deploy.
+
+The installed worker fetches `/sw-control.json` (served `no-store`) on
+activation and on every update check its tabs make (at load, when a tab
+becomes visible, and every 30 minutes). When it reads `disabled: true` it
+deletes its `ifcsheet-` caches, unregisters itself and reloads its tabs. To
+turn it back on, set `disabled` to `false` and deploy; browsers register the
+worker again on the next visit.

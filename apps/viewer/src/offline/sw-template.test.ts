@@ -18,13 +18,14 @@ const template = readFileSync(new URL('../../vite-plugins/offline-sw.template.js
 
 type Listener = (event: unknown) => void;
 
-function load(options: { fetch?: (input: unknown) => Promise<unknown>; shell?: unknown } = {}) {
+function load(options: { fetch?: (input: unknown) => Promise<unknown>; shell?: unknown; clients?: { url: string; navigate: (url: string) => Promise<unknown> }[]; keys?: string[] } = {}) {
   const listeners = new Map<string, Listener>();
-  const calls = { skipWaiting: 0, put: [] as string[], deleted: [] as string[], fetched: [] as string[], fetchArgs: [] as unknown[][] };
+  const calls = { skipWaiting: 0, unregistered: 0, put: [] as string[], deleted: [] as string[], fetched: [] as string[], fetchArgs: [] as unknown[][] };
   const self = {
     location: { origin: 'https://app.test' },
     addEventListener: (type: string, fn: Listener) => { listeners.set(type, fn); },
-    clients: { claim: async () => {} },
+    clients: { claim: async () => {}, matchAll: async () => options.clients ?? [] },
+    registration: { unregister: async () => { calls.unregistered += 1; } },
     skipWaiting: () => { calls.skipWaiting += 1; },
   };
   const caches = {
@@ -39,7 +40,7 @@ function load(options: { fetch?: (input: unknown) => Promise<unknown>; shell?: u
     return options.fetch ? options.fetch(args[0]) : new Response('x');
   };
   const source = template.replace("'__BUILD_VERSION__'", "'v1'").replace("'__PRECACHE_URLS__'", "['/', '/assets/a.js']");
-  vm.runInNewContext(source, { self, caches, URL, Request: class { constructor(readonly url: string, readonly init?: { cache?: string }) {} }, fetch: fetchStub, setTimeout: (fn: () => void) => setTimeout(fn, 0), clearTimeout, AbortController });
+  vm.runInNewContext(source, { self, Response, caches, URL, Request: class { constructor(readonly url: string, readonly init?: { cache?: string }) {} }, fetch: fetchStub, setTimeout: (fn: () => void) => setTimeout(fn, 0), clearTimeout, AbortController });
   return { listeners, calls };
 }
 
@@ -119,5 +120,52 @@ describe('offline service worker template (#456)', () => {
     const worker = load();
     await lifecycle(worker, 'activate');
     assert.deepEqual(worker.calls.deleted.sort(), ['ifcsheet-precache-old', 'ifcsheet-runtime-old']);
+  });
+
+  const control = (body: string, ok = true) => (input: unknown) =>
+    (input as { url: string }).url === '/sw-control.json' ? Promise.resolve(new Response(body, { status: ok ? 200 : 404 })) : Promise.resolve(new Response('x'));
+
+  it('kill switch: disabled true deletes its caches, unregisters and reloads its tabs', async () => {
+    const navigated: string[] = [];
+    const clients = [{ url: 'https://app.test/p', navigate: async (u: string) => { navigated.push(u); } }];
+    const worker = load({ fetch: control('{"disabled": true}'), clients });
+    await lifecycle(worker, 'activate');
+    assert.deepEqual([...new Set(worker.calls.deleted)].sort(), ['ifcsheet-precache-old', 'ifcsheet-precache-v1', 'ifcsheet-runtime-old']);
+    assert.equal(worker.calls.unregistered, 1);
+    assert.deepEqual(navigated, ['https://app.test/p']);
+  });
+
+  it('kill switch: the page-driven CHECK_CONTROL message also switches it off', async () => {
+    const worker = load({ fetch: control('{"disabled":true}') });
+    let work: Promise<unknown> = Promise.resolve();
+    worker.listeners.get('message')!({ data: { type: 'CHECK_CONTROL' }, waitUntil: (p: Promise<unknown>) => { work = p; } });
+    await work;
+    assert.equal(worker.calls.unregistered, 1);
+  });
+
+  it('kill switch: disabled false, a missing file or garbage leaves the worker running', async () => {
+    for (const fetcher of [control('{"disabled": false}'), control('', false), control('not json'), () => Promise.reject(new Error('offline'))]) {
+      const worker = load({ fetch: fetcher });
+      await lifecycle(worker, 'activate');
+      assert.equal(worker.calls.unregistered, 0);
+      assert.deepEqual(worker.calls.deleted.sort(), ['ifcsheet-precache-old', 'ifcsheet-runtime-old']);
+    }
+  });
+
+  it('reads the control file without the HTTP cache', async () => {
+    const worker = load({ fetch: control('{"disabled": false}') });
+    await lifecycle(worker, 'activate');
+    const request = worker.calls.fetchArgs.map((a) => a[0] as { url: string; init?: { cache?: string } }).find((r) => r.url === '/sw-control.json');
+    assert.equal(request?.init?.cache, 'no-store');
+  });
+
+  it('offline /mcp navigation gets a notice, never the app shell', async () => {
+    const worker = load({ fetch: () => Promise.reject(new Error('offline')), shell: { cached: true } });
+    for (const path of ['/mcp', '/mcp/docs']) {
+      let answer: Promise<unknown> = Promise.resolve();
+      dispatch(worker, 'https://app.test' + path, { mode: 'navigate' }, (a) => { answer = a; });
+      const response = (await answer) as Response;
+      assert.equal(response.status, 503);
+    }
   });
 });

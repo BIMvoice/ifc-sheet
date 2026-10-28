@@ -22,11 +22,35 @@ function offerUpdate(waiting: ServiceWorker): void {
   toast.infoLive(() => resolve('offline.updateAvailable'), {
     label: () => resolve('offline.updateReload'),
     onClick: () => {
-      // The new worker takes over, then the page reloads onto its shell.
-      navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+      // The new worker takes over; `controllerchange` (listened for in every
+      // tab, see reloadOnTakeover) reloads this tab and the others.
       waiting.postMessage({ type: 'SKIP_WAITING' });
     },
   });
+}
+
+const UPDATE_CHECK_MS = 30 * 60 * 1000;
+
+/** Every tab reloads once when a new worker takes over from an existing one,
+ *  so the other tabs do not keep running old chunks against a deleted cache. */
+function reloadOnTakeover(): void {
+  if (!navigator.serviceWorker.controller) return; // first install: nothing to reload
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+}
+
+/** Long-open tabs learn about new deploys, and the worker re-reads its kill switch. */
+function checkPeriodically(registration: ServiceWorkerRegistration): void {
+  const check = () => {
+    registration.update().catch(() => {});
+    registration.active?.postMessage({ type: 'CHECK_CONTROL' });
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  window.setInterval(check, UPDATE_CHECK_MS);
 }
 
 function watch(registration: ServiceWorkerRegistration): void {
@@ -43,8 +67,9 @@ export function registerOfflineApp(): void {
   if (typeof window === 'undefined') return;
   listenForInstallPrompt();
   if (!import.meta.env?.PROD || !('serviceWorker' in navigator)) return;
+  reloadOnTakeover();
   const register = () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(watch).catch((error) => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((registration) => { watch(registration); checkPeriodically(registration); registration.active?.postMessage({ type: 'CHECK_CONTROL' }); }).catch((error) => {
       console.warn('[offline] service worker not registered', error);
     });
   };

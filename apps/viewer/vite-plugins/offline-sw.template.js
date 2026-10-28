@@ -18,6 +18,11 @@
  *   cached shell; files go to the cache first. A hashed chunk the install did
  *   not list is cached on first use.
  * - Cache names carry the build hash, and activation deletes the older ones.
+ * - Kill switch: `/sw-control.json` (served no-store) is fetched on activation,
+ *   on every update check the page makes: at load, on becoming visible and
+ *   every 30 minutes (message CHECK_CONTROL). `{"disabled": true}` makes the worker
+ *   delete its caches, unregister and reload its tabs. An unreachable or
+ *   malformed file changes nothing.
  */
 
 const VERSION = '__BUILD_VERSION__';
@@ -27,6 +32,7 @@ const PRECACHE = `${PREFIX}precache-${VERSION}`;
 const RUNTIME = `${PREFIX}runtime-${VERSION}`;
 const NAVIGATION_TIMEOUT_MS = 4000;
 const RUNTIME_CACHEABLE = /^\/(assets|fonts)\/.+\.(js|mjs|css|wasm|ttf|woff2?)$/i;
+const CONTROL_URL = '/sw-control.json';
 const NEVER = /^\/(api|oauth)\//;
 
 self.addEventListener('install', (event) => {
@@ -56,12 +62,34 @@ self.addEventListener('activate', (event) => {
       if (name.startsWith(PREFIX) && !keep.has(name)) await caches.delete(name);
     }
     await self.clients.claim();
+    await checkControl();
   })());
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  const type = event.data && event.data.type;
+  if (type === 'SKIP_WAITING') self.skipWaiting();
+  else if (type === 'CHECK_CONTROL') event.waitUntil(checkControl());
 });
+
+async function checkControl() {
+  let disabled = false;
+  try {
+    const response = await fetch(new Request(CONTROL_URL, { cache: 'no-store' }));
+    if (!response.ok) return;
+    disabled = (await response.json()).disabled === true;
+  } catch {
+    return;
+  }
+  if (!disabled) return;
+  for (const name of await caches.keys()) {
+    if (name.startsWith(PREFIX)) await caches.delete(name);
+  }
+  await self.registration.unregister();
+  for (const client of await self.clients.matchAll({ type: 'window' })) {
+    try { await client.navigate(client.url); } catch { /* a tab that cannot be navigated reloads by itself next visit */ }
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
@@ -69,7 +97,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || NEVER.test(url.pathname) || url.pathname === '/sw.js') return;
   if (request.mode === 'navigate') {
-    event.respondWith(navigate(request));
+    event.respondWith(navigate(request, url));
   } else if (url.pathname !== '/mcp' && !url.pathname.startsWith('/mcp/')) {
     event.respondWith(fromCache(request, url));
   }
@@ -81,7 +109,7 @@ self.addEventListener('fetch', (event) => {
 // to the latest deployment; anything else follows the `__vdpl` cookie, so the
 // page would keep coming from the deployment the cookie names. The timeout is
 // a race, not an abort, for the same reason.
-async function navigate(request) {
+async function navigate(request, url) {
   let timer;
   try {
     const timeout = new Promise((_, reject) => {
@@ -89,6 +117,13 @@ async function navigate(request) {
     });
     return await Promise.race([fetch(request), timeout]);
   } catch (error) {
+    // The MCP landing is not the app: offline it gets a notice, not the shell.
+    if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+      return new Response('<!doctype html><meta charset="utf-8"><title>Offline</title><p>This page needs a connection.</p>', {
+        status: 503,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
     const shell = await caches.match('/', { cacheName: PRECACHE });
     if (shell) return shell;
     throw error;
