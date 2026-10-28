@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/extensions",
+  "private": true,
   "version": "0.10.1",
   "description": "Extension manifest, capability grammar, and slot registry for ifc-lite user customization",
   "type": "module",

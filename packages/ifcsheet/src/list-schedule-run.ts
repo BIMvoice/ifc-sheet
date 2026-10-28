@@ -22,7 +22,7 @@ import { detectNumericColumns } from './list-numeric-columns.js';
 import { withListClassification, type ListClassificationContext } from './list-classification.js';
 import { listCandidates, listResultOf, type ListProviderPair } from './list-run.js';
 import { withListOverrides } from './list-overrides.js';
-import { LIST_COUNT_ID, listFigureKind, type ListCell, type ListScheduleDef, type ListTableSource } from './list-schedule.js';
+import { LIST_COUNT_ID, listFigureKind, type ListCell, type ListMissing, type ListScheduleDef, type ListTableSource } from './list-schedule.js';
 import { passesElementFilter, predefinedTypeText, propertyValueText, type OccurrenceFacts, type PropertyFact, type SubReportFilter } from './schedule-filter.js';
 
 /** The part of a project schedule a run reads. */
@@ -154,7 +154,13 @@ export function runListScheduleHeadless(
 export interface ListSourceWords {
   count: string;
   total: string;
+  /** The line under a table whose total leaves rows out; `{column}`, `{missing}` and `{rows}` are filled in (`listMissingNote`). */
+  missing: string;
 }
+
+/** The sentence for one summed column that some rows do not state: "Total of NetVolume leaves out 3 of 40 rows with no value". */
+export const listMissingNote = (template: string, m: ListMissing): string =>
+  template.replace('{column}', () => m.column).replace('{missing}', String(m.missing)).replace('{rows}', String(m.rows));
 
 /**
  * The run as the table reads it (`listScheduleTable`): the panel's pivot when the list is grouped (a row per group, Count, the sums, and the
@@ -170,5 +176,11 @@ export function listTableSourceOf(run: ListScheduleRun, def: Pick<ListScheduleDe
   }
   const columns = model.schedule.columns.map((c) => ({ id: c.id, label: c.id === LIST_COUNT_ID ? words.count : c.label, numeric: c.numeric, kind: kindOf(c.id) }));
   const totals: ListCell[] = columns.map((c, i) => (i === 0 ? words.total : c.id === LIST_COUNT_ID ? model.totals.count : (model.totals.sums[c.id] ?? null)));
-  return { columns, rows: model.schedule.rows, totals: def.totals === false ? null : totals };
+  // A total over rows that do not all state the quantity says so, like the bill of quantities' `missing` (#432). Only when the totals row is printed.
+  const summary = run.result.summary;
+  const missing: ListMissing[] = def.totals === false ? [] : Object.entries(summary?.missing ?? {}).flatMap(([id, n]) => {
+    const column = columns.find((c) => c.id === id);
+    return column ? [{ column: column.label, missing: n, rows: summary?.count ?? 0 }] : [];
+  });
+  return { columns, rows: model.schedule.rows, totals: def.totals === false ? null : totals, missing, notes: missing.map((m) => listMissingNote(words.missing, m)) };
 }

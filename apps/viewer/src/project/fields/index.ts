@@ -59,6 +59,7 @@ import { norwayPermitField } from './norway-permit';
 import { pacInterventionField } from './pac-intervention';
 import { pacModeField } from './pac-mode';
 import { siteAreaField } from './site-area';
+import { underlaysField } from './underlays';
 import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
 import { defineField, listField, optionalField, recordField, whenPresent, whenUsable, type DocumentField, type FieldKey } from './define';
@@ -139,6 +140,8 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was.
   optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
+  // PDF pages and images under views, to trace over (#457); absent: none.
+  underlaysField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];
