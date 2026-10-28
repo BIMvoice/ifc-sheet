@@ -33,7 +33,7 @@ import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-ma
 import { upgradeTagAllTypes } from '@/tagall/types';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
-import { readJoineryOverrides, readSchedule } from '@bimvoice/ifcsheet';
+import { readSchedule } from '@bimvoice/ifcsheet';
 import { readStructureProfileList } from '@ifc-lite/create';
 import { readCadLayerRule } from '../cad-layers-file';
 import { readNumberingScheme } from '../numbering';
@@ -144,8 +144,6 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
-  // Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was.
-  optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];

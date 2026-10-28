@@ -281,7 +281,6 @@ const FULL = {
   joineryTypes: [{ ...defaultDoorSpec('D-1'), id: 'j1' }, { ...defaultWindowSpec('W-1'), id: 'j2', columns: [2, 1], panels: [{ col: 0, row: 0, operation: 'tilt-turn-right' }] }],
   currentJoinery: { door: 'j1', window: 'j2' },
   joineryMapping: { ...DEFAULT_JOINERY_MAPPING, byName: false, byDimensions: false, tolerance: 0.07, aliases: { j1: ['Door 90'] } },
-  joineryOverrides: [{ type: 'untyped:window:1000×1000', row: 'fire', value: 'EI 30', about: 'W1 Window' }, { type: '0KzM3XjQrPipQpI0RMGVb1', row: 'name', value: 'Attic round', about: 'W9 Attic round window' }],
   elementTypes: (['wall', 'slab', 'column', 'beam', 'roof', 'opening'] as const).map((kind, i) => ({ ...defaultTypeSpec(kind), kind, id: `t${i}`, name: `Type ${kind}`, mark: `M${i}` }) as never),
   currentTypes: { wall: 't0', slab: 't1', column: 't2' },
   schedules: [...Object.values(SCHEDULES), SUB_REPORT, TEXT_SCHEDULE, CONTENT_SCHEDULE, KEPT_SCHEDULE, BOQ_DETAIL_SCHEDULE, CLASSIFICATION_SCHEDULE],
