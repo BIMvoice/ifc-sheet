@@ -21,6 +21,8 @@ export interface SheetFill {
   loops: Polyline[];
   /** `#rrggbb`. */
   colour: string;
+  /** A coloured surface of an elevation or section (#499): painted in the PDF, kept out of the DXF, which carries the lines only. */
+  surface?: true;
 }
 
 /**
@@ -32,7 +34,7 @@ export function viewportSurfaceFills(surfaces: readonly SurfaceFill[], at: (p: P
   const out: SheetFill[] = [];
   for (const s of surfaces) {
     const ring = clipPolygon(s.polygon.outer.map(at), box);
-    if (ring.length >= 3) out.push({ loops: [closed(ring)], colour: s.surfaceColour });
+    if (ring.length >= 3) out.push({ loops: [closed(ring)], colour: s.surfaceColour, surface: true });
   }
   return out;
 }
