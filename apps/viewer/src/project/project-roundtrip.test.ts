@@ -80,6 +80,7 @@ const graphics: Required<ViewGraphics> = {
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
   // A template's class and material mapping, kept on a view that was detached from it (#31).
   styleRules: [{ id: 'sr-w', by: 'class', match: ['IfcWall'], style: { lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2 } }],
+  detailLevel: 'coarse',
 };
 
 const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'], templateId: 'vt-plans' };
