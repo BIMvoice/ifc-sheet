@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/semantic",
+  "private": true,
   "version": "0.1.0",
   "description": "Portable semantic datasets, profiles, validation and IFC identity resolution",
   "type": "module",
@@ -33,7 +34,7 @@
     "typescript": "^6.0.3",
     "vitest": "^5.0.5",
     "@types/jsonld": "^1.5.15",
-    "@types/n3": "^1.26.1",
+    "@types/n3": "^1.26.5",
     "@types/node": "^26.6.5"
   },
   "license": "MPL-2.0",
