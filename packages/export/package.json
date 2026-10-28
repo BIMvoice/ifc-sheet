@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/export",
+  "private": true,
   "version": "4.9.0",
   "description": "Export formats for IFC-Lite",
   "type": "module",

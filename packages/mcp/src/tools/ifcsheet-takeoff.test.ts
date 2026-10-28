@@ -187,6 +187,22 @@ describe.skipIf(missing !== null)('the quantity-takeoff tools over stdio on AC20
     expect(c.text).not.toBe(r.text);
   }, 300_000);
 
+  it('ifcsheet_list says when a total leaves rows out: in the values, the text and the CSV (#432)', async () => {
+    const list = { filter: { classes: ['IfcWallStandardCase', 'IfcDoor'] }, columns: WALLS_BY_TYPE.columns.map((c) => (c.id === 'area' ? { ...c, id: 'volume', propertyName: 'NetVolume' } : c)), groupBy: ['type'], sum: ['volume'] };
+    const partial = join(tmp, 'partial.ifclite-project.json');
+    await writeFile(partial, JSON.stringify({ format: 'ifclite-project', version: 1, schedules: [{ id: 'v', name: 'Volumes', kind: 'list', createdAt: 1, list }] }));
+    const note = 'The total of NetVolume (m³) leaves out 5 of 18 rows with no value';
+    const r = await ok('ifcsheet_list', { model_id: modelId, project_path: partial });
+    expect(r.missing).toEqual([{ column: 'NetVolume (m³)', missing: 5, rows: 18 }]);
+    expect(r.notes).toEqual([note]);
+    expect(r.text.endsWith(`\n${note}\n`)).toBe(true);
+    expect(r.csv.endsWith(`\r\n${note}\r\n`)).toBe(true);
+    expect(jsonOf(r)).toEqual(await parsed('list', FZK, '--project', partial, '--json'));
+    const whole = await ok('ifcsheet_list', { model_id: modelId, project_path: project });
+    expect(whole.missing).toEqual([]);
+    expect(whole.notes).toEqual([]);
+  }, 300_000);
+
   it('ifcsheet_classify equals `ifcsheet classify`', async () => {
     const r = await ok('ifcsheet_classify', { model_id: modelId, project_path: project });
     expect(jsonOf(r)).toEqual(await parsed('classify', FZK, '--project', project, '--json'));
