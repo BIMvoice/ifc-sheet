@@ -73,6 +73,13 @@ const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString()
 const safeName = (s: string) => s.replace(/[<>/\\":;?*|=`]/g, '_').trim().slice(0, 255) || '0';
 const LINE_TYPE_NAME: Record<LineType, string> = { continuous: 'Continuous', dashed: 'DASHED', dotted: 'DOT', dashdot: 'DASHDOT' };
 
+/**
+ * A project line type's name as a DXF table name: ASCII only (a letter outside windows-1252, such as ș, ț or ă, would be written as `?`,
+ * and two such names would collide), diacritics reduced to their base letter, anything else `_`. The project keeps the display name.
+ */
+export const ltypeName = (name: string): string =>
+  name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9$-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 255) || 'LTYPE';
+
 /** The DXF text style the tables use (#500) and the font file each face names; a CAD program substitutes where it lacks the file. */
 export const TABLES_DXF_STYLE = 'Tables';
 const TABLES_FONT_FILE = { sans: 'arial.ttf', serif: 'times.ttf', mono: 'cour.ttf' } as const;
@@ -99,14 +106,15 @@ export class DxfR2000 {
   /** `patternScale` multiplies line-type dash lengths (paper mm): the view's scale for a 1:1 model export. */
   constructor(private readonly patternScale = 1) {}
 
-  private readonly custom = new Map<string, { name: string; dash: number[] }>();
+  private readonly custom = new Map<string, { name: string; display: string; dash: number[] }>();
 
   /** Add a line type of the project, its dash pattern in paper mm (as `dashOf` gives for the built-in ones). */
   defineLineType(id: string, name: string, dash: readonly number[]): void {
-    const taken = new Set([...Object.values(LINE_TYPE_NAME), ...[...this.custom.values()].map((c) => c.name)].map((n) => n.toUpperCase()));
-    let unique = safeName(name).replace(/\s+/g, '_');
+    // Reserved: the built-in names and the two a CAD program always has (ByLayer, ByBlock). Names compare without case.
+    const taken = new Set([...Object.values(LINE_TYPE_NAME), 'ByLayer', 'ByBlock', ...[...this.custom.values()].map((c) => c.name)].map((n) => n.toUpperCase()));
+    let unique = ltypeName(name);
     while (taken.has(unique.toUpperCase())) unique += '_';
-    this.custom.set(id, { name: unique, dash: [...dash] });
+    this.custom.set(id, { name: unique, display: safeName(name), dash: [...dash] });
   }
 
   /** The DXF name of a line type; an unknown one is continuous. */
@@ -187,10 +195,10 @@ export class DxfR2000 {
         '2', LINE_TYPE_NAME[type], '70', '0', '3', type, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
       for (const d of dashes) out.push('49', fmt(d), '74', '0');
     }
-    for (const [id, { name, dash }] of this.custom) {
+    for (const { name, display, dash } of this.custom.values()) {
       const dashes = dash.map((d, i) => (i % 2 === 0 ? d : -d) * this.patternScale);
       out.push('0', 'LTYPE', '5', this.next(), '330', LTYPE_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbLinetypeTableRecord',
-        '2', name, '70', '0', '3', id, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
+        '2', name, '70', '0', '3', display, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
       for (const d of dashes) out.push('49', fmt(d), '74', '0');
     }
     return out;
