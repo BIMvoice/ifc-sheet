@@ -8,14 +8,20 @@
  * same way: title, a header, per type a line per storey (and a total line when
  * the type spans several), then a total per IFC class of element (no total
  * across classes, see `TypeQuantities.classTotals`). The CSV and XLSX share
- * the same lines.
+ * the same lines. A figure with any part measured from geometry carries a `*`,
+ * explained under the table (#74, `measured-marks.ts`).
  */
 
-import { escapeCsvCell } from '@ifc-lite/export';
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import type { ScheduleLayout } from './schedule-layout';
+import type { ExportTable } from './schedule-export';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
 import type { Totals, TypeQuantities } from './type-quantities';
+import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks';
 
 export interface TypeQuantityLabels {
+  /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
+  locale: SheetLocale;
   title: string;
   type: string;
   class: string;
@@ -29,6 +35,12 @@ export interface TypeQuantityLabels {
   noType: string;
   /** The level of an element on no storey. */
   noLevel: string;
+  /** The classification columns (#89) and the heading of the types no code reaches. */
+  classification: string;
+  classificationTitle: string;
+  unclassified: string;
+  /** How measured figures are explained (#74); without it they are still marked, with no note or column. */
+  measured?: MeasuredWords;
 }
 
 export interface TypeQuantityLine {
@@ -43,16 +55,32 @@ export interface TypeQuantityLine {
   total: boolean;
   /** A total per class of element, after the type rows. */
   classTotal: boolean;
+  /** The classification of the type (#89); absent when the schedule shows none. */
+  code?: string;
+  codeTitle?: string;
+  /** A heading line above the types of one code (grouped by classification): no figures. */
+  heading?: boolean;
 }
+
+const HEADING_TOTALS: Totals = { count: 0, noQto: 0, length: null, area: null, volume: null };
 
 const plainClass = (c: string): string => c.replace(/^Ifc/, '');
 
 /** The table's lines, in print order. */
 export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabels): TypeQuantityLine[] {
   const lines: TypeQuantityLine[] = [];
+  let group: string | null = null;
+  let started = false;
   for (const row of data.rows) {
     const type = row.typeName ?? `${plainClass(row.className)} ${labels.noType}`;
-    const base = { type, className: row.className };
+    const base = { type, className: row.className, ...(data.classified ? { code: row.classification?.code ?? '', codeTitle: row.classification?.title ?? '' } : {}) };
+    // Grouped by classification: a heading when the code changes (rows are in code order), the unclassified last under their own.
+    if (data.grouped && (!started || (row.classification?.code ?? null) !== group)) {
+      started = true;
+      group = row.classification?.code ?? null;
+      const heading = group === null ? labels.unclassified : [group, row.classification?.title].filter(Boolean).join('  ');
+      lines.push({ type: heading, className: '', level: '', totals: HEADING_TOTALS, first: true, total: false, classTotal: false, heading: true });
+    }
     const levels = data.levels.filter((l) => row.byLevel[l]);
     levels.forEach((l, i) => lines.push({ ...base, level: l || labels.noLevel, totals: row.byLevel[l], first: i === 0, total: false, classTotal: false }));
     if (levels.length > 1) lines.push({ ...base, level: labels.total, totals: row.total, first: false, total: true, classTotal: false });
@@ -61,51 +89,55 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
   return lines;
 }
 
-const ROW = 6;
-const TEXT = 2.5;
-const PAD = 1.5;
 const COLUMNS = [58, 28, 28, 14, 20, 20, 20, 14] as const;
-const PEN = { frame: 0.35, grid: 0.18 } as const;
+/** With classification (#89) the code and its title come after the class. */
+const CLASSIFIED_COLUMNS = [58, 28, 24, 44, 28, 14, 20, 20, 20, 14] as const;
 
-const fixed = (v: number | null, digits = 2): string => (v === null ? '–' : v.toFixed(digits));
+const fixed = (locale: SheetLocale, v: number | null, kind: 'length' | 'area' | 'volume', measured = false): string => (v === null ? '–' : marked(sheetNumber(locale, v, 2, { kind }), measured));
 
-export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels): ScheduleLayout {
-  const prims: SchedulePrim[] = [];
-  const width = COLUMNS.reduce((a, b) => a + b, 0);
-  const lefts = COLUMNS.map((_, i) => COLUMNS.slice(0, i).reduce((a, b) => a + b, 0));
-  const titleH = 10;
+/** The header cells: type, class, [classification, title,] level, count, length, area, volume, no quantity. */
+const headerOf = (data: TypeQuantities, labels: TypeQuantityLabels): string[] => [
+  labels.type, labels.class, ...(data.classified ? [labels.classification, labels.classificationTitle] : []), labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto,
+];
+
+export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityLabels, paging: PagedOptions = {}): ScheduleLayout {
   const lines = typeQuantityLines(data, labels);
-  const table: { cells: string[]; bold: boolean; rule: boolean; frameBelow?: boolean }[] = [
-    { cells: [labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto], bold: true, rule: true },
-    ...lines.map((l, i) => ({
-      cells: [l.first ? l.type : '', l.first ? plainClass(l.className) : '', l.level, String(l.totals.count), fixed(l.totals.length), fixed(l.totals.area), fixed(l.totals.volume), l.totals.noQto ? String(l.totals.noQto) : ''],
-      bold: l.total,
-      // A rule under the last line of each type.
-      rule: i === lines.length - 1 || lines[i + 1].first,
-      // A frame rule above the class totals.
-      frameBelow: !l.classTotal && lines[i + 1]?.classTotal === true,
+  const lead = data.classified ? 4 : 2;
+  const block: TableBlock = {
+    columns: data.classified ? CLASSIFIED_COLUMNS : COLUMNS, header: headerOf(data, labels), numeric: (c) => c >= lead + 1, skipEmpty: true,
+    rows: lines.map((l, i) => ({
+      cells: l.heading
+        ? [l.type, ...headerOf(data, labels).slice(1).map(() => '')]
+        : [
+          l.first ? l.type : '', l.first ? plainClass(l.className) : '', ...(data.classified ? [l.first ? l.code ?? '' : '', l.first ? l.codeTitle ?? '' : ''] : []),
+          l.level, String(l.totals.count), fixed(labels.locale, l.totals.length, 'length'), fixed(labels.locale, l.totals.area, 'area', (l.totals.measuredArea ?? 0) > 0), fixed(labels.locale, l.totals.volume, 'volume', (l.totals.measuredVolume ?? 0) > 0), l.totals.noQto ? String(l.totals.noQto) : '',
+        ],
+      bold: l.total || l.heading === true,
+      // A frame rule above the class totals, else a rule under the last line of each type.
+      rule: l.heading ? 0 : !l.classTotal && lines[i + 1]?.classTotal === true ? PEN.frame : i === lines.length - 1 || lines[i + 1].first ? PEN.grid : 0,
     })),
-  ];
-  const height = titleH + table.length * ROW;
-  prims.push({ kind: 'text', x: 0, y: titleH - 3, text: labels.title, size: 4, anchor: 'start', bold: true });
-  table.forEach((row, r) => {
-    const top = titleH + r * ROW;
-    row.cells.forEach((text, c) => {
-      const numeric = c >= 3;
-      const x = numeric ? lefts[c] + COLUMNS[c] - PAD : lefts[c] + PAD;
-      if (text) prims.push({ kind: 'text', x, y: top + ROW / 2 + TEXT * 0.35, text, size: TEXT, anchor: numeric ? 'end' : 'start', bold: row.bold });
-    });
-    prims.push({ kind: 'line', x1: 0, y1: top + ROW, x2: width, y2: top + ROW, w: r === 0 || row.frameBelow ? PEN.frame : row.rule ? PEN.grid : 0 });
-  });
-  prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
-  for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });
-  return { width, height, prims: prims.filter((p) => p.kind !== 'line' || p.w > 0) };
+  };
+  // Each element is in one class total: those lines count the whole schedule once.
+  const classLines = lines.filter((l) => l.classTotal);
+  const notes = measuredNoteItems(classLines.some((l) => (l.totals.measuredArea ?? 0) + (l.totals.measuredVolume ?? 0) > 0), classLines.reduce((s, l) => s + (l.totals.unmeasuredVolume ?? 0), 0), labels.measured);
+  return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }, ...notes], { ...paging, tail: notes.length ? 1 : 0 });
 }
 
-/** The table as CSV, numbers unformatted, the type on every line; type names are model text, so every cell is formula-guarded (#1506). */
-export function typeQuantitiesCsv(data: TypeQuantities, labels: TypeQuantityLabels): string {
-  const num = (v: number | null) => (v === null ? '' : String(v));
-  const lines = [[labels.type, labels.class, labels.level, labels.count, labels.length, labels.area, labels.volume, labels.noQto]];
-  for (const l of typeQuantityLines(data, labels)) lines.push([l.type, l.className, l.level, String(l.totals.count), num(l.totals.length), num(l.totals.area), num(l.totals.volume), String(l.totals.noQto)]);
-  return lines.map((l) => l.map((c) => escapeCsvCell(c)).join(',')).join('\n');
+/**
+ * The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type and class (as printed, without `Ifc`) on
+ * every line, figures unformatted. With classification (#89) the code and its title are on every line too, and the grouping headings are left out:
+ * a spreadsheet filters by the code column, the rows stay in code order.
+ */
+export function typeQuantityTable(data: TypeQuantities, labels: TypeQuantityLabels): ExportTable {
+  const lines = typeQuantityLines(data, labels).filter((l) => !l.heading);
+  const shift = data.classified ? 2 : 0;
+  // When a figure is measured from geometry, a last column names the measured figures of each line (#74).
+  const words = labels.measured;
+  const column = words && lines.some((l) => (l.totals.measuredArea ?? 0) + (l.totals.measuredVolume ?? 0) > 0) ? words : null;
+  const tail = (t: Totals): (string | null)[] => (column ? [measuredCell((t.measuredVolume ?? 0) > 0, (t.measuredArea ?? 0) > 0, column)] : []);
+  return {
+    name: labels.title || labels.type, header: [...headerOf(data, labels), ...(column ? [column.column] : [])], numeric: [3, 4, 5, 6, 7].map((c) => c + shift), kinds: { [4 + shift]: 'length', [5 + shift]: 'area', [6 + shift]: 'volume' },
+    rows: lines.map((l) => [l.type, plainClass(l.className), ...(data.classified ? [l.code ?? '', l.codeTitle ?? ''] : []), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null, ...tail(l.totals)]),
+    bold: lines.flatMap((l, i) => (l.total ? [i] : [])),
+  };
 }

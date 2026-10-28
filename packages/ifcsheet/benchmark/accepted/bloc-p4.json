@@ -1,0 +1,566 @@
+{
+ "version": 1,
+ "figures": {
+  "storeys": [
+   "Etaj 1",
+   "Etaj 2",
+   "Etaj 3",
+   "Etaj 4",
+   "Parter"
+  ],
+  "rooms": 90,
+  "au": 1252.97,
+  "levelTotals": {
+   "Etaj 1": 250.59,
+   "Etaj 2": 250.59,
+   "Etaj 3": 250.59,
+   "Etaj 4": 250.59,
+   "Parter": 250.59
+  },
+  "areaFromGeometry": 90,
+  "roomsWithoutArea": 0,
+  "extent": "-0.09 -0.45 -13.73 22.74 15.05 1.52"
+ },
+ "sheets": {
+  "A-101": {
+   "name": "Floor plans 1",
+   "paper": "594 x 420 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Etaj 1 1:100",
+    "Parter 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    584,
+    410
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "36bcd358947d85d2"
+   },
+   "cut": {
+    "paths": 992,
+    "points": 10396,
+    "hash": "82fae0143723032a"
+   },
+   "lines": {
+    "paths": 4496,
+    "points": 8992,
+    "hash": "3fa8dd608cc8ffd2"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 2245,
+     "regions": 0,
+     "points": 4490,
+     "hash": "eb7f4a22339654a0"
+    },
+    "CUT stroke=#000000 fill=- #2": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 2251,
+     "regions": 0,
+     "points": 4502,
+     "hash": "94c84b25aeca794c"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 493,
+     "points": 5178,
+     "hash": "4a77929da25dabb5"
+    },
+    "FILL stroke=- fill=#d4d4d8 #2": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 499,
+     "points": 5218,
+     "hash": "01dd8b7f646acb43"
+    }
+   },
+   "texts": [
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-101 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "Etaj 1  1:100 @423.6,269.3 h3.5 center",
+    "Floor plans 1 @406,388 h3.5",
+    "Organisation @471,373.2 h2",
+    "Parter  1:100 @170.4,269.3 h3.5 center",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Sheet no. @536,377.2 h2",
+    "Title @406,383.2 h2",
+    "ifc-lite @471,378 h3.5"
+   ],
+   "images": 0
+  },
+  "A-102": {
+   "name": "Floor plans 2",
+   "paper": "594 x 420 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Etaj 2 1:100",
+    "Etaj 3 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    584,
+    410
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "36bcd358947d85d2"
+   },
+   "cut": {
+    "paths": 998,
+    "points": 10437,
+    "hash": "e4a3dd386d9e47a4"
+   },
+   "lines": {
+    "paths": 4503,
+    "points": 9006,
+    "hash": "6795b6cae7e82ba3"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 2255,
+     "regions": 0,
+     "points": 4510,
+     "hash": "7644a69e00fcc7dc"
+    },
+    "CUT stroke=#000000 fill=- #2": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 2248,
+     "regions": 0,
+     "points": 4496,
+     "hash": "1fd26a2a66087f91"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 499,
+     "points": 5222,
+     "hash": "6066ac5e3c7a960f"
+    },
+    "FILL stroke=- fill=#d4d4d8 #2": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 499,
+     "points": 5215,
+     "hash": "e54b458e415e9b99"
+    }
+   },
+   "texts": [
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-102 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "Etaj 2  1:100 @170.4,269.3 h3.5 center",
+    "Etaj 3  1:100 @423.6,269.3 h3.5 center",
+    "Floor plans 2 @406,388 h3.5",
+    "Organisation @471,373.2 h2",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Sheet no. @536,377.2 h2",
+    "Title @406,383.2 h2",
+    "ifc-lite @471,378 h3.5"
+   ],
+   "images": 0
+  },
+  "A-103": {
+   "name": "Floor plans 3",
+   "paper": "594 x 420 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Etaj 4 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    584,
+    410
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "36bcd358947d85d2"
+   },
+   "cut": {
+    "paths": 499,
+    "points": 5216,
+    "hash": "18fb2bf06f151201"
+   },
+   "lines": {
+    "paths": 2251,
+    "points": 4502,
+    "hash": "d9cd7c08e59d222c"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 2251,
+     "regions": 0,
+     "points": 4502,
+     "hash": "428e99f1fb882221"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 499,
+     "points": 5216,
+     "hash": "d7385613691221a2"
+    }
+   },
+   "texts": [
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-103 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "Etaj 4  1:100 @297,269.3 h3.5 center",
+    "Floor plans 3 @406,388 h3.5",
+    "Organisation @471,373.2 h2",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Sheet no. @536,377.2 h2",
+    "Title @406,383.2 h2",
+    "ifc-lite @471,378 h3.5"
+   ],
+   "images": 0
+  },
+  "A-201": {
+   "name": "Elevations, south and north",
+   "paper": "594 x 420 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "North Elevation 1:100",
+    "South Elevation 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    584,
+    410
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "36bcd358947d85d2"
+   },
+   "cut": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "lines": {
+    "paths": 17826,
+    "points": 35652,
+    "hash": "60c6925cc28e3b13"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 8957,
+     "regions": 0,
+     "points": 17914,
+     "hash": "ed643a3e4c069efc"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 8869,
+     "regions": 0,
+     "points": 17738,
+     "hash": "48e4908311c7b2d9"
+    }
+   },
+   "texts": [
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-201 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "Elevations, south and north @406,388 h3.5",
+    "North Elevation  1:100 @423.6,270.5 h3.5 center",
+    "Organisation @471,373.2 h2",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Sheet no. @536,377.2 h2",
+    "South Elevation  1:100 @170.4,270.5 h3.5 center",
+    "Title @406,383.2 h2",
+    "ifc-lite @471,378 h3.5"
+   ],
+   "images": 0
+  },
+  "A-202": {
+   "name": "Elevations, east and west",
+   "paper": "594 x 420 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "East Elevation 1:100",
+    "West Elevation 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    584,
+    410
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "36bcd358947d85d2"
+   },
+   "cut": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "lines": {
+    "paths": 16870,
+    "points": 33740,
+    "hash": "7e95121edba3b1d7"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 8393,
+     "regions": 0,
+     "points": 16786,
+     "hash": "fe0bf52fa665c6b5"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 8477,
+     "regions": 0,
+     "points": 16954,
+     "hash": "a7e32aadf332099c"
+    }
+   },
+   "texts": [
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-202 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "East Elevation  1:100 @208.2,270.5 h3.5 center",
+    "Elevations, east and west @406,388 h3.5",
+    "Organisation @471,373.2 h2",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Sheet no. @536,377.2 h2",
+    "Title @406,383.2 h2",
+    "West Elevation  1:100 @385.8,270.5 h3.5 center",
+    "ifc-lite @471,378 h3.5"
+   ],
+   "images": 0
+  },
+  "A-301": {
+   "name": "Sections",
+   "paper": "420 x 297 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Section A-A 1:100",
+    "Section B-B 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    410,
+    287
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "9c68313187596d03"
+   },
+   "cut": {
+    "paths": 399,
+    "points": 3914,
+    "hash": "966236cc6449437f"
+   },
+   "lines": {
+    "paths": 11965,
+    "points": 23930,
+    "hash": "d16c9a131b350c7c"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 833,
+     "regions": 0,
+     "points": 1666,
+     "hash": "283ce3fcebe615d9"
+    },
+    "CUT stroke=#000000 fill=- #2": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 718,
+     "regions": 0,
+     "points": 1436,
+     "hash": "3275297e2806e2b7"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 207,
+     "points": 2039,
+     "hash": "2cab226258b657da"
+    },
+    "FILL stroke=- fill=#d4d4d8 #2": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 187,
+     "points": 1875,
+     "hash": "b9bf3b426576fea6"
+    },
+    "HIDDEN stroke=#000000 fill=- #1": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 4483,
+     "regions": 0,
+     "points": 8966,
+     "hash": "0007a3c4a6185542"
+    },
+    "HIDDEN stroke=#000000 fill=- #2": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 2492,
+     "regions": 0,
+     "points": 4984,
+     "hash": "8f62e3359c536da1"
+    },
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 4271,
+     "regions": 0,
+     "points": 8542,
+     "hash": "0ea0f9f896058160"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 6143,
+     "regions": 0,
+     "points": 12286,
+     "hash": "feef05e8e90d63ed"
+    }
+   },
+   "texts": [
+    "1:100 @362,282.5 h4.5",
+    "2026-10-21 @232,285 h3.5",
+    "A-301 @362,266.5 h9",
+    "Address @297,240.2 h2",
+    "Bloc P+4 @232,245 h3.5",
+    "Checked by @297,270.2 h2",
+    "Client @232,250.2 h2",
+    "Date @232,280.2 h2",
+    "Drawn by @232,270.2 h2",
+    "Organisation @297,250.2 h2",
+    "Project @232,240.2 h2",
+    "Revision @297,280.2 h2",
+    "Scale @362,274.2 h2",
+    "Section A-A  1:100 @121.2,209 h3.5 center",
+    "Section B-B  1:100 @298.8,209 h3.5 center",
+    "Sections @232,265 h3.5",
+    "Sheet no. @362,254.2 h2",
+    "Title @232,260.2 h2",
+    "ifc-lite @297,255 h3.5"
+   ],
+   "images": 0
+  }
+ }
+}

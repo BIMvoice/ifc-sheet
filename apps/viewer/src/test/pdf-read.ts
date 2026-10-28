@@ -16,10 +16,15 @@ export type PdfDoc = Awaited<ReturnType<Pdfjs['getDocument']>['promise']>;
 
 const PT_MM = 25.4 / 72;
 
-export async function openPdf(bytes: Uint8Array): Promise<{ pdf: PdfDoc; pdfjs: Pdfjs; close: () => Promise<void> }> {
+/**
+ * `fontExtraProperties` makes pdf.js send a font's `name` (e.g. 'Times-Roman')
+ * to `page.commonObjs`; since PDF.js 6.4 the name is only sent when asked for.
+ */
+export async function openPdf(bytes: Uint8Array, options: { fontExtraProperties?: boolean } = {}): Promise<{ pdf: PdfDoc; pdfjs: Pdfjs; close: () => Promise<void> }> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const require = createRequire(import.meta.url);
   const task = pdfjs.getDocument({ data: bytes.slice(), enableXfa: false, stopAtErrors: true,
+    fontExtraProperties: options.fontExtraProperties === true,
     standardFontDataUrl: `${join(dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts')}/` });
   return { pdf: await task.promise, pdfjs, close: () => task.destroy() };
 }

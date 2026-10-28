@@ -14,7 +14,10 @@ import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
+import type { Box } from './cross-ref-marks';
+import type { ElementBox } from './dimension-anchor';
 import type { LevelResolver } from './level-mark';
+import type { ViewInputs } from './view-inputs';
 import type { DraftShape, LevelRef, Pt } from './types';
 
 let referenceProvider: (min: Pt, max: Pt) => DraftShape[] = () => [];
@@ -84,6 +87,13 @@ export function setElementPicker(picker: ((p: Pt) => number | null) | null): voi
 }
 export const modelElementAt = (p: Pt): number | null => elementPicker(p);
 
+/** The elements a drawing point is a corner of, with their boxes in the view (a dimension snapped there stays attached to them). */
+let elementBoxProvider: (p: Pt) => ElementBox[] = () => [];
+export function setElementBoxProvider(provider: ((p: Pt) => ElementBox[]) | null): void {
+  elementBoxProvider = provider ?? (() => []);
+}
+export const elementBoxesAt = (p: Pt): ElementBox[] => elementBoxProvider(p);
+
 /** The model elements the view in front draws, with a point each to label them at. */
 let viewElementsProvider: () => ViewElement[] = () => [];
 export function setViewElementsProvider(provider: (() => ViewElement[]) | null): void {
@@ -104,3 +114,40 @@ export function setRoomsProvider(provider: (() => RoomOfPlan[]) | null): void {
   roomsProvider = provider ?? (() => []);
 }
 export const roomsOf = (): RoomOfPlan[] => roomsProvider();
+
+/** The boxes of what the plan in front draws over its cut (door leaves and swings, window frames, roofs, grid): what a tag keeps clear of (`rcp/ceiling-tag-obstacles.ts`). */
+let planObstaclesProvider: () => Box[] = () => [];
+export function setPlanObstaclesProvider(provider: (() => Box[]) | null): void {
+  planObstaclesProvider = provider ?? (() => []);
+}
+export const planObstaclesOf = (): Box[] => planObstaclesProvider();
+
+/** The view in front gives the session all it reads from the view and its drawing (`view-inputs.ts`). */
+export function installViewInputs(inputs: ViewInputs): void {
+  setViewElementsProvider(inputs.viewElements);
+  setPlanPartsProvider(inputs.planParts);
+  setPlanObstaclesProvider(inputs.planObstacles);
+  setRoomsProvider(inputs.rooms);
+  setAnnotationProviders(inputs.closedLoops, inputs.levelAt);
+  setLevelReferenceProviders(inputs.levelRefAt, inputs.resolveLevel);
+  planeProvider = inputs.plane;
+  viewProvider = inputs.view;
+  viewKindProvider = inputs.viewKind;
+}
+
+/** The view in front goes: the session reads no view's data until another is installed. */
+export function clearViewInputs(): void {
+  setViewElementsProvider(null);
+  setPlanPartsProvider(null);
+  setPlanObstaclesProvider(null);
+  setRoomsProvider(null);
+}
+
+/** What the commands read from the view in front, as the session holds it. */
+export function installedViewInputs(): ViewInputs {
+  return {
+    closedLoops: closedLoopsOfView, levelAt: levelAtPoint, levelRefAt, resolveLevel: resolveLevelRef,
+    plane: () => activeWorkPlane().plane, viewKind: viewKindOf, view: () => activeWorkPlane().view,
+    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf,
+  };
+}

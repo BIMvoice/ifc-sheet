@@ -32,13 +32,13 @@ describe('sectionPlaneForView', () => {
     assert.equal(sectionPlaneForView(plan, bounds, [other]), null);
   });
 
-  it('looks at each facade from just inside the bounds, from outside the building', () => {
+  it('looks at each facade from outside the bounds, so nothing of the building is cut', () => {
     const elevation = (direction: 'north' | 'south' | 'east' | 'west'): ProjectView => ({ ...base, kind: 'elevation', direction });
-    // 5 cm on a 10 m Z range is 0.5 %, on a 20 m X range 0.25 %.
-    assert.deepEqual(sectionPlaneForView(elevation('south'), bounds, []), { axis: 'front', position: 99.5, flipped: false });
-    assert.deepEqual(sectionPlaneForView(elevation('north'), bounds, []), { axis: 'front', position: 0.5, flipped: true });
-    assert.deepEqual(sectionPlaneForView(elevation('east'), bounds, []), { axis: 'side', position: 99.75, flipped: false });
-    assert.deepEqual(sectionPlaneForView(elevation('west'), bounds, []), { axis: 'side', position: 0.25, flipped: true });
+    // 0.5 m on a 10 m Z range is 5 %, on a 20 m X range 2.5 %; the plane is past 0 or 100.
+    assert.deepEqual(sectionPlaneForView(elevation('south'), bounds, []), { axis: 'front', position: 105, flipped: false });
+    assert.deepEqual(sectionPlaneForView(elevation('north'), bounds, []), { axis: 'front', position: -5, flipped: true });
+    assert.deepEqual(sectionPlaneForView(elevation('east'), bounds, []), { axis: 'side', position: 102.5, flipped: false });
+    assert.deepEqual(sectionPlaneForView(elevation('west'), bounds, []), { axis: 'side', position: -2.5, flipped: true });
   });
 
   it('puts an elevation with a stored plane offset where it says, not at the bounds', () => {

@@ -70,7 +70,7 @@ function pointInRing(p: Pt, ring: readonly Pt[]): boolean {
 }
 
 /** The distinct coordinates of `values`, ascending, those within GRID_TOL merged to their mean. */
-function gridLines(values: number[]): number[] {
+export function gridLines(values: number[]): number[] {
   const sorted = [...values].sort((a, b) => a - b);
   const lines: number[] = [];
   let group: number[] = [];
@@ -96,6 +96,58 @@ function straightened(loop: Pt[]): Pt[] {
   return keep.length >= 3 ? keep : loop;
 }
 
+/** The first index of the ascending `lines` that is greater than `v`. */
+function firstAbove(lines: readonly number[], v: number): number {
+  let lo = 0, hi = lines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid] > v) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/**
+ * For each cell of the grid (`i * (ys.length - 1) + j`), the shapes, by index, whose box overlaps the cell: a point inside
+ * a cell can lie only in a shape whose box overlaps it. A cell no box reaches has none.
+ */
+function shapesByCell(boxes: readonly Box[], xs: readonly number[], ys: readonly number[]): (number[] | undefined)[] {
+  const nx = xs.length - 1, ny = ys.length - 1;
+  const cells: (number[] | undefined)[] = new Array(nx * ny);
+  boxes.forEach((b, k) => {
+    // The cells with a right edge past the box's left and a left edge before its right.
+    const i0 = Math.max(0, firstAbove(xs, b.x0) - 1), i1 = Math.min(nx - 1, firstAbove(xs, b.x1) - 1);
+    const j0 = Math.max(0, firstAbove(ys, b.y0) - 1), j1 = Math.min(ny - 1, firstAbove(ys, b.y1) - 1);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) (cells[i * ny + j] ??= []).push(k);
+  });
+  return cells;
+}
+
+/**
+ * Which cells of the grid `xs` x `ys` the shapes fill (`filled[i][j]` is the cell between `xs[i]`, `xs[i + 1]` and `ys[j]`, `ys[j + 1]`).
+ * Each cell is tested against the shapes whose box reaches it, not against every shape of the plan: a school's plan has some 600
+ * grid lines a side and as many shapes, and testing every cell against every shape held the page for 18 s.
+ */
+export function filledCells(shapes: readonly (readonly Pt[])[], boxes: readonly Box[], xs: readonly number[], ys: readonly number[]): boolean[][] {
+  const nx = xs.length - 1, ny = ys.length - 1;
+  const filled: boolean[][] = Array.from({ length: nx }, () => new Array<boolean>(ny).fill(false));
+  const near = shapesByCell(boxes, xs, ys);
+  // A cell is filled when any of four points a quarter in from its corners lies in a shape: walls cut
+  // at a mitre meet along a diagonal through the cell, and each covers one half of it.
+  const spots: [number, number][] = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const candidates = near[i * ny + j];
+      if (!candidates) continue;
+      filled[i][j] = spots.some(([fx, fy]) => {
+        const c: Pt = { x: xs[i] + (xs[i + 1] - xs[i]) * fx, y: ys[j] + (ys[j + 1] - ys[j]) * fy };
+        return candidates.some((k) => c.x > boxes[k].x0 && c.x < boxes[k].x1 && c.y > boxes[k].y0 && c.y < boxes[k].y1 && pointInRing(c, shapes[k]));
+      });
+    }
+  }
+  return filled;
+}
+
 /**
  * The outer boundary of the union of `shapes`, counter-clockwise (the outside
  * lies to the right of each edge), or null when they enclose nothing. When the
@@ -108,18 +160,7 @@ export function outlineOf(shapes: readonly (readonly Pt[])[]): Pt[] | null {
   const boxes = shapes.map(boxOf);
   const nx = xs.length - 1, ny = ys.length - 1;
   if (nx < 1 || ny < 1) return null;
-  const filled: boolean[][] = Array.from({ length: nx }, () => new Array<boolean>(ny).fill(false));
-  // A cell is filled when any of four points a quarter in from its corners lies in a shape: walls cut
-  // at a mitre meet along a diagonal through the cell, and each covers one half of it.
-  const spots: [number, number][] = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
-  for (let i = 0; i < nx; i++) {
-    for (let j = 0; j < ny; j++) {
-      filled[i][j] = spots.some(([fx, fy]) => {
-        const c: Pt = { x: xs[i] + (xs[i + 1] - xs[i]) * fx, y: ys[j] + (ys[j + 1] - ys[j]) * fy };
-        return shapes.some((r, k) => c.x > boxes[k].x0 && c.x < boxes[k].x1 && c.y > boxes[k].y0 && c.y < boxes[k].y1 && pointInRing(c, r));
-      });
-    }
-  }
+  const filled = filledCells(shapes, boxes, xs, ys);
   const at = (i: number, j: number) => i >= 0 && j >= 0 && i < nx && j < ny && filled[i][j];
   const id = (i: number, j: number) => i * (ny + 1) + j;
   const out = new Map<number, [number, number][]>();

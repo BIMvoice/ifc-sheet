@@ -16,8 +16,9 @@ import { useIfcLoader } from '@/hooks/useIfcLoader';
 import { useWhatChanged } from '@/whatchanged/baseline';
 import { useProjectStore } from '@/project/project-store';
 import { stepInto } from '../wall/wall-nav';
+import { WALL_PILL } from '../wall/wall-type';
 
-const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70 disabled:opacity-40';
+const action = `${WALL_PILL} disabled:opacity-40`;
 
 export function WhatChangedPanel({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
@@ -49,7 +50,7 @@ export function WhatChangedPanel({ onClose }: { onClose: () => void }) {
   return (
     <aside aria-label={t('whatchanged.ui.title')} className="fixed right-4 top-16 z-30 flex max-h-[calc(100vh-5rem)] w-96 flex-col rounded-lg border border-sky-300/20 bg-[#08214a]/98 text-sky-50 shadow-2xl">
       <header className="flex items-center gap-2 px-4 pb-2 pt-4">
-        <h2 className="m-0 min-w-0 flex-1 text-xs font-medium uppercase tracking-[0.25em] text-cyan-400">{t('whatchanged.ui.title')}</h2>
+        <h2 className="m-0 min-w-0 flex-1 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('whatchanged.ui.title')}</h2>
         <button type="button" aria-label={t('whatchanged.ui.close')} onClick={onClose} className="rounded p-1 text-sky-200 hover:bg-sky-400/20"><X className="size-4" /></button>
       </header>
       <p className="m-0 px-4 pb-3 text-sm text-sky-200/80">{t('whatchanged.ui.intro')}</p>

@@ -16,9 +16,11 @@ import { labelElementByGlobalId } from '@/labels/label-element';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { planTagAll } from '@/tagall/plan';
+import { getLocale } from '@/i18n';
 import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES } from '@/tagall/types';
 import { editDrafts } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
+import { currentSheetLocale } from '@/project/units-and-numbers';
 
 /** The types TAGALL draws with, adding any that the project does not have. */
 function tagAllTypes() {
@@ -46,10 +48,11 @@ export function tagAll(ctx: DraftContext, read: ElementReader): void {
     targets: labelTargets(elements),
     rooms: ctx.rooms(),
     existing: ctx.entities(),
-    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId) },
+    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()) },
     types: { mark: types.mark, room: types.room },
     read,
     crop: ctx.view()?.detail,
+    obstacles: ctx.planObstacles(),
   });
   if (drafts.length) editDrafts({ add: drafts });
   ctx.say(drafts.length ? 'drafting.msg.tagAllDone' : 'drafting.msg.tagAllHave', { marks: summary.marks, rooms: summary.rooms, already: summary.already });

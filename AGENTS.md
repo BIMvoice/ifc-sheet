@@ -8,6 +8,20 @@ Where the IfcSheet code lives: the drawing and documentation layer is in `apps/v
 
 To check a change: build the packages once (`pnpm turbo run build --filter='./packages/*'`), then in `apps/viewer` run `TEST_PATTERN='<paths you touched>' pnpm test` and `pnpm typecheck`. The whole viewer suite takes over ten minutes, so run the part you touched. This is the one exception to the engine note below that says to run tests only through the root `pnpm test` / `pnpm typecheck`: that note exists because a package-local run reads its siblings' built `dist/`, and the build step above is what makes that safe. If a viewer-local result disagrees with the root `pnpm typecheck` / `pnpm test`, rebuild the packages and trust the root run.
 
+## How we work: standing principles
+
+Read these before every task. They apply to every agent and to people.
+
+1. **A goal you can check.** Before you start, write one line, `DONE WHEN:`, naming a test you can run on your own work (a passing test file, a screenshot matching a reference, an IFC that validates). If you can't write it, ask one question to make the goal measurable. Run the test before you report, and report its result, not your opinion of it.
+2. **Use the context, don't guess.** Read the issue, the linked PRs, [LESSONS.md](LESSONS.md) and this file first. If something is missing, say what is missing. Never invent a fact, a number, a file path or a test result.
+3. **Match the example.** When an issue or a maintainer points to an example (a screenshot, an earlier PR, a reference sheet), match its structure and level of detail. Without one, build the smallest version that passes `DONE WHEN`, show it, and wait for feedback before building more.
+4. **Learn from every correction.** When a maintainer corrects you, add one line to [LESSONS.md](LESSONS.md): the date, what was wrong, the rule from now on (in the maintainer's words where possible). A corrected mistake must not come back. A lesson that applies to every agent also goes into the rules below.
+5. **Weekly review.** Once a week, review the last 5 to 10 merged PRs against LESSONS.md, fix the rules or the code so repeated problems can't recur, and summarise what changed in five lines.
+6. **The cheapest model that does the job.** Read-only checks, log reading and recipe work go to the cheapest model; code goes to a mid-tier model; foundations, geometry and performance to the strongest. Move a task to a cheaper model only after it matched the stronger one on 3 real examples, and write the result down.
+7. **A fixed test set.** Before switching models or after a big change, run these three and compare: `packages/mcp/src/tools/ifcsheet-set.test.ts` (open FZK, build, place, issue), `apps/viewer/src/annotate-set/annotate-set.models.test.tsx` (annotate a whole set), `apps/viewer/src/issue/handover.test.tsx` (issue and handover ZIP).
+8. **Prepare, don't publish.** Work on a branch and open a pull request. Agents never merge, deploy, release, post to other repositories or spend money. A maintainer's go is the `ready-to-merge` label or auto-merge set by a maintainer (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+9. **Report short, in this order:** what you did, the `DONE WHEN` result, what is waiting for a maintainer, the one next step.
+
 ## Claiming work
 
 Several agent sessions push to this repository from one GitHub account. The rules here are how they avoid building the same thing twice. They apply to every agent and every session, including short-lived subagents.
@@ -62,7 +76,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 ## Commands
 - Install: `corepack enable && pnpm install`.
 - Build: `pnpm build` (turbo). WASM: `pnpm build:wasm` (needs Rust nightly + `wasm-pack`); `pnpm build:wasm:fetch` pulls the prebuilt wasm from npm when Rust is unavailable (e.g. Windows without WSL).
-- Typecheck: `pnpm typecheck` (turbo, wasm-free: no Rust toolchain needed). This covers **test sources too**, which for a long time it did not: the root `tsconfig.json` excludes `**/*.test.ts` so tests never reach `dist/`, every `packages/*` config inherits that through `tsconfig.packages.json`, and `exclude` filters `include` — so a package's `"include": ["src/**/*"]` cannot pull its own tests back and 652 of 960 test files were in no typecheck program at all (#2457). Since vitest and `tsx --test` transpile per file without checking types, an unchecked test still *runs* while everything it asserts at type level (`expectTypeOf`, `@ts-expect-error`, a typed fixture) is silently unverified. Each package's `typecheck` script therefore runs `scripts/typecheck-tests.mjs`, which derives a no-emit test program from that package's own tsconfig and lists the test files under `files` — unlike `include`, `files` is not filtered by `exclude`. The generated `<pkg>/tsconfig.tests.json` is gitignored (rebuilt every run); the shared emit-off overrides live in `tsconfig.tests.base.json`. Do not "fix" a test-only type error by putting tests back into a package's emit tsconfig — that ships them to `dist/`.
+- Typecheck: `pnpm typecheck` (turbo, wasm-free: no Rust toolchain needed). It covers **test sources too**, through each package's `typecheck` script running `scripts/typecheck-tests.mjs` (generated, gitignored `<pkg>/tsconfig.tests.json`). Do not "fix" a test-only type error by putting tests back into a package's emit tsconfig: that ships them to `dist/`. Why: [agent reference](docs/agents-reference.md#typecheck-covers-test-sources-2457).
 - Test: `pnpm test` (turbo, TS); `cargo test --workspace` (Rust, not `cargo check`); `pnpm test:wasm-contract` (real wasm boundary); `pnpm test:collab` (collab pair).
 - Always run typecheck/test through the root `pnpm typecheck` / `pnpm test` (turbo) (for IfcSheet, see the one exception at the top of this file), never a package-local script (`pnpm --filter <pkg> typecheck`, `cd packages/<pkg> && tsc --noEmit` / `vitest run`) or an editor's TS server in isolation. `turbo.json` makes `typecheck` depend on `^build`, but that dependency graph only fires through turbo; a package-local script or IDE process resolves workspace siblings straight off their `dist/` (root `tsconfig.json` path-maps most packages to `dist/*.d.ts`; the rest, e.g. `@ifc-lite/pointcloud`, resolve via `package.json#types` → `dist/index.d.ts`). An unbuilt or stale sibling `dist/` then throws "Cannot find module" / missing-export errors that name real files and symbols but describe no bug in the source — rebuild (`pnpm build`) before trusting a bypass-turbo result that disagrees with `pnpm typecheck`/`pnpm test`.
 - Dev viewer: `pnpm dev` (full monorepo build, then `--filter viewer dev`; needs a built `@ifc-lite/wasm`).
@@ -75,7 +89,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 
 **Rust is NOT self-policed.** CI runs `cargo clippy --workspace --all-targets -- -D warnings`, so a warning-only defect (an unused import, a needless borrow) is a hard CI failure even when `cargo test --workspace` is green locally, because `cargo test` does not fail on warnings. Run that clippy line verbatim before pushing Rust.
 
-**The ~400-line rule is enforced on both sides**: for Rust by the `module_size_ratchet` test in `rust/processing/tests/`, for TypeScript by `scripts/check-module-size.mjs`. A new non-generated, non-test file over 400 lines fails unless it has an allowlist row, and an allowlisted file may not grow past its recorded budget. Prefer splitting to allowlisting. For a module whose bulk is `#[cfg(test)]`, the house pattern is a sibling `<name>_tests.rs` included via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;` (see `stream_meta.rs`). The rule binds production modules only; test files are exempt, though a long test file should still be split where it has a genuine logical seam, never merely to hit a line count.
+**The ~400-line rule is enforced on both sides**: for Rust by the `module_size_ratchet` test in `rust/processing/tests/`, for TypeScript by `scripts/check-module-size.mjs`. A new non-generated, non-test file over 400 lines fails unless it has an allowlist row, and an allowlisted file may not grow past its recorded budget. Prefer splitting to allowlisting. For a module whose bulk is `#[cfg(test)]`, the house pattern is a sibling `<name>_tests.rs` included via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;` (see `stream_meta.rs`). The rule binds production modules only; test files are exempt, though a long test file should still be split where it has a genuine logical seam, never merely to hit a line count. Run `node scripts/check-module-size.mjs` locally and read its EXIT CODE (`echo $?`), not just its output: a piped or truncated run has hidden a failure before. Split the file rather than adding an allowlist row (budgets and rows: `scripts/module-size-allowlist.txt`).
 
 **Do not trust any list of CI gates written down in this file.** The authoritative list of gates is `.github/workflows/`; the authoritative list of REQUIRED ones is the `main` ruleset, `gh api repos/:owner/:repo/rulesets`. Read them. A gate list is a measurement, and a measurement recorded as prose goes stale by the next merged workflow.
 
@@ -120,6 +134,8 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 - A `tsReturn` / `tsParamTypes` may NAME a type instead of spelling its shape inline (`Promise<BimClash.ClashResult>`). Those declarations are extracted from their defining package by `scripts/generate-bim-globals.mjs` (`DERIVED_TYPE_SOURCES` / `DERIVED_TYPE_ROOTS`) — never transcribe another package's types into the generator, which would be a hand-maintained copy in the one script whose purpose is to stop copies rotting (#2422). Referencing a type the generator cannot resolve is a hard error telling you which list to add the file to. `pnpm check:templates` (node-tests job) typechecks the built-in templates against the generated surface and is what catches a `tsReturn` naming a type that is never emitted; its tsconfig keeps `skipLibCheck: false` on purpose, because the generated `.d.ts` is the subject of that check rather than a dependency of it.
 - `Cargo.lock` is committed (app crates need reproducibility; an upstream yank broke CI once). Refresh with `cargo update -p <crate>`, never by deleting it.
 - Neither a PR branch nor `main` deploys to Vercel: previews are off on all three projects via their Ignored Build Step, and production moves only when `.github/workflows/deploy-nightly.yml` fast-forwards the `production` branch (05:45 UTC nightly, or `workflow_dispatch` with a ref already on `main`) — so a merge is live within 24h, not 20 minutes. To preview a branch on demand, and for the per-project setup and cost rationale: [`scripts/README-vercel-cost.md`](./scripts/README-vercel-cost.md) sections 3a-fix and 3d.
+- Read a single job's log before the run finishes: `gh api repos/BIMvoice/ifcsheet/actions/jobs/<job-id>/logs`. The required check is the "CI passed" aggregate in `.github/workflows/ci.yml`.
+- Never copy build outputs (`packages/wasm/pkg`, `dist`) between worktrees. Build them with `pnpm turbo run build --filter='./packages/*'` (wasm: `pnpm build:wasm` or `pnpm build:wasm:fetch`) in the worktree that needs them.
 
 ## Documentation upkeep
 - A public API or CLI flag change updates the matching guide in the **same PR**. `docs/guide/*.md`, `docs/tutorials/*.md`, and the README carry live `ts`/`typescript` snippets that CI typechecks against each package's `src` (`pnpm docs:check-samples`), so a renamed export or changed signature fails the build until the snippet is fixed. Snippets use shared ambient globals (`scripts/docs/doc-samples-globals.d.ts`); a snippet that is deliberately illustrative pseudo-code opts out with `<!-- docs-check: skip -->` on the line directly above the fence (use sparingly — prefer fixing it).
@@ -142,83 +158,17 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 
 ## Bounding walks over file-supplied references
 
-Entity references come from the file, so their shape is exporter- and
-attacker-controlled. An unbounded recursive walk over one self-referential
-entity dies by `SIGABRT`, which is not a catchable panic: nothing upstream turns
-it into a load error, and in the wasm geometry worker it takes down the
-instance. #2866 found seven such sites.
-
-The three mechanisms are not interchangeable, and each alone leaves a hole:
-
-- a **depth cap** bounds one path's LENGTH, not its breadth. `k` items each
-  leading back into a cycle cost `O(k^depth)`, turning an abort into a hang
-  (measured 7.21s at k=3). A hang is worse: nothing reports it.
-- a **visited set** bounds cycles and revisits. While the walk still recurses it
-  does NOT bound a long *acyclic* chain: every insert succeeds, the set never
-  fires, and the stack still overflows.
-- a **work budget** bounds acyclic DAG fan-out, which neither of the others
-  sees. A DAG where every branch succeeds never errors and never repeats an id;
-  it just emits `2^levels` outputs.
-
-Choose the visited set's SCOPE by what the walk returns:
-
-- **global / memoising** when the result is a pure function of the id (a colour
-  is determined by item id plus style map). Safe and strictly stronger: it kills
-  fan-out outright.
-- **path-scoped** (insert on the way in, remove on the way out) when output
-  ACCUMULATES. A boolean operand tree is a DAG and geometry accumulates, so the
-  same node down two branches is two real pieces of geometry. A global set
-  silently drops the second: **missing geometry, not a cycle guard**, and no
-  termination test notices.
-
-Prefer making the walk **iterative** over adding a cap: with no stack to consume
-there is nothing left for a cap to protect, and the visited set becomes
-sufficient alone. A cap tight enough to stop a cycle usually rejects legitimate
-input — #960 records Revit `FirstOperand` chains 42 nodes deep.
-
-Reuse the shared bound where the chain is shared: `ifc_lite_core::limits`.
-
-A guard that both ACTS and REPORTS has a two-part contract — bound the work, and
-report that you bounded it. Mutate the halves separately; they fail differently
-(a missing bound hangs, a missing report returns a truncated success).
-
-`scripts/check-refwalk-guards.mjs` (CI) enforces the *presence* of a guard, not
-its choice: it fails when a self- or mutually-recursive function, or a
-cursor-chasing loop, reaches `decode_by_id`/`resolve_ref`/`resolve_ref_list`
-under `rust/geometry/src`, `rust/processing/src` or `rust/wasm-bindings/src`
-with no visited set, path stack or depth cap in scope. Five of the six #2866
-fixes are detected at their parent commit and clear at the fix; the sixth
-(#2870) spans two files and is missed, which is the documented blind spot. Which
-guard is right stays a review question — everything above still applies. The
-allowlist is `scripts/refwalk-guard-allowlist.txt` and is empty.
+Entity references come from the file, so a recursive walk over a self-referential entity dies by uncatchable `SIGABRT` (in the wasm geometry worker it takes down the instance); #2866 found seven such sites. A depth cap, a visited set and a work budget each leave a hole alone, so use the right combination. Prefer an **iterative** walk; use a **global/memoising** visited set when the result is a pure function of the id, a **path-scoped** one when output accumulates (a global set silently drops geometry); reuse `ifc_lite_core::limits`. A guard must both bound the work and report that it did. `scripts/check-refwalk-guards.mjs` (CI) enforces only the presence of a guard; its allowlist `scripts/refwalk-guard-allowlist.txt` is empty. Full reasoning and the three mechanisms: [agent reference](docs/agents-reference.md#bounding-walks-over-file-supplied-references).
 
 ## Writing tests
-- A new test must assert behavior through a real fixture or a stated invariant. Don't write: set-state-then-read-it-back store tests, tests that assert a mock's return value (they test the mock), constructor/setter tautologies, or byte-for-byte output pinning unless the byte layout IS the compatibility contract (e.g. signed bundles). Regression tests cite the issue/PR number in the test name or a comment.
+- A new test must assert behavior through a real fixture or a stated invariant. Don't write: set-state-then-read-it-back store tests, tests that assert a mock's return value (they test the mock), constructor/setter tautologies, or byte-for-byte output pinning unless the byte layout IS the compatibility contract (e.g. signed bundles). Regression tests cite the issue/PR number in the test name or a comment. Before calling a test done, revert or mutate the fix and confirm it goes red (see "A test that fails without your change" in [CONTRIBUTING.md](CONTRIBUTING.md)); several passing tests were vacuous until a mutation run showed it.
 - Every package with test files needs a `test` script in its package.json or `turbo test` silently skips it; `scripts/check-test-wiring.mjs` (CI) enforces this. Packages use vitest OR node:test via `tsx --test`; match the package's existing convention, never mix within a package.
 - **A new gate under `scripts/` must be INVOKED, and a package.json entry is not invocation.** A guard nothing runs is the same absence as a guard that finds nothing, and it is invisible in exactly the same way: #3062 shipped a gate script and its test with no workflow step, no `package.json` script and no turbo task, and nothing flagged it.
 
-  `scripts/check-test-wiring.mjs` audits `scripts/` — every `check-*` / `verify-*` file at **any depth** and in `.mjs`, `.js` or `.cjs` (`verify-npm-publish.js` and `check-benchmark-regression.js` are real gates). It accepts exactly the wiring this repo actually uses: a `.github/workflows/` step running `node scripts/<gate>.mjs` (the common case, see the `node-tests` job); a root `package.json` script a workflow reaches through `pnpm <name>`, possibly transitively (`check-changesets.mjs` <- `lint` <- the Lint job); a **workspace** package's script reached by a turbo task (`check-tla-chunk-await.mjs` is the viewer `build` script's tail, deliberately, so Vercel runs it too and not only CI); or a file that an already-reached script imports or spawns (below the top level a `verify-*` name is as often a module as a gate, and a file a running gate runs does run). A root `package.json` entry no workflow ever calls executes exactly as often as no entry at all, and is rejected.
-
-  `scripts/*.test.mjs` is audited separately from the gate itself. The `node --test` catch-all in `test.yml` is per-directory, because a shell glob has no `**`, and a gate whose test runs while its script never executes is still the #3062 failure.
-
-  A script that genuinely should not run in CI declares `@unwired-by-design <reason>` in its own header and is then listed in the checker's OK output rather than hidden. The marker is a blanket escape and nothing judges the reason's quality, so its only safeguard is that every declaration is printed and lives in the diff. STATED HOLES: the check is lexical and does not evaluate workflow expressions, so a gate whose only step sits in a job with `if: false` still counts as wired; and `audit-*.mjs` reports rather than gates, so it is not demanded.
+- **A new gate under `scripts/` must be INVOKED, and a package.json entry is not invocation.** A guard nothing runs is the same absence as a guard that finds nothing (#3062). `scripts/check-test-wiring.mjs` audits `check-*` / `verify-*` files at any depth and `scripts/*.test.mjs`; it accepts a `.github/workflows/` step running the gate, a root script a workflow reaches through `pnpm`, a workspace script reached by a turbo task, or a file an already-reached script imports or spawns. A script that should not run in CI declares `@unwired-by-design <reason>` in its header. Accepted wirings and stated holes: [agent reference](docs/agents-reference.md#wiring-a-new-gate-under-scripts).
 - **Never assert on a source file's text.** A test that reads `Thing.tsx` and greps it certifies a string exists, not that the code works: `SearchModal.filter.wiring.test.tsx` asserted the whole body of `handleRowClick` and stayed 5/5 green when `onRowClick={handleRowClick}` was replaced with `onRowClick={() => {}}` — defect #2396 verbatim. `scripts/check-source-text-assertions.mjs` (CI) blocks new ones; the remaining list is in `scripts/source-text-assertion-allowlist.txt` and only ratchets down (#2434).
-- **Testing a viewer component.** It is mountable — including one that reads `useViewerStore`, which is a module-level Zustand store you seed with `setState`. Three test files claimed otherwise for months; the real blockers were two Vite-isms, fixed once in `apps/viewer/src/test/`. The recipe:
-  ```tsx
-  import '@/test/setup-dom.js';               // MUST be first: registers happy-dom
-  import { installLayout } from '@/test/dom-layout.js';
-  installLayout();                            // only if it virtualizes or measures
-  import { render, click, advance, cleanup } from '@/test/render.js';
-  import { fixtureModel, fixtureModels } from '@/test/store-fixture.js';
-
-  useViewerStore.setState({ ...fixtureModels(fixtureModel('m', { idOffset: 1_000_000 })) });
-  const ui = render(<YourPanel />);
-  click(/* what a user clicks */);
-  assert.equal(useViewerStore.getState().selectedEntityId, expected);
-  ```
-  `~icons/*` (unplugin-icons virtual modules) and `import.meta.env` are handled by `src/test/vite-module-hooks.mjs`, registered from the `--import` flag in the viewer's `test` script — it cannot be registered from inside a test file, because module resolution finishes before any module body runs. `installLayout()` also makes `ResizeObserver` deliver an entry: happy-dom ships the class but never fires it, which is why a virtualized list otherwise renders zero rows.
-  Viewer mounting (#2434): `RibbonToolbar` and its tabs mount as-is; `FileTab` needs `fileCommands`; `PropertiesPanel` and `ModelQuery` need a real parsed store, not a cast stub (`new IfcParser().parseColumnar(...)` over inline STEP); `ViewportContainer` needs stubbed `navigator.gpu` and a loaded model, else it shows "WebGPU Not Available". Radix dropdowns open on `pointerdown` then `click`, and portal to `document.body`. `RibbonContentLargeButton` names itself `tooltip ?? contentLabel`; registered `RibbonCommandLargeButton` uses the registry label as its name and tooltip as its description. Assert visible and accessible labels separately.
-  Assert behavior, not wiring: an unreachable component, ignored hook result, or uncalled handler can look correct in source. #2434 tests that only found a component survived deleting it; assert its values (one such bug shipped until mutation testing).
+- **Testing a viewer component.** It is mountable, including one that reads `useViewerStore` (seed it with `setState`); the recipe (`@/test/setup-dom.js` first, `render`/`click`/`advance`, `fixtureModel`) and the mounting notes are in the [agent reference](docs/agents-reference.md#testing-a-viewer-component). Assert behavior, not wiring: an unreachable component, ignored hook result, or uncalled handler can look correct in source (#2434).
+- Golden sheets (#363): a changed drawing fails the package tests naming sheet and field; an intended change runs `pnpm --filter @bimvoice/ifcsheet benchmark:update` and commits the `benchmark/accepted/` diff.
 - Geometry/WASM changes: mocked `@ifc-lite/wasm` tests prove nothing about the boundary; `pnpm test:wasm-contract` runs the real `buildPrePassOnce`/`processGeometryBatch` path and pins the field surface plus unit-scale contract. Extend it when adding wasm API surface. It skips clean (exit 0) if the wasm runtime isn't built, so a local green there proves nothing unless you ran `scripts/build-wasm.sh` first (CI restores the built artifact before the step).
 
 ## CLI
@@ -230,11 +180,38 @@ allowlist is `scripts/refwalk-guard-allowlist.txt` and is empty.
 ## Browser exports (viewer)
 - One way to save a file: `apps/viewer/src/lib/export/download.ts`. Use `downloadBlob` / `downloadFile` / `downloadDataUrl`; never hand-roll an `<a download>` plus `URL.createObjectURL` dance, and never write another filename regex. `downloadFile` already copies the wasm `Uint8Array<ArrayBufferLike>` into a `BlobPart`, and emits `emitFileDownloaded` (`lib/tours/events`) so task-gated tours can observe saves; a bespoke download path breaks tour progression, not just filename handling.
 - Run every user/model-derived filename through `sanitizeFilename` (preserves case and dots, strips only OS-unsafe chars, see #1299). It is *not* a slug; don't lowercase or hyphenate names for filenames. Slugs (extension IDs) are a separate concern.
-- CSV and list exports neutralize spreadsheet formula injection on user-derived cells, including BOM-prefixed values (#1506). Route any new export column through the existing sanitizer; never hand-roll a CSV writer that skips it.
+- CSV and list exports neutralize spreadsheet formula injection on user-derived cells, including BOM-prefixed values (#1506). Route any new export column through the existing sanitizer; never hand-roll a CSV writer that skips it. Never hand-roll an escaper: call `escapeCsvCell()` / `guardSpreadsheetFormula()` from `@ifc-lite/export`; `scripts/check-csv-escaper-copies.test.mjs` fails CI on a new copy (#317 and #324 both added one).
 
 ## Tour anchors & demo kit (viewer walkthroughs)
 - Elements carrying `data-tour` are interactive-tour anchors. If you move, rename, or delete one, update `apps/viewer/src/lib/tours/anchors.ts` and the referencing steps under `apps/viewer/src/lib/tours/tours/` in the same PR. An anchor no component renders fails `anchors.contract.test.ts`; one unmounted when its step runs auto-skips and fires a `tour_step_broken` PostHog event. Tour telemetry (`lib/tours/telemetry.ts`) carries only registry ids, enums, and numbers, never file or model names (scrub-safe).
 - The tour demo kit reuses the committed `building-architecture.ifc` sample as its base; its variants (`building-architecture-rev-b.ifc`, `building-architecture.ids`, `demo-kit.json`) are derived from that base by `tools/demo-kit/derive-variants.mts`. Revision B preserves the base's GlobalIds (diff matches on GlobalId, so a regenerated base would make compare read as 100% added/deleted) and carries the injected clash. Never hand-edit or regenerate one artifact in isolation; rerun the derivation script, which self-verifies the IDS/clash/diff invariants.
+
+## Working in parallel: rules learned the hard way
+
+**Git**
+- Merge `origin/main` into your PR branch to resolve conflicts. Never rebase a pushed branch, never force-push, never `git stash` (the stash stack is shared across worktrees; use a second worktree).
+- After a merge, diff every conflicted file against BOTH parents (`git diff MERGE_HEAD <file>` and `git diff HEAD <file>`) for silently dropped lines; auto-merged test counts went wrong twice.
+- Never stack PRs: CI only runs against `main`. Do not start work that depends on an unmerged PR; wait for it.
+- To wait on a PR, poll with a loop that prints the state every round. A silent monitor missed a merge and cost 25 minutes.
+
+**One code path for the app and the engine**
+- Logic that the app, the CLI and MCP all need lives once in `packages/ifcsheet` and the app calls it, with a parity test. Examples: `viewStyler` (`view-style.ts`), `classificationOf` (`classification.ts`).
+- A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits `index-exports.snapshot.json`.
+
+**Translations** (`apps/viewer/src/i18n/`)
+- New strings go in a NEW catalogue pair `catalogues/<feature>.en.ts` and `<feature>.ro.ts`, registered in the sub-barrel for its first letter: `barrels/en-a-e.ts`, `en-f-l.ts`, `en-m-r.ts`, `en-s-z.ts`; `barrels/ro-a-l.ts`, `ro-m-z.ts`.
+- Never define a key in two catalogues of one language; `catalogues-disjoint.test.ts` fails on it.
+- Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`.
+
+**A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
+- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`, then append the import and entry at the END of `DOCUMENT_FIELD_DEFS` in `index.ts`.
+- Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
+
+**A new drawer section**
+- Add a file in `apps/viewer/src/components/viewer/wall/drawer-sections/` and one import plus one entry in its `index.ts` (alphabetical). Do not edit `ProjectDrawer.tsx`.
+
+**Import guards**
+- `apps/viewer/src/drafting/session-imports.test.ts` forbids the drafting session from reaching the issue pipeline (`/issue/`), the sheet UI (`components/viewer/wall|sheets/`), `react-dom` and `fflate`. A shared registry such as `project/fields/` must import only light, pure modules: #347 tripped the guard through `issue/file.ts`.
 
 ## New source files
 - MPL-2.0 header on every new file: see [`./LICENSE_HEADER.md`](./LICENSE_HEADER.md).

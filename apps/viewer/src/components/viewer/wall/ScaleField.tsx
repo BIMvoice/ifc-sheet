@@ -12,12 +12,16 @@
 import { useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { detailedScaleThatFits, overrun } from '@/project/drawing-set';
-import { updateProjectView } from '@/project/project-store';
-import { SHEET_SCALES, updateViewport, viewportBox } from '@/project/sheets';
+import { useProjectStore } from '@/project/project-store';
+import { setScheduleScale } from '@/project/schedule-scale-actions';
+import { SHEET_SCALES, setViewportScale, viewportBox } from '@/project/sheets';
+import { changeViewportScale, relaySheetAt } from '@/project/sheet-relayout-actions';
+import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const field = WALL_FIELD;
+const quiet = WALL_PILL;
 const OTHER = 'other';
 /** A typed scale is a whole denominator up to this (1:100 000, a regional plan). */
 export const MAX_SCALE = 100_000;
@@ -30,6 +34,8 @@ interface ScaleFieldProps {
   view: ProjectView | undefined;
   /** The chosen drawing's extent, metres; null before it is generated (or for a schedule). */
   bounds: Bounds | null;
+  /** The model's extent: with it, the sheet's other drawings follow a scale change (#450). */
+  extent?: ModelExtent | null;
 }
 
 /** A typed scale denominator ("50", "1:50", "1 : 50"), or null when it is not a whole positive number within range. */
@@ -39,16 +45,21 @@ export function parseScale(text: string): number | null {
   return Number.isInteger(n) && n >= 1 && n <= MAX_SCALE ? n : null;
 }
 
-export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
+export function ScaleField({ sheet, slot, view, bounds, extent = null }: ScaleFieldProps) {
   const { t } = useTranslation();
   const offered = (SHEET_SCALES as readonly number[]).includes(slot.scale);
   const [typing, setTyping] = useState(false);
   const [bad, setBad] = useState(false);
+  // On a sheet the person arranged, the scale of the one drawing changed and the rest stayed: the layout is offered, not forced.
+  const [offer, setOffer] = useState<number | null>(null);
 
+  // A schedule's scale is the schedule's own (`schedule-scale`): the layout reads it, so that is what the field writes.
+  const isSchedule = useProjectStore((s) => !!s.schedules?.some((x) => x.id === slot.viewId));
   const apply = (scale: number): void => {
+    if (isSchedule) { setScheduleScale(slot.viewId, scale); return; }
     // The box fits the drawing again at the new scale; the view's annotation sizes follow it.
-    updateViewport(sheet.id, slot.id, { scale, width: 0, height: 0 });
-    if (view) updateProjectView(view.id, { scale });
+    if (!extent) { setViewportScale(sheet.id, slot.id, view?.id ?? null, scale); return; }
+    setOffer(changeViewportScale(sheet.id, slot.id, view?.id ?? null, scale, extent) === 'kept' ? scale : null);
   };
   const box = viewportBox(slot, bounds);
   const area = bounds ? overrun(box, sheet) : null;
@@ -56,7 +67,7 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
 
   return (
     <div className="mt-3">
-      <label className="block text-sm text-sky-200">
+      <label className="block text-xs text-sky-200">
         {t('wall.vp.scale')}
         <select
           className={field}
@@ -76,7 +87,7 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
         </select>
       </label>
       {typing ? (
-        <label className="mt-2 block text-sm text-sky-200">
+        <label className="mt-2 block text-xs text-sky-200">
           {t('wall.vp.scaleTyped')}
           <input
             // The field is what "Other…" asked for: it takes the keys at once.
@@ -99,6 +110,12 @@ export function ScaleField({ sheet, slot, view, bounds }: ScaleFieldProps) {
           />
           {bad ? <span role="alert" className="mt-1 block text-xs text-amber-300">{t('wall.vp.scaleBad', { max: MAX_SCALE })}</span> : null}
         </label>
+      ) : null}
+      {offer !== null && extent ? (
+        <output className="mt-2 block rounded-md border border-sky-300/40 bg-sky-300/10 p-2 text-sm text-sky-100">
+          {t('wall.relayout.kept')}
+          <button type="button" className={`${quiet} mt-2 block`} onClick={() => { relaySheetAt(sheet.id, offer, extent); setOffer(null); }}>{t('wall.relayout.offer', { scale: offer })}</button>
+        </output>
       ) : null}
       {area ? (
         <output className="mt-2 block rounded-md border border-amber-300/40 bg-amber-300/10 p-2 text-sm text-amber-100">

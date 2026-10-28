@@ -13,10 +13,12 @@
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
-import { ITEM_KINDS, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
+import { placeField, TitleBlockImportError } from '@bimvoice/ifcsheet';
+import { ITEM_KINDS, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
+
+export { MAX_TEXT };
 
 const MAX_ITEMS = 500;
-export const MAX_TEXT = 200;
 
 /** The numeric fields an item has, and whether zero or less is allowed. */
 const NUMBERS: Record<TemplateItem['kind'], Record<string, boolean>> = {
@@ -41,6 +43,29 @@ export function renameInTemplate(template: TitleBlockTemplate, change: (text: st
 /** Start editing: the standard layout becomes the project's own, once. */
 export function customiseTitleBlock(standard: TitleBlockTemplate): void {
   if (!current()) write({ items: standard.items.map((i) => ({ ...i })) });
+}
+
+/** The Romanian layout (`title-block-ro.ts`) becomes the project's own, in place of whatever layout it printed: one undo step. */
+export function applyRomanianTitleBlock(romanian: TitleBlockTemplate): void {
+  write({ items: romanian.items.map((i) => ({ ...i })) });
+}
+
+/** An imported layout (#458: a DXF or an SVG, `importTitleBlockDxf`) becomes the project's own: one undo step, every sheet prints it. */
+export function applyImportedTitleBlock(template: TitleBlockTemplate): void {
+  write({ items: template.items.map((i) => ({ ...i })) });
+}
+
+/** Place `{field}` on the project's layout, near the block's top-left where its x and y can be edited at once. False when there is no layout of its own yet, or the name or the layout refuses it. */
+export function placeTemplateField(field: string): boolean {
+  const t = current();
+  if (!t) return false;
+  try {
+    write(placeField(t, field, { x: 5, y: 10 }, { fit: 60 }));
+    return true;
+  } catch (err) {
+    if (err instanceof TitleBlockImportError) return false;
+    throw err;
+  }
 }
 
 /** Back to the standard layout. */
@@ -94,7 +119,7 @@ export function clearTemplateFit(id: string): void {
   if (!t) return;
   write({ items: t.items.map((i) => {
     if (i.id !== id || i.kind !== 'text') return i;
-    const { fit: _dropped, ...rest } = i;
+    const { fit: _dropped, lines: _lines, top: _top, ...rest } = i;
     return rest;
   }) });
 }

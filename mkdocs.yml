@@ -42,6 +42,8 @@ not_in_nav: |
   architecture/ifcsheet-engine.md
   architecture/evidence/**
   research/**
+  # Contributor/agent reference moved out of AGENTS.md (size budget); not a user doc.
+  agents-reference.md
 
 theme:
   name: material
@@ -160,6 +162,8 @@ nav:
     - Viewer Assistant: guide/viewer-assistant.md
     - CLI Toolkit: guide/cli.md
     - MCP for AI Agents: guide/mcp.md
+    - IfcSheet Command Line: guide/ifcsheet-cli.md
+    - IfcSheet for AI Agents (MCP): guide/ifcsheet-mcp.md
     - 3D Viewer & Analysis: guide/viewer-api.md
     - Server Guide: guide/server.md
     - Building for Desktop: guide/desktop.md
@@ -209,6 +213,7 @@ nav:
         - Specification: architecture/session-automation-6612.md
         - Implementation Plan: architecture/session-automation-6612-implementation.md
     - Data Flow: architecture/data-flow.md
+    - npm Publishing: architecture/npm-publishing.md
     - Parsing Pipeline: architecture/parsing-pipeline.md
     - Geometry Pipeline: architecture/geometry-pipeline.md
     - Coverage Ledger: architecture/coverage-ledger.md

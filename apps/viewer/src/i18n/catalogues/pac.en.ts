@@ -1,0 +1,53 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import type { TranslationValue } from '../types';
+import { PAC_WORDS_EN } from '@bimvoice/ifcsheet/pac-words';
+
+/** The Romanian permit project (PAC, Legea 169/2026 Anexa 2): its checklist and the sheets it starts a set with (#364). */
+export const pacEn = {
+  ...PAC_WORDS_EN,
+  'pac.title': 'Permit project (PAC), Legea 169/2026',
+  'pac.intro': 'The contents of the permit project, "proiectul pentru autorizarea construirii", as Anexa 2 of Legea 169/2026 lists them. DTAC is the name it had before 25 August 2026.',
+  'pac.drawn': 'Drawn from the model',
+  'pac.supply': 'To supply',
+  'pac.point': 'Anexa 2, {point}',
+  'pac.scales': 'Scale 1:{list}, as the case may be',
+  'pac.scales.adequate': 'Scale: "a suitable scale", the text names none',
+  'pac.kind.drawing': 'Drawings',
+  'pac.kind.written': 'Written parts',
+  'pac.kind.existingBuilding': 'Works on an existing building',
+  'pac.notSet': 'Not stated by the text, so not set here: the paper format and the order of the sheets.',
+  'pac.submit': 'Build the submission PDF',
+  'pac.intervention': 'The works',
+  'pac.intervention.new': 'New building',
+  'pac.intervention.existing': 'Intervention on an existing building',
+  'pac.intervention.interior': 'Interior-only intervention',
+  'pac.na': 'Not applicable',
+  'pac.missingLevels': 'No plan on a sheet for: {list}',
+  'pac.submit.hint': 'Records an issue of the set (the sheets as they stand now) and downloads two files: the submission PDF and the drawing list as CSV. The PDF is the opis (the contents above, each with its Anexa 2 point and whether this file holds it), then the sheets in set order. The text names no paper format, sheet order or file rules for the e-portal, so none is applied.',
+  'pac.submit.working': 'Building the submission PDF…',
+  'pac.useSet': 'Use the PAC sheets for a new project',
+  'pac.mode.label': 'Template',
+  'pac.mode.standard': 'PAC (Anexa 2)',
+  'pac.mode.rural': 'Simplified PAC, rural house (Anexa 3)',
+  'pac.rural.intro': 'The simplified contents for a rural single-family house (at most P + M, at most 150 mp developed built area), as Anexa 3 of Legea 169/2026 lists them.',
+  'pac.rural.point': 'Anexa 3, {point}',
+  'pac.rural.notSet': 'Not stated by the text, so not set here: the paper format and the order of the sheets. Each drawing gets its own A3 sheet at 1:50; a drawing that does not fit A3 at 1:50 (a building larger than Anexa 3 covers) moves that sheet up to A2, then A1. The scale is never changed to save paper.',
+  'pac.rural.scales': 'Scale 1:{list}',
+  'pac.useRuralSet': 'Use the simplified PAC sheets (1:50) for a new project',
+  'pac.rural.set.name': 'Simplified PAC',
+  'pac.item.rural.siteLocation': 'Location plan',
+  'pac.item.rural.situationExisting': 'Site plan, existing situation',
+  'pac.item.rural.situationProposed': 'Site plan, proposed situation',
+  'pac.item.rural.utilities': 'Site plan marking the utility connections on public land',
+  'pac.item.rural.plans': 'Plans of all levels, with the function of each space',
+  'pac.item.rural.roof': 'Roof plans',
+  'pac.item.rural.facades': 'Facades',
+  'pac.item.rural.sections': 'Main sections, showing the ground profile',
+  'pac.item.rural.context': 'Graphic and photo documentation of the neighbours, landscape and visual impact',
+  'pac.item.rural.fencePlans': 'Fence plans, with materials and colours and the niches for technical equipment',
+  'pac.item.rural.memo': 'Summary memo',
+  'pac.item.rural.survey': 'Detailed survey of the existing situation',
+  'pac.item.rural.structuralExpertise': 'Technical assessment of strength and stability',
+} as const satisfies Record<string, TranslationValue>;

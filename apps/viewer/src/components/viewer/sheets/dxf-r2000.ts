@@ -23,6 +23,7 @@ type P = { x: number; y: number };
 /** Skeleton handles: the LTYPE and LAYER tables, model space's block record, the plot-style placeholder. */
 const LTYPE_TABLE = '2';
 const LAYER_TABLE = '1';
+const STYLE_TABLE = '5';
 const MODEL_SPACE = '17';
 const PLOT_STYLE = '13';
 const FIRST_HANDLE = 0x100;
@@ -72,22 +73,54 @@ const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString()
 const safeName = (s: string) => s.replace(/[<>/\\":;?*|=`]/g, '_').trim().slice(0, 255) || '0';
 const LINE_TYPE_NAME: Record<LineType, string> = { continuous: 'Continuous', dashed: 'DASHED', dotted: 'DOT', dashdot: 'DASHDOT' };
 
+/**
+ * A project line type's name as a DXF table name: ASCII only (a letter outside windows-1252, such as ș, ț or ă, would be written as `?`,
+ * and two such names would collide), diacritics reduced to their base letter, anything else `_`. The project keeps the display name.
+ */
+export const ltypeName = (name: string): string =>
+  name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9$-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 255) || 'LTYPE';
+
+/** The DXF text style the tables use (#500) and the font file each face names; a CAD program substitutes where it lacks the file. */
+export const TABLES_DXF_STYLE = 'Tables';
+const TABLES_FONT_FILE = { sans: 'arial.ttf', serif: 'times.ttf', mono: 'cour.ttf' } as const;
+export type TablesFace = keyof typeof TABLES_FONT_FILE;
+
 export interface PenSpec {
   color: string;
-  lineType?: LineType;
+  /** A built-in line type or the id of a project line type defined on the writer (`defineLineType`); anything else is continuous. */
+  lineType?: string;
+  /** False: the layer does not plot. */
+  print?: boolean;
   /** Millimetres. */
   lineWeight?: number;
 }
 
-interface Layer { color: string; lineType: LineType; lineWeight: number }
+interface Layer { color: string; lineType: string; lineWeight: number; print: boolean }
 
 export class DxfR2000 {
   private readonly layers = new Map<string, Layer>();
   private readonly out: string[] = [];
   private handle = FIRST_HANDLE;
+  private tablesFace: TablesFace | undefined;
 
   /** `patternScale` multiplies line-type dash lengths (paper mm): the view's scale for a 1:1 model export. */
   constructor(private readonly patternScale = 1) {}
+
+  private readonly custom = new Map<string, { name: string; display: string; dash: number[] }>();
+
+  /** Add a line type of the project, its dash pattern in paper mm (as `dashOf` gives for the built-in ones). */
+  defineLineType(id: string, name: string, dash: readonly number[]): void {
+    // Reserved: the built-in names and the two a CAD program always has (ByLayer, ByBlock). Names compare without case.
+    const taken = new Set([...Object.values(LINE_TYPE_NAME), 'ByLayer', 'ByBlock', ...[...this.custom.values()].map((c) => c.name)].map((n) => n.toUpperCase()));
+    let unique = ltypeName(name);
+    while (taken.has(unique.toUpperCase())) unique += '_';
+    this.custom.set(id, { name: unique, display: safeName(name), dash: [...dash] });
+  }
+
+  /** The DXF name of a line type; an unknown one is continuous. */
+  private ltName(type: string): string {
+    return (LINE_TYPE_NAME as Record<string, string>)[type] ?? this.custom.get(type)?.name ?? LINE_TYPE_NAME.continuous;
+  }
 
   private next(): string {
     return (this.handle++).toString(16).toUpperCase();
@@ -96,7 +129,7 @@ export class DxfR2000 {
   /** Register a layer (its first pen defines it) and return its DXF name. */
   layer(raw: string, pen: PenSpec): string {
     const name = safeName(raw);
-    if (!this.layers.has(name)) this.layers.set(name, { color: pen.color, lineType: pen.lineType ?? 'continuous', lineWeight: dxfLineWeight(pen.lineWeight ?? 0.25) });
+    if (!this.layers.has(name)) this.layers.set(name, { color: pen.color, lineType: pen.lineType ?? 'continuous', lineWeight: dxfLineWeight(pen.lineWeight ?? 0.25), print: pen.print !== false });
     return name;
   }
 
@@ -106,7 +139,7 @@ export class DxfR2000 {
     if (!pen || !l) return [];
     const out: string[] = [];
     if (aciOf(pen.color) !== aciOf(l.color) || trueColor(pen.color) !== trueColor(l.color)) out.push('62', String(aciOf(pen.color)), '420', String(trueColor(pen.color)));
-    if (pen.lineType && pen.lineType !== l.lineType) out.push('6', LINE_TYPE_NAME[pen.lineType]);
+    if (pen.lineType && pen.lineType !== l.lineType) out.push('6', this.ltName(pen.lineType));
     if (pen.lineWeight !== undefined && dxfLineWeight(pen.lineWeight) !== l.lineWeight) out.push('370', String(dxfLineWeight(pen.lineWeight)));
     return out;
   }
@@ -125,12 +158,30 @@ export class DxfR2000 {
     for (const p of pts) this.out.push('10', fmt(p.x), '20', fmt(p.y));
   }
 
-  text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec } = {}): void {
+  /**
+   * A solid fill of `loops` (the outer boundary and any holes, filled even-odd), in the colour `pen` gives: a HATCH on `layer`.
+   * Loops of fewer than three points are left out.
+   */
+  hatch(loops: readonly (readonly P[])[], layer: string, pen?: PenSpec): void {
+    const paths = loops.filter((l) => l.length >= 3);
+    if (paths.length === 0) return;
+    this.out.push(...this.head('HATCH', layer, pen), '100', 'AcDbHatch', '10', '0', '20', '0', '30', '0', '210', '0', '220', '0', '230', '1', '2', 'SOLID', '70', '1', '71', '0', '91', String(paths.length));
+    paths.forEach((path, i) => {
+      // A polyline boundary (bit 2); the first is the external one (bit 1).
+      this.out.push('92', i === 0 ? '3' : '2', '72', '0', '73', '1', '93', String(path.length));
+      for (const p of path) this.out.push('10', fmt(p.x), '20', fmt(p.y));
+      this.out.push('97', '0');
+    });
+    this.out.push('75', '0', '76', '1', '98', '0');
+  }
+
+  text(at: P, value: string, height: number, layer: string, options: { rotationDeg?: number; align?: 'left' | 'center' | 'right'; pen?: PenSpec; tablesFace?: TablesFace } = {}): void {
     const clean = value.replace(/[\r\n]+/g, ' ').trim();
     if (!clean || !(height > 0)) return;
     const h = options.align === 'center' ? 1 : options.align === 'right' ? 2 : 0;
     this.out.push(...this.head('TEXT', layer, options.pen), '100', 'AcDbText', '10', fmt(at.x), '20', fmt(at.y), '30', '0', '40', fmt(height), '1', clean,
-      '50', fmt(options.rotationDeg ?? 0), '7', 'Standard');
+      '50', fmt(options.rotationDeg ?? 0), '7', options.tablesFace ? TABLES_DXF_STYLE : 'Standard');
+    if (options.tablesFace) this.tablesFace = options.tablesFace;
     if (h) this.out.push('72', String(h), '11', fmt(at.x), '21', fmt(at.y), '31', '0');
     this.out.push('100', 'AcDbText');
   }
@@ -144,6 +195,12 @@ export class DxfR2000 {
         '2', LINE_TYPE_NAME[type], '70', '0', '3', type, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
       for (const d of dashes) out.push('49', fmt(d), '74', '0');
     }
+    for (const { name, display, dash } of this.custom.values()) {
+      const dashes = dash.map((d, i) => (i % 2 === 0 ? d : -d) * this.patternScale);
+      out.push('0', 'LTYPE', '5', this.next(), '330', LTYPE_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbLinetypeTableRecord',
+        '2', name, '70', '0', '3', display, '72', '65', '73', String(dashes.length), '40', fmt(dashes.reduce((s, d) => s + Math.abs(d), 0)));
+      for (const d of dashes) out.push('49', fmt(d), '74', '0');
+    }
     return out;
   }
 
@@ -152,7 +209,7 @@ export class DxfR2000 {
     for (const [name, l] of this.layers) {
       if (name === '0') continue;
       out.push('0', 'LAYER', '5', this.next(), '330', LAYER_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbLayerTableRecord',
-        '2', name, '70', '0', '62', String(aciOf(l.color)), '420', String(trueColor(l.color)), '6', LINE_TYPE_NAME[l.lineType], '370', String(l.lineWeight), '390', PLOT_STYLE);
+        '2', name, '70', '0', '62', String(aciOf(l.color)), '420', String(trueColor(l.color)), '6', this.ltName(l.lineType), '370', String(l.lineWeight), '390', PLOT_STYLE, ...(l.print ? [] : ['290', '0']));
     }
     return out;
   }
@@ -161,11 +218,15 @@ export class DxfR2000 {
   bytes(comment: string): Uint8Array {
     const ltypes = this.lineTypes();
     const layers = this.layerTable();
+    const styles = this.tablesFace
+      ? ['0', 'STYLE', '5', this.next(), '330', STYLE_TABLE, '100', 'AcDbSymbolTableRecord', '100', 'AcDbTextStyleTableRecord', '2', TABLES_DXF_STYLE, '70', '0', '40', '0.0', '41', '1.0', '50', '0.0', '71', '0', '42', '2.5', '3', TABLES_FONT_FILE[this.tablesFace], '4', '']
+      : [];
     const pairs = (list: string[]) => list.map((v, i) => (i % 2 === 0 ? v.padStart(3) : v)).join('\n');
     const text = skeleton
       .replace(/^999\n[^\n]*\n/, `999\n${comment.replace(/\n/g, ' ')}\n`)
       .replace('{{LTYPES}}\n', ltypes.length ? `${pairs(ltypes)}\n` : '')
       .replace('{{LAYERS}}\n', layers.length ? `${pairs(layers)}\n` : '')
+      .replace('{{STYLES}}\n', styles.length ? `${pairs(styles)}\n` : '')
       .replace('{{ENTITIES}}\n', this.out.length ? `${pairs(this.out)}\n` : '')
       .replace('{{HANDSEED}}', this.handle.toString(16).toUpperCase());
     return encodeDxfCp1252(text).bytes;

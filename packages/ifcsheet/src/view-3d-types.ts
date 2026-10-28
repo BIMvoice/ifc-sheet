@@ -4,7 +4,7 @@
 
 /** A 3D view of the project and how it prints (vector axonometric, or a raster capture). Re-exported by `document.ts`. */
 
-import type { ProjectViewBase } from './document.js';
+import type { ProjectLevel, ProjectViewBase } from './document.js';
 
 export type ProjectionMode = 'perspective' | 'orthographic';
 
@@ -33,6 +33,24 @@ export interface ViewRaster {
   widthMm: number; heightMm: number;
 }
 
+/** A box in the drawing frame (viewer metres, Y up): what a section box keeps. */
+export interface SectionBox {
+  min: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+}
+
+/**
+ * What a cut-away axonometric removes before it is drawn (#97): the model above
+ * a storey's cut, and everything outside a section box. The faces the cut
+ * leaves in the solids are filled, like a plan's cut.
+ */
+export interface AxonometricCutaway {
+  /** The storey cut: nothing higher than `cutHeight` over the level's floor (`levelFloorY`) is drawn. */
+  storey?: { level: ProjectLevel; cutHeight: number };
+  /** Only what lies inside this box is drawn. */
+  box?: SectionBox;
+}
+
 export interface ThreeDProjectView extends ProjectViewBase {
   kind: '3d';
   /** `null` means "the default 3D view": fit the whole model. */
@@ -45,4 +63,6 @@ export interface ThreeDProjectView extends ProjectViewBase {
   raster?: ViewRaster | null;
   /** An axonometric printed as a shaded raster instead of vector lines. */
   shaded?: boolean;
+  /** A cut-away axonometric (#97): cut at a storey and/or to a section box, and drawn at its nominal scale (see `axonometric.ts`). Vector only. */
+  cutaway?: AxonometricCutaway;
 }

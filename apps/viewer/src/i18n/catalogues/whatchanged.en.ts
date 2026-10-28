@@ -46,4 +46,8 @@ export const whatChangedEn = {
   'whatchanged.ui.sheetRow': { one: '{number}: {count} change', other: '{number}: {count} changes' },
   'whatchanged.ui.sheetsUnchanged': { one: '{count} sheet unchanged', other: '{count} sheets unchanged' },
   'whatchanged.ui.unchanged': 'Nothing that the sheets show has changed.',
+  'whatchanged.offer.title': 'A new version of this model?',
+  'whatchanged.offer.description': '{file} has the same IfcProject as {old}, which this project is drawn from. Update the project to the new version: its sheets, views, annotations and settings stay, and what changed is listed. Cancel opens {file} as a new project instead.',
+  'whatchanged.offer.update': 'Update this project',
+  'whatchanged.offer.failed': 'The project could not be updated to the new version: {reason}',
 } as const satisfies Record<string, TranslationValue>;

@@ -16,12 +16,16 @@ import { cleanup, render } from '@/test/render.js';
 import { getTour } from '@/lib/tours/registry';
 import { useViewerStore } from '@/store';
 import { fixtureModel, fixtureModels } from '@/test/store-fixture.js';
+import { registerLocale, setLocale } from '@/i18n';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
+import ro from '@/i18n/locales/ro';
 import { TourStepCard } from './TourStepCard.js';
 
 const originalState = useViewerStore.getState();
 after(() => { useViewerStore.setState(originalState, true); });
 afterEach(() => {
   cleanup();
+  act(() => setLocale('en'));
   useViewerStore.setState(originalState, true);
 });
 
@@ -53,5 +57,20 @@ describe('welcome tour load step Skip label (#6720)', () => {
     const orbit = tour.steps.find((s) => s.id === 'orbit')!;
     const root = render(<TourStepCard tour={tour} step={orbit} stepIndex={1} targetEl={null} />);
     assert.ok(!buttons(root).includes('Skip (use demo)'));
+  });
+});
+
+describe('the Wall tour card in Romanian (#231)', () => {
+  it('says the skip label in Romanian, and keeps the step counter on one line', () => {
+    registerLocale('ro', checkCatalogue(ro).catalogue);
+    act(() => setLocale('ro'));
+    useViewerStore.setState({ models: new Map(), ifcDataStore: null, loading: false });
+    const tour = getTour('ifcsheet')!;
+    const open = tour.steps.find((s) => s.id === 'open')!;
+    const root = render(<TourStepCard tour={tour} step={open} stepIndex={0} targetEl={null} />);
+    assert.ok(buttons(root).includes('Omite (demo)'), buttons(root).join(' | '));
+    assert.ok(!buttons(root).some((b) => /Skip/.test(b)));
+    const counter = [...root.querySelectorAll('span')].find((n) => n.textContent?.trim() === '1 / 6');
+    assert.ok(counter?.className.includes('whitespace-nowrap'), 'the counter must not wrap into a column');
   });
 });

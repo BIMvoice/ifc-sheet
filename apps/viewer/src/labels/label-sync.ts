@@ -15,14 +15,19 @@
 import { useEffect } from 'react';
 import type { AnnotationType } from '@/catalogue/types';
 import type { DraftEntity } from '@/drafting/types';
+import { withAnnotationScreenUp } from '@/drafting/annotation';
 import { paperUnitOf } from '@/project/drafting-standards';
+import { viewScreenUp } from '@/project/view-screen-up';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
 import { extrasOf, resolveWithExtras } from './label-extras';
 import type { LabelElement } from './label-resolve';
 import { parseTemplate, type ParsedTemplate } from './label-template';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 export const isParametricLabel = (d: DraftEntity): boolean => d.shape.type === 'text' && typeof d.params.labelOf === 'string' && typeof d.params.atype === 'string';
 
@@ -38,7 +43,7 @@ function templateOf(text: string): ParsedTemplate {
 }
 
 /** `drafts` with every parametric label brought in line with its element and type; the same array when nothing changed. */
-export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, paperUnit: (viewId: string) => number = () => 0.1): DraftEntity[] {
+export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationType[], element: (globalId: string) => LabelElement | null, locale: SheetLocale, paperUnit: (viewId: string) => number = () => 0.1, screenUp: (viewId: string) => 1 | -1 = () => -1): DraftEntity[] {
   let changed = false;
   const next = drafts.map((d) => {
     if (!isParametricLabel(d) || d.shape.type !== 'text') return d;
@@ -47,27 +52,30 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
     if (!spec) return d;
     let out = d;
     if (el) {
-      const text = resolveWithExtras(templateOf(spec.template), el, spec.missing, extrasOf(d.params));
+      const text = resolveWithExtras(templateOf(spec.template), el, locale, spec.missing, extrasOf(d.params));
       if (text !== d.shape.text || spec.frame !== d.shape.frame) {
         const { frame: _old, ...rest } = d.shape;
         out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };
       }
     }
     // Where the label is, and how big its text now makes it, decide whether it has a leader.
-    out = settleLeader(out, spec.leader, paperUnit(d.viewId));
+    // ...measured in the label's own view, not the one the session is in: opening a project must not move a leader (#297).
+    out = withAnnotationScreenUp(screenUp(d.viewId), () => settleLeader(out, spec.leader, paperUnit(d.viewId)));
     if (out !== d) changed = true;
     return out;
   });
   return changed ? next : drafts;
 }
 
-export function refreshParametricLabels(): void {
+export function refreshParametricLabels(locale: SheetLocale): void {
   const { drafts, annotationTypes } = useProjectStore.getState();
-  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, (viewId) => paperUnitOf(viewId));
+  const next = settleLabels(drafts, annotationTypes ?? [], labelElementByGlobalId, locale, (viewId) => paperUnitOf(viewId), (viewId) => viewScreenUp(viewId));
   if (next !== drafts) useProjectStore.setState({ drafts: next, dirty: true });
 }
 
 export function useParametricLabelSync(): void {
+  // A language switch re-writes the labels' numbers ("12,50" / "12.50"): the text is derived, like the rest of the label.
+  const locale = useSheetLocale();
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
   const types = useProjectStore((s) => s.annotationTypes);
@@ -77,6 +85,8 @@ export function useParametricLabelSync(): void {
   const count = useProjectStore((s) => s.drafts.filter(isParametricLabel).length);
   // `drafts` too: a label dragged by hand gains or loses its leader. Settling twice changes nothing, so this cannot loop.
   useEffect(() => {
-    if (count > 0) refreshParametricLabels();
-  }, [mutationVersion, models, types, count, drafts, tagFields]);
+    if (count > 0) refreshParametricLabels(locale);
+  }, [mutationVersion, models, types, count, drafts, tagFields, locale]);
+  // The ceiling tags' heights follow the language the same way (#269).
+  useEffect(() => { refreshCeilingTags(locale); }, [locale, drafts]);
 }

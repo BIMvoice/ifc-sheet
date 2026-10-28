@@ -32,6 +32,7 @@ import { textBlock, type TextFrame } from '@/drafting/text-block';
 import { textWidthEm } from '@/drafting/text-width';
 import type { AnnotationShape, Pt } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 /** The styles an annotation is drawn with (resolved from its params). */
 export interface AnnotationLook {
@@ -107,7 +108,9 @@ function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, 
           fontStyle={style.italic ? 'italic' : 'normal'}
           textAnchor={anchor}
           // The width the frame was measured for: a renderer that hints advances at small sizes would otherwise run the text past it.
-          textLength={textWidthEm(line.text, style) * size || undefined}
+          // Not for a single character: the spacing is spread over the gaps between characters, and one character has none, so the
+          // PDF writer divides by zero and writes `-Infinity Tc` (#292).
+          textLength={[...line.text.trim()].length > 1 ? textWidthEm(line.text, style) * size || undefined : undefined}
           lengthAdjust="spacing"
         >
           {line.text}
@@ -185,6 +188,7 @@ function Symbol({ shape, color, t, axis, k, look, live }: { shape: Extract<Annot
 export const AnnotationGraphics = memo(function AnnotationGraphics({
   shape, color: base, selected, transform: t, axis, extraPatterns, strokeScale: k = 1, look = DEFAULT_LOOK, paperUnit = 0.1, symbols,
 }: Props) {
+  const locale = useSheetLocale();
   const s = (p: Pt) => drawingToScreen(p, t, axis);
   if (shape.type === 'hatch') return <Hatch shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} extraPatterns={extraPatterns} k={k} />;
   if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;
@@ -240,7 +244,7 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
             <path d={`M${p.x} ${p.y}L${p.x - h} ${p.y - h}L${p.x + h} ${p.y - h}Z`} fill={lineColor} fillOpacity={0.25} />
             <path d={`M${p.x - h} ${p.y}L${p.x + h * 5} ${p.y}`} />
           </g>
-          <Label at={{ x: p.x + h * 1.3, y: p.y - h * 1.15 }} text={formatLevel(shape.value)} px={px} deg={0} color={textColor} style={look.text} anchor="start" />
+          <Label at={{ x: p.x + h * 1.3, y: p.y - h * 1.15 }} text={formatLevel(locale, shape.value)} px={px} deg={0} color={textColor} style={look.text} anchor="start" />
         </g>
       );
     }
@@ -273,7 +277,8 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const layout = dimensionLayout(shape, {
         extGap: dim.extGap * paperUnit,
         extOver: dim.extOver * paperUnit,
-        format: (m) => formatDimension(m, dim),
+        format: (m) => formatDimension(locale, m, dim),
+        locale,
       });
       const lineColor = selected ? '#2563eb' : dim.color ?? base;
       const lines = layout.lines.map((l) => polyline([l.a, l.b], t, axis)).join('');

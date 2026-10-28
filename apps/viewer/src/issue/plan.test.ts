@@ -17,7 +17,7 @@ const vp = (viewId: string, scale: number) => ({ id: `vp-${viewId}-${scale}`, vi
 const sheet = (id: string, number: string, name: string, extra: Partial<ProjectSheet> = {}): ProjectSheet => ({ id, number, name, createdAt: 1, viewports: [vp('v1', 50)], ...extra });
 const none = { documents: [{ id: 'v1', createdAt: 1 }], drafts: [], views: [], sheets: [] };
 const input = { name: 'Planning', date: '2026-10-13', listFirst: true };
-const labels = { title: 'Drawing list', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision' };
+const labels = { title: 'Drawing list', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision', landscape: 'landscape', portrait: 'portrait', drawingList: 'drawing list' };
 
 describe('planning an issue', () => {
   it('orders sheets by number, naturally', () => {
@@ -30,7 +30,7 @@ describe('planning an issue', () => {
       sheet('a', 'A-101', 'Ground floor', { paper: 'A2', orientation: 'portrait', revisionIds: ['rc'], viewports: [vp('v1', 100), vp('v1', 50), vp('v1', 100)] }),
       sheet('b', 'A-102', 'Blank', { viewports: [] }),
     ], { ...none, revisions: [{ id: 'rc', code: 'C', date: '', description: '', by: '' }] }, input);
-    assert.deepEqual(plan.sheets.map((s) => ({ ...s.row, fingerprint: '' })), [{ number: 'A-101', title: 'Ground floor', scale: 'As indicated', paper: 'A2', orientation: 'portrait', revision: 'C', fingerprint: '' }]);
+    assert.deepEqual(plan.sheets.map((s) => ({ ...s.row, fingerprint: '' })), [{ number: 'A-101', title: 'Ground floor', scale: 'As indicated', paper: 'A2', orientation: 'portrait', revision: 'C', fingerprint: '', fingerprintVersion: 2, sheetId: 'a' }]);
     assert.equal(plan.leftOut.length, 1);
     assert.equal(plan.leftOut[0].reason.key, 'issue.reason.empty');
     assert.equal(scaleText({ viewports: [] }), '');
@@ -57,6 +57,18 @@ describe('planning an issue', () => {
   it('names the next issue', () => {
     assert.equal(nextIssueName([]), 'Issue 1');
     assert.equal(nextIssueName([{ name: 'Issue 2' }]), 'Issue 3');
+  });
+
+  // #294: the number is the identity, not the words, so a language switch does not restart or repeat the count.
+  it('counts issues across a language switch', () => {
+    const templates = ['Emitere {n}', 'Issue {n}'];
+    const nameFor = (n: number) => `Emitere ${n}`;
+    assert.equal(nextIssueName([{ name: 'Issue 1' }], nameFor, templates), 'Emitere 2');
+    assert.equal(nextIssueName([{ name: 'Issue 1' }, { name: 'Emitere 2' }], (n) => `Issue ${n}`, ['Issue {n}', 'Emitere {n}']), 'Issue 3');
+    // The number 2 was used in the other language: it is not handed out again.
+    assert.equal(nextIssueName([{ name: 'Emitere 2' }], (n) => `Issue ${n}`, ['Issue {n}', 'Emitere {n}']), 'Issue 3');
+    // Two issues, the second named by hand: the next default must still not repeat the first's number.
+    assert.equal(nextIssueName([{ name: 'Emitere 2' }, { name: 'P01' }], (n) => `Issue ${n}`, ['Issue {n}', 'Emitere {n}']), 'Issue 3');
   });
 });
 

@@ -64,7 +64,7 @@ export function failureLine(f: CaptureFailure, waitMs = WAIT_MS): { key: Transla
 }
 
 /** Draws each sheet; a sheet whose drawings fail or do not come is reported with why, and the others are still drawn. */
-export async function captureSheets(sheets: readonly ProjectSheet[], options: { dxf?: boolean; waitMs?: number; currentCloudsOnly?: boolean } = {}): Promise<Captured> {
+export async function captureSheets(sheets: readonly ProjectSheet[], options: { dxf?: boolean; waitMs?: number; currentCloudsOnly?: boolean; issueDate?: string } = {}): Promise<Captured> {
   const waitMs = options.waitMs ?? WAIT_MS;
   const before = useDocumentTabs.getState();
   const svgs = new Map<string, string>();
@@ -93,7 +93,7 @@ export async function captureSheets(sheets: readonly ProjectSheet[], options: { 
         failed.push({ sheet, reason: status(stuck) === 'error' ? 'error' : 'timeout', view: view?.name ?? stuck, message: useViewDrawings.getState().byView[stuck]?.error ?? undefined });
         continue;
       }
-      root.render(createElement(WallSheet, { sheet, width: 1000, currentCloudsOnly: options.currentCloudsOnly }));
+      root.render(createElement(WallSheet, { sheet, width: 1000, currentCloudsOnly: options.currentCloudsOnly, issueDate: options.issueDate }));
       const found = await until(() => host.querySelector(`svg[data-sheet-id="${CSS.escape(sheet.id)}"]`) !== null, 10_000);
       await sleep(SETTLE_MS);
       const svg = found ? host.querySelector<SVGSVGElement>(`svg[data-sheet-id="${CSS.escape(sheet.id)}"]`) : null;

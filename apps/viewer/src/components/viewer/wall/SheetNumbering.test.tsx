@@ -35,13 +35,13 @@ import { useWallNav } from './wall-nav.js';
 
 const HOUSE: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } };
 const LEVELS: ProjectLevel[] = [{ name: 'Ground Floor', elevation: 0, storeyGlobalIds: ['L0'] }, { name: 'First Floor', elevation: 3, storeyGlobalIds: ['L1'] }];
-const LABELS = { title: 'Drawing list', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision' };
+const LABELS = { title: 'Drawing list', issue: 'Issue', date: 'Date', sheet: 'Sheet', sheetTitle: 'Title', scale: 'Scale', paper: 'Paper', revision: 'Revision', landscape: 'landscape', portrait: 'portrait', drawingList: 'drawing list' };
 const state = () => useProjectStore.getState();
 const numbers = () => state().sheets.map((s) => s.number);
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
   clearDraftHistory();

@@ -15,13 +15,19 @@
  * and writes R2000 DXF with CAD layers and text (`sheet-dxf.ts`). Both need
  * the sheet SVG, which only the browser renders today. The DXF here carries
  * linework only; its text is written once the app's DXF writer moves here.
+ *
+ * The title block's logo is drawn when it is a PNG or JPEG (`printableLogo`).
+ *
+ * The drawings carry the app's pens (#34): each viewport's faces and lines as
+ * `sheet-graphic.ts` grouped them through the view's styler, with the colour,
+ * paper-mm width, dash and fill the app's sheet gives the same item.
  */
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
-import type { SheetGraphic } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
 
-/** jsPDF line widths, mm: the frame heavier than the drawing, cut faces heavier than what is seen beyond. */
-const PEN = { frame: 0.5, cut: 0.35, line: 0.18 } as const;
+/** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
+const PEN = { frame: 0.5, mark: 0.18 } as const;
 
 /** The font file the package ships (`fonts/Inter-Regular.ttf`, SIL Open Font License), read from disk in Node. */
 async function packagedFont(): Promise<Uint8Array> {
@@ -67,15 +73,52 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       }
     };
     // Every run is open: a closed ring repeats its first point (`sheet-graphic.ts`), a clipped one must not be closed across the cut.
+    // A colour scheme's fills go down first, under every line; each region is one even-odd path, so a hole stays open.
+    for (const fill of sheet.fills) {
+      const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
+      doc.setFillColor(fill.colour);
+      doc.path(ops).fillEvenOdd();
+    }
+    // The drawings by pen, in the app's paint order: the cut faces' fills, then the hidden, seen and cut lines.
+    for (const pen of sheet.pens) {
+      if (pen.fill) {
+        doc.setFillColor(pen.fill);
+        for (const region of pen.regions) doc.path(region.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }])).fillEvenOdd();
+        continue;
+      }
+      doc.setDrawColor(pen.stroke ?? '#000000');
+      doc.setLineDashPattern(pen.dash ? [...pen.dash] : [], 0);
+      stroke(pen.runs, pen.width);
+    }
+    doc.setLineDashPattern([], 0);
+    doc.setDrawColor('#000000');
     stroke(sheet.frame, PEN.frame);
-    stroke(sheet.cut, PEN.cut);
-    stroke(sheet.lines, PEN.line);
+    stroke(sheet.marks, PEN.mark);
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
-      doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left' });
+      doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
     }
-    doc.outline.add(null, `${sheet.number} ${sheet.name}`, { pageNumber: i + 1 });
+    // The logo: fitted whole and centred in its box (the app's `xMidYMid meet`); in a strip it reads upward.
+    for (const image of sheet.images) {
+      try {
+        const { width, height, fileType } = doc.getImageProperties(image.src);
+        const turned = image.angle === 90;
+        // The image's own width runs along the box's height when turned.
+        const k = Math.min(image.box.w / (turned ? height : width), image.box.h / (turned ? width : height));
+        const w = width * k;
+        const h = height * k;
+        const cx = image.box.x + image.box.w / 2;
+        const cy = image.box.y + image.box.h / 2;
+        // jsPDF turns the image about the point it is given; a quarter counter-clockwise puts the picture's x range at [x - h, x] and its y range at [y + h - w, y + h].
+        if (turned) doc.addImage(image.src, fileType, cx + h / 2, cy + w / 2 - h, w, h, 'logo', 'FAST', 90);
+        else doc.addImage(image.src, fileType, cx - w / 2, cy - h / 2, w, h, 'logo', 'FAST');
+      } catch (error) {
+        // A file the browser showed but jsPDF cannot decode: the sheet prints without its logo.
+        console.warn('[ifcsheet] the logo could not be drawn in the PDF', error);
+      }
+    }
+    doc.outline.add(null, `${sheet.number} ${sheet.name}`.trim(), { pageNumber: i + 1 });
   });
   return new Uint8Array(doc.output('arraybuffer'));
 }
@@ -90,6 +133,33 @@ function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
   };
 }
 
+/**
+ * A colour scheme's fills as DXF layers (#92), one per colour (`COLOUR-77AADD`): R12 has no hatch, so each region is the closed
+ * polylines of its boundary, as the exporter writes a cut face's hatch region, in the colour's nearest ACI colour.
+ */
+function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
+  const byColour = new Map<string, Polyline[]>();
+  for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
+  return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+}
+
+/**
+ * The drawings' stroke pens as DXF layers: R12 has no line weight, so a pen's layer names its kind and width in hundredths of a
+ * millimetre (`VIEW-CUT-050`, `VIEW-SEEN-025`, `VIEW-HIDDEN-018`), and a colour other than black (`VIEW-CUT-050-C62828`); the layer
+ * carries the colour. The cut faces' grey fills are not written: R12 has no hatch, and their outlines are the cut lines already.
+ */
+function penLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
+  const byName = new Map<string, { name: string; color: string; polylines: Polyline[]; closed: boolean }>();
+  for (const pen of sheet.pens.filter((p): p is SheetPen & { stroke: string } => p.stroke !== null && p.runs.length > 0)) {
+    const colour = pen.stroke.toLowerCase() === '#000000' ? '' : `-${pen.stroke.slice(1).toUpperCase()}`;
+    const name = `VIEW-${pen.layer}-${String(Math.round(pen.width * 100)).padStart(3, '0')}${colour}`;
+    const layer = byName.get(name) ?? { name, color: pen.stroke, polylines: [], closed: false };
+    layer.polylines.push(...pen.runs);
+    byName.set(name, layer);
+  }
+  return [...byName.values()];
+}
+
 /** One sheet as DXF text (R12), paper millimetres with y up and the origin at the paper's bottom-left corner. */
 export function exportDxf(sheet: SheetGraphic): string {
   const flip = (p: { x: number; y: number }) => ({ x: p.x, y: sheet.paper.h - p.y });
@@ -98,8 +168,9 @@ export function exportDxf(sheet: SheetGraphic): string {
     coordinateTransform: flip,
     polylineLayers: [
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
-      { name: 'VIEW-CUT', color: '#000000', polylines: sheet.cut, closed: false },
-      { name: 'VIEW-LINES', color: '#808080', polylines: sheet.lines, closed: false },
+      ...penLayers(sheet),
+      { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
+      ...colourLayers(sheet),
     ],
   });
 }

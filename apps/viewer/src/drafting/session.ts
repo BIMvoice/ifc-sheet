@@ -25,14 +25,13 @@ import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
-import {
-  closedLoopsOfView, hasModelPicker, levelAtPoint, levelRefAt, modelElementAt, pickModel, planPartsOf, referenceShapesIn, roomsOf, resolveLevelRef, setReferenceProvider, viewElementsOf, viewKindOf, activeWorkPlane,
-} from './session-providers';
+import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
+import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -109,38 +108,28 @@ function say(line: HistoryLine): void {
   set({ history: [...get().history.slice(-(HISTORY_LINES - 1)), line] });
 }
 
-function visibleEntities(viewId: string): DraftEntity[] {
+/** Echo a line into the command history from outside a command (an action run by a typed alias, #168). */
+export function echoLine(key: TranslationKey, params?: Record<string, string | number>): void {
+  say({ key, params });
+}
+
+/** The view's drafted entities on visible, unlocked layers: what a command sees as already there. */
+export function visibleEntities(viewId: string): DraftEntity[] {
   const { drafts, draftLayers } = useProjectStore.getState();
   const usable = new Set(draftLayers.filter((l) => l.visible && !l.locked).map((l) => l.id));
   return draftsOfView(viewId, drafts).filter((d) => usable.has(d.layerId));
 }
 
 function context(viewId: string): DraftContext {
-  const { axis } = get();
-  const { kx, ky } = { kx: axis === 'side' ? -1 : 1, ky: axis !== 'down' ? -1 : 1 };
-  return {
-    viewId,
+  return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt, elementBoxesAt }, {
     layerId: currentLayerId(),
+    axis: get().axis,
+    settings: scaledSettings,
     entities: () => visibleEntities(viewId),
-    referenceShapes: referenceShapesIn,
-    closedLoops: closedLoopsOfView,
-    levelAt: levelAtPoint,
-    levelRefAt,
-    resolveLevel: resolveLevelRef,
-    plane: () => activeWorkPlane().plane,
-    viewKind: viewKindOf,
-    view: () => activeWorkPlane().view,
-    elementAt: modelElementAt,
-    viewElements: viewElementsOf,
-    planParts: planPartsOf,
-    rooms: roomsOf,
     selection: () => get().selection,
     setSelection: (ids) => set({ selection: ids }),
-    // userToDrawing is diag(kx, −ky): orientation-reversing when its determinant is negative.
-    orientation: (kx * -ky) > 0 ? 1 : -1,
-    settings: scaledSettings,
     say: (key, params) => say({ key, params }),
-  };
+  });
 }
 
 let activeLayerId = '0';
@@ -173,6 +162,9 @@ function finish(result: StepResult): void {
  */
 let sizeScale = 1;
 
+/** How many drawing units a settings unit of size (text height, hatch scale) is on the current target: 1 on a view, 10 on a sheet. */
+export const draftSizeScale = (): number => sizeScale;
+
 /** The settings as commands see them on the current target. */
 const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
 
@@ -183,8 +175,9 @@ export function attachDraftingView(viewId: string | null, axis: SectionAxisName,
   setReferenceProvider(references);
   sizeScale = unitsScale;
   // Plans draw drawing-y downward on screen; text and marks grow up on screen.
-  setAnnotationScreenUp(axis === 'down' ? -1 : 1);
-  setAnnotationScreenRight(axis === 'side' ? -1 : 1);
+  const frame = annotationFrameOf(axis);
+  setAnnotationScreenUp(frame.up);
+  setAnnotationScreenRight(frame.right);
   if (get().viewId === viewId && get().axis === axis) return;
   if (get().viewId !== viewId) cancelCommand();
   set({ viewId, axis, selection: get().viewId === viewId ? get().selection : new Set() });
@@ -200,6 +193,7 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
   cancelCommand();
+  endedByUser = false;
   say({ key: def.labelKey });
   // Enter repeats a drawing command; it must not issue the set again.
   if (!def.projectWide) set({ lastCommandId: def.id });
@@ -321,6 +315,28 @@ export function pressEnter(): void {
     return;
   }
   if (lastCommandId) startDraftCommand(lastCommandId);
+}
+
+let endedByUser = false;
+
+/**
+ * Done: the visible way to end the running command or the object selection it waits for, for
+ * a person without Esc or Enter at hand (an iPad, #166). What the command has drafted stays,
+ * as Enter leaves it; a command that Enter would only advance is cancelled. Does nothing when
+ * nothing runs (Enter on an idle line would repeat the last command).
+ */
+export function endCommand(): void {
+  if (!command && !pending) return;
+  endedByUser = true;
+  pressEnter();
+  if (command || pending) cancelCommand();
+}
+
+/** Whether the last command was ended by {@link endCommand} (a tool that chains must not start again), read once. */
+export function takeEndedByUser(): boolean {
+  const was = endedByUser;
+  endedByUser = false;
+  return was;
 }
 
 /** Escape: cancel the command, else clear the selection. */

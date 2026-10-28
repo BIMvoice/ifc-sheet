@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -69,9 +69,9 @@ describe.skipIf(missing !== null)('ifcsheet_* tools over stdio on AC20-FZK-Haus'
     await rm(tmp, { recursive: true, force: true });
   });
 
-  it('advertises the three tools with a described input schema', async () => {
+  it('advertises the first four tools with a described input schema (the set tools are in ifcsheet-set.test.ts)', async () => {
     const tools = (await call('tools/list')).result!.tools!.filter((t) => t.name.startsWith('ifcsheet_'));
-    expect(tools.map((t) => t.name).sort()).toEqual(['ifcsheet_export_pdf', 'ifcsheet_generate_set', 'ifcsheet_open_model']);
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['ifcsheet_check_readiness', 'ifcsheet_export_pdf', 'ifcsheet_generate_set', 'ifcsheet_open_model']));
     for (const t of tools) {
       expect(t.description.length).toBeGreaterThan(40);
       expect(t.inputSchema.type).toBe('object');
@@ -118,11 +118,77 @@ describe.skipIf(missing !== null)('ifcsheet_* tools over stdio on AC20-FZK-Haus'
     expect(inline.structuredContent.pages).toBe(4);
   }, 120_000);
 
+  it('reports what AC20-FZK-Haus lacks: four of 82 elements have no material, the same finding as `ifcsheet check`', async () => {
+    const opened = await tool('ifcsheet_open_model', { file_path: FZK });
+    const checked = await tool('ifcsheet_check_readiness', { model_id: opened.structuredContent.model_id });
+    expect(checked.isError, JSON.stringify(checked.content)).toBeFalsy();
+    expect(checked.structuredContent).toEqual({
+      model_id: opened.structuredContent.model_id,
+      ready: false,
+      findings: [{ kind: 'noMaterials', missing: '4 of 82 elements have no material.', effect: expect.stringContaining('material takeoff'), params: { count: 4, total: 82 } }],
+    });
+    expect(checked.content![0].text).toContain('4 of 82 elements have no material.');
+  }, 120_000);
+
+  it('reads a saved project too: a split schedule with a gap is reported as `ifcsheet check --project` reports it, by path and inline', async () => {
+    // FZK holds 11 windows: 2 of 1000x1000 (Dachgeschoss) and 9 of 2000x1200 (Erdgeschoss). The part keeps only the first type.
+    const project = JSON.stringify({
+      format: 'ifclite-project', version: 1, name: 'Haus',
+      schedules: [
+        { id: 's1', name: 'Joinery', kind: 'all', createdAt: 1 },
+        { id: 's2', name: 'Doors', kind: 'all', createdAt: 1, sub: { parent: 's1', filter: { kinds: ['door'] } } },
+        { id: 's3', name: 'Windows', kind: 'all', createdAt: 1, sub: { parent: 's1', filter: { kinds: ['window'], types: ['untyped:window:1000×1000'] } } },
+      ],
+    });
+    const file = join(tmp, 'haus.ifclite-project.json');
+    await writeFile(file, project);
+    const opened = await tool('ifcsheet_open_model', { file_path: FZK });
+    const model_id = opened.structuredContent.model_id;
+    const gap = {
+      kind: 'subReportGaps',
+      missing: 'In "Joinery", some elements are in no part. Types: 1, elements: 9: W2 Window ×9 (Erdgeschoss).',
+      effect: 'The parts do not add up to the schedule: those doors and windows are on no sheet.',
+      params: { schedule: 'Joinery', types: 1, count: 9, list: 'W2 Window ×9 (Erdgeschoss)' },
+    };
+    const byPath = await tool('ifcsheet_check_readiness', { model_id, project_path: file });
+    expect(byPath.isError, JSON.stringify(byPath.content)).toBeFalsy();
+    expect(byPath.structuredContent.project).toBe(file);
+    expect(byPath.structuredContent.findings.map((f: { kind: string }) => f.kind)).toEqual(['noMaterials', 'subReportGaps']);
+    expect(byPath.structuredContent.findings[1]).toEqual(gap);
+    const inline = await tool('ifcsheet_check_readiness', { model_id, project_json: project });
+    expect(inline.structuredContent.findings).toEqual(byPath.structuredContent.findings);
+    expect(inline.structuredContent.project).toBe('project_json');
+    // Without a project the report is the model's alone.
+    const alone = await tool('ifcsheet_check_readiness', { model_id });
+    expect(alone.structuredContent.findings.map((f: { kind: string }) => f.kind)).toEqual(['noMaterials']);
+    expect(alone.structuredContent).not.toHaveProperty('project');
+  }, 120_000);
+
+  it('refuses both project inputs together, a file that is not a project, and a project from a newer build', async () => {
+    const opened = await tool('ifcsheet_open_model', { file_path: FZK });
+    const model_id = opened.structuredContent.model_id;
+    const both = await tool('ifcsheet_check_readiness', { model_id, project_path: join(tmp, 'a.json'), project_json: '{}' });
+    expect(both.isError).toBe(true);
+    expect(both.structuredContent.message).toContain('not both');
+    const junk = await tool('ifcsheet_check_readiness', { model_id, project_json: '{nope' });
+    expect(junk.isError).toBe(true);
+    expect(junk.structuredContent.message).toMatch(/cannot be used as a project: Not a project file: invalid JSON/);
+    const future = await tool('ifcsheet_check_readiness', { model_id, project_json: JSON.stringify({ format: 'ifclite-project', version: 99 }) });
+    expect(future.isError).toBe(true);
+    expect(future.structuredContent.message).toMatch(/newer than this build reads/);
+    const absent = await tool('ifcsheet_check_readiness', { model_id, project_path: join(tmp, 'absent.json') });
+    expect(absent.isError).toBe(true);
+    expect(absent.structuredContent.message).toMatch(/no such file|absent\.json/);
+  }, 120_000);
+
   it('refuses an unknown handle with an error the agent can act on', async () => {
     const gen = await tool('ifcsheet_generate_set', { model_id: 'sheetmodel-999' });
     expect(gen.isError).toBe(true);
     expect(gen.structuredContent.code).toBe('MODEL_NOT_FOUND');
     expect(gen.structuredContent.message).toContain('ifcsheet_open_model');
+    const check = await tool('ifcsheet_check_readiness', { model_id: 'sheetmodel-999' });
+    expect(check.isError).toBe(true);
+    expect(check.structuredContent.code).toBe('MODEL_NOT_FOUND');
     const pdf = await tool('ifcsheet_export_pdf', { document_id: 'sheetset-999', file_path: join(tmp, 'x.pdf') });
     expect(pdf.isError).toBe(true);
     expect(pdf.structuredContent.code).toBe('ENTITY_NOT_FOUND');

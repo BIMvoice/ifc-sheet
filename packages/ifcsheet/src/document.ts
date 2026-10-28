@@ -12,11 +12,19 @@
  * issues and the rest). It round-trips as JSON.
  */
 
+import type { NameLanguage } from './names.js';
 import type { ViewGraphics } from './view-graphics-types.js';
+import type { ProjectViewTemplate } from './view-templates.js';
 import type { ThreeDProjectView } from './view-3d-types.js';
+import type { TitleBlockParam } from './title-block-params.js';
+import type { ProjectRevision, RevisionDraft } from './revisions.js';
+import type { TitleSources } from './title-block-sources.js';
+import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
+import type { UnitsAndNumbers } from './units-and-numbers.js';
 
-export type { CategoryGraphics, CategoryLineWeight, GridEnds, PhaseId, PhaseStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
 export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types.js';
 
@@ -103,8 +111,10 @@ export interface ProjectViewBase {
    * same depth), shown at a larger scale and cropped to `min`..`max`.
    */
   detail?: ViewDetail;
-  /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. */
+  /** The view's own graphics (Visibility / Graphics): a preset and per-category overrides. With a `templateId`, these are the overrides laid over the template's (`resolveViewGraphics`, #44). */
   graphics?: ViewGraphics;
+  /** The view template (`ProjectDocument.viewTemplates`) whose graphics this view follows; absent: none, the view's own `graphics` are all there is. */
+  templateId?: string;
   /** Drawing scale denominator (100 = 1:100). Annotation sizes follow it; absent = 1:100. */
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
@@ -211,6 +221,10 @@ export interface SheetViewport {
   hiddenLayers?: string[];
   /** The page of a document split over several sheets (the drawing register's continuation sheets), from 0; absent is 0. */
   page?: number;
+  /** A continuation page the user moved: it keeps its own position when the schedule is laid out again, instead of following the first sheet's (`syncSchedulePages`). */
+  placed?: boolean;
+  /** On a schedule's first page: where the user put continuation pages that are not there now (the schedule shrank to fewer pages and grew again), so a page comes back where it was. */
+  placedPages?: { page: number; x: number; y: number }[];
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
@@ -268,6 +282,8 @@ export interface ProjectSheet {
   revisionIds?: string[];
   /** The values this sheet gives title block parameters otherwise than the project's (`title-block-params.ts`); a name present wins. */
   titleBlockParams?: Record<string, string>;
+  /** Lines the sheet prints on itself, in the frame's bottom-left corner (`sheet-notes.ts`): why its paper or scale is not the template's. */
+  notes?: string[];
 }
 
 /** The identity of a model a project refers to (content hash, else its name). */
@@ -292,12 +308,30 @@ export interface ProjectDocument {
   sheets: ProjectSheet[];
   /** Title block fields every sheet prints (project, client, drawn by, date…). */
   titleBlock?: Record<string, string>;
+  /** Where each title block field reads its value in the model, by field id; a field not listed reads its default (`title-block-sources.ts`). */
+  titleBlockSources?: TitleSources;
+  /** The project's revisions, oldest first (`revisions.ts`); a sheet's title block prints the latest it has. */
+  revisions?: ProjectRevision[];
+  /** Drafted shapes; the engine reads only the revision clouds among them, to know which revisions a sheet has (`revisions.ts`). */
+  drafts?: RevisionDraft[];
+  /** The layout every sheet's title block prints, as edited or chosen (the Romanian one); absent: the standard layout (the app) or, in this package too, the same standard layout (`title-block-standard.ts`). */
+  titleBlockTemplate?: TitleBlockTemplate;
+  /** The project's own title block parameters (`{Name}` in a layout). */
+  titleBlockParams?: TitleBlockParam[];
   /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`). */
   sheetTemplates?: SheetTemplate[];
+  /** The project's view templates (#44): named graphics that views follow by `templateId`. */
+  viewTemplates?: ProjectViewTemplate[];
   /** The template new sheets of a series start from, by template id. */
   seriesTemplates?: Partial<Record<TemplateSeries, string>>;
   /** How sheets are numbered (`numbering.ts`); absent is the default A-101 style. */
   sheetNumbering?: NumberingScheme;
-  /** The levels the user defined for a model with no storeys; absent or empty: none (`UserLevel`). */
-  userLevels?: UserLevel[];
+  /** "Include far-away elements in framing" (`framing.ts`): frame the views on everything the storeys contain, small elements far from the building too. Absent is off. */
+  includeFarElements?: boolean;
+  /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
+  handoverPattern?: string;
+  /** The language the project's generated names (sheets, views, view templates) were made in, `ro` or `en` (any other value in a file is ignored by both readers); absent: not recorded, which a command-line build reads as the language it is told with `--locale`, else English; the app then names in its interface language. Recorded so the same set is named the same wherever it is generated; names already stored are never rewritten. */
+  language?: NameLanguage;
+  /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
+  unitsAndNumbers?: UnitsAndNumbers;
 }

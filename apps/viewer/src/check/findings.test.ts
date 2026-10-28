@@ -6,6 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { anchorOf, encodeAnchor } from '@/drafting/dimension-anchor';
 import { newDraft } from '@/drafting/draft-store';
 import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet } from '@/project/types';
@@ -137,4 +138,45 @@ describe('checkSet', () => {
     assert.ok(f.some((x) => x.kind === 'viewOffSheet' && x.viewId === 'x'));
   });
   it('is the same every time', () => assert.deepEqual(checkSet(base()), checkSet(base())));
+});
+
+describe('danglingAnnotations, named', () => {
+  const tag = (viewId: string, label: string, guid: string) => newDraft(viewId, 'l', { type: 'leader', pts: [{ x: 0, y: 0 }, { x: 1, y: 1 }], text: label, height: 0.25 }, { tagOf: guid });
+  const known = (g: string) => ({ H: { name: 'Haustuer', className: 'Door' } } as Record<string, { name: string; className: string }>)[g];
+  it('gives each of two orphaned tags its own finding, naming the tag, the element and the sheet', () => {
+    const d = [tag('plan', 'Haustuer', 'H'), tag('plan', 'EG-Fenster-1', 'W')];
+    const f = danglingAnnotations(base({ drafts: d, elementExists: () => false, lastKnown: known }));
+    assert.equal(f.length, 2);
+    assert.deepEqual(f.map((x) => [x.draftId, x.params.text, x.params.sheet, x.params.view]), [[d[0].id, 'Haustuer', 'A-101', 'Erdgeschoss'], [d[1].id, 'EG-Fenster-1', 'A-101', 'Erdgeschoss']]);
+    assert.equal(f[0].params.element, 'Door · "Haustuer" · H');
+    assert.equal(f[1].params.element, 'W', 'no last known state: the GlobalId alone');
+    assert.deepEqual(f[0].remedies, ['delete', 'reattach']);
+    assert.ok(f[0].box && f[0].box.max.x > f[0].box.min.x, 'it knows where the tag is, to zoom to it');
+  });
+  it('falls back to the last known name, then the GlobalId, for an annotation with no text', () => {
+    const blank = newDraft('plan', 'l', { type: 'text', p: { x: 0, y: 0 }, text: ' ', height: 0.25, rotation: 0 }, { labelOf: 'H' });
+    assert.equal(danglingAnnotations(base({ drafts: [blank], elementExists: () => false, lastKnown: known }))[0].params.text, 'Haustuer');
+    assert.equal(danglingAnnotations(base({ drafts: [blank], elementExists: () => false }))[0].params.text, 'H');
+  });
+  it('lists a tag whose view is on two sheets once, with both sheets', () => {
+    const f = danglingAnnotations(base({ drafts: [tag('plan', 'Haustuer', 'H')], elementExists: () => false, sheets: [sheet('s1', 'A-101', ['plan']), sheet('s2', 'A-102', ['plan'])] }));
+    assert.equal(f.length, 1);
+    assert.equal(f[0].params.sheet, 'A-101, A-102');
+  });
+  it('lists a dimension snapped to a wall that is gone, and not one whose walls are all there or one drawn in the open (#459)', () => {
+    const rect = { x0: 0, y0: 0, x1: 4, y1: 0.2 };
+    const shape = { type: 'dimension' as const, variant: 'aligned' as const, a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, at: { x: 2, y: -1 }, height: 0.25 };
+    const end = (guid: string, x: number) => encodeAnchor(anchorOf({ x, y: 0 }, { guid, rect })!);
+    const toGone = newDraft('plan', 'l', shape, { anchorA: end('HERE', 0), anchorB: end('GONE', 4) });
+    const toBoth = newDraft('plan', 'l', shape, { anchorA: end('HERE', 0), anchorB: end('HERE', 4) });
+    const free = newDraft('plan', 'l', shape);
+    const f = danglingAnnotations(base({ drafts: [toGone, toBoth, free], elementExists: (g) => g === 'HERE', lastKnown: (g) => (g === 'GONE' ? { className: 'IfcWall', name: 'W2' } : undefined) }));
+    assert.deepEqual(f.map((x) => [x.draftId, x.guids, x.params.what, x.remedies]), [[toGone.id, ['GONE'], 'dimension', ['delete']]]);
+    assert.equal(f[0].params.element, 'IfcWall · "W2" · GONE');
+  });
+  it('offers a dimension only the delete remedy, and a tag with no sheet says so', () => {
+    const m = newDraft('plan', 'l', { type: 'dimension', variant: 'aligned', a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, at: { x: 0, y: 1 }, height: 0.25 }, { measures: 'H' });
+    const f = danglingAnnotations(base({ drafts: [m], elementExists: () => false, sheets: [] }));
+    assert.deepEqual([f[0].remedies, f[0].params.sheet, f[0].sheetId], [['delete'], '', undefined]);
+  });
 });

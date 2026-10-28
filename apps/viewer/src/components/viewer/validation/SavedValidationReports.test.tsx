@@ -305,6 +305,8 @@ describe('saved validation evidence (#6500)', () => {
     const picker = ui.querySelector<HTMLSelectElement>('select[aria-label="Saved report source"]'); assert.ok(picker);
     assert.ok(picker.querySelector<HTMLOptionElement>('option[value=""]')?.disabled, 'retained snapshot placeholder cannot trigger a no-op selection');
     select(picker, `saved:${reports[0].id}`); await settle();
+    // The preview lays out asynchronously (font metrics, block resolution), so one microtask tick is a race.
+    await waitFor(() => /First check/.test(ui.querySelector('[data-block-ids-report]')?.textContent ?? ''), 'preview shows the selected saved check');
     assert.match(ui.querySelector('[data-block-ids-report]')?.textContent ?? '', /First check/);
     addSavedBlock(ui); await settle();
     const doc = useViewerStore.getState().documents[0];

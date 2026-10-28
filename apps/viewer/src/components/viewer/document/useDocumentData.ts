@@ -42,7 +42,7 @@ export interface DocumentData {
 const ALL_SCOPE = { kind: 'all' as const };
 
 export function useDocumentData(document: DocumentSpec | null): DocumentData {
-  const { revision } = useTranslation();
+  const { revision, locale } = useTranslation();
   const labels = useMemo(() => captureTranslation(), [revision]);
   const savedComparisons = useViewerStore((s) => s.savedComparisons);
   const models = useViewerStore((s) => s.models);
@@ -61,8 +61,9 @@ export function useDocumentData(document: DocumentSpec | null): DocumentData {
   const bindings = useMemo<BindingContext>(() => {
     const bound: Array<BindingContext['models'][number]> = [];
     for (const m of models.values()) if (m.ifcDataStore) bound.push({ id: m.id, name: m.name, store: m.ifcDataStore, view: mutationViews.get(m.id) });
-    return { models: bound, activeModelId, today: new Date() };
-  }, [models, activeModelId, mutationViews, mutationVersion]);
+    // The language is part of the context: a switch builds a new one, so every bound number re-resolves in the new separators (#269).
+    return { models: bound, activeModelId, today: new Date(), locale };
+  }, [models, activeModelId, mutationViews, mutationVersion, locale]);
 
   const { aggregations, chartMessages, chartErrors } = useMemo(() => {
     return prepareDocumentCharts(document, datasets, sourceFilters, savedComparisons);

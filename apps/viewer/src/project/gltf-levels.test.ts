@@ -23,7 +23,7 @@ import { parseProjectFile, serializeProject } from './project-file.js';
 import { isMeshOnlyModel, loadedModels } from './project-sync.js';
 import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store.js';
 import { addUserLevel, moveUserLevel, removeUserLevel, renameUserLevel, replaceUserLevels } from './user-levels.js';
-import { levelFloorY, planCutHeight, resolvePlanLevel } from './view-defaults.js';
+import { levelFloorY, defaultPlanCutHeight, resolvePlanLevel } from './view-defaults.js';
 import type { PlanProjectView } from './types.js';
 
 /** A flat square of `size` metres at height `y`, facing up. */
@@ -108,7 +108,7 @@ describe('a glTF model with two levels of the person\'s own', () => {
     assert.equal(plans().length, 1);
     assert.equal(resolvePlanLevel(plans()[0], state().levels)?.name, 'Ground floor');
     removeUserLevel(id);
-    assert.deepEqual(state().userLevels, []);
+    assert.deepEqual(state().userLevels ?? [], []);
     assert.deepEqual(state().levels, []);
     assert.equal(plans().length, 1);
   });
@@ -129,10 +129,10 @@ describe('the levels are the project\'s', () => {
     const saved = serializeProject(projectDocument());
     const before = state().userLevels;
     resetProject();
-    assert.deepEqual(state().userLevels, []);
+    assert.deepEqual(state().userLevels ?? [], []);
     assert.deepEqual(state().levels, []);
     loadProjectDocument(parseProjectFile(saved));
-    assert.deepEqual(state().userLevels, before);
+    assert.deepEqual(state().userLevels ?? [], before ?? []);
     assert.deepEqual(state().levels.map((l) => [l.name, l.elevation]), [['First', 3.2], ['Ground', 0]]);
     for (const p of plans()) assert.ok(resolvePlanLevel(p, state().levels), p.name);
     assert.deepEqual(plans().map(cutAt).sort(), [1.2, 4.4]);
@@ -142,7 +142,7 @@ describe('the levels are the project\'s', () => {
     open();
     const doc = parseProjectFile(serializeProject(projectDocument()));
     assert.equal(doc.userLevels, undefined);
-    assert.deepEqual(state().userLevels, []);
+    assert.deepEqual(state().userLevels ?? [], []);
   });
 
   it('drop an entry that is not a name and a height, and keep the rest', () => {
@@ -163,12 +163,11 @@ describe('a model that is only meshes', () => {
 });
 
 describe('an IFC model (storeys)', () => {
-  it('is cut at 1.2 m above each storey, however close, as before', () => {
+  it('is cut as the storeys\' spacing says (a storey 1 m under the next, 0.5 m), as on any model', () => {
     const storeys = [{ name: 'A', elevation: 0, globalId: 'g-a' }, { name: 'B', elevation: 1, globalId: 'g-b' }];
     syncProjectWithModels([{ key: 'm', name: 'm' }], storeys);
-    assert.deepEqual(plans().map((p) => p.cutHeight), [1.2, 1.2]);
-    for (const l of state().levels) assert.equal(planCutHeight(l, state().levels), 1.2);
-    assert.equal(levelFloorY(state().levels[0]) + 1.2, 2.2);
+    assert.deepEqual(plans().map((p) => p.cutHeight), state().levels.map((l) => defaultPlanCutHeight(l, state().levels)));
+    assert.deepEqual(plans().map((p) => p.cutHeight), [1.2, 0.5]);
   });
 });
 

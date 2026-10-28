@@ -20,10 +20,12 @@ import { IfcParser } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 import { modelLevels } from '@/project/model-levels';
 import { useProjectStore } from '@/project/project-store';
-import { levelsFromStoreys } from '@/project/view-defaults';
+import { levelsFromStoreys, planDepthBelowCut } from '@/project/view-defaults';
 import { sectionPlaneForView } from '@/project/view-plane';
 import { viewDisplayOverrides } from '@/project/view-drawings';
 import { styledDrawing } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElements } from '@/project/view-element-filter';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
 import { drawnBySymbol } from '@/project/view-symbols';
@@ -76,14 +78,15 @@ export function planModelMissing(path: string): string | false {
   return false;
 }
 
-/** Check `planModelMissing(path)` first. */
-export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
+/** Check `planModelMissing(path)` first. `geometryHashes` turns on the per-element geometry fingerprints and world boxes the viewer turns on for a project (what WHATCHANGED compares). */
+export async function loadPlanModel(path: string, options: { geometryHashes?: boolean } = {}): Promise<LoadedPlanModel> {
   const bytes = readFileSync(path);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const ds = await new IfcParser().parseColumnar(buffer);
   serveWasmFromDisk();
   const processor = new GeometryProcessor();
   await processor.init();
+  if (options.geometryHashes) processor.enableGeometryHashes();
   const geometry = await processor.process(new Uint8Array(buffer));
   const maxExpressId = Math.max(...geometry.meshes.map((m) => m.expressId));
   useViewerStore.setState({
@@ -107,7 +110,7 @@ export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
     const position = bounds.min[axis] + (resolved.position / 100) * range;
     // A plan sees down its manual view depth and up to the model's top; any other view projects through the whole model.
     const { constructionProjectionDepth } = viewDisplayOverrides(view);
-    const below = view.kind === 'plan' ? constructionProjectionDepth ?? 0 : range;
+    const below = view.kind === 'plan' ? planDepthBelowCut(constructionProjectionDepth ?? 0, position, bounds.max[axis]) : range;
     const above = view.kind === 'plan' ? Math.max(range, 1e-3) : 1e-3;
     const generator = new Drawing2DGenerator();
     await generator.initialize();
@@ -118,7 +121,8 @@ export async function loadPlanModel(path: string): Promise<LoadedPlanModel> {
     const raw = await generator.generate(geometry.meshes, config, { includeHiddenLines: true, includeProjection: true, includeEdges: true, mergeLines: true });
     const omits = options?.omits ?? 'view';
     const omit = omits === 'none' ? undefined : omits === 'main' ? (view.kind === 'plan' ? drawnBySymbol : undefined) : viewOmits(view);
-    return styledDrawing(raw, view.graphics, partHostType, omit, null);
+    // What a drawing tab and a sheet do: the elements and lines the view hides are left out first (#33), the rest styled by GlobalId (#32).
+    return styledDrawing(withoutHiddenElements(raw, view.graphics, renderIdGlobalId), view.graphics, partHostType, omit, null, null, null, renderIdGlobalId);
   };
   const drawnIds = (drawing: Drawing2D) => new Set<number>([...drawing.cutPolygons.map((p) => p.entityId), ...drawing.lines.map((l) => l.entityId)]);
   const drawnNames = (drawing: Drawing2D) => new Set([...drawnIds(drawing)].map(nameOf).filter(Boolean));

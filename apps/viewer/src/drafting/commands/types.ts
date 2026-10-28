@@ -9,11 +9,14 @@
  */
 
 import type { TranslationKey } from '@/i18n';
+import type { TagFieldName } from '@/catalogue/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@/labels/view-elements';
 import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { ProjectView } from '@/project/types';
+import type { Box } from '../cross-ref-marks';
+import type { ElementBox } from '../dimension-anchor';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
 export type StepResult = 'continue' | 'done';
@@ -52,10 +55,14 @@ export interface DraftContext {
   view(): ProjectView | null;
   /** The model element (renderer id) drawn under a drawing point, or null. */
   elementAt(p: Pt): number | null;
+  /** The elements the point is a corner of, nearest first, with their boxes in the view (a snapped dimension point stays attached to one). */
+  elementBoxesAt?(p: Pt): ElementBox[];
   /** Every model element the view draws, with a point to label it at. */
   viewElements(): ViewElement[];
   /** The walls, doors and windows the plan is cut through, for DIMALL. */
   planParts(): PlanPart[];
+  /** The boxes of what the plan draws over its cut (door leaves and swings, window frames, roofs, grid): what a ceiling tag keeps clear of. */
+  planObstacles(): Box[];
   /** The rooms of the plan in front. */
   rooms(): RoomOfPlan[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
@@ -92,11 +99,13 @@ export interface DraftSettings {
   axisLineType: 'continuous' | 'dashed' | 'dotted' | 'dashdot';
   /** DIMALIGNED / DIMLINEAR chain further dimensions from the last end (the default) rather than stopping after one. */
   dimContinuous: boolean;
+  /** Dimension lines snap onto a close, parallel dimension line while placed or dragged (the ALIGN keyword toggles it). */
+  dimAlign: boolean;
   /** The styles new annotations take. */
   currentTextStyle: string;
   currentDimStyle: string;
   /** TAG: what the label shows. */
-  tagField: 'mark' | 'name' | 'class';
+  tagField: TagFieldName;
   /** The annotation type the next annotation of its tool is stamped with (`params.atype`), or null. */
   annotationType: { id: string; tool: string } | null;
   /** SYMBOL: the symbol placed, its scale factor and rotation (degrees). */

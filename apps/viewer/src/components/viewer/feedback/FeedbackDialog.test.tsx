@@ -29,7 +29,7 @@ beforeEach(() => {
   const levels = [{ name: 'Ground Floor', elevation: 0, storeyGlobalIds: ['L0'] }];
   useProjectStore.setState({ levels, views: defaultViews(levels) });
   startDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } });
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: false, panel: null });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: null });
   window.localStorage.setItem('ifc-lite:tours:v1', JSON.stringify({ notices: { 'ifcsheet-tour-seen': 'x' } }));
   opened = [];
   fetched = 0;

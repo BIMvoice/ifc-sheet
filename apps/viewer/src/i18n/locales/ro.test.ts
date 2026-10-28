@@ -4,6 +4,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCatalogue } from '../catalogue-problems';
+import { untranslatedFaceKeys } from '../face-keys';
 import { en, type TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
 import ro from './ro';
@@ -15,10 +16,35 @@ import ro from './ro';
  * drawer, sheet cards, title block, scales and tool rail; the rest are the
  * catalogues the Wall opens (sheet settings, what is missing, issue the set,
  * what changed, libraries, the takeoff and door and window schedule as they
- * print on a sheet, the draft set report, the title block's parameters and layout).
+ * print on a sheet, the draft set report, the title block's parameters and layout), then what the face reaches
+ * outside the Wall (`IfcSheetShell` covers the engine's interface, and keeps these): the command palette, the Settings
+ * dialog, the feedback dialog, a drawing's annotation bar and the export dialogs the palette opens (including the anonymized subset, the modified-IFC review and the Cesium ion upload), and the toasts of the exports the palette starts and of opening a file.
  */
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'settings.privacy.toast', 'viewerShell.toast.dismiss'];
-const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE.some((p) => k.startsWith(p)));
+// `ready.` is the model-readiness list (#403): its keys are built at render, so the face check below cannot see them.
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'ready.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
+  // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
+  'commandPalette.', 'settings.', 'feedback.',
+  // The export dialogs the palette's export rows open: IFC, GLB, KMZ, USD, energy model and the to-scale PDF. Not the Properties panel's edit card (`geometryExport.editCard.`) nor the sheet-setup and title-block editors (`sheetsPdf.sheetSetup.`, `sheetsPdf.titleBlock.`), which the face hides.
+  'exportDialog.', 'geometryExport.shared.', 'geometryExport.shell.', 'geometryExport.glb.', 'geometryExport.kmz.', 'geometryExport.usd.', 'geometryExport.energy.', 'sheetsPdf.pdfView.',
+  // The three dialogs the palette's remaining export rows open: the anonymized subset, the review before "Export modified IFC…" and the Cesium ion upload. Not `exportChangesButton.` (the standing toolbar button and its tooltip, which the face hides).
+  'anonymizedExport.', 'exportChangesReviewDialog.', 'ionUpload.',
+  // The toasts of the exports the palette starts and of opening a file (the Open button of the top bar).
+  'exportToast.', 'fileLoad.toast.'];
+/**
+ * Single keys, matched exactly because their prefix also holds keys the face does not reach: the annotation bar of
+ * a drawing, one toast and one label, and the palette rows whose text lives in another catalogue's prefix (panel
+ * titles, the project, version and export commands).
+ */
+const IN_SCOPE_KEYS = new Set<string>([
+  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.el.resetTag', 'standards.el.tagOverridden', 'standards.text.bold', 'standards.text.italic',
+  'standards.dim.placement.above', 'standards.dim.placement.centered', 'standards.dim.placement.below',
+  'standards.dim.arrow', 'standards.dim.arrow.tick', 'standards.dim.arrow.arrow', 'standards.dim.arrow.dot', 'standards.dim.arrow.none',
+  'drafting.snap', 'drafting.sectionDepth', 'viewerShell.file.ifcxOverlayRequiresIfcx',
+  'lists.panel.title', 'workspacePanels.bottom.document', 'section2d.heading', 'properties.panel.title', 'changesPanel.title', 'measure.panel.title', 'viewportLighting.sunSkyPanel.header.title', 'commands.visibility.showAll',
+  'projectPackage.open', 'projectPackage.save', 'projectPackage.saveAs', 'projectPackage.link', 'projectVersions.save', 'projectVersions.update', 'projectVersions.history',
+  'exportCommands.ifc.menuLabel', 'exportCommands.anonymized.menuLabel', 'exportCommands.modifiedIfc.menuLabel', 'exportCommands.glb.menuLabel', 'exportCommands.kmz.menuLabel', 'exportCommands.ion.menuLabel', 'exportCommands.usd.menuLabel', 'exportCommands.energy.menuLabel', 'exportCommands.json.menuLabel', 'exportCommands.screenshot.menuLabel', 'exportCommands.pdf.menuLabel',
+]);
+const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE_KEYS.has(k) || IN_SCOPE.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
 
 const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
@@ -53,6 +79,59 @@ describe('Romanian catalogue (#53)', () => {
     assert.ok(keys.length > 300, `the scope found ${keys.length} English keys`);
     assert.deepEqual(keys.filter((k) => !Object.hasOwn(catalogue, k)), []);
     assert.deepEqual(Object.keys(catalogue).filter((k) => !Object.hasOwn(en, k)), []);
+  });
+
+  it('has an entry for every English key a source file of the IfcSheet face names (#231)', () => {
+    const missing = untranslatedFaceKeys(catalogue);
+    if (missing.length > 0) assert.fail(`${missing.length} English-only key(s):\n${missing.join('\n')}`);
+  });
+
+  it('the face check catches a key that is only English', () => {
+    const { 'revision.title': _dropped, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(catalogue), []);
+    assert.deepEqual(untranslatedFaceKeys(without), ['revision.title (components/viewer/wall/RevisionsCard.tsx, components/viewer/wall/SteppedSheet.tsx)']);
+  });
+
+  // #258: the site balance and the urban indicators printed English under Română because their folders were not in the face list.
+  it('the face check reaches the site plan, the urban indicators and the schedules a sheet prints (#258)', () => {
+    const { 'site.balance.title': _a, 'urban.ac': _b, 'finishes.room': _c, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without), [
+      'finishes.room (components/viewer/joinery/ScheduleGraphic.tsx)',
+      'site.balance.title (components/viewer/siteplan/SiteBalance.tsx)',
+      'urban.ac (components/viewer/urban/useUrban.ts)',
+    ]);
+  });
+
+  // #294: `issue/` was not in the face list, and the English it printed was string literals, which a key check cannot see; the words are keys now and the folder is checked.
+  it('the face check reaches the issue folder (#294)', () => {
+    const { 'issue.file.drawingList': _a, 'issue.list.landscape': _b, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without), [
+      'issue.file.drawingList (issue/run.ts)',
+      'issue.list.landscape (issue/run.ts)',
+    ]);
+  });
+
+  // #314: the command line and the Info dialog read English under Română because `drafting/` and the dialog were not in the face list, with this suite green.
+  it('the face check reaches the command line, the commands behind it and the Info dialog (#314)', () => {
+    const { 'drafting.prompt.firstPoint': _a, 'drafting.msg.tagAllDone': _b, 'keyboardShortcuts.header.title': _c, 'drafting.commandLine': _d, 'commands.wall.nextSheet': _e, ...without } = catalogue;
+    assert.deepEqual(untranslatedFaceKeys(without).sort(), [
+      'drafting.commandLine (components/viewer/drafting/CommandLine.tsx)',
+      'drafting.msg.tagAllDone (drafting/commands/tagall.ts)',
+      'drafting.prompt.firstPoint (drafting/commands/draw.ts)',
+      'keyboardShortcuts.header.title (components/viewer/KeyboardShortcutsDialog.tsx)',
+      'commands.wall.nextSheet (lib/commands/keyboard-commands.ts)',
+    ].sort());
+  });
+
+  it('gives every plural message of the catalogue the forms Romanian counts with (#314)', () => {
+    const lacking = Object.entries(catalogue).filter(([, v]) => typeof v !== 'string' && (v.one === undefined || v.few === undefined)).map(([k]) => k);
+    assert.deepEqual(lacking, []);
+  });
+
+  it('keeps the typed names of the commands (#314)', () => {
+    const names = Object.keys(catalogue).filter((k) => k.startsWith('drafting.cmd.'));
+    assert.ok(names.length > 30);
+    assert.deepEqual(names.filter((k) => catalogue[k] !== en[k as TranslationKey]), []);
   });
 
   it('keeps every placeholder of the English message', () => {

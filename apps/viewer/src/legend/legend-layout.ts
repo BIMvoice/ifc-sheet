@@ -22,7 +22,8 @@ import type { LegendEntry, LegendGroup } from './legend-data';
 
 export type LegendPrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number; color?: string; dash?: boolean }
-  | { kind: 'path'; pts: Pt[]; closed?: boolean; w: number; color?: string; fill?: string; dash?: boolean }
+  /** `solid`: the fill is data (a colour scheme's colour), not decoration, so a DXF carries it as a hatch. */
+  | { kind: 'path'; pts: Pt[]; closed?: boolean; w: number; color?: string; fill?: string; dash?: boolean; solid?: boolean }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; font?: FontKind };
 
 export interface LegendLayout {
@@ -40,6 +41,11 @@ export interface LegendLabels {
   tool: (tool: AnnotationType['tool']) => string;
   membrane: string;
   sampleText: string;
+  /** The sample figures the dimension and level entries show, written like the sheet's own (`sheetNumber`, `sheetLevel`: a comma project shows "2,50" and "±0,00"). Absent: "2.50" and "±0.00". */
+  sampleDimension?: string;
+  sampleLevel?: string;
+  /** A known attribute's readable name (`LongName` → "Room name"), or `undefined` for a property with no catalogue label. */
+  attribute?: (name: string) => string | undefined;
 }
 
 export interface LegendLayoutContext {
@@ -151,8 +157,6 @@ interface Box { x: number; y: number; w: number; h: number }
 
 const rect = (b: Box): Pt[] => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
 
-const DASH_TYPES = new Set(['dashed', 'dotted', 'dashdot']);
-
 /** A hatch pattern in a box, as outline plus pattern lines (a solid pattern fills it). */
 function hatchSwatch(out: LegendPrim[], b: Box, patternName: string, scale: number, ctx: LegendLayoutContext, fill?: string): void {
   const pattern = findPattern(patternName, ctx.patterns);
@@ -176,7 +180,7 @@ function swatch(out: LegendPrim[], e: LegendEntry, b: Box, ctx: LegendLayoutCont
       if (e.hatch && e.membrane) out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: 0.7, color: INK, dash: true });
       break;
     case 'layers':
-      out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: Math.max(e.weight, 0.1), color: e.color, ...(DASH_TYPES.has(e.lineType) ? { dash: true } : {}) });
+      out.push({ kind: 'line', x1: b.x, y1: midY, x2: b.x + b.w, y2: midY, w: Math.max(e.weight, 0.1), color: e.color, ...(e.lineType !== 'continuous' ? { dash: true } : {}) });
       break;
     case 'hatches':
       hatchSwatch(out, b, e.name, e.scale, ctx);
@@ -186,6 +190,9 @@ function swatch(out: LegendPrim[], e: LegendEntry, b: Box, ctx: LegendLayoutCont
       break;
     case 'annotations':
       annotationSwatch(out, e.type, b, ctx);
+      break;
+    case 'colours':
+      out.push({ kind: 'path', pts: rect(b), closed: true, w: 0.25, color: INK, fill: e.colour, solid: true });
       break;
   }
 }
@@ -241,7 +248,7 @@ function annotationSwatch(out: LegendPrim[], type: AnnotationType, b: Box, ctx: 
     case 'dimlinear':
       line(x + 1, midY, x + w - 1, midY);
       for (const tx of [x + 1, x + w - 1]) { line(tx, midY - h * 0.35, tx, midY + h * 0.35); line(tx - 0.8, midY + 0.8, tx + 0.8, midY - 0.8, 0.3); }
-      text(x + w / 2, midY - 0.8, '2.50', 'middle');
+      text(x + w / 2, midY - 0.8, ctx.labels.sampleDimension ?? '2.50', 'middle');
       break;
     case 'dimradius':
     case 'dimdiameter': {
@@ -262,7 +269,7 @@ function annotationSwatch(out: LegendPrim[], type: AnnotationType, b: Box, ctx: 
     case 'level':
       out.push({ kind: 'path', pts: [{ x: x + 3, y: midY + 1 }, { x: x + 1, y: midY - 1.2 }, { x: x + 5, y: midY - 1.2 }], closed: true, w: 0.18, color: INK, fill: INK });
       line(x + 0.5, midY + 1, x + w * 0.5, midY + 1);
-      text(x + w * 0.52, midY + 0.5, '±0.00');
+      text(x + w * 0.52, midY + 0.5, ctx.labels.sampleLevel ?? '±0.00');
       break;
     case 'axis': {
       const axis = type.axis ?? { bubble: 'circle', ends: 'both', size: null, lineType: 'dashdot' };

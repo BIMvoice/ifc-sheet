@@ -18,44 +18,44 @@ const text = (d: DraftEntity) => (d.shape.type === 'text' ? d.shape.text : null)
 
 describe('settleLabels', () => {
   it('writes the template resolved for the element', () => {
-    const [d] = settleLabels([label()], [type()], byGuid(wall()));
+    const [d] = settleLabels([label()], [type()], byGuid(wall()), 'en');
     assert.equal(text(d), 'W-01\n4.29 m');
   });
   it('follows a change of the element: a renamed element and an edited quantity', () => {
-    const first = settleLabels([label()], [type()], byGuid(wall()));
+    const first = settleLabels([label()], [type()], byGuid(wall()), 'en');
     const renamed = wall({ attribute: (n) => (n === 'Name' ? 'W-02' : '') , quantitySets: () => [{ name: 'Qto_WallBaseQuantities', quantities: [{ name: 'Length', value: 5 }] }] });
-    const second = settleLabels(first, [type()], byGuid(renamed));
+    const second = settleLabels(first, [type()], byGuid(renamed), 'en');
     assert.equal(text(second[0]), 'W-02\n5.00 m');
     assert.equal(second[0].id, first[0].id, 'the same draft, not a new one');
   });
   it('follows a change of the type: template, frame', () => {
-    const first = settleLabels([label()], [type()], byGuid(wall()));
-    const second = settleLabels(first, [type({ template: 'Fire {Pset_WallCommon.FireRating}', frame: 'bubble' })], byGuid(wall()));
+    const first = settleLabels([label()], [type()], byGuid(wall()), 'en');
+    const second = settleLabels(first, [type({ template: 'Fire {Pset_WallCommon.FireRating}', frame: 'bubble' })], byGuid(wall()), 'en');
     assert.equal(text(second[0]), 'Fire EI 60');
     assert.ok(second[0].shape.type === 'text' && second[0].shape.frame === 'bubble');
-    const third = settleLabels(second, [type({ template: 'Fire {Pset_WallCommon.FireRating}' })], byGuid(wall()));
+    const third = settleLabels(second, [type({ template: 'Fire {Pset_WallCommon.FireRating}' })], byGuid(wall()), 'en');
     assert.ok(third[0].shape.type === 'text' && !('frame' in third[0].shape), 'dropping the frame takes it off');
   });
   it('returns the very same array when nothing changed', () => {
-    const once = settleLabels([label()], [type()], byGuid(wall()));
-    assert.equal(settleLabels(once, [type()], byGuid(wall())), once);
+    const once = settleLabels([label()], [type()], byGuid(wall()), 'en');
+    assert.equal(settleLabels(once, [type()], byGuid(wall()), 'en'), once);
   });
   it('keeps what a label said when its element or its type is gone', () => {
     const drafts = [label()];
-    assert.equal(settleLabels(drafts, [type()], byGuid(null)), drafts);
-    assert.equal(settleLabels(drafts, [], byGuid(wall())), drafts);
-    assert.equal(settleLabels(drafts, [{ id: 'at1', name: 'x', tool: 'label' }], byGuid(wall())), drafts, 'a type with no label spec');
+    assert.equal(settleLabels(drafts, [type()], byGuid(null), 'en'), drafts);
+    assert.equal(settleLabels(drafts, [], byGuid(wall()), 'en'), drafts);
+    assert.equal(settleLabels(drafts, [{ id: 'at1', name: 'x', tool: 'label' }], byGuid(wall()), 'en'), drafts, 'a type with no label spec');
   });
   it('leaves other drawing alone: plain text, element tags, a label of another element', () => {
     const plain = newDraft('v', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'Note', height: 0.25, rotation: 0 });
     const tag = newDraft('v', '0', { type: 'leader', pts: [{ x: 0, y: 0 }, { x: 1, y: 1 }], text: 'M1', height: 0.25 }, { tagOf: 'G1' });
     const other = label({ labelOf: 'G2' });
     const drafts = [plain, tag, other];
-    assert.equal(settleLabels(drafts, [type()], byGuid(wall())), drafts);
+    assert.equal(settleLabels(drafts, [type()], byGuid(wall()), 'en'), drafts);
   });
   it('resolves with the placeholder of the type', () => {
     const el = wall({ quantitySets: () => [] });
-    assert.equal(text(settleLabels([label()], [type({ missing: 'empty' })], byGuid(el))[0]), 'W-01\n');
-    assert.equal(text(settleLabels([label()], [type({ missing: 'field' })], byGuid(el))[0]), 'W-01\nQto_WallBaseQuantities.Length');
+    assert.equal(text(settleLabels([label()], [type({ missing: 'empty' })], byGuid(el), 'en')[0]), 'W-01\n');
+    assert.equal(text(settleLabels([label()], [type({ missing: 'field' })], byGuid(el), 'en')[0]), 'W-01\nQto_WallBaseQuantities.Length');
   });
 });

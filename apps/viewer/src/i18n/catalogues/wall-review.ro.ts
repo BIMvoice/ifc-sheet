@@ -1,0 +1,55 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import type { TranslationKey } from '../en';
+import type { TranslationValue } from '../types';
+
+/** Romanian for the review by element (`wall-review.en.ts`). Term choices: `../ro-glossary.md`. */
+export const wallReviewRo = {
+  'wall.review.open': 'Verificare pe elemente',
+  'wall.review.title': 'Verificare pe elemente',
+  'wall.review.of': '„{schedule}”: fiecare tip, cu părțile care îl conțin.',
+  'wall.review.close': 'Închide',
+  'wall.review.summary': 'Elemente: dubluri {duplicate}, goluri {gap}, păstrate separat {kept}, în regulă {ok}.',
+  'wall.review.hint': 'Săgețile sus și jos trec de la un tip la altul, Enter îl deschide, Escape închide. Orice modificare poate fi anulată.',
+  'wall.review.filters': 'Afișează',
+  'wall.review.filter.kind': 'Fel',
+  'wall.review.filter.level': 'Nivel',
+  'wall.review.filter.status': 'Stare',
+  'wall.review.kind.all': 'Toate felurile',
+  'wall.review.kind.door': 'Uși',
+  'wall.review.kind.window': 'Ferestre',
+  'wall.review.level.all': 'Toate nivelurile',
+  'wall.review.status.all': 'Orice stare',
+  'wall.review.status.duplicate': 'Dublură',
+  'wall.review.status.gap': 'Gol',
+  'wall.review.status.kept': 'Păstrat separat',
+  'wall.review.status.ok': 'În regulă',
+  'wall.review.list': 'Tipurile și părțile care le conțin',
+  'wall.review.row': '{label}: {status}. Elemente: {count}. În: {parts}.',
+  'wall.review.noParts': 'nicio parte',
+  'wall.review.none': 'Nimic nu corespunde filtrelor.',
+  'wall.review.noSplit': 'Acest tabel nu este împărțit în părți, deci nu e nimic de verificat.',
+  'wall.review.elements': 'Elementele tipului {label}',
+  'wall.review.noElement': 'Încă niciun element în model: tipul vine din catalog.',
+  'wall.review.col.mark': 'Marcaj',
+  'wall.review.col.level': 'Nivel',
+  'wall.review.col.parts': 'Părți',
+  'wall.review.col.status': 'Stare',
+  'wall.review.col.actions': 'Acțiune',
+  'wall.review.merge': 'Unifică într-o singură parte',
+  'wall.review.mergeInto': 'Unifică în „{part}”',
+  'wall.review.move': 'Mută în altă parte',
+  'wall.review.moveTo': 'Mută în „{part}”',
+  'wall.review.keepType': 'Păstrează tipul separat, intenționat',
+  'wall.review.resumeType': 'Verifică din nou tipul',
+  'wall.review.keepElement': 'Păstrează separat',
+  'wall.review.resumeElement': 'Verifică din nou',
+  'wall.review.keptWithType': 'Păstrat separat odată cu tipul',
+  'wall.review.done.merge': 'Am unificat {label} în „{part}”.',
+  'wall.review.done.move': 'Am mutat {label} în „{part}”.',
+  'wall.review.done.keep': 'Păstrat separat: {label}. Verificarea dublurilor îl lasă în pace.',
+  'wall.review.done.resume': 'Verific din nou: {label}.',
+  'wall.review.done.same': '{label} este deja doar în „{part}”.',
+} as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

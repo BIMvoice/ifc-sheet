@@ -41,6 +41,10 @@ export type LastSectionMode =
   | { kind: 'pick' | 'box' }
   | { kind: 'cardinal'; axis: SectionPlaneAxis; position: number; flipped: boolean };
 
+// How far past the model a stored cut may stand: ten model heights either
+// side. A top storey's plan cut is a fraction of one; the bound only stops a
+// tampered value stretching the slider's span.
+const MAX_STORED_OVERSHOOT_PCT = 1000;
 const DEFAULT_LAST_MODE: LastSectionMode = { kind: 'pick' };
 
 function isSectionPlaneAxis(v: unknown): v is SectionPlaneAxis {
@@ -60,9 +64,10 @@ export function loadLastSectionMode(): LastSectionMode {
       typeof parsed.position === 'number' && Number.isFinite(parsed.position) &&
       typeof parsed.flipped === 'boolean'
     ) {
-      // Clamp position to the same [0, 100] range the slice enforces so
-      // a tampered or stale value can't poison the slider on restore.
-      const position = Math.min(100, Math.max(0, parsed.position));
+      // A cut beyond the model (a top storey's plan cut) is below 0 or past
+      // 100 and restores where it was saved, not on the model's face; only
+      // an absurd overshoot is bounded.
+      const position = Math.min(100 + MAX_STORED_OVERSHOOT_PCT, Math.max(-MAX_STORED_OVERSHOOT_PCT, parsed.position));
       return { kind: 'cardinal', axis: parsed.axis, position, flipped: parsed.flipped };
     }
     return DEFAULT_LAST_MODE;

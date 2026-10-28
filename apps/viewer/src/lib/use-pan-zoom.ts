@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { capturePointer } from './pointer-capture';
 
 export interface PanZoom {
   /** Screen pixels per content unit, and the content origin's screen position. */
@@ -77,7 +78,7 @@ export function usePanZoom(hostRef: RefObject<HTMLElement | null>, size: { width
   const handlers = {
     onPointerDown: (e: React.PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return;
-      e.currentTarget.setPointerCapture?.(e.pointerId);
+      capturePointer(e.currentTarget, e.pointerId);
       drag.current = { sx: e.clientX, sy: e.clientY, start: view, pointer: e.pointerId };
     },
     onPointerMove: (e: React.PointerEvent) => {

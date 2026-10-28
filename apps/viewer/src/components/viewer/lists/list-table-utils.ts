@@ -8,7 +8,7 @@
  * aggregation that powers the in-table (settings-free) grouped view.
  */
 
-import { groupingColumnIds, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
+import { groupingColumnIds, quantityText, tallies, tallyPart, tallyTotals, tallyValue, type CellValue, type ColumnDefinition, type ListRow, type ListGrouping } from '@ifc-lite/lists';
 import { buildNestedGroupBuckets, compareCells, orderGroups, type GroupSort, type OrderableGroup } from '@/lib/lists/group-sort';
 
 // Re-exported so existing consumers keep importing the list-table barrel.
@@ -35,6 +35,11 @@ export function rebuildGrouping(
   return { ...previous, columnId: columnIds[0] ?? '', columnIds, sumColumnIds };
 }
 
+/** A sum as the panel writes it: a dash when no row states the quantity (never 0). */
+export function formatSumValue(sum: number | null | undefined): string {
+  return quantityText(sum, formatCellValue);
+}
+
 export function formatCellValue(value: CellValue): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -45,21 +50,7 @@ export function formatCellValue(value: CellValue): string {
   return String(value);
 }
 
-/** A column is numeric (summable) when every sampled non-empty value is a
- *  finite number and at least one such value exists. */
-export function detectNumericColumns(columns: ColumnDefinition[], rows: ListRow[]): boolean[] {
-  const sample = rows.slice(0, 120);
-  return columns.map((_, i) => {
-    let sawNumber = false;
-    for (const r of sample) {
-      const v = r.values[i];
-      if (v === null || v === undefined || v === '') continue;
-      if (typeof v === 'number' && Number.isFinite(v)) { sawNumber = true; continue; }
-      return false;
-    }
-    return sawNumber;
-  });
-}
+export { detectNumericColumns } from '@bimvoice/ifcsheet/list-projection';
 
 /** Content-aware default width: fits the header + the widest sampled value
  *  (≈7px/char), clamped to a readable range. */
@@ -77,14 +68,14 @@ export function autoColumnWidth(label: string, rows: ListRow[], colIdx: number):
 
 export type DisplayItem =
   | {
-      kind: 'group'; key: string; label: string; count: number; sums: Record<string, number>; level: number;
+      kind: 'group'; key: string; label: string; count: number; sums: Record<string, number | null>; level: number;
       /** Every member row under this group, descendants of nested sub-groups
        *  included, so clicking a parent selects its whole subtree (#6368). */
       rows: ListRow[];
     }
   | { kind: 'row'; row: ListRow };
 
-export interface Totals { count: number; sums: Record<string, number> }
+export interface Totals { count: number; sums: Record<string, number | null> }
 export interface GroupedView {
   items: DisplayItem[];
   /** Number of top-level groups. */
@@ -131,13 +122,14 @@ export function buildGroupedView(
 
   // Grand totals from the TOP-LEVEL subtotals only (deeper levels re-split the
   // same rows — adding them too would double-count).
-  const totals: Totals = { count: rows.length, sums: Object.fromEntries(sums.map((s) => [s.id, 0])) };
+  const running = tallies(sums.map((s) => s.id));
   let groupCount = 0;
   for (const g of nested) {
     if (g.level !== 0) continue;
     groupCount++;
-    for (const s of sums) totals.sums[s.id] += g.sums[s.id];
+    for (const s of sums) tallyPart(running[s.id], g.sums[s.id]);
   }
+  const totals: Totals = { count: rows.length, sums: tallyTotals(running) };
 
   const items: DisplayItem[] = [];
   const groupKeys: string[] = [];
@@ -172,7 +164,7 @@ export interface ScheduleRow {
   /** Group-by values, outermost first — one per active grouping level. */
   path: string[];
   count: number;
-  sums: Record<string, number>;
+  sums: Record<string, number | null>;
   /** The member rows this tuple counts — what clicking the row selects (#6368). */
   rows: ListRow[];
 }
@@ -233,12 +225,9 @@ export function blankRepeatedPathValues(rows: { path: string[] }[]): string[][] 
 /** Grand totals for the flat (ungrouped) view when sum columns are active. */
 export function flatTotals(rows: ListRow[], columns: ColumnDefinition[], sumColumnIds: string[]): Totals {
   const sums = sumIndices(columns, sumColumnIds);
-  const acc: Record<string, number> = Object.fromEntries(sums.map((s) => [s.id, 0]));
+  const running = tallies(sums.map((s) => s.id));
   for (const r of rows) {
-    for (const s of sums) {
-      const v = r.values[s.idx];
-      if (typeof v === 'number' && Number.isFinite(v)) acc[s.id] += v;
-    }
+    for (const s of sums) tallyValue(running[s.id], r.values[s.idx]);
   }
-  return { count: rows.length, sums: acc };
+  return { count: rows.length, sums: tallyTotals(running) };
 }

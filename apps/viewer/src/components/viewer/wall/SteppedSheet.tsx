@@ -12,11 +12,12 @@
  * sheet" button and the sheet with the Back link (#142).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n';
-import { patchDraftSettings, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
+import { endCommand, patchDraftSettings, runningCommand, startDraftCommand, takeEndedByUser, useDraftingSession } from '@/drafting/session';
 import { setPlacing, useReviewUi } from '@/review/ui-store';
-import { sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { drawingArea, sheetGroup, type ModelExtent } from '@/project/drawing-set';
+import { addViewport } from '@/project/sheets';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
@@ -27,25 +28,31 @@ import { printSheet } from '../sheets/sheet-export';
 import { useSheetContent } from '../sheets/useSheetContent';
 import { AddDrawing } from './AddDrawing';
 import { InfoCard } from './InfoCard';
+import { SelectedHatchCard, useSelectedHatches } from './SelectedHatchCard';
 import { PrintPreview } from './PrintPreview';
 import { SectionTray } from './SectionTray';
 import { ToolRail } from './ToolRail';
 import { ScaleChips } from './WallGrid';
+import { ScheduleFitOffer } from './ScheduleFitOffer';
 import { SheetCanvas } from './SheetCanvas';
 import { RevisionsCard } from './RevisionsCard';
 import { TitleBlockCard } from './TitleBlockForm';
+import { useWallNav } from './wall-nav';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
+import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
+import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
+import { WALL_CARD_HOST, WALL_PILL } from './wall-type';
 
 /** The Wall tool that runs as a chain: each click adds the next dimension, until Esc. */
 const CHAINED_TOOL = 'dimaligned';
 
 /** The sheet's way out: printed or saved, at true paper size. */
-const issue = 'rounded-full border border-sky-300/30 px-3 py-1 text-sm text-sky-100 hover:border-sky-300/70';
+const issue = WALL_PILL;
 
 interface SteppedSheetProps {
   sheet: ProjectSheet;
@@ -56,9 +63,11 @@ interface SteppedSheetProps {
   initialFocus?: string | null;
   /** Step into another sheet (a drawing just added landed there). */
   onStep: (sheetId: string) => void;
+  /** The model's joinery rows (default: the loaded models'); what the offer to split a schedule that does not fit reads. */
+  scheduleRows?: ComponentProps<typeof ScheduleFitOffer>['read'];
 }
 
-export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep }: SteppedSheetProps) {
+export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, onBack, onStep, scheduleRows }: SteppedSheetProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const sheets = useProjectStore((s) => s.sheets);
@@ -74,6 +83,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [revising, setRevising] = useState(false);
   const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [settingsKey, setSettingsKey] = useState(0);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
@@ -98,7 +108,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     if (ran.current === null) return;
     const ended = ran.current;
     ran.current = null;
-    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
+    if (ended === CHAINED_TOOL && toolNow.current === CHAINED_TOOL && !takeEndedByUser() && !escaped.current && startDraftCommand(CHAINED_TOOL)) return;
     setTool(null);
   }, [commandId]);
   useEffect(() => () => cancelStart.current(), []);
@@ -130,6 +140,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       if (e.target instanceof Element && e.target.closest('[data-owns-keys]')) return;
       // A running tool or a drafted selection lets go first (the drafting keys' own Esc), and that is all this Esc does.
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
+      // A panel in front of the sheet takes this Esc (wall-key-bus `panelEscape`), whichever listener runs first.
+      if (e.defaultPrevented || useWallNav.getState().panel !== null) return;
       // The comment tool lets go first of what is not a drawing tool.
       if (useReviewUi.getState().placing) {
         setPlacing(false);
@@ -183,6 +195,13 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current = startWhenAttached(target.id, command);
   };
 
+  /** The tool's Done: ends it and lets the rail go, without Esc or Enter (#166). The dimension chain does not start again. */
+  const stopTool = useCallback((): void => {
+    cancelStart.current();
+    endCommand();
+    setTool(null);
+  }, []);
+
   /** A tool's one-action twin: run it on the drawing in front (or the chosen one), its note appears in the drawing's command line. */
   const runAll = (command: string): void => {
     cancelStart.current();
@@ -207,7 +226,20 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v && v.kind !== '3d') setFocusId(v.id);
-  }, []);
+    // A schedule (or a legend) has no drawing to open: its settings are the card, which comes forward with the name ready to type over.
+    else if (!v) {
+      choose(vp.id);
+      setSettingsKey((k) => k + 1);
+    }
+  }, [choose]);
+  const cardHost = useRef<HTMLDivElement>(null);
+  const hatches = useSelectedHatches();
+  useEffect(() => {
+    if (settingsKey === 0) return;
+    const name = cardHost.current?.querySelector<HTMLInputElement>('aside input');
+    name?.focus();
+    name?.select();
+  }, [settingsKey]);
   const nudge = useCallback((vp: SheetViewport, steps: number): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v?.kind === 'plan') nudgeCutHeight(v.id, steps);
@@ -223,40 +255,57 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const drafting = commandId !== null || runningCommand() !== null;
   const canStep = !drafting && !focusView;
   const neighbour = (to: number): (() => void) | null => (canStep && sheets[to] ? () => onStep(sheets[to].id) : null);
+  // One function per sheet button, which its key (when the person gave it one, #166) runs too.
+  const toggleComment = () => setPlacing(!useReviewUi.getState().placing);
+  const togglePaper = () => { setPapering((x) => !x); setTitling(false); setRevising(false); };
+  const toggleTitle = () => { setTitling((x) => !x); setPapering(false); setRevising(false); };
+  const toggleRevisions = () => { setRevising((x) => !x); setTitling(false); setPapering(false); };
+  const preview = () => setPreviewing(true);
+  const exportDxf = () => { if (paperRef.current) exportSheetDxf(paperRef.current, sheet); };
+  const onSheet = <T,>(f: T): T | null => (focusView ? null : f);
   useWallKeys(steppedHandlers({
     startTool,
     toggleAdd: () => setAdding((a) => !a),
-    fit: focusView ? null : fit,
-    print: focusView ? null : print,
+    fit: onSheet(fit),
+    print: onSheet(print),
     previous: at > 0 ? neighbour(at - 1) : null,
     next: at >= 0 ? neighbour(at + 1) : null,
+    back: onBack,
+    leaveEdit: focusView ? leaveEditMode : null,
+    comment: onSheet(toggleComment),
+    paper: onSheet(togglePaper),
+    titleBlock: onSheet(toggleTitle),
+    revisions: onSheet(toggleRevisions),
+    printPreview: onSheet(preview),
+    exportDxf: onSheet(exportDxf),
   }));
+  useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the buttons name
 
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-4 text-sky-100">
-        <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={onBack}>{t('wall.back')}</button>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-6 pb-2 pt-3 text-sm text-sky-100">
+        <button type="button" className="text-cyan-400 hover:text-cyan-300" aria-keyshortcuts={ariaKeyShortcuts('wall.back') || undefined} onClick={onBack}>{t('wall.back')}</button>
         <span className="text-sky-200/50">/</span>
-        <span className="font-semibold text-white">{sheet.number} {sheet.name}</span>
+        <span className="min-w-0 truncate font-semibold text-white">{sheet.number} {sheet.name}</span>
         {focusView ? <><span className="text-sky-200/50">/</span><span className="text-white">{focusView.name}</span></> : null}
-        {focusView ? <button type="button" className={issue} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
+        {focusView ? <button type="button" className={issue} aria-keyshortcuts={ariaKeyShortcuts('wall.leaveEdit') || undefined} onClick={leaveEditMode}>{t('wall.leaveEdit')}</button> : null}
         <span className="flex-1" />
-        {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} /> : null}
+        {group && group !== 'schedules' && !focusView ? <ScaleChips group={group} extent={extent} labelFromWide /> : null}
         {!focusView ? (
           <>
-            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} onClick={() => setPlacing(!commenting)}>{t('review.tool')}</button>
-            <button type="button" className={issue} aria-pressed={papering} onClick={() => { setPapering((x) => !x); setTitling(false); setRevising(false); }}>{t('wall.paper.button')}</button>
-            <button type="button" className={issue} aria-pressed={titling} onClick={() => { setTitling((x) => !x); setPapering(false); setRevising(false); }}>{t('wall.tb.title')}</button>
-            <button type="button" className={issue} aria-pressed={revising} onClick={() => { setRevising((x) => !x); setTitling(false); setPapering(false); }}>{t('revision.title')}</button>
+            <button type="button" className={issue} aria-pressed={commenting} title={t('review.tool.hint')} aria-keyshortcuts={ariaKeyShortcuts('wall.comment') || undefined} onClick={toggleComment}>{t('review.tool')}</button>
+            <button type="button" className={issue} aria-pressed={papering} {...keyProps(t, t('wall.paper.button'), 'wall.paper')} onClick={togglePaper}>{t('wall.paper.button')}</button>
+            <button type="button" className={issue} aria-pressed={titling} {...keyProps(t, t('wall.tb.title'), 'wall.titleBlock')} onClick={toggleTitle}>{t('wall.tb.title')}</button>
+            <button type="button" className={issue} aria-pressed={revising} {...keyProps(t, t('revision.title'), 'wall.revisions')} onClick={toggleRevisions}>{t('revision.title')}</button>
             <button type="button" className={issue} {...keyProps(t, t('wall.fit'), 'wall.fit')} onClick={fit}>{t('wall.fit')}</button>
-            <button type="button" className={issue} onClick={() => setPreviewing(true)}>{t('printPreview.open')}</button>
-            <button type="button" className={issue} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdf')}</button>
-            <button type="button" className={issue} onClick={() => paperRef.current && exportSheetDxf(paperRef.current, sheet)}>{t('wall.export.dxf')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('printPreview.open'), 'wall.printPreview')} onClick={preview}>{t('printPreview.open')}</button>
+            <button type="button" className={issue} aria-label={t('wall.export.pdf')} {...keyProps(t, t('wall.export.pdf'), 'wall.print')} onClick={print}>{t('wall.export.pdfShort')}</button>
+            <button type="button" className={issue} {...keyProps(t, t('wall.export.dxf'), 'wall.exportDxf')} onClick={exportDxf}>{t('wall.export.dxf')}</button>
           </>
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={startTool} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
+        <ToolRail active={tool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
@@ -267,14 +316,16 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
             </div>
           )}
-          <div className="pointer-events-none absolute right-3 top-3 [&>*]:pointer-events-auto">
-            {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} />
+          <div ref={cardHost} className={WALL_CARD_HOST}>
+            {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} onDone={stopTool} />
+              : hatches.length > 0 && !papering && !titling && !revising ? <SelectedHatchCard hatches={hatches} drawingOn={focusView?.name ?? null} />
               : focusView ? null
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
           </div>
+          {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (
             <div className="absolute inset-x-3 bottom-3 flex justify-center">
               <AddDrawing
@@ -285,6 +336,11 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                   setAdding(false);
                   const landed = extent ? hangView(viewId, extent) : null;
                   if (landed && landed !== sheet.id) onStep(landed);
+                  // A 3D view (a cut-away axonometric, #97) belongs to no series: it goes on the sheet in front.
+                  if (!landed && useProjectStore.getState().views.find((v) => v.id === viewId)?.kind === '3d') {
+                    const area = drawingArea(sheet);
+                    addViewport(sheet.id, viewId, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, 100);
+                  }
                 }}
               />
             </div>
@@ -298,8 +354,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         </div>
       ) : null}
       {!focusView && !tool ? (
-        <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-3 text-sm text-zinc-700">
-          <strong className="text-zinc-900">{t('wall.sheetHint.title')}</strong>
+        <footer className="flex shrink-0 items-baseline gap-3 border-t border-zinc-200 bg-white px-6 py-2 text-xs text-zinc-700">
+          <strong className="shrink-0 whitespace-nowrap text-zinc-900">{t('wall.sheetHint.title')}</strong>
           <span>{t('wall.sheetHint.body')}</span>
         </footer>
       ) : null}

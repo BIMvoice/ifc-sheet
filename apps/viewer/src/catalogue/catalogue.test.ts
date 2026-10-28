@@ -46,6 +46,25 @@ const full: Catalogue = {
     { id: 'st1', name: 'Long elevations', paper: { kind: 'elongated', base: 'A3', factor: 3 }, orientation: 'landscape', frame: { margins: { top: 10, right: 10, bottom: 10, left: 20 }, titleBlock: 'right' } },
     { id: 'st2', name: 'Site plan', paper: { kind: 'custom', widthMm: 500, heightMm: 700 }, orientation: 'portrait', frame: { margins: { top: 5, right: 5, bottom: 5, left: 5 }, titleBlock: 'bottom-right' } },
   ],
+  // EXAMPLE articles made up for the test: IfcSheet ships no norm or article code (#75).
+  boqArticles: [
+    { id: 'b1', code: 'EXAMPLE-01', description: 'EXAMPLE: masonry', unit: 'm3', typeName: 'T240', quantity: 'NetVolume', factor: 1, waste: 5, filter: { properties: [{ name: 'IsExternal', op: 'equals', value: 'true' }] } },
+    { id: 'b2', code: 'EXAMPLE-02', description: 'EXAMPLE: doors', unit: 'buc', quantity: 'Count', factor: 1, filter: { classes: ['IfcDoor'] } },
+  ],
+  classificationMappings: [{
+    id: 'cl1', system: { name: 'Uniclass', edition: '2015' },
+    rules: [{ by: 'type', match: 'T240', code: 'EXAMPLE-Ss_25', title: 'EXAMPLE: walls' }, { by: 'class', match: 'IfcDoor', code: 'EXAMPLE-Ss_32' }],
+  }],
+  viewTemplates: [
+    { id: 'vt1', name: 'Plans, heavy walls', kind: 'plan', graphics: {
+      presetId: 'preset-architectural', categories: { doors: { lineWeight: 'light' } },
+      styleRules: [
+        { id: 'sr1', by: 'class', match: ['IfcWall'], style: { lineWeight: 'heavy', fillColor: '#666666' } },
+        { id: 'sr2', by: 'material', match: ['Concrete', 'Reinforced concrete'], style: { fillColor: '#999999', cutHatch: 'ANSI31', hatchScale: 2 } },
+      ],
+    } },
+    { id: 'vt2', name: 'Elevations', kind: 'elevation', graphics: {} },
+  ],
 };
 
 describe('catalogue file', () => {
@@ -100,6 +119,34 @@ const mine: Catalogue = {
   materials: [{ id: 'mm', name: 'mineral  WOOL', hatch: 'INSULATION' }],
   symbols: [{ id: 's1', name: 'Mine', unit: 'paper', shapes: [] }],
 };
+
+describe('view templates in the library (#31)', () => {
+  it('survive export and import with their rules, and a malformed one is refused with the path', () => {
+    const good = JSON.parse(serializeCatalogue(full, 'x'));
+    assert.deepEqual(parseCatalogue(JSON.stringify(good)).catalogue.viewTemplates, full.viewTemplates);
+    assert.equal(selectKinds(full, new Set(['viewTemplates'])).viewTemplates.length, 2);
+    assert.equal(selectKinds(full, new Set(['layers'])).viewTemplates.length, 0);
+    assert.throws(() => parseCatalogue(JSON.stringify({ ...good, viewTemplates: [{ id: 'x', name: 'Bad', kind: 'roof' }] })), /\/viewTemplates\/0/);
+  });
+
+  it('a library from before view templates reads as having none', () => {
+    const { viewTemplates: _none, ...old } = JSON.parse(serializeCatalogue(full, 'x'));
+    assert.deepEqual(parseCatalogue(JSON.stringify(old)).catalogue.viewTemplates, []);
+  });
+
+  it('merge by name under the policy, the rules going with the template', () => {
+    const mineT = { ...full.viewTemplates[0], id: 'mine', graphics: { styleRules: [{ id: 'm1', by: 'class' as const, match: ['IfcSlab'], style: { fillColor: '#111111' } }] } };
+    const own: Catalogue = { ...emptyCatalogue(), viewTemplates: [mineT] };
+    const theirs: Catalogue = { ...emptyCatalogue(), viewTemplates: [full.viewTemplates[0]] };
+    assert.deepEqual(mergeCatalogues(own, theirs, 'mine', fresh).catalogue.viewTemplates, [mineT]);
+    const replaced = mergeCatalogues(own, theirs, 'theirs', fresh).catalogue.viewTemplates;
+    assert.deepEqual([replaced.length, replaced[0].id, replaced[0].graphics.styleRules], [1, 'mine', full.viewTemplates[0].graphics.styleRules]);
+    const both = mergeCatalogues(own, theirs, 'both', fresh).catalogue.viewTemplates;
+    assert.deepEqual(both.map((t) => t.name), ['Plans, heavy walls', 'Plans, heavy walls (2)']);
+    assert.deepEqual(both[1].graphics.styleRules, full.viewTemplates[0].graphics.styleRules);
+    assert.equal(both[0].id === both[1].id, false);
+  });
+});
 
 describe('catalogue merge', () => {
   it('merges sheet templates by name under the policy', () => {

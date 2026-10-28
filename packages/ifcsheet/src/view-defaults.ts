@@ -19,6 +19,13 @@ export { freshProjectId } from './ids.js';
 /** Standard architectural plan-cut height above the floor, metres. */
 export const DEFAULT_PLAN_CUT_HEIGHT_M = 1.2;
 
+/**
+ * How far below the next level's floor a default plan cut stays at most,
+ * metres: room for the next floor's build-up (slab, screed, finishes), which
+ * reaches below that level's elevation line, typically 0.15 to 0.30 m.
+ */
+export const NEXT_FLOOR_CLEARANCE_M = 0.5;
+
 /** Levels closer than this are the same level (federated models repeat them). */
 export const LEVEL_MATCH_TOLERANCE_M = 0.25;
 
@@ -38,6 +45,46 @@ export interface StoreyInput {
 /** Where a level's floor is in the drawing frame: the frame plan cuts, work planes and bands are in. */
 export function levelFloorY(level: Pick<ProjectLevel, 'elevation' | 'floorY'>): number {
   return level.floorY ?? level.elevation;
+}
+
+/**
+ * The default cut height above `level`'s floor, metres, given the `levels` of
+ * the project: {@link DEFAULT_PLAN_CUT_HEIGHT_M}, kept below the build-up of
+ * the next level up when that is closer than the cut would reach.
+ *
+ * With `gap` the distance to the next level's floor, the cut is
+ * `min(1.2, max(gap - 0.5, gap / 2))`: a storey 1.0 m below the next is cut
+ * at 0.5 m, 0.6 m below it at 0.3 m (the midpoint: below 1 m the clearance
+ * would leave nothing above the floor). Storeys 1.7 m or more apart keep
+ * exactly 1.2 m. Measured between floors (`levelFloorY`), so a slab whose top
+ * sits above its storey's elevation moves both ends together; the 0.5 m
+ * clearance is what covers the next slab's underside reaching below its
+ * elevation line. The top level, and a project of one level, have no next
+ * level and keep 1.2 m. A cut a user sets is stored in the view and is never
+ * recomputed from this.
+ */
+export function defaultPlanCutHeight(level: Pick<ProjectLevel, 'elevation' | 'floorY'>, levels: readonly Pick<ProjectLevel, 'elevation' | 'floorY'>[] = []): number {
+  const floor = levelFloorY(level);
+  let gap = Infinity;
+  for (const other of levels) {
+    if (sameElevation(other.elevation, level.elevation)) continue;
+    const d = levelFloorY(other) - floor;
+    if (d > 0 && d < gap) gap = d;
+  }
+  if (!Number.isFinite(gap)) return DEFAULT_PLAN_CUT_HEIGHT_M;
+  return Math.min(DEFAULT_PLAN_CUT_HEIGHT_M, Math.max(gap - NEXT_FLOOR_CLEARANCE_M, gap / 2));
+}
+
+/**
+ * How far below its cut a plan looking down sees, metres: its view depth,
+ * plus the empty space between the cut and the model top when the cut is
+ * above it. The cut itself stays where it is, so nothing is cut there (#226);
+ * a plan above everything (a roof plan, the top storey of a model whose
+ * highest element is a slab) still sees as far into the model as its depth
+ * says. A depth of 0 (the plan shows its cut only) stays 0.
+ */
+export function planDepthBelowCut(viewDepth: number, cut: number, modelTop: number): number {
+  return viewDepth > 0 ? viewDepth + Math.max(0, cut - modelTop) : viewDepth;
 }
 
 /**
@@ -66,18 +113,6 @@ export function levelsWithUser(storeys: readonly StoreyInput[], userLevels: read
   return levelsFromStoreys([...storeys, ...userLevels.map(({ name, elevation }) => ({ name, elevation }))]);
 }
 
-/**
- * How far above `level`'s floor its plan is cut. A storey's plan is cut at {@link DEFAULT_PLAN_CUT_HEIGHT_M} as ever.
- * A level the user defined (no storey GlobalIds) may sit closer than that to the one above it, so its cut is held
- * to half the way up, and never lands on or past the next floor.
- */
-export function planCutHeight(level: ProjectLevel, levels: readonly ProjectLevel[]): number {
-  if (level.storeyGlobalIds.length > 0) return DEFAULT_PLAN_CUT_HEIGHT_M;
-  const next = levels.filter((l) => !sameElevation(l.elevation, level.elevation) && l.elevation > level.elevation).map((l) => l.elevation - level.elevation);
-  if (next.length === 0) return DEFAULT_PLAN_CUT_HEIGHT_M;
-  return Math.min(DEFAULT_PLAN_CUT_HEIGHT_M, Math.round((Math.min(...next) / 2) * 100) / 100);
-}
-
 export function sameElevation(a: number, b: number): boolean {
   return Math.abs(a - b) < LEVEL_MATCH_TOLERANCE_M;
 }
@@ -98,14 +133,14 @@ export function uniqueViewName(base: string, views: readonly Pick<ProjectView, '
   }
 }
 
-export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], now = Date.now(), levels: readonly ProjectLevel[] = [level]): PlanProjectView {
+export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], now = Date.now(), levels: readonly ProjectLevel[] = []): PlanProjectView {
   return {
     id: freshProjectId('view'),
     kind: 'plan',
     name: uniqueViewName(level.name, views),
     // The frame-derived floor stays with the live level (`levelFloorY`), never in the saved view.
     level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] },
-    cutHeight: planCutHeight(level, levels),
+    cutHeight: defaultPlanCutHeight(level, levels),
     auto: true,
     createdAt: now,
   };

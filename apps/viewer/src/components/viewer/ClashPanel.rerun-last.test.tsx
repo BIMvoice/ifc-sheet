@@ -20,9 +20,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useViewerStore } from '@/store';
 import { seedCoincidentWalls } from '@/test/clash-run-fixture.js';
 import { ClashPanel } from './ClashPanel.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { get: () => 800, configurable: true });
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { get: () => 600, configurable: true });
+stubBoxSize(800, 600);
 
 /** The shared store's presets; one case deletes a preset and must hand them back. */
 const INITIAL_PRESETS = useViewerStore.getState().clashPresets;

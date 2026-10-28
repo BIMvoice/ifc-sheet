@@ -279,7 +279,8 @@ describe('the Wall after an edit, away from the Wall, and in another project', (
     // A re-import, the project navigator or an autosave restore: the same sheet ids, and the Wall forgotten.
     act(() => loadProjectDocument(projectDocument()));
     assert.equal(useWallView.getState().near.length, 4, 'the Wall measured again');
-    assert.equal(papers(ui), 4, 'so the near sheets are drawn, not left as outlines');
+    // Drawn a couple at a time (`wall-promote`), not all in one render.
+    await waitFor(() => papers(ui) === 4, 'so the near sheets are drawn, not left as outlines');
     await waitFor(() => useWallView.getState().queue.length > 4, 'and the background fill took up the far sheets again');
   });
 

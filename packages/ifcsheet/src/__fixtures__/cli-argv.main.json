@@ -1,0 +1,885 @@
+[
+ {
+  "argv": [],
+  "code": 2,
+  "stdout": "",
+  "stderr": "<USAGE>"
+ },
+ {
+  "argv": [
+   "--help"
+  ],
+  "code": 0,
+  "stdout": "<USAGE>",
+  "stderr": ""
+ },
+ {
+  "argv": [
+   "-h"
+  ],
+  "code": 0,
+  "stdout": "<USAGE>",
+  "stderr": ""
+ },
+ {
+  "argv": [
+   "--version"
+  ],
+  "code": 0,
+  "stdout": "0.1.0\n",
+  "stderr": ""
+ },
+ {
+  "argv": [
+   "-v"
+  ],
+  "code": 0,
+  "stdout": "0.1.0\n",
+  "stderr": ""
+ },
+ {
+  "argv": [
+   "--bogus"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: Unknown option '--bogus'. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- \"--bogus\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "frobnicate"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "frobnicate",
+   "m.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "build"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--out",
+   "/nonexistent-dir-ifcsheet/a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--csv"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--detail",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--locale",
+   "ro",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--json",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has no --json; it is an option of check.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--schedule",
+   "s",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has no --schedule; it is an option of list.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "a.ifc",
+   "b.ifc",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "check"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--csv"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "a.ifc",
+   "b.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+ },
+ {
+  "argv": [
+   "materials"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+ },
+ {
+  "argv": [
+   "materials",
+   "m.ifc"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "materials",
+   "m.ifc",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+ },
+ {
+  "argv": [
+   "materials",
+   "m.ifc",
+   "--csv"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "materials",
+   "a.ifc",
+   "b.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+ },
+ {
+  "argv": [
+   "materials",
+   "m.ifc",
+   "--json",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "boq"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--schedule",
+   "s"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet boq takes one model, --project, --csv or --json, --detail and --locale: ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--detail",
+   "--locale",
+   "ro"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--system",
+   "x"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "boq",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--handover",
+   "h.zip"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read p.json: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "--project",
+   "p.json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--detail"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--system",
+   "x"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "m.ifc",
+   "--locale",
+   "ro",
+   "--csv"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "rooms",
+   "a.ifc",
+   "b.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "list"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--schedule",
+   "s",
+   "--csv"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--detail"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--system",
+   "x"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n"
+ },
+ {
+  "argv": [
+   "classify"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc",
+   "--project",
+   "p.json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--system",
+   "x",
+   "--csv"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--locale",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--schedule",
+   "s"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "classify",
+   "m.ifc",
+   "--project",
+   "p.json",
+   "--csv",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+ },
+ {
+  "argv": [
+   "build",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--out",
+   "a.pdf",
+   "--standard",
+   "ro"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro, de).\n"
+ },
+ {
+  "argv": [
+   "list",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro, de).\n"
+ },
+ {
+  "argv": [
+   "frobnicate",
+   "m.ifc",
+   "--standard",
+   "ro"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "build",
+   "--pac"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--locale",
+   "ro",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--template",
+   "t.bvset",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--out",
+   "a.pdf",
+   "--intervention",
+   "new"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has --intervention only with --pac.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--intervention",
+   "bogus",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --intervention is one of new, existing, interior.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--intervention",
+   "interior",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--pac"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet check has no --pac; it is an option of build.\n"
+ },
+ {
+  "argv": [
+   "frobnicate",
+   "m.ifc",
+   "--pac"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet: unknown command \"frobnicate\"\n\n<USAGE>"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--pac-mode",
+   "rural",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac",
+   "--pac-mode",
+   "bogus",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build --pac-mode is one of full, rural.\n"
+ },
+ {
+  "argv": [
+   "build",
+   "m.ifc",
+   "--pac-mode",
+   "rural",
+   "--out",
+   "a.pdf"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "ifcsheet build has --pac-mode only with --pac.\n"
+ },
+ {
+  "argv": [
+   "check",
+   "m.ifc",
+   "--pac-mode",
+   "rural"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+ }
+]

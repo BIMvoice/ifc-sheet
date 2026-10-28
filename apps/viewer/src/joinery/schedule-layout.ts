@@ -16,24 +16,46 @@
  */
 
 import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
+import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
-import type { ScheduleData, ScheduleEntry } from './schedule-data';
+import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
+import { fitText } from '@/project/title-block-template';
+import { pageTitle } from './paged-table';
+import type { ExportCell, ExportTable } from './schedule-export';
+import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
   | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
+/** A cell of a column table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) and the column (id) it is. */
+export interface ScheduleCell { x: number; y: number; w: number; h: number; guid: string; column: string; /** The cell holds a value typed over the model's: the editor marks it, the print does not. */ overridden?: true }
+
 export interface ScheduleLayout {
   width: number;
   height: number;
   prims: SchedulePrim[];
+  /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
+  pages?: number;
+  /** The cells of this page a person can pick (a list schedule's element rows), by the table's row and column. */
+  cells?: ScheduleCell[];
+  /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
+  minBox?: { width: number; height: number };
+  /**
+   * Set when the table is wrapped to a viewport's box (joinery schedules on a sheet): the box, paper mm, it is drawn at the top
+   * left of and clipped to, and the smallest box that holds one band whole (a resize stops there).
+   */
+  fit?: { box: { x: number; y: number; w: number; h: number }; min: { width: number; height: number } };
 }
 
 export interface ScheduleLabels {
+  /** The language the U value is written in on paper ("1,1" in Romanian); the CSV and XLSX keep the plain number. */
+  locale: SheetLocale;
   title: string;
   mark: string;
   name: string;
@@ -50,8 +72,14 @@ export interface ScheduleLabels {
 export interface ScheduleLayoutOptions {
   /** Scale of the drawings: 50 = 1:50. */
   scale?: number;
-  /** Cards wrap past this width (mm). */
+  /** Cards wrap past this width (mm): the viewport's width. */
   maxWidth?: number;
+  /** Bands that do not fit this height (mm) go on the next page; at least one band is kept per page. Absent: all on one. */
+  maxHeight?: number;
+  /** The page to lay out, from 0 (`pages` of the result says how many there are). */
+  page?: number;
+  /** The word for "continued" in the user's language, written in the title of every page after the first. */
+  continued?: string;
   /**
    * Front, plan and section cut from the real geometry, by entry key. An entry
    * with views draws them (with the opening symbol overlaid); one without draws
@@ -65,25 +93,62 @@ const ROW = 6;
 const MARK_ROW = 10;
 const PEN = { frame: 0.35, grid: 0.18, drawing: { cut: 0.35, outline: 0.25, thin: 0.13 } } as const;
 const TEXT = 2.5;
+const TITLE_H = 10;
+const BAND_GAP = 8;
+const DEFAULT_MAX_WIDTH = 380;
 
 export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): string {
-  if (!entry.spec) return '—';
+  if (!entry.spec) return entry.operations?.length ? entry.operations.map(labels.op).join(' + ') : '—';
   const ops = [...new Set(normalisedPanels(entry.spec).map((p) => p.operation))];
   return ops.map(labels.op).join(' + ');
 }
 
-function rows(data: ScheduleData, labels: ScheduleLabels): { label: string; value: (e: ScheduleEntry) => string; strong?: boolean }[] {
-  const out: { label: string; value: (e: ScheduleEntry) => string; strong?: boolean }[] = [
-    { label: labels.name, value: (e) => e.name },
-    { label: labels.size, value: (e) => `${Math.round(e.width * 1000)} × ${Math.round(e.height * 1000)}` },
-    { label: labels.operation, value: (e) => operationText(e, labels) },
-  ];
-  if (data.entries.some((e) => e.kind === 'window')) out.push({ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '—') });
-  for (const level of data.levels) out.push({ label: level, value: (e) => String(e.counts[level] ?? '') });
-  out.push({ label: labels.total, value: (e) => String(e.total), strong: true });
-  out.push({ label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '—') });
-  out.push({ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—' });
-  return out;
+interface TableRowSpec {
+  label: string;
+  value: (e: ScheduleEntry) => string;
+  strong?: boolean;
+  /** Typed in by hand (`ScheduleData.textRows`): fitted to its cell instead of shrunk by length. */
+  text?: boolean;
+  /** The row in the CSV and XLSX: its column headings (the label by default) and, per type, one cell for each, figures unformatted. */
+  heads?: readonly string[];
+  raw?: (e: ScheduleEntry) => ExportCell[];
+  /** The row holds figures (right-aligned in the XLSX); `sum`: the export's total row adds them up. */
+  num?: boolean;
+  sum?: boolean;
+}
+
+const mm = (m: number): number => Math.round(m * 1000);
+
+/**
+ * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
+ * reader of the choice, agree). By default: name, size, operation, sill, the count per level, total, U value, fire rating, then the
+ * user's own text rows. The CSV and XLSX read the same list (`joineryExport`), so the file has the rows the sheet prints.
+ */
+function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; heightMm?: string }): TableRowSpec[] {
+  const typed = data.textRows ?? [];
+  const model: Record<string, () => TableRowSpec[]> = {
+    name: () => [{ label: labels.name, value: (e) => e.name }],
+    size: () => [{
+      label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
+      heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
+    }],
+    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec || e.operations?.length ? operationText(e, labels) : null] }],
+    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
+    levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
+    total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
+    u: () => [{
+      label: labels.uValue, value: (e) => (e.spec?.props.thermalTransmittance !== undefined ? sheetNumber(labels.locale, e.spec.props.thermalTransmittance, 3, { trim: true, group: false }) : '—'),
+      raw: (e) => [e.spec?.props.thermalTransmittance ?? null], num: true,
+    }],
+    fire: () => [{ label: labels.fire, value: (e) => e.spec?.props.fireRating ?? '—', raw: (e) => [e.spec?.props.fireRating ?? null] }],
+  };
+  const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
+  // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
+  const own = new Map(typed.map((row) => [textRowId(row.id), row]));
+  return ids.flatMap((id): TableRowSpec[] => {
+    const row = own.get(id);
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : model[id]?.() ?? [];
+  });
 }
 
 /** A dimension line between `a` and `b` (paper mm), its value written above (or left of) the line. */
@@ -95,19 +160,23 @@ function dimension(prims: SchedulePrim[], a: { x: number; y: number }, b: { x: n
   else prims.push({ kind: 'text', x: (a.x + b.x) / 2, y: a.y - 0.8, text, size: 2, anchor: 'middle' });
 }
 
-export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, options: ScheduleLayoutOptions = {}): ScheduleLayout {
+/** Labels for a measurement: only the number of rows depends on the data, never their text. */
+const NO_LABELS: ScheduleLabels = { locale: 'en', title: '', mark: '', name: '', size: '', operation: '', sill: '', total: '', uValue: '', fire: '', op: () => '' };
+
+/** The cards' sizes and how they split into bands and pages; what `layoutSchedule` draws and `schedulePages` counts, so they cannot disagree. */
+function plan(data: ScheduleData, options: ScheduleLayoutOptions) {
   const k = 1000 / (options.scale ?? 50);
-  const maxWidth = options.maxWidth ?? 380;
-  const prims: SchedulePrim[] = [];
-  const tableRows = rows(data, labels);
+  const maxWidth = options.maxWidth ?? DEFAULT_MAX_WIDTH;
+  const rowCount = rows(data, NO_LABELS).length;
   const viewsOf = (e: ScheduleEntry) => options.views?.get(e.key);
   const cardW = (e: ScheduleEntry) => { const v = viewsOf(e); return Math.max(30, (v?.width ?? e.width) * k + 16 + (v ? sectionRoom(v, k) : 0)); };
   // Under the front view and its dimension: the plan, in the room the deepest one needs.
-  const planBlock = Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; }));
-  const drawingH = Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock));
-  const bandH = MARK_ROW + drawingH + tableRows.length * ROW;
-
-  // Split the cards into bands.
+  // The header cells draw the elevation and the plan unless the schedule's content turns one off (`symbolsShown`): the cell is as tall as what it draws.
+  const shown = symbolsShown(data.content);
+  const planBlock = shown.plan ? Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; })) : 0;
+  // Without the elevation the plan alone fills the cell (it starts 2 mm under the mark row); without either the cell is the mark row.
+  const drawingH = shown.elevation ? Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock)) : Math.max(0, planBlock - 6);
+  const bandH = MARK_ROW + drawingH + rowCount * ROW;
   const bands: ScheduleEntry[][] = [];
   let band: ScheduleEntry[] = [], used = LABEL_W;
   for (const e of data.entries) {
@@ -116,9 +185,31 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     used += cardW(e);
   }
   if (band.length || bands.length === 0) bands.push(band);
+  const perPage = options.maxHeight === undefined ? bands.length : Math.max(1, Math.floor((options.maxHeight - TITLE_H + BAND_GAP) / (bandH + BAND_GAP)));
+  return { k, shown, viewsOf, cardW, planBlock, drawingH, bandH, bands, perPage, pages: Math.max(1, Math.ceil(bands.length / perPage)), maxCard: Math.max(0, ...data.entries.map(cardW)) };
+}
 
-  prims.push({ kind: 'text', x: 0, y: 6, text: labels.title, size: 5, anchor: 'start', bold: true });
-  let top = 10, width = LABEL_W;
+/** How many pages `data` runs over in a box `maxWidth` × `maxHeight`: one per sheet the schedule takes. */
+export function schedulePages(data: ScheduleData, options: ScheduleLayoutOptions): number {
+  return plan(data, options).pages;
+}
+
+/** The smallest box that holds one band of `data` at its scale: any smaller and a card or a band cannot fit whole. */
+export function scheduleMinBox(data: ScheduleData, options: Pick<ScheduleLayoutOptions, 'scale' | 'views'>): { width: number; height: number } {
+  const p = plan(data, options);
+  return { width: Math.ceil(LABEL_W + p.maxCard), height: Math.ceil(TITLE_H + p.bandH) };
+}
+
+export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, options: ScheduleLayoutOptions = {}): ScheduleLayout {
+  const { k, shown, viewsOf, cardW, planBlock, drawingH, bandH, perPage, pages, bands: all } = plan(data, options);
+  const page = Math.max(0, options.page ?? 0);
+  const bands = all.slice(page * perPage, (page + 1) * perPage);
+  const prims: SchedulePrim[] = [];
+  const tableRows = rows(data, labels);
+
+  // Inset like the paged tables' titles: the viewport's frame is drawn on x = 0 and would cover the first letter.
+  prims.push({ kind: 'text', x: PAD, y: 6, text: pageTitle(labels.title, page, pages, options.continued), size: 5, anchor: 'start', bold: true });
+  let top = TITLE_H, width = LABEL_W;
   for (const cards of bands) {
     const w = LABEL_W + cards.reduce((s, e) => s + cardW(e), 0);
     width = Math.max(width, w);
@@ -131,7 +222,9 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
     tableRows.forEach((row, i) => {
       const y = yRows + i * ROW;
       prims.push({ kind: 'line', x1: 0, y1: y, x2: w, y2: y, w: i === 0 ? PEN.frame : PEN.grid });
-      prims.push({ kind: 'text', x: 2, y: y + 4.2, text: row.label, size: TEXT, anchor: 'start', bold: row.strong });
+      // A row the user named is fitted to the label column like its cells are to theirs (the title block's measure, #220).
+      const label = row.text ? fitText({ size: TEXT, fit: LABEL_W - 4, bold: row.strong }, row.label) : { size: TEXT, text: row.label };
+      prims.push({ kind: 'text', x: 2, y: y + 4.2, text: label.text, size: label.size, anchor: 'start', bold: row.strong });
     });
     let x = LABEL_W;
     for (const e of cards) {
@@ -140,47 +233,79 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       prims.push({ kind: 'line', x1: x + cw, y1: top, x2: x + cw, y2: top + bandH, w: PEN.grid });
       prims.push({ kind: 'text', x: cx, y: top + 7, text: e.mark, size: 4, anchor: 'middle', bold: true });
       // The elevation, bottom on a baseline that leaves room for the width dimension (and the plan under it).
-      const base = top + MARK_ROW + drawingH - 7 - planBlock;
+      const base = shown.elevation ? top + MARK_ROW + drawingH - 7 - planBlock : top + MARK_ROW - 8;
       const v = viewsOf(e);
       // Views draw to their own extent, centred over the card less the section beside them.
       const w = v?.width ?? e.width, h = v?.height ?? e.height;
       const fx = v ? cx - sectionRoom(v, k) / 2 : cx;
       const x0 = fx - (w * k) / 2, x1 = fx + (w * k) / 2;
       if (v) {
-        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()));
-      } else if (e.spec) {
+        // The plan is the plan view; the front, the section beside it and the opening symbol are the elevation.
+        prims.push(...viewPrims(v, e.spec, { fx, base }, k, openingConvention()).filter((p) => p.kind !== 'path' || (p.view === 'plan' ? shown.plan : shown.elevation)));
+      } else if (shown.elevation && e.spec) {
         const strokes = elevationSymbol(e.spec, { hardware: true, convention: openingConvention() });
         const b = strokeBounds(strokes);
         const ox = cx - ((b.min.x + b.max.x) / 2) * k;
         for (const s of strokes) {
           prims.push({ kind: 'path', pts: s.pts.map((p) => ({ x: ox + p.x * k, y: base - p.y * k })), closed: s.closed, w: PEN.drawing[s.weight], dashed: s.dashed });
         }
-      } else {
+      } else if (shown.elevation) {
+        // The generated symbol is an elevation: with it off, a type without views draws nothing.
         prims.push({ kind: 'path', pts: [{ x: x0, y: base }, { x: x1, y: base }, { x: x1, y: base - e.height * k }, { x: x0, y: base - e.height * k }], closed: true, w: PEN.drawing.outline });
       }
-      dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
-      dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
+      if (shown.elevation) {
+        dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
+        dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
+      }
       tableRows.forEach((row, i) => {
         const value = row.value(e);
+        if (row.text) {
+          // Typed text: shrunk to fit its card down to the smallest caption height, cut with an ellipsis only beyond that; never wider than the card.
+          if (value) { const fitted = fitText({ size: TEXT, fit: cw - 3 }, value); prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: fitted.text, size: fitted.size, anchor: 'middle' }); }
+          return;
+        }
         const size = value.length > cw / 1.6 ? Math.max(1.6, (cw - 2) / value.length * 1.7) : TEXT;
         prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: value, size, anchor: 'middle', bold: row.strong });
       });
       x += cw;
     }
-    top += bandH + 8;
+    top += bandH + BAND_GAP;
   }
-  return { width, height: top - 8, prims };
+  return { width, height: top - BAND_GAP, prims, pages };
 }
 
-/** The schedule as CSV (one line per type), the counts per level as columns. */
-export function scheduleCsv(data: ScheduleData, labels: ScheduleLabels): string {
-  const quote = (v: string) => (/[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const header = [labels.mark, labels.name, 'Width (mm)', 'Height (mm)', labels.operation, labels.sill, ...data.levels, labels.total, labels.uValue, labels.fire];
-  const lines = data.entries.map((e) => [
-    e.mark, e.name, String(Math.round(e.width * 1000)), String(Math.round(e.height * 1000)), operationText(e, labels),
-    e.kind === 'window' && e.spec ? String(Math.round(e.spec.sillHeight * 1000)) : '',
-    ...data.levels.map((l) => String(e.counts[l] ?? 0)), String(e.total),
-    e.spec?.props.thermalTransmittance !== undefined ? String(e.spec.props.thermalTransmittance) : '', e.spec?.props.fireRating ?? '',
-  ]);
-  return [header, ...lines].map((r) => r.map(quote).join(',')).join('\n') + '\n';
+export interface JoineryExportLabels extends ScheduleLabels {
+  widthMm: string;
+  heightMm: string;
+  /** The worksheet of the types and the one of every element. */
+  types: string;
+  elements: string;
+  number: string;
+  level: string;
+  globalId: string;
+}
+
+/**
+ * The schedule as the tables of its CSV and XLSX: the Types table, one line per type with the rows the sheet prints (in the order of the
+ * content choice, the sort and the numbering of `data`, the text rows) as columns, figures as numbers, and under it the per-column totals
+ * the sheet does not print; and, in the workbook only, the Elements sheet: every door and window with its number within its type, its level and its GlobalId.
+ */
+export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): { title: string; tables: ExportTable[] } {
+  const specs = rows(data, labels);
+  const columns = specs.flatMap((s) => (s.heads ?? [s.label]).map((head) => ({ head, spec: s })));
+  const body = data.entries.map((e): ExportCell[] => [e.mark, ...specs.flatMap((s) => (s.raw ? s.raw(e) : [s.value(e)]))]);
+  const at = (pick: (s: TableRowSpec) => boolean | undefined) => columns.flatMap((c, i) => (pick(c.spec) ? [i + 1] : []));
+  const sums = at((s) => s.sum);
+  const total = sums.length ? [[labels.total, ...columns.map((_, i) => (sums.includes(i + 1) ? body.reduce((n, r) => n + (typeof r[i + 1] === 'number' ? (r[i + 1] as number) : 0), 0) : null))]] : [];
+  return {
+    title: labels.title,
+    tables: [
+      { name: labels.types, header: [labels.mark, ...columns.map((c) => c.head)], rows: body, numeric: at((s) => s.num), footer: total },
+      {
+        name: labels.elements, workbookOnly: true, numeric: [3, 4],
+        header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, e.name, mm(e.width), mm(e.height), o.level, o.globalId])),
+      },
+    ],
+  };
 }

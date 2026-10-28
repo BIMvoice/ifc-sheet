@@ -29,6 +29,8 @@ import { FederationSetupControls } from '../FederationSetupControls';
 
 import { FILE_ACCEPT, isModelSidecarFile, isSupportedModelFile } from '@/services/supported-model-files';
 import { captureModelTags, restoreModelTags } from '@/lib/model-tags/carry-over';
+import { askInDialog, openFileForProject } from '@/project/open-file';
+import { setPanel } from '../wall/wall-nav';
 
 // FILE_ACCEPT offers `.dxf` while `isSupportedModelFile` rejects it: DXF
 // files are 2D reference underlays, not models, and split off to the DXF
@@ -138,7 +140,19 @@ export function useFileCommands(): FileCommands {
 
   const routeOpenedFiles = useCallback((supportedFiles: File[], handles?: (FileSystemFileHandle | undefined)[]) => {
     if (supportedFiles.length === 1) {
-      void loadFile(supportedFiles[0], { kind: 'primary' }, { sourceHandle: handles?.[0] });
+      const sourceHandle = handles?.[0];
+      // The next version of the model the open project is drawn from is offered as an update of that project (#50).
+      void openFileForProject(supportedFiles[0], {
+        models: () => Array.from(useViewerStore.getState().models.values()),
+        ask: askInDialog,
+        open: (file) => loadFile(file, { kind: 'primary' }, { sourceHandle }),
+        update: async (file) => {
+          const { loadNewVersion } = await import('@/whatchanged/version');
+          await loadNewVersion(file, (f) => loadFile(f, { kind: 'primary' }, { sourceHandle }), () => {});
+        },
+        updated: () => setPanel('changed'),
+        failed: (reason) => toast.error(t('whatchanged.offer.failed', { reason })),
+      });
       return;
     }
     const allIfcx = supportedFiles.every(isIfcxModelFile);
@@ -146,7 +160,7 @@ export function useFileCommands(): FileCommands {
     clearAllModels();
     if (allIfcx) void loadFederatedIfcx(supportedFiles);
     else void loadFilesSequentially(supportedFiles, handles);
-  }, [loadFile, loadFilesSequentially, loadFederatedIfcx, resetViewerState, clearAllModels]);
+  }, [loadFile, loadFilesSequentially, loadFederatedIfcx, resetViewerState, clearAllModels, t]);
 
   const prepareAndOpen = usePreparedModelFileRoute(routeOpenedFiles);
 

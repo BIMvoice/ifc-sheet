@@ -15,8 +15,12 @@ import { makeDraftSet } from '@/draft-set/run';
 import { modelMeshes } from '@/draft-set/body';
 import { detectLevels } from '@/project/level-detect';
 import { useProjectStore } from '@/project/project-store';
+import type { UserLevel } from '@/project/types';
 import { addUserLevel, defaultLevelName, moveUserLevel, removeUserLevel, renameUserLevel, replaceUserLevels } from '@/project/user-levels';
 import { useViewerStore } from '@/store';
+
+/** One empty list, so a selector over a project with no levels returns the same value every time. */
+const NO_LEVELS: readonly UserLevel[] = [];
 
 const field = 'm-0.5 min-w-0 rounded border border-sky-300/40 bg-[#061a36] px-1.5 py-1 text-sm text-white';
 const action = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
@@ -30,7 +34,7 @@ export function useWantsUserLevels(): boolean {
 
 export function LevelsSection({ lowest }: { lowest: number }) {
   const { t } = useTranslation();
-  const userLevels = useProjectStore((s) => s.userLevels ?? []);
+  const userLevels = useProjectStore((s) => s.userLevels ?? NO_LEVELS);
   const sorted = [...userLevels].sort((a, b) => a.elevation - b.elevation);
   const then = (): void => { makeDraftSet(); };
   const next = sorted.length > 0 ? Math.round((sorted[sorted.length - 1].elevation + 3) * 100) / 100 : Math.round(lowest * 100) / 100;

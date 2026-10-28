@@ -14,6 +14,7 @@
  */
 
 import type { AnnotationType } from '@/catalogue/types';
+import { getLocale } from '@/i18n';
 import { classesOf, planTagAll, type LabelTarget } from '@/labels/label-place';
 import { defaultCentres, labelDraft, labelTargets, type LabelPlacement } from '@/labels/label-all';
 import { paperUnitOf } from '@/project/drafting-standards';
@@ -22,6 +23,7 @@ import { entitySkeleton } from '../annotation';
 import { editDrafts } from '../draft-store';
 import type { Pt } from '../types';
 import type { DraftCommandDef, DraftContext } from './types';
+import { currentSheetLocale } from '@/project/units-and-numbers';
 
 /** The label type the settings name, or null (none chosen, or it is gone or no longer a label type). */
 function currentLabelType(ctx: DraftContext): AnnotationType | null {
@@ -31,7 +33,7 @@ function currentLabelType(ctx: DraftContext): AnnotationType | null {
 }
 
 const placement = (ctx: DraftContext): LabelPlacement => ({
-  viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId),
+  viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()),
 });
 
 /** A cursor this near the element picked (paper millimetres) has not been moved yet: the label shows at its default place. */

@@ -12,21 +12,24 @@
  * tagged ancestor names (`dxf-tags.ts`): drafted lines and annotations on
  * their drafting layer — with its colour, line weight and line type — the
  * generated drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens,
- * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out,
- * and so are raster images (a 3D view captured as one): `exportSheetDxf` and
+ * the sheet on FRAME / TITLEBLOCK / VIEWPORT-LABELS. Fills are left out, but a
+ * colour scheme's (#92: its rooms, elements and legend swatches, tagged
+ * `data-dxf-fill="solid"`), which go out as solid hatches; so are raster images (a 3D view captured as one): `exportSheetDxf` and
  * the issue say which.
  */
 
-import { DxfR2000 } from './dxf-r2000';
+import { DxfR2000, type TablesFace } from './dxf-r2000';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import { paperOf } from '@/project/sheets';
 import { useProjectStore } from '@/project/project-store';
 import { rasterViewNames } from '@/project/view-raster';
+import { omittedUnderlayViewNames } from '@/underlay/underlay';
 import { toast } from '@/components/ui/toast';
 import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { layerAndPens } from './dxf-cad-layers';
+import { clipLoop } from './dxf-hatch';
 
 type P = { x: number; y: number };
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -36,6 +39,12 @@ const STRAIGHT = /^[MLHVZmlhvz0-9eE.,\s+-]*$/;
 
 function layerOf(el: Element): string {
   return el.closest('[data-dxf-layer]')?.getAttribute('data-dxf-layer') ?? 'SHEET';
+}
+
+/** The face a table's text is set in (`data-dxf-font`, #500); absent on every other text, which stays in Standard. */
+function tablesFaceOf(el: Element): TablesFace | undefined {
+  const face = el.getAttribute('data-dxf-font');
+  return face === 'sans' || face === 'serif' || face === 'mono' ? face : undefined;
 }
 
 const tag = (el: Element, name: string) => el.closest(`[data-dxf-${name}]`)?.getAttribute(`data-dxf-${name}`) ?? undefined;
@@ -169,6 +178,7 @@ export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
 export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? []): Uint8Array {
   const root = svg.getScreenCTM()?.inverse();
   const writer = new DxfR2000(patternScale);
+  for (const l of useProjectStore.getState().lineTypes ?? []) writer.defineLineType(l.id, l.name, l.dash);
   if (!root) return writer.bytes(comment);
   // Element-local → paper millimetres, Y up.
   const mapper = (el: SVGGraphicsElement) => {
@@ -212,8 +222,28 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     }
   };
 
+  // A solid fill: every loop of the path, clipped as a shape to its viewport, as one hatch in the fill's own colour.
+  const hatch = (el: SVGGraphicsElement, subpaths: { pts: P[]; closed: boolean }[]) => {
+    const map = mapper(el);
+    const colour = getComputedStyle(el).fill;
+    if (!colour || colour === 'none') return;
+    const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), colour);
+    const clip = clipOf(el);
+    const loops = subpaths.filter((s) => s.pts.length > 2).map((s) => (clip ? clipLoop(s.pts.map(map), clip) : s.pts.map(map)));
+    writer.hatch(loops, writer.layer(pens.name, pens.layer), pens.own);
+  };
+
   for (const el of Array.from(svg.querySelectorAll<SVGGraphicsElement>('path, line, rect, circle, ellipse, polyline, polygon, text'))) {
     if (skip(el)) continue;
+    if (el.getAttribute('data-dxf-fill') === 'solid') {
+      const d = el instanceof SVGPathElement ? el.getAttribute('d') ?? '' : '';
+      if (el instanceof SVGPathElement) {
+        const subpaths = STRAIGHT.test(d) ? straightSubpaths(d) : sampledSubpaths(el, d);
+        hatch(el, subpaths);
+        emit(el, subpaths); // the outline, where the path has a stroke
+      }
+      continue;
+    }
     if (el instanceof SVGTextElement) {
       const text = el.textContent?.trim();
       if (!text) continue;
@@ -229,6 +259,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
         rotationDeg: (-Math.atan2(m.b, m.a) * 180) / Math.PI,
         align: anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left',
         pen: pens.own,
+        tablesFace: tablesFaceOf(el),
       });
       continue;
     }
@@ -264,4 +295,8 @@ export function exportSheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): void {
   // A raster viewport comes out as an empty frame: say so, and where the image is.
   const rasters = rasterViewNames(sheet, useProjectStore.getState().views);
   if (rasters.length > 0) toast.error(resolve('sheets.dxf.rasterOmitted', { views: rasters.join(', ') }), `dxf-raster-${sheet.id}`);
+  // An underlay the sheet prints is a picture too: the DXF leaves it out, and says so.
+  const state = useProjectStore.getState();
+  const underlays = omittedUnderlayViewNames(sheet, state.views, state.underlays);
+  if (underlays.length > 0) toast.error(resolve('sheets.dxf.underlayOmitted', { views: underlays.join(', ') }), `dxf-underlay-${sheet.id}`);
 }

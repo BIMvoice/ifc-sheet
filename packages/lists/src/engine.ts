@@ -11,8 +11,10 @@
 import type { PropertySet, Property, QuantitySet, Quantity } from '@ifc-lite/data';
 import { isWhollyNumeric, parsePropertyValue } from '@ifc-lite/encoding';
 import { compileNameMatcher } from './name-pattern.js';
+import { tallies, tallyTotals, tallyValue, type SumTally } from './quantity.js';
 import { getWorldCoordinateValue, extractGeometryColumnValue } from './geometry-column.js';
 import { withAggregateInheritance } from './condition-inherit.js';
+import { officeClassificationValue } from './office-classification.js';
 import type {
   ListDataProvider,
   ListDefinition,
@@ -142,27 +144,22 @@ export function summariseListRows(
     .map(id => ({ id, idx: columns.findIndex(c => c.id === id) }))
     .filter(s => s.idx >= 0);
 
-  const zeroSums = (): Record<string, number> => {
-    const out: Record<string, number> = {};
-    for (const s of sumIndices) out[s.id] = 0;
-    return out;
-  };
+  const sumIds = sumIndices.map((s) => s.id);
 
   // Whole-result summary (accumulated once, independent of nesting depth).
-  const summary: ListSummary = { count: rows.length, sums: zeroSums() };
-  for (const row of rows) {
-    for (const s of sumIndices) {
-      const v = row.values[s.idx];
-      if (typeof v === 'number' && Number.isFinite(v)) summary.sums[s.id] += v;
-    }
-  }
+  // A sum is missing (null), not 0, when no row states the value (#411).
+  const summaryTallies = tallies(sumIds);
+  for (const row of rows) for (const s of sumIndices) tallyValue(summaryTallies[s.id], row.values[s.idx]);
+  const summary: ListSummary = { count: rows.length, sums: tallyTotals(summaryTallies) };
+  const missing = Object.fromEntries(sumIds.map((id) => [id, rows.length - summaryTallies[id].counted]).filter(([, n]) => (n as number) > 0));
+  if (Object.keys(missing).length > 0) summary.missing = missing;
 
   // Recursive per-level bucketing, preserving first-seen order within a level,
   // then ordered largest-group-first (stable default) before flattening.
   const groups: ListGroup[] = [];
   const walk = (subRows: ListRow[], level: number, parentPath: string[]) => {
     const colIdx = levelIndices[level];
-    const byKey = new Map<string, { group: ListGroup; rows: ListRow[] }>();
+    const byKey = new Map<string, { group: ListGroup; rows: ListRow[]; tallies: Record<string, SumTally> }>();
     for (const row of subRows) {
       const raw = colIdx >= 0 ? row.values[colIdx] : null;
       const label = raw === null || raw === undefined || raw === '' ? '(none)' : String(raw);
@@ -170,21 +167,19 @@ export function summariseListRows(
       let bucket = byKey.get(label);
       if (!bucket) {
         const path = [...parentPath, label];
-        bucket = { group: { key: groupPathKey(path), label, count: 0, sums: zeroSums(), level, path }, rows: [] };
+        bucket = { group: { key: groupPathKey(path), label, count: 0, sums: {}, level, path }, rows: [], tallies: tallies(sumIds) };
         byKey.set(label, bucket);
       }
       bucket.group.count++;
       bucket.rows.push(row);
 
-      for (const s of sumIndices) {
-        const v = row.values[s.idx];
-        if (typeof v === 'number' && Number.isFinite(v)) bucket.group.sums[s.id] += v;
-      }
+      for (const s of sumIndices) tallyValue(bucket.tallies[s.id], row.values[s.idx]);
     }
 
     const ordered = Array.from(byKey.values())
       .sort((a, b) => b.group.count - a.group.count || a.group.label.localeCompare(b.group.label));
     for (const bucket of ordered) {
+      bucket.group.sums = tallyTotals(bucket.tallies);
       groups.push(bucket.group);
       if (level + 1 < levelIndices.length) {
         walk(bucket.rows, level + 1, bucket.group.path!);
@@ -584,17 +579,14 @@ function extractColumnValues(
         if (quant && columnMeta[i].quantityType === undefined) columnMeta[i].quantityType = quant.type;
         break;
       }
-      case 'material': {
-        const names = provider.getMaterialNames?.(entityId) ?? [];
-        values[i] = names.length > 0 ? uniqueJoin(names) : null;
-        break;
-      }
+      case 'material': { const names = provider.getMaterialNames?.(entityId) ?? []; values[i] = names.length > 0 ? uniqueJoin(names) : null; break; }
       case 'classification': {
         const refs = provider.getClassifications?.(entityId) ?? [];
         const codes = refs.map(r => r.code || r.name || '').filter(s => s.length > 0);
         values[i] = codes.length > 0 ? uniqueJoin(codes) : null;
         break;
       }
+      case 'officeClassification': values[i] = officeClassificationValue(entityId, col, provider); break;
       case 'spatial': values[i] = getSpatialValue(entityId, col.propertyName, provider); break;
       case 'model': values[i] = provider.getModelName?.() || null; break;
       case 'zone':

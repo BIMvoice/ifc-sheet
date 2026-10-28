@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { chordIdentity, formatChord } from './chord.js';
 import { KEY_COMMANDS, type KeyCommandDefinition, type KeyContext } from './keyboard-commands.js';
 import { formatCommandKeys, primaryShortcutLabel, shortcutLabel } from './shortcut-label.js';
+import { isWallAction } from './action-registry.js';
 
 /** Every (context, chord) claimed by more than one command. */
 function collisions(commands: readonly KeyCommandDefinition[]): string[] {
@@ -82,7 +83,8 @@ describe('keyboard command table (#5836)', () => {
   });
 
   it('every command formats to a non-empty label on both platforms', () => {
-    for (const command of KEY_COMMANDS) {
+    // A Wall action may ship with no key, for a person to bind (#166); every other command has one.
+    for (const command of KEY_COMMANDS.filter((c) => !(isWallAction(c.id) && c.keys.length === 0))) {
       assert.ok(command.keys.length > 0, `${command.id} has keys`);
       for (const apple of [true, false]) {
         assert.ok(formatCommandKeys(command, apple).trim(), `${command.id} (apple=${apple})`);

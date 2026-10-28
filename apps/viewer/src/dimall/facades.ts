@@ -34,6 +34,8 @@ export interface Facade {
 export interface FacadeContent {
   /** Door and window edges along the facade. */
   openings: number[];
+  /** The same, per element: the span it fills along the facade and its part id. */
+  openingParts: { s0: number; s1: number; id: number }[];
   /** The inner faces of the corner walls. */
   endFaces: number[];
   /** Faces of the cross walls meeting the facade, and their centre lines. */
@@ -103,14 +105,17 @@ export function bridgedOpenings(openings: readonly Opening[], walls: readonly Bo
 
 /** What lies on the facade `f`; `walls` and `openings` are the plan's parts (openings bridged). */
 export function contentOf(f: Facade, walls: readonly Box[], openings: readonly Opening[]): FacadeContent {
-  const c: FacadeContent = { openings: [], endFaces: [], crossFaces: [], crossAxes: [] };
+  const c: FacadeContent = { openings: [], openingParts: [], endFaces: [], crossFaces: [], crossAxes: [] };
   const sd = walls.map((w) => inFacade(f, w));
   // The facade wall's thickness: the thickest wall lying along it with its outer face on it.
   const along = sd.filter((w) => near(w.d1, f.D) && w.s1 - w.s0 >= w.d1 - w.d0 && w.s1 > f.s0 && w.s0 < f.s1);
   const depth = Math.max(0.05, ...along.map((w) => w.d1 - w.d0));
   for (const o of openings) {
     const b = inFacade(f, o.box);
-    if (near(b.d1, f.D) && b.s0 >= f.s0 - TOUCH && b.s1 <= f.s1 + TOUCH) c.openings.push(Math.max(b.s0, f.s0), Math.min(b.s1, f.s1));
+    if (near(b.d1, f.D) && b.s0 >= f.s0 - TOUCH && b.s1 <= f.s1 + TOUCH) {
+      c.openings.push(Math.max(b.s0, f.s0), Math.min(b.s1, f.s1));
+      c.openingParts.push({ s0: Math.max(b.s0, f.s0), s1: Math.min(b.s1, f.s1), id: o.part.id });
+    }
   }
   for (const w of sd) {
     const thinInS = w.s1 - w.s0 < w.d1 - w.d0;

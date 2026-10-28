@@ -4,5 +4,5 @@
 
 /** Moved to the engine package (`packages/ifcsheet/src/set-defaults.ts`); re-exported here so the app's imports stay as they were. */
 
-export { DEPTH_MARGIN_M, ELEVATION_INSET_M, elevationDepth, elevationPlaneOffset, proposalDepth } from '@bimvoice/ifcsheet';
+export { DEPTH_MARGIN_M, ELEVATION_CLEARANCE_M, elevationDepth, elevationPlaneOffset, proposalDepth } from '@bimvoice/ifcsheet';
 export type { Extent3 } from '@bimvoice/ifcsheet';

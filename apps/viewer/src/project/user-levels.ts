@@ -13,7 +13,7 @@
 
 import { resolve } from '@/i18n/registry';
 import { resyncLevels, useProjectStore } from './project-store';
-import { freshProjectId, planCutHeight, sameElevation, uniqueViewName } from './view-defaults';
+import { freshProjectId, defaultPlanCutHeight, sameElevation, uniqueViewName } from './view-defaults';
 import type { PlanProjectView, ProjectView, UserLevel } from './types';
 
 const levelsNow = (): UserLevel[] => useProjectStore.getState().userLevels ?? [];
@@ -41,7 +41,7 @@ function followLevels(): void {
     if (v.kind !== 'plan' || !v.auto || v.discipline || v.detail || v.level.storeyGlobalIds.length > 0) return v;
     const level = levels.find((l) => l.storeyGlobalIds.length === 0 && sameElevation(l.elevation, v.level.elevation));
     if (!level || !userLevels.some((u) => sameElevation(u.elevation, level.elevation))) return v;
-    const cut = planCutHeight(level, levels);
+    const cut = defaultPlanCutHeight(level, levels);
     if (v.level.name === level.name) {
       if (v.cutHeight <= cut) return v;
       changed = true;

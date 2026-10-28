@@ -15,6 +15,8 @@
 
 import type { RegisterRow } from '@/project/drawing-register';
 import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
+import { PAD } from './paged-table';
+import type { ExportTable } from './schedule-export';
 
 export interface RegisterLabels {
   title: string;
@@ -28,7 +30,6 @@ export interface RegisterLabels {
 /** Full size, paper mm: row height, text height, cell padding, column widths. */
 const ROW_MM = 6;
 const TEXT_MM = 2.5;
-const PAD_MM = 1.5;
 const COLUMN_MM = [24, 120, 28, 22, 28] as const;
 const PEN = { frame: 0.35, grid: 0.18 } as const;
 const TITLE_H = 10;
@@ -70,7 +71,7 @@ export function layoutRegister(rows: readonly RegisterRow[], labels: RegisterLab
   const k = scale;
   const row = ROW_MM * k;
   const text = TEXT_MM * k;
-  const pad = PAD_MM * k;
+  const pad = PAD * k;
   const columns = COLUMN_MM.map((c) => c * k);
   const width = columns.reduce((a, b) => a + b, 0);
   const lefts = columns.map((_, i) => columns.slice(0, i).reduce((a, b) => a + b, 0));
@@ -80,7 +81,8 @@ export function layoutRegister(rows: readonly RegisterRow[], labels: RegisterLab
     ...rows.map((r) => [r.number, r.title, r.scale, r.revision, r.date]),
   ];
   const height = titleH + table.length * row;
-  prims.push({ kind: 'text', x: 0, y: titleH - 3 * k, text: labels.title, size: TITLE_TEXT * k, anchor: 'start', bold: true });
+  // Inset like the cells: the viewport's frame is drawn on x = 0 and would cover the first letter.
+  prims.push({ kind: 'text', x: pad, y: titleH - 3 * k, text: labels.title, size: TITLE_TEXT * k, anchor: 'start', bold: true });
   table.forEach((cells, r) => {
     const top = titleH + r * row;
     cells.forEach((value, c) => {
@@ -91,4 +93,12 @@ export function layoutRegister(rows: readonly RegisterRow[], labels: RegisterLab
   prims.push({ kind: 'line', x1: 0, y1: titleH, x2: width, y2: titleH, w: PEN.frame });
   for (const x of [...lefts, width]) prims.push({ kind: 'line', x1: x, y1: titleH, x2: x, y2: height, w: x === 0 || x === width ? PEN.frame : PEN.grid });
   return { width, height, prims };
+}
+
+/** The register as the table of its CSV and XLSX: every sheet of the set, whatever pages the table is drawn over. */
+export function registerTable(rows: readonly RegisterRow[], labels: RegisterLabels): ExportTable {
+  return {
+    name: labels.title || labels.number, header: [labels.number, labels.sheetTitle, labels.scale, labels.revision, labels.date],
+    rows: rows.map((r) => [r.number, r.title, r.scale, r.revision, r.date]),
+  };
 }

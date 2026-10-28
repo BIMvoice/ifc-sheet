@@ -19,12 +19,16 @@
 import { buildDrawingSet, groundPlan, groupsThatDoNotFit, type ModelExtent, type SetGroup } from './drawing-set.js';
 import type { ElevationProjectView, NumberingScheme, PlanProjectView, ProjectDocument, ProjectLevel, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './document.js';
 import { freshProjectId } from './ids.js';
-import { nameOf } from './names.js';
+import { nameLanguageOf, nameOf, withNameLanguage } from './names.js';
 import { DEFAULT_SCHEME } from './numbering.js';
 import { proposeSections, type ProposalInput, type SectionProposal } from './section-proposals.js';
 import { sectionPlaneThrough } from './section-plane.js';
+import { assignDefaultTemplates, defaultViewTemplates } from './view-templates.js';
+import type { SetTemplate } from './set-template.js';
+import { applySetTemplate } from './set-template-apply.js';
+import type { TemplateNote, TemplateNoteKey } from './set-template-notes.js';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults.js';
-import { ELEVATION_DIRECTIONS, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planCutHeight, resolvePlanLevel, sameElevation, uniqueViewName, type StoreyInput } from './view-defaults.js';
+import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, resolvePlanLevel, sameElevation, uniqueViewName, type StoreyInput } from './view-defaults.js';
 
 /** How many proposed sections the starting set draws (`SET_SECTIONS` in the app). */
 export const SET_SECTIONS = 2;
@@ -35,6 +39,8 @@ export interface SetModel {
   projectName?: string;
   storeys: readonly StoreyInput[];
   extent: ModelExtent | null;
+  /** The extent was framed on everything, far-away small elements included; the document records the setting. */
+  includeFarElements?: boolean;
   proposalInput(level: ProjectLevel): ProposalInput | null;
 }
 
@@ -47,11 +53,21 @@ export interface DefaultSetOptions {
   templates?: Partial<Record<TemplateSeries, SheetTemplate>>;
   /** The project's numbering (default: A-101 style). */
   scheme?: NumberingScheme;
+  /** A set template (#21): the sheets are made by its rules (`applySetTemplate`) instead of the automatic grouping; the views are the same. */
+  setTemplate?: SetTemplate;
+  /**
+   * The language the set's names are made in (`ro`, `en`; `names.ts`), recorded on the document as `language`. Absent:
+   * the installed resolver names it (the app's catalogue; English without one) and no language is recorded. A tag the
+   * engine has no names in names the set in English.
+   */
+  language?: string;
+  /** The language the notes printed on the sheets are written in (`applySetTemplate`); default English. */
+  locale?: string;
 }
 
 /** Something the person should know about the set, as a catalogue key and its parameters. */
 export interface SetNote {
-  key: 'draftSet.note.noStoreys' | 'draftSet.note.noFit';
+  key: 'draftSet.note.noStoreys' | 'draftSet.note.noFit' | TemplateNoteKey;
   params: Record<string, string | number>;
 }
 
@@ -108,11 +124,23 @@ class Planner {
     }
     for (const level of levels) {
       if (this.views.some((v) => v.kind === 'plan' && sameElevation(v.level.elevation, level.elevation))) continue;
-      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: planCutHeight(level, levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, this.levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
     }
   }
 
-  /** The four elevations, each plane just inside its facade and each seeing through the building. */
+  /**
+   * The site plan a template with a `site` rule draws: the ground storey's cut, flagged `site`, at the scale the rule
+   * asks for. None when the project has one already (the app's `ensureSitePlan` keeps the first too) or has no plan.
+   */
+  sitePlan(template: SetTemplate | undefined): void {
+    const slot = template?.sheets.flatMap((s) => s.slots).find((s) => s.view.kind === 'site');
+    if (!slot || this.views.some((v) => v.kind === 'plan' && v.site)) return;
+    const ground = groundPlan(this.views.filter((v) => !v.detail));
+    if (!ground) return;
+    this.add<PlanProjectView>({ kind: 'plan', name: nameOf('names.view.site'), cutHeight: ground.cutHeight, level: ground.level, site: true, ...(slot.scale === undefined ? {} : { scale: slot.scale }) });
+  }
+
+  /** The four elevations, each plane outside its facade and each seeing through the building. */
   elevations(): void {
     for (const direction of ELEVATION_DIRECTIONS) {
       const found = this.views.find((v): v is ElevationProjectView => v.kind === 'elevation' && v.direction === direction && !v.interior);
@@ -126,9 +154,9 @@ class Planner {
   }
 
   /** A plan with no scale of its own takes the one the set will draw it at. */
-  planScales(templates: Partial<Record<TemplateSeries, SheetTemplate>>): void {
+  planScales(templates: Partial<Record<TemplateSeries, SheetTemplate>>, setTemplate?: SetTemplate): void {
     const plans = this.views.filter((v): v is PlanProjectView => v.kind === 'plan' && !v.detail);
-    const planned = buildDrawingSet({ views: plans, extent: this.extent, templates });
+    const planned = setTemplate ? applySetTemplate(setTemplate, { views: plans, extent: this.extent }).sheets : buildDrawingSet({ views: plans, extent: this.extent, templates });
     const scales = new Map(planned.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, vp.scale] as const)));
     for (const plan of plans) {
       const scale = scales.get(plan.id);
@@ -145,7 +173,7 @@ class Planner {
     return this.add<SectionProjectView>({ kind: 'section', name, plane: { axis: 'front', offset: custom.distance, flipped: false, custom }, through: proposal.label });
   }
 
-  /** The proposed sections the set draws, on the lowest plan, each seeing to the far side of the building. */
+  /** The proposed sections the set draws, on the ground plan (`groundPlan`), each seeing to the far side of the building. */
   sections(model: SetModel): void {
     if (this.views.some((v) => v.kind === 'section')) return;
     const plan = groundPlan(this.views);
@@ -165,6 +193,11 @@ class Planner {
  * geometry): there is nothing to measure the sheets on.
  */
 export function generateDefaultSet(model: SetModel, options: DefaultSetOptions = {}): DefaultSet | null {
+  const set = withNameLanguage(options.language, () => generateSet(model, options));
+  return set && options.language !== undefined ? { ...set, document: { ...set.document, language: nameLanguageOf(options.language) ?? 'en' } } : set;
+}
+
+function generateSet(model: SetModel, options: DefaultSetOptions): DefaultSet | null {
   if (!model.extent) return null;
   const now = options.now ?? Date.now();
   const templates = options.templates ?? {};
@@ -172,18 +205,28 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
   const planner = new Planner(levels, model.extent, now);
   planner.plans();
   planner.elevations();
-  planner.planScales(templates);
+  planner.sitePlan(options.setTemplate);
+  planner.planScales(templates, options.setTemplate);
   planner.sections(model);
-  const sheets = buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme: options.scheme ?? DEFAULT_SCHEME });
-  const notes = [...planner.notes, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
+  const chosen = options.setTemplate?.numbering ?? options.scheme;
+  const scheme = chosen ?? DEFAULT_SCHEME;
+  const ruled = options.setTemplate ? applySetTemplate(options.setTemplate, { views: planner.views, extent: model.extent, now, scheme, ...(options.locale ? { locale: options.locale } : {}) }) : null;
+  const sheets = ruled ? ruled.sheets : buildDrawingSet({ views: planner.views, extent: model.extent, now, templates, scheme });
+  // The schedules a template carries are added by the app; the engine says so rather than leave them out silently.
+  const schedules = (options.setTemplate?.schedules ?? []).map((r): TemplateNote => ({ key: 'setTemplate.note.schedule', params: { kind: r.kind, name: r.name } }));
+  const notes = [...planner.notes, ...(ruled?.notes ?? []), ...schedules, ...groupsThatDoNotFit(planner.views, model.extent).map((kind: SetGroup): SetNote => ({ key: 'draftSet.note.noFit', params: { kind } }))];
+  // The starting view templates (#44): one per kind, named on the views the set drew.
+  const viewTemplates = defaultViewTemplates((kind) => nameOf(`names.viewTemplate.${kind}`), () => freshProjectId('viewtemplate'));
   return {
     document: {
       name: options.name ?? (model.projectName || nameOf('names.project.untitled')),
       models: [],
-      views: planner.views,
+      views: assignDefaultTemplates(planner.views, viewTemplates),
+      viewTemplates,
       sheets,
       titleBlock: { date: new Date(now).toISOString().slice(0, 10) },
-      ...(options.scheme ? { sheetNumbering: options.scheme } : {}),
+      ...(chosen ? { sheetNumbering: chosen } : {}),
+      ...(model.includeFarElements ? { includeFarElements: true } : {}),
     },
     levels,
     notes,

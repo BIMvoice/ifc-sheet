@@ -10,7 +10,8 @@
  * building: an inner string (the corner walls, the cross walls and the door
  * and window edges), a middle string (corner to cross-wall axes to corner,
  * only when cross walls meet the facade) and an overall string. The first
- * string stands 12 mm (paper) from the facade, the next ones 8 mm further.
+ * string stands 20 mm (paper) from the facade by default (a dimension style
+ * setting), the next ones 8 mm further.
  * Pure and deterministic: the same parts give the same strings.
  */
 
@@ -19,7 +20,8 @@ import { bridgedOpenings, contentOf, facadesOf, type Facade, type Opening } from
 import { boxOf, mainDirection, outlineOf, rotate, unionBox } from './outline';
 import type { DimensionPlan, DimensionSettings, PlannedString, PlanPart, StringKind } from './types';
 
-export const FIRST_MM = 12;
+/** Paper mm from the facade to the first string when the dimension style has no setting (the style default, `DEFAULT_DIM_STYLE.allOffset`): clear of a row of tags. */
+export const FIRST_MM = 20;
 export const STEP_MM = 8;
 /** Points closer than this along a string are one point (metres). */
 const SAME = 0.005;
@@ -61,7 +63,9 @@ export function planDimensions(parts: readonly PlanPart[], settings: DimensionSe
     sets.forEach(([kind, values], i) => {
       const along = distinct(values);
       if (along.length < 2) return;
-      strings.push({ key: key(f, kind), kind, along: back(f.u), outward: back(f.n), points: along.map(at), offset: first + step * i });
+      // A span between the two edges of a door or window measures that element.
+      const measures = along.slice(1).map((s1, k) => (kind === 'inner' ? c.openingParts.find((o) => Math.abs(o.s0 - along[k]) <= SAME && Math.abs(o.s1 - s1) <= SAME)?.id ?? null : null));
+      strings.push({ key: key(f, kind), kind, along: back(f.u), outward: back(f.n), points: along.map(at), offset: first + step * i, measures });
     });
   }
   return { strings, skippedFacades: skipped, angle, outline: loop.map(back) };

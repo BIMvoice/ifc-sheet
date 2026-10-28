@@ -12,22 +12,29 @@
  * draw through this, so a sheet looks the same wherever it hangs.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
-import { fitExtent, viewportBox } from '@/project/sheets';
-import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
+import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
+import { viewportBox } from '@/project/sheets';
+import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkDrafts, elevationMarkPlan, obstacleBoxes, sectionReferenceDrafts } from '@/drafting/cross-ref-marks';
-import { annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
+import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { viewScreenUp } from '@/project/view-screen-up';
+import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
+import { schemeResultOf } from '@/project/view-colour-scheme';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
@@ -41,6 +48,7 @@ import { useSheetCivilDrawings } from '../civil/CivilDrawingGraphic';
 import { useSheetLegends } from '../legend/LegendGraphic';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import type { ViewportContent } from './SheetPaper';
+import { memoOn, sharedMemo } from './shared-memo';
 import { siteBounds, useSheetSite } from '../siteplan/useSheetSite';
 
 /** The raster capture a 3D view prints as, when it prints as one and has been captured (and, after an autosave restore, read back). */
@@ -49,16 +57,39 @@ function rasterOf(view: ProjectView | undefined): ViewRaster | undefined {
   return raster && !isAutosaveRasterRef(raster.href) ? raster : undefined;
 }
 
+interface StyledViewport { drawing: Drawing2D | null; overlays: PlanOverlay[] }
+
+const styledMemo = sharedMemo<StyledViewport>();
+const fittedMemo = sharedMemo<Drawing2D>();
+const crossRefMemo = sharedMemo<PlanCrossRefInput>();
+
 export interface SheetContent {
   content: (vp: SheetViewport) => ViewportContent;
   /** A viewport's box on the paper, mm. */
   boxOf: (vp: SheetViewport) => { width: number; height: number };
 }
 
-export function useSheetContent(sheet: ProjectSheet): SheetContent {
+export interface SheetContentOptions {
+  /**
+   * Take a newly generated drawing in a deferred render (`useDeferredValue`), which React splits
+   * into short tasks and lets input go first. For the Wall, where views land one by one while the
+   * user scrolls (#154); a caller that reads the paper as soon as a view is ready (an issue's
+   * capture, the sheet editor) keeps the default, which draws the drawing in the same render.
+   */
+  deferDrawings?: boolean;
+}
+
+export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: SheetContentOptions = {}): SheetContent {
   const views = useProjectStore((s) => s.views);
+  // The view templates (#44): a template edited redraws every viewport whose view follows it.
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
   const drafts = useProjectStore((s) => s.drafts);
-  const byView = useViewDrawings((s) => s.byView);
+  // Only this sheet's drawings: a progress tick, or another sheet's view landing, leaves the sheet as it is (#154).
+  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const liveDrawings = useViewDrawings(useShallow((s) => placedViewIds.map((id) => s.byView[id]?.drawing ?? null)));
+  const deferredDrawings = useDeferredValue(liveDrawings);
+  const sheetDrawings = deferDrawings ? deferredDrawings : liveDrawings;
+  const drawingOf = useMemo(() => new Map(placedViewIds.map((id, i) => [id, sheetDrawings[i]])), [placedViewIds, sheetDrawings]);
   // Each placed view as its own graphics style it: styled drawing and (plans) door / window symbols and roofs.
   const flips = useProjectStore((s) => s.symbolFlips);
   const standard = useGraphicStandard();
@@ -73,19 +104,33 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const loadedModels = useViewerStore((s) => s.models);
   const projectModels = useProjectStore((s) => s.models);
   const styleOf = useMemo(() => entityStyles(useViewerStore.getState(), projectModels), [loadedModels, projectModels]);
+  // A viewport is styled again only when its own drawing, view or scale changed, or one of the shared inputs
+  // did: views land one at a time and the others on the sheet keep what they had, and the sheet editor
+  // reuses what the Wall styled (`styledMemo`, #154).
   const styled = useMemo(() => {
-    const out = new Map<string, { drawing: Drawing2D | null; overlays: PlanOverlay[] }>();
+    const out = new Map<string, StyledViewport>();
     for (const vp of sheet.viewports ?? []) {
       if (out.has(vp.viewId)) continue;
       const view = views.find((v) => v.id === vp.viewId);
-      const raw = (byView[vp.viewId] ?? EMPTY_VIEW_DRAWING).drawing;
-      const phases = phaseViewOf(view?.graphics, phaseSource);
-      const drawing = raw ? styledDrawing(raw, view?.graphics, partHostType, viewOmits(view), viewMaterials(raw), phases) : null;
-      const overlays = [...(view && raw ? planOverlays(view, raw.config.plane, phaseMeshes(geometryResult?.meshes, phases), flips, hiddenClasses(view.graphics), raw, vp.scale, standard.pens) : []), ...membraneOverlays(drawing)];
-      out.set(vp.viewId, { drawing, overlays });
+      const raw = drawingOf.get(vp.viewId) ?? null;
+      const style = (): StyledViewport => {
+        const graphics = resolveViewGraphics(view, viewTemplates);
+        const phases = phaseViewOf(graphics, phaseSource);
+        // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
+        // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
+        const detail = resolveDetailLevel(graphics, vp.scale);
+        const kept = raw ? atDetailLevel(withoutHiddenElements(raw, graphics, renderIdGlobalId), detail) : null;
+        const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
+        return { drawing, overlays };
+      };
+      out.set(vp.viewId, raw
+        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
+        : style());
     }
     return out;
-  }, [sheet.viewports, views, byView, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
+  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.
@@ -93,38 +138,45 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
   const settledDrafts = useCallback((viewId: string) => {
     const view = views.find((v) => v.id === viewId);
     const own = draftsOfView(viewId, drafts);
-    return view ? settleLevelDrafts(own, levelResolverFor(view, levels, byView[viewId]?.drawing?.config.plane)) : own;
-  }, [views, drafts, levels, byView]);
+    return view ? settleLevelDrafts(own, levelResolverFor(view, levels, drawingOf.get(viewId)?.config.plane)) : own;
+  }, [views, drafts, levels, drawingOf]);
   const placedLegends = useSheetLegends(sheet);
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
-  const rawDrawing = useCallback((viewId: string) => byView[viewId]?.drawing ?? null, [byView]);
-  const placedViewIds = useMemo(() => (sheet.viewports ?? []).map((vp) => vp.viewId), [sheet.viewports]);
+  const rawDrawing = useCallback((viewId: string) => drawingOf.get(viewId) ?? null, [drawingOf]);
   const sites = useSheetSite(placedViewIds, views, drafts, rawDrawing);
-  // What an auto-fit viewport frames: the drawing, the plot of a site plan and the view's own drafts (#140).
-  // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
-  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitExtent(vp, siteBounds(bounds, sites.get(vp.viewId)), settledDrafts(vp.viewId), views.find((v) => v.id === vp.viewId)?.scale), [sites, settledDrafts, views]);
-  const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
-    const drawing = styled.get(vp.viewId)?.drawing ?? null;
-    if (!drawing) return null;
-    const bounds = fittedBounds(vp, drawing.bounds);
-    return bounds === drawing.bounds ? drawing : { ...drawing, bounds };
-  }, [styled, fittedBounds]);
   // Cross-references are derived here, at draw time, from the sheets as they are: nothing of them is stored on the plan.
   const sheets = useProjectStore((s) => s.sheets);
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
-  const draftsFor = useCallback((vp: SheetViewport) => {
-    const own = settledDrafts(vp.viewId);
-    const view = views.find((v) => v.id === vp.viewId);
-    const sections = view?.kind === 'plan' ? sectionReferenceDrafts(own, views, sheets) : [];
-    const bounds = byView[vp.viewId]?.drawing?.bounds;
-    const withSections = sections.length ? [...own, ...sections] : own;
-    const elevations = view && view.id === ground?.id && bounds
-      ? elevationMarkDrafts({ planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(vp.scale), factor: annotationFactor(vp.scale, view.scale), obstacles: obstacleBoxes(withSections) })
-      : [];
-    return elevations.length ? [...withSections, ...elevations] : withSections;
-  }, [settledDrafts, views, sheets, byView, ground]);
+  // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
+  // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
+  // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
+  // the Wall hangs as an outline and then draws again, or the sheet editor opening it, finds them already placed.
+  const crossRefInput = useMemo(() => {
+    return (vp: SheetViewport): PlanCrossRefInput => {
+      const raw = drawingOf.get(vp.viewId) ?? null;
+      const view = views.find((v) => v.id === vp.viewId);
+      const overlays = styled.get(vp.viewId)?.overlays;
+      const screenUp = viewScreenUp(vp.viewId);
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+        drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp,
+      }));
+    };
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);
+  const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
+  // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
+  // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
+  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(bounds, sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput]);
+  // The same refitted drawing object while its bounds are the same, so a viewport's pens (memoised on it) are kept.
+  const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
+    const drawing = styled.get(vp.viewId)?.drawing ?? null;
+    if (!drawing) return null;
+    const bounds = fittedBounds(vp, drawing.bounds);
+    if (bounds === drawing.bounds) return drawing;
+    return memoOn(fittedMemo, drawing, [bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y], () => ({ ...drawing, bounds }));
+  }, [styled, fittedBounds]);
   const content = useCallback((vp: SheetViewport): ViewportContent => ({
     schedule: placedSchedules.get(vp.viewId),
     civil: placedCivil.get(vp.viewId),
@@ -141,8 +193,10 @@ export function useSheetContent(sheet: ProjectSheet): SheetContent {
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);
-    const drawing = byView[v.viewId]?.drawing;
-    return placed ? { width: placed.width, height: placed.height } : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
-  }, [placedSchedules, placedCivil, placedLegends, byView, fittedBounds]);
+    const drawing = drawingOf.get(v.viewId);
+    return placed ? ('fit' in placed && placed.fit ? { width: placed.fit.box.w, height: placed.fit.box.h } : { width: placed.width, height: placed.height }) : viewportBox(v, drawing ? fittedBounds(v, drawing.bounds) : null);
+  }, [placedSchedules, placedCivil, placedLegends, drawingOf, fittedBounds]);
+  // Code outside React (the legend placement) measures the sheet's viewports with this same box (#267).
+  useEffect(() => registerViewportBoxes(sheet.id, boxOf), [sheet.id, boxOf]);
   return { content, boxOf };
 }

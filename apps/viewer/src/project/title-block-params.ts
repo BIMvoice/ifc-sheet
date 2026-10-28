@@ -13,56 +13,18 @@
  * cannot be taken.
  */
 
-import type { ProjectSheet } from './types';
+import { BUILTIN_PARAMS, checkParamName, PARAM_NAME, paramLookup, resolveParamText, SOFT_BUILTINS, TOKEN, type BuiltinParam, type ParamNameProblem, type TitleBlockParam } from '@bimvoice/ifcsheet';
 
-export interface TitleBlockParam {
-  name: string;
-  value: string;
-}
+/** The built-ins, the token pattern, the text and sheet lookups are the engine's (`packages/ifcsheet/src/title-block-params.ts`): the PDF resolves a layout the same way. */
+export { BUILTIN_PARAMS, paramLookup, resolveParamText, SOFT_BUILTINS, type BuiltinParam, type TitleBlockParam };
 
-/** A name: a letter, then letters, digits and underscores. */
-export const PARAM_NAME = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
-/** `{Name}` inside text. */
-const TOKEN = /\{([A-Za-z][A-Za-z0-9_]{0,39})\}/g;
+/** Every name the program fills, for listing to the user: the fixed ones, then those a project's own parameter of the name replaces. */
+export const FILLED_PARAMS: readonly string[] = [...BUILTIN_PARAMS, ...SOFT_BUILTINS];
 
-/** The built-in parameters, read-only: the sheet's own facts and the title block fields (`title-block.ts`), by the name text uses. */
-export const BUILTIN_PARAMS = ['SheetNumber', 'SheetName', 'Scale', 'Date', 'Page', 'Project', 'Address', 'Client', 'Organisation', 'DrawnBy', 'CheckedBy', 'Revision'] as const;
-export type BuiltinParam = (typeof BUILTIN_PARAMS)[number];
-
-const BUILTIN_LOWER = new Set(BUILTIN_PARAMS.map((n) => n.toLowerCase()));
-
-export type ParamNameProblem = 'empty' | 'invalid' | 'builtin' | 'duplicate';
-
-/** Why `name` cannot be a parameter's name, or null. `except` is the name being renamed, which may be kept. Names are told apart without regard to case, so `{phase}` never silently means something else than `{Phase}`. */
-export function checkParamName(name: string, existing: readonly TitleBlockParam[], except?: string): ParamNameProblem | null {
-  const trimmed = name.trim();
-  if (!trimmed) return 'empty';
-  if (!PARAM_NAME.test(trimmed)) return 'invalid';
-  if (BUILTIN_LOWER.has(trimmed.toLowerCase())) return 'builtin';
-  const lower = trimmed.toLowerCase();
-  if (existing.some((p) => p.name !== except && p.name.toLowerCase() === lower)) return 'duplicate';
-  return null;
-}
-
-/** `text` with each `{Name}` replaced by what `lookup` says; a name it does not know becomes `{Name?}`. The values are not read again. */
-export function resolveParamText(text: string, lookup: (name: string) => string | undefined): string {
-  return text.replace(TOKEN, (_, name: string) => lookup(name) ?? `{${name}?}`);
-}
+/** The name rule and its check are the engine's (`title-block-file-read.ts`): the project file's reader drops what the editor would refuse by the same rule. */
+export { checkParamName, PARAM_NAME, type ParamNameProblem };
 
 /** `text` with `{from}` written `{to}`. */
 export function renameParamIn(text: string, from: string, to: string): string {
   return text.replace(TOKEN, (whole, name: string) => (name === from ? `{${to}}` : whole));
-}
-
-/**
- * The lookup a sheet's text resolves through: the built-ins first (they own their names), then the sheet's own
- * value, then the project's. A sheet value for a parameter the project no longer has is not read.
- */
-export function paramLookup(sheet: Pick<ProjectSheet, 'titleBlockParams'>, params: readonly TitleBlockParam[] | undefined, builtins: Readonly<Partial<Record<BuiltinParam, string>>>): (name: string) => string | undefined {
-  const project = new Map((params ?? []).map((p) => [p.name, p.value]));
-  return (name) => {
-    if ((BUILTIN_PARAMS as readonly string[]).includes(name)) return builtins[name as BuiltinParam] ?? '';
-    const own = sheet.titleBlockParams?.[name];
-    return own !== undefined && project.has(name) ? own : project.get(name);
-  };
 }
