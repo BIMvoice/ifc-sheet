@@ -7,6 +7,9 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, render } from '@/test/render.js';
 import { setEditionForTests } from '@/edition';
+import { registerLocale, setLocale } from '@/i18n';
+import { checkCatalogue } from '@/i18n/catalogue-problems';
+import ro from '@/i18n/locales/ro';
 import { KEY_COMMANDS } from '@/lib/commands/keyboard-commands';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { WALL_KEY_COMMANDS } from '@/lib/commands/wall-key-commands';
@@ -41,6 +44,18 @@ describe('the shortcut list on IfcSheet\'s face', () => {
     assert.equal(rows.get('drafting.undo'), 'Ctrl+Z');
     assert.equal(rows.get('drafting.snap'), 'F3');
     assert.equal(rows.get('drafting.ortho'), 'F8');
+  });
+
+  it('states the Escape rule of the drafting tools in English and Romanian (#453)', () => {
+    setEditionForTests('docs');
+    const text = () => render(<ShortcutsTab />).querySelector('[data-shortcut-command="drafting.cancel"]')?.textContent ?? '';
+    assert.match(text(), /end the current tool.*Back to sheet.*text field keeps its own Escape/);
+    cleanup();
+    try {
+      registerLocale('ro', checkCatalogue(ro).catalogue);
+      setLocale('ro');
+      assert.match(text(), /încheie instrumentul curent.*Înapoi la planșă.*text.*propriul Esc/);
+    } finally { setLocale('en'); }
   });
 
   it('adds a row when an entry is added to the table', () => {

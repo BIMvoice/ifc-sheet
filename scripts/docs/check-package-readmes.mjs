@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Guard: every published (non-private) package under packages/* ships a
+ * Guard: every documented package (non-private, or a package that #423 marked private but that still carries a publishConfig) under packages/* ships a
  * sibling README.md. npm renders it as the package landing page, so a
  * missing one is a silently shipped blank page.
  *
@@ -46,6 +46,17 @@ const packagesDir = join(ROOT, 'packages');
  * the count towards zero rather than to 24.
  */
 const CHECKED_FLOOR = 25;
+
+/**
+ * A package is documented/versioned when it is not private, OR when it is
+ * private but still carries a `publishConfig` (the marker of a package that was
+ * published upstream; the purely internal tools never had one). #423 marks the
+ * vendored packages `private: true` only so they can never be published; their READMEs, doc samples and
+ * changesets still matter. Same rule in check-package-readmes.mjs,
+ * check-doc-samples.mjs and check-changeset-required.mjs (a parity test
+ * drives the first two over the real tree).
+ */
+const isDocumented = (pkg) => pkg.private !== true || pkg.publishConfig != null;
 
 function fail(message) {
   console.error(`\n❌ ${message}\n`);
@@ -108,7 +119,7 @@ for (const dir of entries) {
   const pkgJsonPath = join(packagesDir, dir, 'package.json');
   if (!existsOrFail(pkgJsonPath, 'package manifest')) continue;
   const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-  if (pkg.private === true) continue;
+  if (!isDocumented(pkg)) continue;
   checked += 1;
   if (!existsOrFail(join(packagesDir, dir, 'README.md'), 'README')) {
     missing.push(`${pkg.name}  (packages/${dir}/README.md)`);

@@ -10,6 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
+import type { DetailLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
 import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
@@ -19,14 +20,29 @@ import { typedElevationSymbol } from '@/joinery/elevation-placement';
 import { doorOperationOfRenderId } from '@/joinery/door-operation-read';
 import { openingConvention } from '@/joinery/opening-convention';
 
+/**
+ * A symbol at a detail level (#444). Fine is the symbol as it is. Coarse and medium simplify the opening: a window keeps its frame
+ * and loses the glazing lines across it (when a closed frame is left), and the dashed parts (what lies above the cut) go. A door
+ * keeps its leaf and its swing.
+ */
+export function simplifyOpeningSymbol(s: OpeningSymbol, detail: DetailLevel): OpeningSymbol {
+  if (detail === 'fine') return s;
+  const framed = [...s.shapes, ...(s.heavy ?? [])].some((x) => x.type === 'polyline' && x.closed);
+  const shapes = s.kind === 'window' && framed ? s.shapes.filter((x) => x.type !== 'line') : s.shapes;
+  const { dashed: _dashed, ...rest } = s;
+  return { ...rest, shapes };
+}
+
 export function viewOpeningSymbols(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine',
 ): OpeningSymbol[] {
   const flipsOf = (id: number) => {
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId).filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
+  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId)
+    .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
+    .map((s) => simplifyOpeningSymbol(s, detail));
 }
 
 /**
@@ -56,7 +72,7 @@ export function visibleEntities(drawing: Pick<Drawing2D, 'lines'> | null | undef
  * opening marks over the projected mesh.
  */
 export function viewElevationSymbols(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, visible: ReadonlySet<number>, hidden: ReadonlySet<string>,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, visible: ReadonlySet<number>, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine',
 ): OpeningSymbol[] {
   if (plane.axis === 'y' || plane.customPlane) return [];
   const byId = new Map<number, { kind: 'door' | 'window'; world: number[]; l2w?: number[] }>();
@@ -77,7 +93,7 @@ export function viewElevationSymbols(
   for (const [id, entry] of byId) {
     const drawn = entry.l2w ? drawnJoineryOfRenderId(id) : null;
     const placed = drawn && entry.l2w ? typedElevationSymbol(drawn.spec, entry.world, entry.l2w, plane, drawn.flips, { convention }) : null;
-    if (placed) out.push({ id, kind: entry.kind, shapes: placed.thin, dashed: placed.dashed });
+    if (placed) out.push(simplifyOpeningSymbol({ id, kind: entry.kind, shapes: placed.thin, dashed: placed.dashed }, detail));
   }
   return out;
 }
