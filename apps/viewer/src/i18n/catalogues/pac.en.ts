@@ -30,7 +30,7 @@ export const pacEn = {
   'pac.useSet': 'Use the PAC sheets for a new project',
   'permitPack.label': 'Permit pack',
   'permitPack.pacFull': 'PAC (Anexa 2)',
-  'permitPack.pacRural': 'PAC simplificat (Anexa 3)',
+  'permitPack.pacRural': 'Simplified PAC, rural house (Anexa 3)',
   'permitPack.norway': 'Norge (byggesak)',
   'permitPack.germany': 'Deutschland (Bauantrag)',
   'pac.rural.intro': 'The simplified contents for a rural single-family house (at most P + M, at most 150 mp developed built area), as Anexa 3 of Legea 169/2026 lists them.',

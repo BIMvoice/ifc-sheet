@@ -31,7 +31,7 @@ export const pacRo = {
   'pac.useSet': 'Folosește planșele PAC pentru un proiect nou',
   'permitPack.label': 'Pachet de autorizare',
   'permitPack.pacFull': 'PAC (Anexa 2)',
-  'permitPack.pacRural': 'PAC simplificat (Anexa 3)',
+  'permitPack.pacRural': 'PAC simplificat, locuință rurală (Anexa 3)',
   'permitPack.norway': 'Norge (byggesak)',
   'permitPack.germany': 'Deutschland (Bauantrag)',
   'pac.rural.intro': 'Conținutul simplificat pentru o locuință unifamilială în mediul rural (cel mult P + M, cel mult 150 mp suprafață construită desfășurată), cum îl enumeră Anexa 3 la Legea 169/2026.',

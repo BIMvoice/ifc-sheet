@@ -38,7 +38,7 @@ describe('the checklist, literally', () => {
     ['sitePlan', 'read', site, siteStatus, 'site'],
     ['siteContent', 'read', null, null, null],
   ];
-  // READ for a Land only where its own text was read: the scale bar, the single files and the PDF/A of Bayern (DBauV § 11), the PDF/A of BW (LBOVVO § 3(2)). The rest cite the model text only.
+  // READ for a Land only where its own text was read: the scale bar, the single files and the PDF/A of Bayern (DBauV § 11), the PDF/A of BW (LBOVVO § 3). The rest cite the model text only.
   const tail = (land: 'bayern' | 'nrw' | 'bw') => [
     ['scaleBar', land === 'bayern' ? 'read' : 'unverified', null, null, null],
     ['pdfA', land === 'nrw' ? 'unverified' : 'read', null, null, null],
@@ -108,7 +108,7 @@ describe('the checklist, literally', () => {
     bayern: {
       plans: 'BayBauVorlV § 8', sections: 'BayBauVorlV § 8', sectionHeights: 'BayBauVorlV § 8', facades: 'BayBauVorlV § 8', facadeContent: 'BayBauVorlV § 8',
       sitePlan: 'BayBauVorlV § 7', siteContent: 'BayBauVorlV § 7(3)', setbackAreas: 'BayBauVorlV § 7(3) no. 13', setbackDeclaration: 'BayBauVorlV § 3 no. 8',
-      useCalculation: 'BayBauVorlV § 3 no. 7', symbolsColours: 'BayBauVorlV § 7(5)', scaleBar: 'DBauV § 11(2)', pdfA: 'DBauV § 11', oneFile: 'DBauV § 11',
+      useCalculation: 'BayBauVorlV § 3 no. 7', symbolsColours: 'BayBauVorlV § 7(5)', scaleBar: 'DBauV (digital Bauantrag only) § 11(2)', pdfA: 'DBauV (digital Bauantrag only) § 11', oneFile: 'DBauV (digital Bauantrag only) § 11',
     },
     nrw: {
       plans: 'BauPrüfVO § 4', sections: 'BauPrüfVO § 4', sectionHeights: 'BauPrüfVO § 4(3)', facades: 'BauPrüfVO § 4', facadeContent: 'BauPrüfVO § 4(4)',
@@ -116,7 +116,7 @@ describe('the checklist, literally', () => {
     },
     bw: {
       plans: 'LBOVVO § 6', sections: 'LBOVVO § 6', sectionHeights: 'LBOVVO § 6', facades: 'LBOVVO § 6', facadeContent: 'LBOVVO § 6',
-      sitePlan: 'LBOVVO § 4', siteContent: 'LBOVVO § 4', setbackSheet: 'LBOVVO § 4(4)', useCalculation: 'LBOVVO § 4(6) no. 6', symbolsColours: 'LBOVVO § 4(5)', pdfA: 'LBOVVO § 3(2)',
+      sitePlan: 'LBOVVO § 4', siteContent: 'LBOVVO § 4', setbackSheet: 'LBOVVO § 4(4)', useCalculation: 'LBOVVO § 4(6) no. 6', symbolsColours: 'LBOVVO § 4(5)', pdfA: 'LBOVVO § 3',
     },
     other: {
       plans: 'MBauVorlV (model text, not law until a Land adopts it) § 8', sections: 'MBauVorlV (model text, not law until a Land adopts it) § 8', sectionHeights: 'MBauVorlV (model text, not law until a Land adopts it) § 8',
