@@ -30,7 +30,7 @@ describe('the permit pack choice', () => {
     assert.equal(new Set(radios(ui).map((r) => r.name)).size, 1);
     assert.deepEqual(checked(ui), ['pacFull']);
     assert.equal(ui.querySelector('fieldset > legend')?.textContent, 'Permit pack');
-    assert.deepEqual([...ui.querySelectorAll('label')].map((l) => l.textContent), ['PAC (Anexa 2)', 'PAC simplificat (Anexa 3)', 'Norge (byggesak)', 'Deutschland (Bauantrag)']);
+    assert.deepEqual([...ui.querySelectorAll('label')].map((l) => l.textContent), ['PAC (Anexa 2)', 'Simplified PAC, rural house (Anexa 3)', 'Norge (byggesak)', 'Deutschland (Bauantrag)']);
     for (const r of radios(ui)) assert.ok(r.closest('label'), 'every radio is labelled');
   });
 

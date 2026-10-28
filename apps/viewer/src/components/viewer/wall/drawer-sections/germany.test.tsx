@@ -109,7 +109,7 @@ describe('the Germany mode', () => {
     assert.match(lageplan.textContent ?? '', /To add.*Sheet made; its content is to be added/s);
     assert.doesNotMatch(lageplan.textContent ?? '', /Drawn from the model/);
     for (const id of ['scaleBar', 'pdfA', 'oneFile', 'fileName', 'designer', 'useCalculation']) assert.equal(ui.querySelector(`[data-germany-item="${id}"]`)?.getAttribute('data-germany-drawn'), 'false', id);
-    assert.match(ui.querySelector('[data-germany-item="pdfA"]')?.textContent ?? '', /DBauV § 11/);
+    assert.match(ui.querySelector('[data-germany-item="pdfA"]')?.textContent ?? '', /DBauV \(digital Bauantrag only\) § 11/);
   });
 
   it('keeps the pack and the Land in the project file: saved, reopened, and off saved as absent', () => {
