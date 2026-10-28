@@ -37,8 +37,10 @@ async function precache() {
   const cache = await caches.open(PRECACHE);
   const queue = [...URLS];
   const worker = async () => {
+    // 'no-cache' revalidates what the visit already downloaded (a 304 for an
+    // unchanged file) instead of downloading the whole list a second time.
     for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
-      const response = await fetch(new Request(url, { cache: 'reload' }));
+      const response = await fetch(new Request(url, { cache: 'no-cache' }));
       if (!response.ok) throw new Error(`precache ${url}: ${response.status}`);
       await cache.put(url, response);
     }
@@ -73,19 +75,25 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// The navigation is fetched as the browser made it: `fetch(request)`, no init.
+// `fetch(request, init)` with any init turns a "navigate" request into a
+// "same-origin" one, and Vercel Skew Protection routes only real navigations
+// to the latest deployment; anything else follows the `__vdpl` cookie, so the
+// page would keep coming from the deployment the cookie names. The timeout is
+// a race, not an abort, for the same reason.
 async function navigate(request) {
+  let timer;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), NAVIGATION_TIMEOUT_MS);
-    try {
-      return await fetch(request, { signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('navigation timed out')), NAVIGATION_TIMEOUT_MS);
+    });
+    return await Promise.race([fetch(request), timeout]);
   } catch (error) {
     const shell = await caches.match('/', { cacheName: PRECACHE });
     if (shell) return shell;
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

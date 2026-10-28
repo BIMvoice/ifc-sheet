@@ -18,9 +18,9 @@ const template = readFileSync(new URL('../../vite-plugins/offline-sw.template.js
 
 type Listener = (event: unknown) => void;
 
-function load() {
+function load(options: { fetch?: (input: unknown) => Promise<unknown>; shell?: unknown } = {}) {
   const listeners = new Map<string, Listener>();
-  const calls = { skipWaiting: 0, put: [] as string[], deleted: [] as string[], fetched: [] as string[] };
+  const calls = { skipWaiting: 0, put: [] as string[], deleted: [] as string[], fetched: [] as string[], fetchArgs: [] as unknown[][] };
   const self = {
     location: { origin: 'https://app.test' },
     addEventListener: (type: string, fn: Listener) => { listeners.set(type, fn); },
@@ -28,23 +28,27 @@ function load() {
     skipWaiting: () => { calls.skipWaiting += 1; },
   };
   const caches = {
-    match: async () => undefined,
+    match: async () => options.shell,
     open: async () => ({ put: async (url: string) => { calls.put.push(url); } }),
     keys: async () => ['ifcsheet-precache-old', 'ifcsheet-runtime-old', 'ifcsheet-precache-v1', 'other-app-cache'],
     delete: async (name: string) => { calls.deleted.push(name); return true; },
   };
-  const fetchStub = async (input: { url: string }) => { calls.fetched.push(input.url); return new Response('x'); };
+  const fetchStub = async (...args: unknown[]) => {
+    calls.fetchArgs.push(args);
+    calls.fetched.push((args[0] as { url: string }).url);
+    return options.fetch ? options.fetch(args[0]) : new Response('x');
+  };
   const source = template.replace("'__BUILD_VERSION__'", "'v1'").replace("'__PRECACHE_URLS__'", "['/', '/assets/a.js']");
-  vm.runInNewContext(source, { self, caches, URL, Request: class { constructor(readonly url: string) {} }, fetch: fetchStub, setTimeout, clearTimeout, AbortController });
+  vm.runInNewContext(source, { self, caches, URL, Request: class { constructor(readonly url: string, readonly init?: { cache?: string }) {} }, fetch: fetchStub, setTimeout: (fn: () => void) => setTimeout(fn, 0), clearTimeout, AbortController });
   return { listeners, calls };
 }
 
 type Worker = ReturnType<typeof load>;
 
-function dispatch({ listeners }: Worker, url: string, init: { method?: string; mode?: string } = {}): boolean {
+function dispatch({ listeners }: Worker, url: string, init: { method?: string; mode?: string } = {}, onAnswer?: (answer: Promise<unknown>) => void): boolean {
   let handled = false;
   const request = { method: init.method ?? 'GET', mode: init.mode ?? 'cors', url, clone: () => request };
-  listeners.get('fetch')!({ request, respondWith: (answer: Promise<unknown>) => { handled = true; answer.catch(() => {}); } });
+  listeners.get('fetch')!({ request, respondWith: (answer: Promise<unknown>) => { handled = true; answer.catch(() => {}); onAnswer?.(answer); } });
   return handled;
 }
 
@@ -77,6 +81,30 @@ describe('offline service worker template (#456)', () => {
     await lifecycle(worker, 'install');
     assert.deepEqual(worker.calls.put.sort(), ['/', '/assets/a.js']);
     assert.equal(worker.calls.skipWaiting, 0);
+  });
+
+  it('fetches a navigation as the browser made it, with no init that would turn it into a non-navigation request', async () => {
+    const worker = load();
+    let answer: Promise<unknown> = Promise.resolve();
+    dispatch(worker, 'https://app.test/project', { mode: 'navigate' }, (a) => { answer = a; });
+    await answer;
+    assert.equal(worker.calls.fetchArgs.length, 1);
+    assert.equal(worker.calls.fetchArgs[0].length, 1, 'fetch(request, init) re-issues a navigation as mode "same-origin"');
+    assert.equal((worker.calls.fetchArgs[0][0] as { mode: string }).mode, 'navigate');
+  });
+
+  it('falls back to the cached shell when the navigation does not answer in time', async () => {
+    const shell = { cached: true };
+    const worker = load({ fetch: () => new Promise(() => {}), shell });
+    let answer: Promise<unknown> = Promise.resolve();
+    dispatch(worker, 'https://app.test/project', { mode: 'navigate' }, (a) => { answer = a; });
+    assert.equal(await answer, shell);
+  });
+
+  it('revalidates instead of re-downloading what the visit already fetched', async () => {
+    const worker = load();
+    await lifecycle(worker, 'install');
+    for (const [request] of worker.calls.fetchArgs) assert.equal((request as { init?: { cache?: string } }).init?.cache, 'no-cache');
   });
 
   it('skips waiting only when the page asks', () => {
