@@ -24,7 +24,6 @@ import { openStandards } from '@/project/standards-dialog-store';
 
 import { useTranslation } from '@/i18n';
 
-import { cn } from '@/lib/utils';
 
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
@@ -140,6 +139,7 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
+import { Toggle } from './Toggle';
 
 
 const NO_SHEET_TRANSFORM = { current: null };
@@ -384,18 +384,5 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn('h-6 rounded-sm px-2 font-medium', active ? 'bg-primary/15 text-primary' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900')}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }
