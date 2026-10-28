@@ -8,12 +8,15 @@
  * (`onLeftOut`), not dropped without a word.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ProjectSheet, ProjectView } from './document.js';
 import type { DraftEntity } from './draft-types.js';
 import type { OpenedModel } from './model.js';
 import { readProjectSet } from './project-set.js';
 import { projectSheetOptions, type LeftOut } from './project-sheets.js';
+
+// These tests pass no model: the site's north is not what they are about.
+vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ frame: { north: null, frameOffset: undefined }, georeferenced: false }) }));
 
 const line = (id: string, viewId: string): DraftEntity => ({ id, viewId, layerId: '0', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, params: {} });
 const detail: ProjectView = { id: 'detail', name: 'Eaves detail', kind: 'drafting', createdAt: 0 } as ProjectView;

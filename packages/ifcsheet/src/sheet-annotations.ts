@@ -21,7 +21,7 @@
 
 import type { Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
-import { clipPolyline } from './clip.js';
+import { clipPolyline, pointInBox } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
 import { formatDimension, layerShows, lookOf, type LayerGroup, type StyleBook } from './draft-look.js';
 import { AXIS_NAME } from './drawing-frame.js';
@@ -66,7 +66,7 @@ export interface SiteFacts {
 export type { SheetStroke };
 
 /**
- * The drafts on `vp`'s view, on the paper. `at` maps a drawing point to the paper; `box` clips the lines (the viewport's room),
+ * The drafts on `vp`'s view, on the paper. `at` maps a drawing point to the paper; `box` clips the lines and drops a text whose anchor is outside it, as the app's sheet clips a viewport's drafts (the viewport's room),
  * none when the layout gave the view none. A key plan prints no drafts, as on the sheet.
  */
 export function viewportAnnotations(
@@ -138,5 +138,6 @@ export function viewportAnnotations(
       if (textAt) a.onSkipped?.('dimension', view);
     }
   }
+  if (box) out.texts = out.texts.filter((t) => pointInBox(t.at, box));
   return out;
 }

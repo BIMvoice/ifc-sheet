@@ -27,13 +27,19 @@ import { DEFAULT_DIM_STYLE as ENGINE_DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type 
 
 // Resolving an entity's look is the engine's (`packages/ifcsheet/src/draft-look.ts`), so the command line prints what the app draws (#479).
 export {
-  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, TEXT_OVERRIDES, dashOf, dimStyleOf, formatDimension, layerLocked, layerPen, layerShows, lookOf, naturalDecimals, overrideKey,
+  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashOf, dimStyleOf, formatDimension, layerLocked, layerPen, layerShows, lookOf, naturalDecimals, overrideKey,
   readableDeg, resolveDim, resolveText, textStyleOf, unitFactor, type LayerGroup, type LayerVisibilityScope, type LineType, type StyleBook,
 } from '@bimvoice/ifcsheet';
 
 export type { ArrowKind, DimStyle, FontKind, TextPlacement, TextStyle } from '@bimvoice/ifcsheet';
 export type LengthUnit = DraftLengthUnit;
 export const STANDARD = STANDARD_STYLE_ID;
+
+/**
+ * The faces a table can be set in: the three the issued PDF can write (Inter embedded for sans, Times for serif, Courier for mono;
+ * `issue/pdf-fonts.ts`). `FontKind` has no other value, so a table style can never name a face the PDF could not carry.
+ */
+export const TABLE_FONTS: readonly FontKind[] = ['sans', 'serif', 'mono'];
 
 /** The project's own dimension style: the engine's (it is also the base of the dimension styles a graphic standard adds). */
 export const DEFAULT_DIM_STYLE: DimStyle = ENGINE_DEFAULT_DIM_STYLE;
