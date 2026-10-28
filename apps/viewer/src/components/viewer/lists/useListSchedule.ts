@@ -35,8 +35,8 @@ const NO_SCHEDULES: ProjectSchedule[] = [];
 /** A list schedule with its definition. */
 const isListSchedule = (s: ProjectSchedule | undefined): s is ProjectSchedule & { list: ListScheduleDef } => s?.kind === 'list' && !!s.list;
 
-/** What a run reads of the definition: not the name, which only titles the table. */
-const fingerprint = (list: ListScheduleDef): string => JSON.stringify(list);
+/** What a run reads of the definition: not the name, which only titles the table, and not the overrides, which are printed in afterwards (`listTableSourceOf`) and must not run the list again. */
+const fingerprint = ({ overrides: _overrides, ...list }: ListScheduleDef): string => JSON.stringify(list);
 
 /** The same object while every dep is `===` its predecessor; a new one otherwise. */
 function useStableKey(deps: readonly unknown[]): object {
@@ -141,9 +141,9 @@ export function useListScheduleRun(schedule: ProjectSchedule | undefined): ListR
 }
 
 /** The words a list table says that the Lists engine does not, in the interface's language. */
-export function useListWords(): { count: string; total: string; yes: string; no: string } {
+export function useListWords(): { count: string; total: string; yes: string; no: string; missing: string } {
   const { t } = useTranslation();
-  return useMemo(() => ({ count: t('listSched.count'), total: t('listSched.total'), yes: t('listSched.yes'), no: t('listSched.no') }), [t]);
+  return useMemo(() => ({ count: t('listSched.count'), total: t('listSched.total'), yes: t('listSched.yes'), no: t('listSched.no'), missing: t('listSched.missing') }), [t]);
 }
 
 /** The table of a run, as the sheet, the CSV and the XLSX hold it. */

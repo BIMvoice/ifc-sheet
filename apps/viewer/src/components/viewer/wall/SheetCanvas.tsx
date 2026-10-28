@@ -30,7 +30,10 @@ import { submitTypedLine } from '../drafting/typed-line';
 import { useSheetDrafting } from '../sheets/useSheetDrafting';
 import type { SheetContent } from '../sheets/useSheetContent';
 import { isResizable } from '@/project/viewport-resize';
+import { cellAt, pickCell } from '@/joinery/list-cell-pick';
 import { ViewportHandles } from './ViewportHandles';
+import { SheetHints } from '@/onboarding/SheetHints';
+import { dismissHint } from '@/onboarding/hints';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
 import { keysBelongElsewhere } from './wall-key-bus';
@@ -188,6 +191,9 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           if (e.button === 0 && drafting.down(p, e.shiftKey)) return;
           const vp = e.button === 0 ? viewportAt(p) : null;
           if (vp) onChoose(vp.id);
+          // A cell of a list schedule is picked by a click on it (#446); the card then offers its value to override. A drag still moves the schedule.
+          const cell = vp && e.button === 0 ? cellAt(sheetContent.content(vp).schedule, p) : null;
+          pickCell(vp && cell ? { scheduleId: vp.viewId, guid: cell.guid, column: cell.column } : null);
           const others = vp ? (sheet.viewports ?? []).filter((o) => o.id !== vp.id).map((o) => ({ x: o.x, y: o.y, ...sheetContent.boxOf(o) })) : [];
           drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined, sheet, targets: vp ? snapTargets(sheet, others) : undefined };
         }}
@@ -210,7 +216,10 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         onPointerCancel={endDrag}
         onDoubleClick={(e) => {
           const vp = viewportAt(toPaper(e.clientX, e.clientY));
-          if (vp && !runningCommand()) onOpen(vp);
+          if (vp && !runningCommand()) {
+            dismissHint('openView');
+            onOpen(vp);
+          }
         }}
       >
         <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
@@ -224,6 +233,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           </svg>
         ) : null}
         {drafting.overlay}
+        <SheetHints resizing={resizing !== null} hasDrawings={(sheet.viewports ?? []).length > 0} />
         {resizing ? <ViewportHandles key={resizing.id} sheet={sheet} vp={resizing} box={sheetContent.boxOf(resizing)} drawing={chosenDrawing} pan={pan} min={chosenFit?.min} /> : null}
         <CommentLayer sheet={sheet} pan={pan} toPaper={toPaper} />
       </div>

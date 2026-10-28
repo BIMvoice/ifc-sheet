@@ -15,9 +15,10 @@ export {
 export { boqMissing, computeBoq, declared, picks, type BoqElement, type BoqElementRef, type BoqLine, type BoqMissing, type BoqQuantity, type BoqResult, type BoqTypeLine } from '../boq-compute.js';
 export {
   LIST_COUNT_ID, listExportTable, listFigureKind, listScheduleTable, readListScheduleDef,
-  type ListCell, type ListFigureKind, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
+  type ListCell, type ListFigureKind, type ListMissing, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
 } from '../list-schedule.js';
 export { listFigure, listTableCells, listTableText } from '../list-figures.js';
+export { MAX_LIST_OVERRIDES, clearListOverride, listColumnKey, orphanedOverrides, overrideOf, readListOverrides, setListOverride, withListOverrides, type ListCellOverride } from '../list-overrides.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';
 export { boqLineText, boqNotes, boqTable, boqTableCells, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
 export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '../schedule-csv.js';

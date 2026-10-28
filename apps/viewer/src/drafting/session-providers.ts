@@ -15,6 +15,7 @@ import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { Box } from './cross-ref-marks';
+import type { ElementBox } from './dimension-anchor';
 import type { LevelResolver } from './level-mark';
 import type { ViewInputs } from './view-inputs';
 import type { DraftShape, LevelRef, Pt } from './types';
@@ -85,6 +86,13 @@ export function setElementPicker(picker: ((p: Pt) => number | null) | null): voi
   elementPicker = picker ?? (() => null);
 }
 export const modelElementAt = (p: Pt): number | null => elementPicker(p);
+
+/** The elements a drawing point is a corner of, with their boxes in the view (a dimension snapped there stays attached to them). */
+let elementBoxProvider: (p: Pt) => ElementBox[] = () => [];
+export function setElementBoxProvider(provider: ((p: Pt) => ElementBox[]) | null): void {
+  elementBoxProvider = provider ?? (() => []);
+}
+export const elementBoxesAt = (p: Pt): ElementBox[] => elementBoxProvider(p);
 
 /** The model elements the view in front draws, with a point each to label them at. */
 let viewElementsProvider: () => ViewElement[] = () => [];
