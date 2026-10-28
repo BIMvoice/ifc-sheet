@@ -228,3 +228,24 @@ fn annotation_symbolic_items_5389_body_representation_still_reports() {
         Some(&1)
     );
 }
+/// #487: a Bonsai drawing is an `IfcAnnotation` with `ObjectType` `DRAWING`;
+/// its camera extent must never mesh, while any other annotation still does.
+#[test]
+fn bonsai_drawing_annotation_487_meshes_nothing_but_other_annotations_do() {
+    let plain = fixture("IFCANNOTATION", "Annotation2D");
+    let drawing = plain.replace("'fill',$,$,#34", "'fill',$,'DRAWING',#34");
+    assert_ne!(plain, drawing, "fixture must carry ObjectType DRAWING");
+    let meshes = |source: &str| {
+        let mut decoder = EntityDecoder::new(source);
+        let entity = decoder.decode_by_id(40).unwrap();
+        GeometryRouter::new()
+            .process_element_with_submeshes(&entity, &mut decoder)
+            .unwrap()
+            .sub_meshes
+            .len()
+    };
+    assert_eq!(meshes(&plain), 1);
+    assert_eq!(meshes(&drawing), 0);
+    let grid = plain.replace("'fill',$,$,#34", "'fill',$,'GRID',#34");
+    assert_eq!(meshes(&grid), 1);
+}
