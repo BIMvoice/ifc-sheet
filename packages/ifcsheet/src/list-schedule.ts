@@ -129,6 +129,16 @@ export interface ListTableSource {
   rows: readonly (readonly ListCell[])[];
   /** The totals row, aligned with `columns`; `null` for none. */
   totals: readonly ListCell[] | null;
+  /** The summed columns that some rows state no value for (their totals leave those rows out), and the sentences saying so (`listTableSourceOf`). */
+  missing?: readonly ListMissing[];
+  notes?: readonly string[];
+}
+
+/** A summed column over rows that do not all state it: `missing` of the `rows` rows are left out of its total. */
+export interface ListMissing {
+  column: string;
+  missing: number;
+  rows: number;
 }
 
 export interface ListTableWords {
@@ -144,6 +154,9 @@ export interface ListScheduleTable {
   bold: number[];
   numeric: number[];
   kinds: Record<number, ListFigureKind>;
+  /** The totals that leave rows out because they state no value, and the lines saying so; empty when every row states every summed value. */
+  missing: ListMissing[];
+  notes: string[];
 }
 
 /** A figure without the float noise of a long sum (`0.30000000000000004`): six decimals are far below any quantity a schedule states. */
@@ -166,6 +179,7 @@ export function listScheduleTable(source: ListTableSource, def: Pick<ListSchedul
   return {
     name, header: keep.map((i) => source.columns[i].label), rows, bold,
     numeric: keep.flatMap((i, c) => (source.columns[i].numeric ? [c] : [])), kinds,
+    missing: [...(source.missing ?? [])], notes: [...(source.notes ?? [])],
   };
 }
 
@@ -173,5 +187,5 @@ export function listScheduleTable(source: ListTableSource, def: Pick<ListSchedul
 export function listExportTable(table: ListScheduleTable): ExportTable {
   const kinds: Record<number, NumberKind> = {};
   for (const [column, kind] of Object.entries(table.kinds)) if (kind !== 'count') kinds[Number(column)] = kind;
-  return { name: table.name, header: table.header, rows: table.rows, bold: table.bold, numeric: table.numeric, kinds };
+  return { name: table.name, header: table.header, rows: table.rows, bold: table.bold, numeric: table.numeric, kinds, ...(table.notes.length ? { notes: table.notes } : {}) };
 }

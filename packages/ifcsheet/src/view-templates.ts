@@ -34,7 +34,7 @@ export type ViewTemplateKind = 'plan' | 'section' | 'elevation';
 export const VIEW_TEMPLATE_KINDS: readonly ViewTemplateKind[] = ['plan', 'section', 'elevation'];
 
 /** The part of a view's graphics a template carries. */
-export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories' | 'styleRules' | 'colouredSurfaces'>;
+export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories' | 'styleRules' | 'detailLevel' | 'colouredSurfaces'>;
 
 export interface ProjectViewTemplate {
   id: string;
@@ -87,8 +87,10 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Res
   const grid = template.grid || own?.grid ? { ...template.grid, ...own?.grid } : undefined;
   const presetId = own?.presetId !== undefined ? own.presetId : template.presetId;
   const rules = template.styleRules?.length ? template.styleRules : undefined;
+  const detailLevel = own?.detailLevel ?? template.detailLevel;
   const coloured = own?.colouredSurfaces !== undefined ? own.colouredSurfaces : template.colouredSurfaces;
   return {
+    ...(detailLevel ? { detailLevel } : {}),
     ...(coloured !== undefined ? { colouredSurfaces: coloured } : {}),
     ...(grid ? { grid } : {}),
     ...(rules ? { styleRules: rules, ...(own?.categories ? { ownCategories: own.categories } : {}) } : {}),
@@ -147,6 +149,7 @@ export function templateGraphicsOf(graphics: ViewGraphics | undefined): Template
   if (graphics?.grid) out.grid = structuredClone(graphics.grid);
   if (graphics?.categories) out.categories = structuredClone(graphics.categories);
   if (graphics?.styleRules?.length) out.styleRules = structuredClone(graphics.styleRules);
+  if (graphics?.detailLevel) out.detailLevel = graphics.detailLevel;
   if (graphics?.colouredSurfaces !== undefined) out.colouredSurfaces = graphics.colouredSurfaces;
   return out;
 }

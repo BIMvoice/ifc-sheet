@@ -62,6 +62,7 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
     }
     out.categories = categories;
   }
+  if (raw.detailLevel === 'coarse' || raw.detailLevel === 'medium' || raw.detailLevel === 'fine') out.detailLevel = raw.detailLevel;
   const styleRules = readStyleRules(raw.styleRules);
   if (styleRules.length > 0) out.styleRules = styleRules;
   if (isObject(raw.phases) && Array.isArray(raw.phases.show)) {

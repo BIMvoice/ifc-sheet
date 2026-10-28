@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/source-autodesk",
+  "private": true,
   "version": "0.1.0",
   "description": "Autodesk Forma and Data Exchange cloud-source provider for ifc-lite",
   "type": "module",

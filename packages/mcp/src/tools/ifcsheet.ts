@@ -13,7 +13,7 @@
  * never draws a set does not load the PDF writer or the geometry engine.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { describeReadiness, paperLabel, paperOf } from '@bimvoice/ifcsheet';
 import type { ProjectFacts } from '@bimvoice/ifcsheet/project';
@@ -24,7 +24,7 @@ import { okResult } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
 import { drawSet } from './ifcsheet-draw.js';
-import { outputPath } from './ifcsheet-shared.js';
+import { assertWithinLimit, outputPath } from './ifcsheet-shared.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -211,13 +211,16 @@ async function projectOf(input: Record<string, unknown>, ctx: Parameters<Tool['h
   if (typeof path === 'string') {
     source = await resolveSafePath(path, ctx, 'read');
     try {
+      assertWithinLimit(ctx, (await stat(source)).size, `'${source}'`);
       text = await readFile(source, 'utf8');
     } catch (err) {
+      if (err instanceof ToolExecutionError) throw err;
       throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: `Cannot read '${source}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}` });
     }
   } else {
     source = 'project_json';
     text = json as string;
+    assertWithinLimit(ctx, Buffer.byteLength(text, 'utf8'), 'project_json');
   }
   const { readProjectFile } = await import('@bimvoice/ifcsheet/headless');
   try {
