@@ -181,4 +181,30 @@ describe.skipIf(missing !== null)('a hand-arranged project prints the same throu
     expect(fromCli.flat()).toEqual(expect.arrayContaining(['Planșa', 'Revizie', 'Sinteza ariilor (Su, Sc, Sd)']));
     expect(fromMcp.flat()).toEqual(expect.arrayContaining(['Planșa', 'Revizie', 'Sinteza ariilor (Su, Sc, Sd)']));
   }, 300_000);
+
+  it('content the engine does not print yet is named in the tool result, as the build names it on stderr', async () => {
+    const document_id = (await ok('ifcsheet_generate_set', { model_id: modelId })).document_id as string;
+    const saved = join(tmp, 'saved-left-out.ifclite-project.json');
+    await ok('ifcsheet_save_project', { document_id, file_path: saved });
+    const doc = JSON.parse(await readFile(saved, 'utf8'));
+    // A door schedule (a joinery list, which the engine does not print) placed on a sheet of its own.
+    doc.schedules = [{ id: 'doors', name: 'Doors', kind: 'door', createdAt: 0 }];
+    doc.sheets.push({ id: 'sheet-doors', number: 'X-903', name: 'Doors', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp-doors', viewId: 'doors', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
+    const project = join(tmp, 'left-out.ifclite-project.json');
+    await writeFile(project, JSON.stringify(doc));
+
+    const built = await cli('build', FZK, '--project', project, '--out', join(tmp, 'left-out-cli.pdf'));
+    expect(built.stderr).toContain('X-903 Doors: the door schedule "Doors" not printed yet.');
+    const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_path: project });
+    const note = 'X-903 Doors: the door schedule "Doors" not printed yet.';
+    const exported = await ok('ifcsheet_export_pdf', { document_id: loaded.document_id, file_path: join(tmp, 'left-out-mcp.pdf') });
+    expect(exported.notes).toEqual([note]);
+    const reply = (await call('tools/call', { name: 'ifcsheet_export_pdf', arguments: { document_id: loaded.document_id, file_path: join(tmp, 'left-out-mcp2.pdf') } })).result!;
+    expect(reply.content!.map((c) => c.text).join('\n')).toContain(`Not printed: ${note}`);
+    const issued = await ok('ifcsheet_issue_set', { document_id: loaded.document_id, directory: join(tmp, 'issued') });
+    expect(issued.notes).toEqual([note]);
+    // A project that leaves nothing out says so with an empty list.
+    const plain = await ok('ifcsheet_export_pdf', { document_id, file_path: join(tmp, 'plain.pdf') });
+    expect(plain.notes).toEqual([]);
+  }, 300_000);
 });

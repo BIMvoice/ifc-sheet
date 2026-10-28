@@ -42,6 +42,9 @@ async function write(path: string, ctx: ToolContext, data: Uint8Array | string, 
   return { file, bytes: typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength };
 }
 
+/** The sentence that says what a loaded project holds that was not printed; empty when nothing was left out. */
+const notedIn = (notes: readonly string[]): string => (notes.length ? ` Not printed: ${notes.join(' ')}` : '');
+
 // ---- ifcsheet_apply_template ----
 
 export const ifcsheetApplyTemplate: Tool = {
@@ -116,7 +119,7 @@ export const ifcsheetExportDxf: Tool = {
       const written = await write(join(directory, dxfName(sheet.number, used)), ctx, exportDxf(sheet));
       files.push({ sheet: sheet.number, ...written });
     }
-    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.`, { document_id: entry.id, directory, files });
+    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.${notedIn(drawn.notes)}`, { document_id: entry.id, directory, files, notes: drawn.notes });
   },
 };
 
@@ -191,8 +194,8 @@ export const ifcsheetIssueSet: Tool = {
       zip = { ...written, files: built.files.map((f) => f.name) };
     }
     return okResult(
-      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.`,
-      { document_id: entry.id, directory, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
+      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.${notedIn(drawn.notes)}`,
+      { document_id: entry.id, directory, notes: drawn.notes, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
     );
   },
 };

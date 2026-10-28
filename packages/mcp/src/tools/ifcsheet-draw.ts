@@ -85,6 +85,8 @@ function setTable(sheet: SheetGraphic, area: { x: number; y: number; w: number; 
 
 export interface DrawnSet {
   sheets: SheetGraphic[];
+  /** What the loaded project holds that the engine does not print yet, one sentence each (`ifcsheet build --project` says the same on stderr); empty for a generated set. */
+  notes: string[];
   /** Per schedule: the table and how many of its rows fit the sheet (the rest are in the CSV of the issue). */
   schedules: { schedule: SetSchedule; table: ScheduleTable; drawn: number }[];
 }
@@ -117,7 +119,8 @@ export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Pro
   const { projectSheetOptions, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
   const project = projectOf(entry.set.document);
   const language = drawLanguage(entry.set.document);
-  const extras = project ? projectSheetOptions(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name) : {};
+  const notes: string[] = [];
+  const extras = project ? projectSheetOptions(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
   const sheets = await sheetGraphics(entry.set, model.model, extras);
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
@@ -127,5 +130,5 @@ export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Pro
     const table = await scheduleTable(schedule, model.model, entry.set.document.unitsAndNumbers);
     schedules.push({ schedule, table, drawn: setTable(graphic, drawingArea(sheet), sheet.name, table) });
   }
-  return { sheets, schedules };
+  return { sheets, notes, schedules };
 }
