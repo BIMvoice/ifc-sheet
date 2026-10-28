@@ -48,7 +48,7 @@ export interface SlotRule {
   scale?: number;
   /**
    * The north arrow and the graphic scale bar the viewport takes (`SheetViewport.northArrow` / `scaleBar`, drawn by
-   * `viewport-marks.ts`). Absent follows the view, as for any viewport: on for a site plan, off otherwise.
+   * `viewport-marks.ts`). Absent: off, as for any viewport (a site plan too: its marks are drawn when the viewport asks for them).
    */
   northArrow?: boolean;
   scaleBar?: boolean;

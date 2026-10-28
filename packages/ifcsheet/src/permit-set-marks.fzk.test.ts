@@ -77,17 +77,25 @@ describe.skipIf(missing !== null)('the permit sets of AC20-FZK-Haus', () => {
     expect(marksOf(norway)).toEqual([['elevation', undefined, true], ['plan', true, true], ['section', undefined, true], ['site', true, true]]);
   });
 
-  it('puts no mark on a sheet that holds no view of the template (schedules, a cover)', () => {
+  it('puts a mark on a viewport only where the template drew a view into it (a schedule or a cover has none)', () => {
+    let withView = 0;
+    let withoutView = 0;
     for (const set of [pac, rural, norway]) {
       for (const sheet of set.document.sheets) {
         for (const vp of sheet.viewports ?? []) {
-          const view = set.document.views.find((v) => v.id === vp.viewId);
-          if (view) continue;
-          expect(vp.northArrow, sheet.name).toBeUndefined();
-          expect(vp.scaleBar, sheet.name).toBeUndefined();
+          const marked = vp.northArrow !== undefined || vp.scaleBar !== undefined;
+          if (set.document.views.some((v) => v.id === vp.viewId)) {
+            withView++;
+            expect(marked, sheet.name).toBe(true);
+          } else {
+            // The FZK sets hold no viewport without a view today; the branch stays for a template that adds one.
+            withoutView++;
+            expect(marked, sheet.name).toBe(false);
+          }
         }
       }
     }
+    expect(withView).toBeGreaterThan(0);
   });
 
   it('a north arrow is only ever drawn on a plan: the facades and sections resolve to no arrow', () => {
@@ -109,16 +117,37 @@ describe.skipIf(missing !== null)('the permit sets of AC20-FZK-Haus', () => {
       const drawn = graphics.flatMap((g) => g.viewports);
       const arrows = graphics.reduce((n, g) => n + g.texts.filter((t) => t.text === 'N').length, 0);
       const bars = graphics.reduce((n, g) => n + g.symbols.strokes.filter((s) => s.length === 5 && s[0].y === s[1].y).length, 0);
-      // A mark that does not fit its viewport's box is not drawn (`viewport-marks.ts`): the FZK-Haus is a 13 m house, so at the
-      // Norway site plan's 1:500 its box is smaller than the arrow and the shortest bar, and that one viewport's marks are left out. Every other plan has its arrow.
       const planViews = set.document.sheets.flatMap((s) => s.viewports ?? []).map((vp) => set.document.views.find((v) => v.id === vp.viewId)).filter((v) => v?.kind === 'plan');
       const floorPlans = planViews.filter((v) => v?.kind === 'plan' && !v.site).length;
       expect(floorPlans).toBeGreaterThan(0);
-      expect(arrows).toBeGreaterThanOrEqual(floorPlans);
-      expect(arrows).toBeLessThanOrEqual(planViews.length);
-      const siteViews = set.document.views.filter((v) => v.kind === 'plan' && v.site).length;
-      expect(bars).toBeGreaterThanOrEqual(drawn.length - siteViews);
-      expect(bars).toBeLessThanOrEqual(drawn.length);
+      expect(arrows).toBe(planViews.length);
+      expect(bars).toBe(drawn.length);
+    }
+  });
+
+  it('Norway: the site plan of the FZK-Haus (a 13 m house at 1:500, a box smaller than the arrow) still prints its arrow and bar, beside the drawing', async () => {
+    const graphics = await sheetGraphics(norway, model);
+    const siteView = norway.document.views.find((v) => v.kind === 'plan' && v.site)!;
+    const sheet = norway.document.sheets.find((sh) => (sh.viewports ?? []).some((vp) => vp.viewId === siteView.id))!;
+    const g = graphics.find((x) => x.sheetId === sheet.id)!;
+    const box = g.viewports.find((v) => v.viewId === siteView.id)!.box;
+    expect(box.w).toBeLessThan(34);
+    // Only this view is a site plan on its sheet: its mark texts are the sheet's 'N' and its bar figures.
+    const arrow = g.texts.find((t) => t.text === 'N');
+    expect(arrow).toBeDefined();
+    const bar = g.symbols.strokes.filter((s) => s.length === 5 && s[0].y === s[1].y);
+    expect(bar.length).toBeGreaterThan(0);
+    const inside = (p: { x: number; y: number }) => p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h;
+    expect(inside(arrow!.at)).toBe(false);
+    expect(bar.flat().some(inside)).toBe(false);
+    const frame = g.frame[0];
+    const xs = frame.map((p) => p.x);
+    const ys = frame.map((p) => p.y);
+    for (const p of [arrow!.at, ...bar.flat()]) {
+      expect(p.x).toBeGreaterThan(Math.min(...xs));
+      expect(p.x).toBeLessThan(Math.max(...xs));
+      expect(p.y).toBeGreaterThan(Math.min(...ys));
+      expect(p.y).toBeLessThan(Math.max(...ys));
     }
   });
 });

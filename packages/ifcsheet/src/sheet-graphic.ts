@@ -36,7 +36,7 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
-import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
+import { ARROW_NEED_MM, BAR_NEED_MM, markArea, markBox, northDegrees, siteMarkArea, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 
@@ -214,12 +214,23 @@ export function sheetGraphic(
     }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
-    const area = marksBox ? markArea(marksBox, drawingAreaIn(paper, frameOf(sheet))) : null;
-    if (area && drawing && (flags.northArrow || flags.scaleBar)) {
-      const shapes = viewportMarks({ area, scale: vp.scale, arrowDegrees: flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null, bar: flags.scaleBar, locale: marks.locale });
-      out.symbols.strokes.push(...shapes.strokes);
-      out.symbols.solids.push(...shapes.solids);
-      out.texts.push(...shapes.texts);
+    const drawingArea = drawingAreaIn(paper, frameOf(sheet));
+    // A site plan's marks stand beside its drawing when they do not fit inside it (`siteMarkArea`); any other view's are left out then.
+    const site = view?.kind === 'plan' && view.site === true;
+    const areaFor = (need: { w: number; h: number }) => (!marksBox ? null : site ? siteMarkArea(marksBox, drawingArea, need) : markArea(marksBox, drawingArea));
+    if (drawing && (flags.northArrow || flags.scaleBar)) {
+      const north = flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null;
+      const placed = [
+        { area: north !== null ? areaFor(ARROW_NEED_MM) : null, arrowDegrees: north, bar: false },
+        { area: flags.scaleBar ? areaFor(BAR_NEED_MM) : null, arrowDegrees: null, bar: true },
+      ];
+      for (const p of placed) {
+        if (!p.area || !(p.arrowDegrees !== null || p.bar)) continue;
+        const shapes = viewportMarks({ area: p.area, scale: vp.scale, arrowDegrees: p.arrowDegrees, bar: p.bar, locale: marks.locale });
+        out.symbols.strokes.push(...shapes.strokes);
+        out.symbols.solids.push(...shapes.solids);
+        out.texts.push(...shapes.texts);
+      }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }
