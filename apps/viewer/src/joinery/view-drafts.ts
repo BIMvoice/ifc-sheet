@@ -46,7 +46,7 @@ function storedOf(e: DraftEntity, layers: readonly DraftLayer[]): JoineryViewDra
   const pen = layerPen(layer);
   return [{
     id: e.id, shape: JSON.parse(JSON.stringify(e.shape)) as JoineryViewDraft['shape'], layerId: e.layerId, weight: pen.width,
-    ...(pen.dash.length && layer?.lineType && layer.lineType !== 'continuous' ? { lineType: layer.lineType } : {}),
+    ...(pen.dash.length && (layer?.lineType === 'dashed' || layer?.lineType === 'dotted' || layer?.lineType === 'dashdot') ? { lineType: layer.lineType } : {}),
     ...(Object.keys(e.params).length ? { params: { ...e.params } } : {}),
   }];
 }
