@@ -89,8 +89,8 @@ function reach(l: ScheduleLayout): { x: number; y: number } {
   return { x, y };
 }
 
-/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. Every digest moved when the title and the notes were inset by the cells' padding (#42); the rooms' also when the perimeter column was added; nothing else changed. */
-const BEFORE: Record<string, string> = { takeoff: '9dbd0ce04a3e', finishes: '276f937907fd', types: 'edf180bf476f', urban: 'dd99a4b04c63', rooms: '433b9ad33bfa' };
+/** What each kind's small fixture drew before the shared engine (the old per-kind layouts), as a digest. Every digest moved when the title and the notes were inset by the cells' padding (#42); the rooms' also when the perimeter column was added and when each area cell took its unit (m², #495); nothing else changed. */
+const BEFORE: Record<string, string> = { takeoff: '9dbd0ce04a3e', finishes: '276f937907fd', types: 'edf180bf476f', urban: 'dd99a4b04c63', rooms: 'ce814543711c' };
 /** A first-column text that exists once per row of the kind's fixture. */
 const ROW_TEXT: Record<string, (i: number) => string> = {
   takeoff: (i) => `Material ${i}`, finishes: (i) => `Room ${i + 1}`, types: (i) => `Type ${i}`, urban: (i) => `Category ${i}`, rooms: (i) => `Room ${i + 1}`,

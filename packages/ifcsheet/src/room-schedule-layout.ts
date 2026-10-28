@@ -33,6 +33,8 @@ export interface RoomScheduleLabels extends RoomScheduleWords {
 
 const COLUMNS = [14, 62, 27, 27] as const;
 const NONE = '–';
+/** Square metres, written with the superscript two (U+00B2, in WinAnsi and Windows-1252: the PDF and DXF print it). */
+export const AREA_UNIT = 'm\u00b2';
 const GAP = 4;
 
 /** The bold rows: a level's name (above its rooms), its total and the building's. */
@@ -44,7 +46,8 @@ export function roomScheduleCells(schedule: RoomSchedule, labels: RoomScheduleWo
   const rows: { cells: string[]; bold: boolean; rule: number }[] = [];
   lines.forEach((l, i) => {
     if (l.kind === 'room' && (i === 0 || lines[i - 1].kind !== 'room')) rows.push({ cells: ['', l.level, '', ''], bold: true, rule: PEN.grid });
-    const area = l.area === null ? NONE : `${sheetNumber(labels.locale, l.area, 2, { kind: 'area' })}${l.source === 'geometry' ? ' *' : ''}`;
+    // The unit sits in the cell, so a trailing `*` is never read as a stand-in for it: the star marks an estimated area only.
+    const area = l.area === null ? NONE : `${sheetNumber(labels.locale, l.area, 2, { kind: 'area' })} ${AREA_UNIT}${l.source === 'geometry' ? ' *' : ''}`;
     const perimeter = l.kind !== 'room' ? '' : l.perimeter === null ? NONE : sheetNumber(labels.locale, l.perimeter, 2, { kind: 'length' });
     rows.push({ cells: [l.number, l.name, area, perimeter], bold: isTotal(l), rule: isTotal(l) ? PEN.frame : PEN.grid });
   });

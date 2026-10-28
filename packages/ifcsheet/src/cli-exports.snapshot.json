@@ -1,0 +1,40 @@
+{
+  "./cli-boq": [
+    "BoqArgs: type",
+    "BoqOutput: type",
+    "boq: value",
+    "boqCsv: value",
+    "boqOutput: value",
+    "boqResult: value"
+  ],
+  "./cli-rooms": [
+    "RoomsArgs: type",
+    "RoomsOutput: type",
+    "rooms: value",
+    "roomsOutput: value"
+  ],
+  "./cli-materials": [
+    "MaterialsArgs: type",
+    "MaterialsOutput: type",
+    "materialsCommand: value",
+    "materialsOutput: value",
+    "readProjectMaterials: value"
+  ],
+  "./cli-list": [
+    "ListArgs: type",
+    "ListOutput: type",
+    "chooseListSchedule: value",
+    "list: value",
+    "listOutput: value",
+    "listSchedulesOn: value",
+    "listTableText: value"
+  ],
+  "./cli-classify": [
+    "ClassifyArgs: type",
+    "ClassifyOutput: type",
+    "chosenMapping: value",
+    "classify: value",
+    "classifyCsv: value",
+    "classifyOutput: value"
+  ]
+}
