@@ -16,6 +16,8 @@ import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 import { readStoreFacts } from './title-block-records.js';
 import { projectTitleFields } from './title-block-sources.js';
 import { generateViewDrawings } from './view-drawings.js';
+import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.js';
+import { resolveViewGraphics } from './view-templates.js';
 import { propertySetsOf } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties, type PenTable } from './view-style.js';
 
@@ -49,11 +51,17 @@ export function headlessMaterialOf(dataStore: NonNullable<OpenedModel['dataStore
 }
 
 /** Every sheet of `set` as shapes on its paper, in set order, the drawings cut from the building's meshes and clipped to the room the layout made for them. */
-export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'buildingMeshes' | 'extent'> & Partial<Pick<OpenedModel, 'meshes' | 'dataStore'>>, options: SheetGraphicsOptions = {}): Promise<SheetGraphic[]> {
+export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'buildingMeshes' | 'extent'> & Partial<Pick<OpenedModel, 'meshes' | 'dataStore' | 'coordinateInfo'>>, options: SheetGraphicsOptions = {}): Promise<SheetGraphic[]> {
   const { document: doc, levels } = set;
   const hung = new Set(doc.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const drawings = options.drawings === false || !model.extent ? new Map()
     : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError);
+  // A plan draws the 2D symbol of an element that has one in place of its body (#489), as the app's plans do; a view can switch it off.
+  const symbols = model.dataStore && drawings.size > 0 ? readPlanSymbols(model.dataStore, model.coordinateInfo).symbols : null;
+  for (const view of symbols?.size ? doc.views : []) {
+    const drawing = drawings.get(view.id);
+    if (drawing && view.kind === 'plan' && planSymbolsOn(resolveViewGraphics(view, doc.viewTemplates))) drawings.set(view.id, withPlanSymbols(drawing, symbols!));
+  }
   // The views coloured by a property (#92): what each paints, from the same rules the app uses (`colour-fills.ts`).
   const schemes = new Map<string, SchemeResult>();
   for (const view of doc.views) {

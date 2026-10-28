@@ -41,6 +41,7 @@ import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { entityStyles } from '@/project/model-styles';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
@@ -119,7 +120,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
         // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
         const detail = resolveDetailLevel(graphics, vp.scale);
-        const kept = raw ? atDetailLevel(withoutHiddenElements(raw, graphics, renderIdGlobalId), detail) : null;
+        const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(raw, graphics, renderIdGlobalId), view, graphics), detail) : null;
         const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
         const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];

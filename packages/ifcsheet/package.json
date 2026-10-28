@@ -35,6 +35,11 @@
       "import": "./dist/pac-words.js",
       "default": "./dist/pac-words.js"
     },
+    "./plan-symbols": {
+      "types": "./dist/plan-symbols.d.ts",
+      "import": "./dist/plan-symbols.js",
+      "default": "./dist/plan-symbols.js"
+    },
     "./underlay": {
       "types": "./dist/underlay.d.ts",
       "import": "./dist/underlay.js",

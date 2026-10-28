@@ -114,6 +114,7 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
@@ -202,7 +203,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
-  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withoutHiddenElements(drawing, graphics, renderIdGlobalId), detail) : null), [drawing, graphics, models, detail]);
+  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(drawing, graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view.kind, detail]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
