@@ -2,7 +2,39 @@
 
 The IfcSheet drawing-set engine: the project document, the starting set of views and sheets a model opens with, and PDF and DXF export, without a browser. The IfcSheet web app (`apps/viewer`) is a client of it.
 
-Not published yet (`private`). The design and what is still to move are in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
+Not on npm yet (the package is `private` until the owner decides to publish; see `docs/architecture/npm-publishing.md`). The design and what is still to move are in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
+
+## Install
+
+Once published (not yet), no clone is needed:
+
+```sh
+npx @bimvoice/ifcsheet build model.ifc --out set.pdf
+npm install --global @bimvoice/ifcsheet   # then: ifcsheet build model.ifc --out set.pdf
+```
+
+Node 22.13 or newer. The geometry engine (WebAssembly) arrives with the `@ifc-lite/wasm` dependency; nothing else is downloaded at run time. Until it is published, build from a clone as described under "The `ifcsheet` command".
+
+## Use from an AI assistant (MCP)
+
+The Model Context Protocol server with the IfcSheet tools (open a model, build a set, place views, issue) is `packages/mcp`. It is not published under an IfcSheet name yet (the package name is undecided, see `docs/architecture/npm-publishing.md`). From a clone, after `pnpm turbo run build --filter=@ifc-lite/mcp...`, Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json`) take the same entry:
+
+```json
+{
+  "mcpServers": {
+    "ifcsheet": {
+      "command": "node",
+      "args": ["/path/to/ifcsheet/packages/mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+When a package is published the entry becomes `"command": "npx", "args": ["-y", "<package name>"]`.
+
+## Licence
+
+MPL-2.0. IfcSheet derives from [ifc-lite](https://github.com/LTplus-AG/ifc-lite), also MPL-2.0; source files keep their headers, and the tarball carries `LICENSE` and `NOTICE`. The bundled font, Inter, is under the SIL Open Font License (`fonts/Inter-OFL.txt`).
 
 ## From an IFC to a drawing set, in Node
 
@@ -30,7 +62,7 @@ ifcsheet build house.ifc --out set.pdf                       # one PDF, a page p
 ifcsheet build house.ifc --out out/set.pdf --dxf out/dxf     # plus A-101.dxf, A-201.dxf, ...
 ifcsheet build house.ifc --out set.pdf --name "House Alpha"  # project name in the title blocks
 ifcsheet build house.ifc --out set.pdf --template office.bvset # the sheets made by an office's set template (#21)
-ifcsheet build house.ifc --out set.pdf --standard ro            # the Romanian pack's pens and title block (#365); --project uses the project's own
+ifcsheet build house.ifc --out set.pdf --standard ro            # the Romanian pack's pens and title block (#365), or --standard de for the German pack; --project uses the project's own
 ifcsheet check house.ifc                                     # what the model lacks, in plain English
 ifcsheet check house.ifc --json                              # the same as JSON
 ifcsheet check house.ifc --project house.ifclite-project.json  # also the project's split schedules: an element in two parts, or in none
@@ -40,7 +72,7 @@ ifcsheet list house.ifc --project house.ifclite-project.json --schedule walls   
 ifcsheet --help
 ```
 
-Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. `build` needs the wasm bundle, as `openModel` does; `check` does not. `check` exits 0 when nothing would weaken the drawings and 1 when something would (or the file cannot be read): the findings are the model-readiness report of the app, one implementation (`readiness.ts`). `--project` (#260) reads a saved `.ifclite-project.json`: its schedules and sub-reports, and the joinery catalogue and symbol mapping the schedule rows depend on; the rows are built by `joineryScheduleData`, the one function the app also calls to list a model's doors and windows, and the findings carry the app's sentences. What it cannot see: edits made in the app and not yet exported to the IFC (the CLI reads the file as saved), and the project's title block, views and sheets (no finding reads them yet). `--template` (#21) makes the sheets by the rules of a `.bvset` file saved from a project in the app (`set-template.ts`, `set-template-apply.ts`, `set-template-file.ts`): a plan per storey counted from the ground storey, the elevations by direction, the sections by place, each sheet's paper and scale. A rule the model cannot meet is skipped and printed, a storey the template did not foresee is laid out as the automatic set lays it out, and the app and the command line run the same `applySetTemplate`. The schedules, title block layout and tag fields a template carries are added by the app, not by the command line. `build --project` draws with the project's graphic standard (its pens) and title block layout, and `build --standard ro` (#365) applies the Romanian pack, the definition the app's "Install standard" applies (`standard-pack.ts`, `graphic-standard.ts`, `title-block-ro.ts`): the pens and the cartuș with Romanian captions; `--standard` wins over the project's own, an unknown id fails with the known ids, and without either the output is byte for byte what it was. The pack's number format and sheet numbering are not applied by the command line. The PDF's frame pen is the engine's own (0.5) whatever the standard. `boq` (#75) adds up the project's bill-of-quantities articles (`boqArticles`, entered in the app: IfcSheet ships no norm or article code) over the quantities the model declares, with `computeBoq`, the one function the app calls too. A unit that is not the quantity's is refused (exit 1) in words; an element that does not declare the quantity is named and left out of the sum, never counted as zero. The XLSX is the app's (its one writer); the command line prints text, `--csv` or `--json`, and reads the `.ifclite-project.json` sidecar, not a `.bvproj` package. The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
+Exit code 0 on success, 1 when the work failed (unreadable file, a model with no geometry), 2 for a wrong command line. `build` needs the wasm bundle, as `openModel` does; `check` does not. `check` exits 0 when nothing would weaken the drawings and 1 when something would (or the file cannot be read): the findings are the model-readiness report of the app, one implementation (`readiness.ts`). `--project` (#260) reads a saved `.ifclite-project.json`: its schedules and sub-reports, and the joinery catalogue and symbol mapping the schedule rows depend on; the rows are built by `joineryScheduleData`, the one function the app also calls to list a model's doors and windows, and the findings carry the app's sentences. What it cannot see: edits made in the app and not yet exported to the IFC (the CLI reads the file as saved), and the project's title block, views and sheets (no finding reads them yet). `--template` (#21) makes the sheets by the rules of a `.bvset` file saved from a project in the app (`set-template.ts`, `set-template-apply.ts`, `set-template-file.ts`): a plan per storey counted from the ground storey, the elevations by direction, the sections by place, each sheet's paper and scale. A rule the model cannot meet is skipped and printed, a storey the template did not foresee is laid out as the automatic set lays it out, and the app and the command line run the same `applySetTemplate`. The schedules, title block layout and tag fields a template carries are added by the app, not by the command line. `build --project` draws with the project's graphic standard (its pens) and title block layout, and `build --standard ro` or `--standard de` (#365) applies the Romanian or the German pack, the definition the app's "Install standard" applies (`standard-pack.ts`, `graphic-standard.ts`, `title-block-ro.ts`): the pens and the cartuș with Romanian captions (German: the pens and the standard layout with German captions); `--standard` wins over the project's own, an unknown id fails with the known ids, and without either the output is byte for byte what it was. The pack's number format and sheet numbering are not applied by the command line. The PDF's frame pen is the engine's own (0.5) whatever the standard. `boq` (#75) adds up the project's bill-of-quantities articles (`boqArticles`, entered in the app: IfcSheet ships no norm or article code) over the quantities the model declares, with `computeBoq`, the one function the app calls too. A unit that is not the quantity's is refused (exit 1) in words; an element that does not declare the quantity is named and left out of the sum, never counted as zero. The XLSX is the app's (its one writer); the command line prints text, `--csv` or `--json`, and reads the `.ifclite-project.json` sidecar, not a `.bvproj` package. The package is private, so run the built bin: `pnpm --filter @bimvoice/ifcsheet build`, then `node packages/ifcsheet/dist/bin.js build ...`.
 
 ## What the output is today
 

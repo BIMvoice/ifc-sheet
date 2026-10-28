@@ -17,7 +17,7 @@ export {
 export { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from '../project-version.js';
 export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from '../viewport-fit.js';
 export { paperSigns, placer } from '../sheet-graphic.js';
-export { SHEET_NOTE_SIZE, sheetNoteLines, steppedUpNote, rescaledNote, type SheetNoteLine } from '../sheet-notes.js';
+export { SHEET_NOTE_SIZE, sheetNoteLines, steppedUpNote, rescaledNote, isRescaledNote, type SheetNoteLine } from '../sheet-notes.js';
 export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, NEXT_FLOOR_CLEARANCE_M, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,
   resolvePlanLevel, sameElevation, syncDefaultViews, uniqueViewName, type StoreyInput,
@@ -33,3 +33,4 @@ export {
 export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from '../storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from '../entity-bounds.js';
 export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from '../framing.js';
+export { relaySheet, sheetIsAsLaid, type SheetRelayout } from '../sheet-relayout.js';

@@ -53,6 +53,7 @@ SetGroup: type (type-only)
 SetInput: type (type-only)
 SheetLayout: type (type-only)
 SheetNoteLine: type (type-only)
+SheetRelayout: type (type-only)
 StoreyInput: type (type-only)
 TARGET_SCALE: value
 TITLE_BLOCK_MM: value
@@ -92,6 +93,7 @@ groupsThatDoNotFit: value
 indexMeshesByEntity: value
 isCustom: value
 isElongated: value
+isRescaledNote: value
 isSetSheet: value
 isValidCoord: value
 levelFloorY: value
@@ -121,6 +123,7 @@ readSeriesTemplates: value
 readTemplate: value
 registerNumberIn: value
 registerSlot: value
+relaySheet: value
 renumbered: value
 rescaledNote: value
 resolvePlanLevel: value
@@ -129,6 +132,7 @@ sameElevation: value
 scaleOn: value
 sectionPlaneThrough: value
 sheetGroup: value
+sheetIsAsLaid: value
 sheetNoteLines: value
 sheetScaleReason: value
 sheetSeries: value

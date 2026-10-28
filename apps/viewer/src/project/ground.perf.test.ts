@@ -90,10 +90,16 @@ describe('the ground of an elevation on a triangulated terrain', () => {
     const ground = strip(10_000, 100);
     assert.equal(ground.length, 20_000);
     const d = drawing([...ground, ...walls(100, 1000)]);
-    const started = performance.now();
-    const out = drawingWithGround(d, 'elevation');
-    const ms = performance.now() - started;
-    console.log(`ground profile: ${ground.length} edges, ${ms.toFixed(0)} ms`);
+    // One warm-up run, then the fastest of three: a shared CI runner's scheduling noise can add a few hundred milliseconds to any
+    // single run, while the pairwise rule this guards against costs seconds on every one, so the bound below still catches it.
+    let out = drawingWithGround(d, 'elevation');
+    let ms = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now();
+      out = drawingWithGround(d, 'elevation');
+      ms = Math.min(ms, performance.now() - started);
+    }
+    console.log(`ground profile: ${ground.length} edges, fastest of 3: ${ms.toFixed(0)} ms`);
     assert.equal(out.lines.filter((l) => l.ifcType === 'IfcSite').length, 10_000, 'the top chain is the profile');
     assert.ok(out.lines.filter((l) => l.ifcType === 'IfcWall').length >= 1000, 'the walls stay');
     // Near-linear work takes under a hundred milliseconds; the pairwise rule and a scan per bisection step take seconds.

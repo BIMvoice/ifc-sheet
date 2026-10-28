@@ -12,7 +12,10 @@
 import { listTableCells, textWidthEm, truncateToWidth, type ListScheduleTable } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock } from './paged-table';
+import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
+import { wrapNote } from '@/urban/urban-layout';
+
+const GAP = 4;
 
 export interface ListSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
@@ -45,12 +48,19 @@ export function layoutListSchedule(table: ListScheduleTable, labels: ListSheetLa
   const columns = columnWidths(table.header, cells, bold);
   const numeric = new Set(table.numeric);
   const block: TableBlock = {
-    columns, header: table.header.map((h, c) => fit(h, columns[c], true)), numeric: (c) => numeric.has(c), skipEmpty: true,
+    columns, header: table.header.map((h, c) => fit(h, columns[c], true)), numeric: (c) => numeric.has(c), skipEmpty: true, columnIds: table.columnIds,
     rows: cells.map((row, r) => ({
       cells: row.map((text, c) => fit(text, columns[c], bold.has(r))),
       bold: bold.has(r),
       rule: bold.has(r) || r === cells.length - 1 ? PEN.frame : PEN.grid,
+      // A row that is an element can be picked on the sheet (#446); the totals row and a group's row cannot.
+      ...(table.guids && r < table.guids.length && !bold.has(r) ? { pick: { guid: table.guids[r], marked: table.overridden?.[r] ?? [] } } : {}),
     })),
   };
-  return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
+  // The lines under a table whose total leaves rows out (#432), as the CSV and the text of `ifcsheet list` carry them.
+  const notes = table.notes.flatMap((note) => wrapNote(note, 110));
+  const items: TableItem[] = [{ kind: 'table', block }];
+  if (notes.length) items.push({ kind: 'gap', h: GAP });
+  for (const text of notes) items.push({ kind: 'text', h: GAP, dy: GAP, size: 2, text });
+  return layoutPagedTable(labels.title, 4, items, { ...paging, tail: notes.length ? 1 : 0 });
 }

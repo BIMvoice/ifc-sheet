@@ -10,17 +10,21 @@ FIELD_PARAMS: value
 FactOverrides: type (type-only)
 FittedCell: type (type-only)
 ITEM_KINDS: value
+ImportedTitleBlock: type (type-only)
 LOGO_FIELD: value
 LOGO_MAX_BYTES: value
 MAX_CELL_LINES: value
+MAX_TEMPLATE_ITEMS: value
 MAX_TEXT: value
 MODEL_ENTITIES: value
 ModelEntity: type (type-only)
 OWNER_PARTS: value
 OwnerPart: type (type-only)
 PARAM_NAME: value
+PLACEABLE_FIELDS: value
 PRESET_SOURCES: value
 ParamNameProblem: type (type-only)
+PlaceFieldOptions: type (type-only)
 ProjectRevision: type (type-only)
 REVISION_ID_PARAM: value
 RO_COLUMNS: value
@@ -46,6 +50,7 @@ TemplateRect: type (type-only)
 TemplateText: type (type-only)
 TitleBlockFacts: type (type-only)
 TitleBlockField: type (type-only)
+TitleBlockImportError: value+type
 TitleBlockMetrics: type (type-only)
 TitleBlockMisfit: type (type-only)
 TitleBlockParam: type (type-only)
@@ -60,8 +65,13 @@ fieldBuiltins: value
 fitCell: value
 fitText: value
 formatTitleBlockDate: value
+importTitleBlockDxf: value
+importTitleBlockSvg: value
 isPlaceholder: value
+ownTitleBlockPack: value
 paramLookup: value
+placeField: value
+placedFields: value
 printTitleBlock: value
 projectTitleFields: value
 readSheetParams: value

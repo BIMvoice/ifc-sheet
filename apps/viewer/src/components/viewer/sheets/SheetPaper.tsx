@@ -26,8 +26,8 @@ import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/pro
 import { hasTrueScale } from '@/project/axonometric';
 import { shapePath } from '../drafting/DraftOverlay';
 import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
-import { cadKindOf, layerTags, penTags } from './dxf-tags';
-import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { cadKindOf, layerTags, lineTags, penTags } from './dxf-tags';
+import { entityPen, layerShows, lookOf, overrideKey } from '@/drafting/styles';
 import { useProjectStore } from '@/project/project-store';
 import { resolvedDraft } from '@/project/parametric-text';
 import { TitleBlockGraphic } from './TitleBlockGraphic';
@@ -42,9 +42,11 @@ import { resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimv
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
+import { matrixText, printedUnderlays, underlayMatrix } from '@/underlay/underlay';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
+import { CellMarks } from './CellMarks';
 import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
@@ -125,8 +127,8 @@ function TitleNumber({ number, x, baseline, size }: { number: string | undefined
 
 const pensMemo = sharedMemo<ReturnType<typeof viewportPens>>();
 
-const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, extraPatterns, selected, highlight = null }: {
-  vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
+const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, layers, extraPatterns, selected, highlight = null }: {
+  sheetId: string; vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
   /** On a key plan: the part its keyed viewport shows, paper mm. */
   highlight?: Rect | null;
 }) {
@@ -136,6 +138,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
   const cadLayers = useProjectStore((s) => s.cadLayers);
+  const allUnderlays = useProjectStore((s) => s.underlays);
   // The graphics the view draws with: its template's, then its own over them (#44).
   const viewTemplates = useProjectStore((s) => s.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
@@ -172,10 +175,13 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
   const live = useLiveSymbolContext(drawing?.config.plane, axis, vp.scale);
   // A key plan is the whole plan alone: no drafting on it, only the outline of the part keyed.
   const keyPlan = vp.keyPlanOf !== undefined;
+  // The pictures this sheet prints under the view (#457): chosen per sheet, drawn beneath the linework with the same transform.
+  const underlays = keyPlan || !view ? [] : printedUnderlays(allUnderlays, view.id, sheetId);
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
+        {underlays.map((u) => <image key={u.id} data-underlay-id={u.id} data-export-ignore-dxf="true" href={u.href} x={0} y={0} width={u.widthPx} height={u.heightPx} preserveAspectRatio="none" opacity={u.opacity} transform={matrixText(underlayMatrix(u, t, axis))} />)}
         {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
           <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} data-dxf-fill={p.solid ? 'solid' : undefined} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
@@ -187,8 +193,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ vp, content, layers, ext
           const color = layerColor.get(e.layerId);
           if (color === null) return null;
           return isGeometry(e.shape)
-            ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
-            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
+            ? <PenPath key={e.id} layer={layerById.get(e.layerId)} params={e.params} d={shapePath(e.shape, t, axis)} color={color ?? '#000'} />
+            : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
       <rect
@@ -232,7 +238,7 @@ function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout:
   return (
     <g data-viewport-id={vp.id}>
       {layout.fit ? <clipPath id={clipId}><rect x={box.x} y={box.y} width={box.w} height={box.h} /></clipPath> : null}
-      <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /></g>
+      <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /><CellMarks layout={layout} scheduleId={vp.viewId} x={box.x} y={box.y} /></g>
       <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="transparent"
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
     </g>
@@ -274,10 +280,16 @@ function useDraftingStandards() {
 }
 
 /** A drafted line on paper with its layer's pen (weight and line type, millimetres). */
-function PenPath({ layer, d, color }: { layer: DraftLayer | undefined; d: string; color: string }) {
-  const pen = layerPen(layer);
-  return <path {...layerTags(layer)} d={d} stroke={color} strokeWidth={pen.width} strokeDasharray={pen.dash.length ? pen.dash.join(' ') : undefined} fill="none" />;
+function PenPath({ layer, params, d, color }: { layer: DraftLayer | undefined; params: DraftEntity['params']; d: string; color: string }) {
+  const lineTypes = useProjectStore((s) => s.lineTypes);
+  // The layer's pen, and over it what the element sets itself; a colour the layer gives is the layer's (it is `color`), the element's own wins.
+  const pen = entityPen(layer, params, lineTypes ?? []);
+  const own = typeof params[overrideKey('color')] === 'string' && params[overrideKey('color')] !== '' ? pen.color : color;
+  return <path {...lineTags(layer, pen.own)} {...printOnly(layer)} d={d} stroke={own} strokeWidth={pen.width} strokeDasharray={pen.dash.length ? pen.dash.join(' ') : undefined} fill="none" />;
 }
+
+/** What marks an element of a layer that does not print: the print and PDF export leave it out (`sheetSvgText`), the screen and the DXF keep it. */
+export const printOnly = (layer: DraftLayer | undefined) => (layer?.print === false ? { 'data-print-ignore': 'true' } : {});
 
 /** The sheet's own lines and annotations, on the paper. */
 function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPatterns }: { sheet: ProjectSheet; projectName: string; issueDate?: string; entities: readonly DraftEntity[]; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[] }) {
@@ -293,8 +305,8 @@ function SheetDrafts({ sheet, projectName, issueDate, entities, layers, extraPat
         const color = colour.get(e.layerId);
         if (color === null) return null;
         return isGeometry(e.shape)
-          ? <PenPath key={e.id} layer={layerById.get(e.layerId)} d={shapePath(e.shape, PAPER, 'down')} color={color ?? '#000'} />
-          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
+          ? <PenPath key={e.id} layer={layerById.get(e.layerId)} params={e.params} d={shapePath(e.shape, PAPER, 'down')} color={color ?? '#000'} />
+          : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={PAPER} axis="down" extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={1} /></g>;
       })}
     </g>
   );
@@ -325,7 +337,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
-          : <ViewportGraphic key={vp.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
+          : <ViewportGraphic key={vp.id} sheetId={sheet.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
       <g data-sheet-notes="" {...penTags('VIEWPORT-LABELS', 0.25)}>

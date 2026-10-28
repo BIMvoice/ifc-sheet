@@ -6,6 +6,8 @@ DEFAULT_GRAPHIC_STANDARD: value
 DimStyle: type (type-only)
 DraftLengthUnit: type (type-only)
 FontKind: type (type-only)
+GERMANY_PACK_ID: value
+GERMAN_PRACTICE: value
 GRAPHIC_STANDARDS: value
 GraphicStandard: type (type-only)
 ISO_128_LINE_WIDTHS: value
@@ -19,9 +21,11 @@ ROMANIA_PACK_ID: value
 STANDARD_PACK_VERSION: value
 STANDARD_STYLE_ID: value
 StandardPack: type (type-only)
+TITLE_BLOCK_CAPTIONS_DE: value
 TextPlacement: type (type-only)
 TextStyle: type (type-only)
 builtInPacks: value
+germanyPack: value
 graphicStandardOf: value
 knownGraphicStandard: value
 packForCommandLine: value

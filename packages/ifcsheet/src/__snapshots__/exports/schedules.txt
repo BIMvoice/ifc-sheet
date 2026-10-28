@@ -42,8 +42,10 @@ LIST_COUNT_ID: value
 LIST_WORDS_EN: value
 LIST_WORDS_RO: value
 ListCell: type (type-only)
+ListCellOverride: type (type-only)
 ListClassificationContext: type (type-only)
 ListFigureKind: type (type-only)
+ListMissing: type (type-only)
 ListScheduleColumn: type (type-only)
 ListScheduleDef: type (type-only)
 ListScheduleTable: type (type-only)
@@ -51,6 +53,7 @@ ListTableSource: type (type-only)
 MARK_SCHEMES: value
 MAX_KEPT_APART: value
 MAX_LABEL_LENGTH: value
+MAX_LIST_OVERRIDES: value
 MAX_START: value
 MAX_TEXT_LENGTH: value
 MAX_TEXT_ROWS: value
@@ -128,6 +131,7 @@ boqTypeLabel: value
 canSplit: value
 checkSubReports: value
 cleanText: value
+clearListOverride: value
 computeBoq: value
 contentOf: value
 csvDelimiter: value
@@ -147,6 +151,7 @@ isClean: value
 isOpenFilter: value
 keepApart: value
 keepId: value
+listColumnKey: value
 listExportTable: value
 listFigure: value
 listFigureKind: value
@@ -162,6 +167,8 @@ normaliseName: value
 occurrenceMarkOf: value
 orderedRows: value
 orphanCells: value
+orphanedOverrides: value
+overrideOf: value
 partsOf: value
 passesElementFilter: value
 passesPropertyTest: value
@@ -176,6 +183,7 @@ readBoqArticle: value
 readBoqArticles: value
 readJoineryMapping: value
 readKeptApart: value
+readListOverrides: value
 readListScheduleDef: value
 readPropertyTest: value
 readSchedule: value
@@ -202,6 +210,7 @@ roomScheduleWords: value
 ruralReadiness: value
 scheduleFilterProperties: value
 scheduleOf: value
+setListOverride: value
 setTextCell: value
 shownRows: value
 spaceRole: value
@@ -219,4 +228,5 @@ tidy: value
 typeLabel: value
 unitDimension: value
 withListClassification: value
+withListOverrides: value
 withOfficeClassification: value

@@ -14,7 +14,7 @@
  * it separate means converting a component to translated strings never
  * has to touch the (already large) viewer store.
  */
-import { setNameResolver } from '@bimvoice/ifcsheet/names';
+import { nameLanguageOf, nameResolverFor, setNameResolver, type EngineNameKey, type NameParams } from '@bimvoice/ifcsheet/names';
 import { appName } from '../edition';
 import { en, type TranslationKey } from './en';
 import { formatLocaleNumber } from './intlFormat';
@@ -142,9 +142,26 @@ export function resolve(key: TranslationKey, params: TranslationParameters = {})
   return resolveFromCatalogue(key, params, activeLocale, catalogues.get(activeLocale));
 }
 
-// The drawing-set engine names what it makes (the starting set's sheets, the default views) in the active language.
+let projectNameLanguage: () => string | undefined = () => undefined;
+
+/** Where the language a project's names were recorded in is read from (the project store installs it). Not a UI language: it keeps naming in it whatever the interface shows. */
+export function setProjectNameLanguageSource(read: () => string | undefined): void {
+  projectNameLanguage = read;
+}
+
+/**
+ * Resolve a name the app is about to store (a sheet, a view, a view template, a schedule): in the language the project
+ * recorded when its names were first made, else in the active interface language. The engine's names come from its own
+ * tables (`nameResolverFor`), the same text a command-line build writes, so the interface language cannot change them.
+ */
+export function resolveName(key: EngineNameKey, params: NameParams = {}): string {
+  const language = nameLanguageOf(projectNameLanguage());
+  return language ? nameResolverFor(language)(key, params) : resolve(key, params);
+}
+
+// The drawing-set engine names what it makes (the starting set's sheets, the default views) in the project's language, else the active one.
 // `@bimvoice/ifcsheet/names` imports nothing, so the catalogue does not load the engine to install it.
-setNameResolver((key, params) => resolve(key, params));
+setNameResolver(resolveName);
 
 /** Freeze a label context for an asynchronous document layout/export (#6610).
  * Locale or catalogue replacement must not mix languages halfway through a PDF. */

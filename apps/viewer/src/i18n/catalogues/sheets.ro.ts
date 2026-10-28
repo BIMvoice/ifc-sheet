@@ -38,4 +38,5 @@ export const sheetsRo = {
   'sheets.pdf': 'PDF / Tipărire',
   'sheets.viewportLabelNoScale': '{name}  (fără scară)',
   'sheets.dxf.rasterOmitted': 'Fișierul DXF nu poate conține imagini: {views} se tipărește ca imagine și a ieșit un cadru gol. Exportați planșa ca PDF pentru a o păstra.',
+  'sheets.dxf.underlayOmitted': 'Fișierul DXF nu poate conține imagini: fundalul de sub {views} este tipărit pe planșă ca imagine și nu se află în DXF. Exportați planșa ca PDF pentru a-l păstra.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
