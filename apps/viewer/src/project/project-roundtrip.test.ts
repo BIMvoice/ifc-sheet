@@ -276,7 +276,6 @@ const FULL = {
     id: 'arch', name: 'Arch', textStyle: 'big', arrow: 'arrow', arrowSize: 2, extGap: 0.5, extOver: 2, placement: 'below', textGap: 0.8, precision: 0, unit: 'mm', color: '#0000aa',
   }],
   layerGroups: [{ id: 'g1', name: 'Annotation', visible: false, locked: true }],
-  lineTypes: [{ id: 'lt-centre', name: 'Centre', dash: [6, 2, 0, 2] }],
   graphicStandard: 'ro-practice',
   openingLines: 'hinge',
   symbolFlips: { '2O2Fr$t4X7Zf8NOew3FLOH': 3 },
