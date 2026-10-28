@@ -12,6 +12,8 @@
  * added here is written after every field of `./index.ts`; its place among the registered ones is its key's.
  */
 import type { DocumentField, FieldKey } from './define';
+import { germanyLandField, germanyPermitField } from './germany-permit';
+import { lineTypesField } from './line-types';
 
 /** `legacy` (the frozen list in `./index.ts`) followed by `registered` sorted by key; a key listed twice throws. */
 export function assembleFields(legacy: readonly DocumentField<FieldKey>[], registered: readonly DocumentField<FieldKey>[]): DocumentField<FieldKey>[] {
@@ -26,4 +28,7 @@ export function assembleFields(legacy: readonly DocumentField<FieldKey>[], regis
 }
 
 export const REGISTERED_FIELD_DEFS = [
+  germanyLandField,
+  germanyPermitField,
+  lineTypesField,
 ] as const satisfies readonly DocumentField<FieldKey>[];

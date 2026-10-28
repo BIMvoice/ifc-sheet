@@ -24,7 +24,6 @@
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
 import { readDraft, readDraftLayer } from '@/drafting/draft-file';
-import { readLineType } from '@/drafting/line-types';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { resolve } from '@/i18n/registry';
@@ -57,7 +56,6 @@ import { handoverPatternField } from './handover-pattern';
 import { includeFarElementsField } from './include-far-elements';
 import { languageField } from './language';
 import { revisionsField } from './revisions';
-import { germanyLandField, germanyPermitField } from './germany-permit';
 import { norwayPermitField } from './norway-permit';
 import { pacInterventionField } from './pac-intervention';
 import { pacModeField } from './pac-mode';
@@ -142,13 +140,8 @@ const DOCUMENT_FIELD_DEFS = [
   pacInterventionField,
   // The project is a Norwegian building application (#372); absent: it is not.
   norwayPermitField,
-  // The project is a German building application, and in which Land (#372); absent: it is not, none chosen.
-  germanyPermitField,
-  germanyLandField,
   // Which permit project: the full one or the simplified one for a rural house (#364); absent: the full one.
   pacModeField,
-  // The project's own line types (#496); absent: only the built-in ones.
-  listField('lineTypes', (raw) => at(raw, 'lineTypes', readLineType), { presentOnly: true }),
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
