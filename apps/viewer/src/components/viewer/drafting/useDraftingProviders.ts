@@ -6,9 +6,10 @@
 
 import { useEffect, useMemo } from 'react';
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { pickModelElement, type ReferenceSet } from '@/drafting/references';
+import { pickModelElement, referenceElementBoxes, type ReferenceSet } from '@/drafting/references';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { syncLevelMarks } from '@/drafting/level-sync';
-import { clearViewInputs, installViewInputs, setElementPicker, setModelPicker } from '@/drafting/session';
+import { clearViewInputs, installViewInputs, setElementBoxProvider, setElementPicker, setModelPicker } from '@/drafting/session';
 import { viewInputs } from '@/drafting/view-inputs';
 import type { DraftEntity } from '@/drafting/types';
 import { roofAtPoint } from '@/project/roof-plan';
@@ -41,6 +42,11 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     setElementPicker((p) => (drawing && references ? pickModelElement(drawing, references, p, 6 / scale) : null));
     return () => setElementPicker(null);
   }, [drawing, references, scale]);
+  // A dimension point snapped to a corner of a model element stays on it when a new version changes the element (#459).
+  useEffect(() => {
+    setElementBoxProvider((p) => (references ? referenceElementBoxes(references, p, 2 / scale, renderIdGlobalId) : []));
+    return () => setElementBoxProvider(null);
+  }, [references, scale]);
   // Everything the one-action commands (LABELALL, DIMALL, TAGALL, CEILTAG, LEVELALL, hatch, level marks) read from this view
   // and its drawing is one function of them (`viewInputs`), the one the batch that annotates the whole set calls too.
   const inputs = useMemo(() => viewInputs({ view, drawing, entities, plane, levels }), [view, drawing, entities, plane, levels]);
