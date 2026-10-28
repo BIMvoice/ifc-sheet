@@ -113,6 +113,6 @@ describe.skipIf(missing !== null)('ifcsheet rooms, on AC20-FZK-Haus', () => {
     expect(await run(['rooms', FZK, '--csv', '--json'], bad.io)).toBe(EXIT.usage);
     expect(await run(['rooms', FZK, '--out', 'x.pdf'], capture().io)).toBe(EXIT.usage);
     expect(await run(['check', FZK, '--csv'], capture().io)).toBe(EXIT.usage);
-    expect(await run(['build', FZK, '--out', 'x.pdf', '--locale', 'ro'], capture().io)).toBe(EXIT.usage);
+    expect(await run(['build', FZK, '--out', 'x.pdf', '--csv'], capture().io)).toBe(EXIT.usage);
   }, 120_000);
 });
