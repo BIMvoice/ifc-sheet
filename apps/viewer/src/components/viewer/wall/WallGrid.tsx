@@ -29,6 +29,8 @@ import { WallFind } from './WallFind';
 import { useWallZoomControls } from './useWallZoom';
 import { WallMiniMap } from './WallMiniMap';
 import { WallZoomControl } from './WallZoomControl';
+import { Hint } from '@/onboarding/Hint';
+import { dismissHint } from '@/onboarding/hints';
 
 const GROUPS: { group: SetGroup | null; labelKey: TranslationKey }[] = [
   { group: 'plans', labelKey: 'wall.group.plans' },
@@ -91,9 +93,9 @@ const SheetOnWall = memo(function SheetOnWall({ sheet, extent, width, onStep, on
         type="button"
         aria-label={name}
         className="block cursor-zoom-in rounded-sm border-0 bg-transparent p-0 outline-none transition-transform duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-sky-400"
-        onDoubleClick={() => onStep(sheet.id)}
+        onDoubleClick={() => { dismissHint('openSheet'); onStep(sheet.id); }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') onStep(sheet.id);
+          if (e.key === 'Enter') { dismissHint('openSheet'); onStep(sheet.id); }
         }}
       >
         <LazyWallSheet sheet={sheet} width={width} near={near} />
@@ -165,6 +167,7 @@ export function WallGrid({ extent, onStep }: { extent: ModelExtent | null; onSte
         </div>
         <p className="mt-10 max-w-xl text-sm text-sky-200/70">{t('wall.hint')}</p>
       </div>
+      <Hint id="openSheet">{t('onboarding.hint.openSheet')}</Hint>
       <WallMiniMap />
       <WallZoomControl api={zoom} />
     </div>
