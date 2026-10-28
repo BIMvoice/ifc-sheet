@@ -32,7 +32,9 @@ describe('the surfaces of a coloured elevation (#499)', () => {
     const flipped = quad(1, 9, [1, 0, 0, 1]);
     flipped.indices = new Uint32Array([0, 2, 1, 0, 3, 2]);
     for (const mesh of [quad(1, 9, [1, 0, 0, 1]), flipped]) {
-      for (const f of surfaceFills([mesh], south())) {
+      const fills = surfaceFills([mesh], south());
+      expect(fills.length).toBeGreaterThan(0);
+      for (const f of fills) {
         const [a, b, c] = f.polygon.outer;
         expect((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).toBeGreaterThan(0);
       }
@@ -46,6 +48,21 @@ describe('the surfaces of a coloured elevation (#499)', () => {
     const hidden = quad(4, 7, [1, 1, 0, 1], 'IfcDoor');
     const fills = surfaceFills([wall, space, behind, hidden], south(), (_id, type) => type !== 'IfcDoor');
     expect([...new Set(fills.map((f) => f.entityId))]).toEqual([1]);
+  });
+
+  it('cuts a face the plane crosses at the plane: only the part beyond it is drawn, and a face wholly in front is dropped', () => {
+    // A 1 x 1 wall seen from the south (z = 10 looking down -z) and tilted: its x = 0 edge is 2 in front of the plane (z = 12), its x = 1 edge 2 behind (z = 8).
+    const tilted = quad(1, 0, [1, 0, 0, 1]);
+    tilted.positions = new Float32Array([0, 0, 12, 1, 0, 8, 1, 1, 8, 0, 1, 12]);
+    const fills = surfaceFills([tilted], south());
+    expect(fills.length).toBeGreaterThan(0);
+    const xs = fills.flatMap((f) => f.polygon.outer.map((p) => p.x));
+    // The plane crosses at the middle of the face: nothing is drawn on the removed half.
+    expect(Math.min(...xs)).toBeGreaterThan(0.5 - 1e-6);
+    expect(Math.max(...xs)).toBeCloseTo(1, 6);
+    const area = fills.reduce((sum, f) => { const [a, b, c] = f.polygon.outer; return sum + Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2; }, 0);
+    expect(area).toBeCloseTo(0.5, 6);
+    expect(surfaceFills([quad(1, 12, [1, 0, 0, 1])], south())).toEqual([]);
   });
 
   it('draws nothing for a view with no depth, and glass as the paper shows it', () => {

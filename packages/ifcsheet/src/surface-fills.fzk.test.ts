@@ -47,6 +47,7 @@ describe.skipIf(missing !== null)('the coloured elevations of AC20-FZK-Haus (#49
     expect(wall).toHaveLength(1);
     expect(shown.has(wall[0])).toBe(true);
     // The windows' frames and the roof beams are on the facade too.
+    expect(authored(model, 'IfcWindow').length).toBeGreaterThan(0);
     for (const colour of authored(model, 'IfcWindow')) expect(shown.has(colour), colour).toBe(true);
   });
 
