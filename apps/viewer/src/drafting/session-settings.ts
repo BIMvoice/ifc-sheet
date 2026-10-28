@@ -10,7 +10,7 @@ export function defaultDraftSettings(): DraftSettings {
   return { filletRadius: 0, offsetDistance: null, textHeight: 0.25, hatchPattern: 'LINES45', hatchScale: 1, hatchAngle: 0, extrudeClass: 'IfcBuildingElementProxy', extrudeDepth: 1,
   roofKind: 'gable', roofSystem: true, roofPick: false, roofSlope: 30, roofThickness: 0.25, roofOverhang: 0.5,
   axisLabel: '1', axisBubble: 'circle', axisEnds: 'both', axisSize: null, axisLineType: 'dashdot',
-  dimContinuous: true, currentTextStyle: 'standard', currentDimStyle: 'standard', tagField: 'mark', annotationType: null,
+  dimContinuous: true, dimAlign: true, currentTextStyle: 'standard', currentDimStyle: 'standard', tagField: 'mark', annotationType: null,
   symbolId: null, symbolScale: 1, symbolRotation: 0, symbolTarget: null };
 }
 
