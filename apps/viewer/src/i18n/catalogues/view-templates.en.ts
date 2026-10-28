@@ -36,5 +36,7 @@ export const viewTemplatesEn = {
   'wall.tpl.name': 'Template name',
   'wall.tpl.usedBy': { one: 'used by one drawing', other: 'used by {count} drawings' },
   'wall.tpl.edit': 'What shows in {name}',
+  'wall.tpl.detail': 'Detail level',
+  'wall.tpl.detail.scale': 'Follow the scale',
   'wall.tpl.delete': 'Delete template {name}; its drawings keep their graphics',
 } as const satisfies Record<string, TranslationValue>;
