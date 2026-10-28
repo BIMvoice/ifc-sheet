@@ -121,8 +121,10 @@ export interface DraftLayer {
   locked: boolean;
   /** Pen width, paper millimetres (absent: 0.25). */
   lineWeight?: number;
-  /** Absent: continuous. */
-  lineType?: 'continuous' | 'dashed' | 'dotted' | 'dashdot';
+  /** A built-in line type (`continuous`, `dashed`, `dotted`, `dashdot`) or the id of one of the project's own (`CustomLineType`). Absent: continuous. */
+  lineType?: string;
+  /** Whether the layer prints (sheet SVG, PDF and the plot flag of its DXF layer). Absent: it prints. */
+  print?: boolean;
   /** The layer group it belongs to (`LayerGroup.id`). */
   group?: string;
 }

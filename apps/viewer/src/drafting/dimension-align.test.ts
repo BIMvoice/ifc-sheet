@@ -10,10 +10,11 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from '@/project/project-store';
-import { clearDraftHistory, editDrafts, newDraft } from './draft-store.js';
+import { clearDraftHistory, editDrafts, newDraft, undoDrafts } from './draft-store.js';
 import { dimensionLayout } from './annotation.js';
-import { alignDimensionLine } from './dimension-align.js';
-import { attachDraftingView, cancelCommand, clickDrawing, startDraftCommand, useDraftingSession } from './session.js';
+import { alignDimensionLine, alignDraggedGrip, alignGlyph } from './dimension-align.js';
+import { moveGrip } from './grips.js';
+import { attachDraftingView, baseDraftSettings, cancelCommand, clickDrawing, patchDraftSettings, startDraftCommand, submitCommandLine, useDraftingSession } from './session.js';
 import type { AnnotationShape, Pt } from './types.js';
 
 type Dim = Extract<AnnotationShape, { type: 'dimension' }>;
@@ -25,6 +26,7 @@ const dims = (): Dim[] => useProjectStore.getState().drafts.flatMap((d) => (d.sh
 
 beforeEach(() => {
   cancelCommand();
+  patchDraftSettings({ dimAlign: true });
   resetProject();
   clearDraftHistory();
   useDraftingSession.setState({ selection: new Set(), ortho: false, history: [], lastCommandId: null });
@@ -86,5 +88,49 @@ describe('DIMALIGNED / DIMLINEAR line placement', () => {
     startDraftCommand('dimaligned');
     click(6, 0); click(9, 0); click(7.5, 3);
     near(dimensionLayout(dims().at(-1) as Dim).lines[2].a.y, 3);
+  });
+});
+
+describe('the alignment toggle', () => {
+  const seed = (shape: Dim) => editDrafts({ add: [newDraft('view-1', '0', shape)] });
+
+  it('is on by default and ALIGN turns it off: the line then stays where it was put', () => {
+    assert.equal(baseDraftSettings().dimAlign, true);
+    seed(dim('aligned', { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 2, y: 1 }));
+    startDraftCommand('dimaligned');
+    submitCommandLine('align', null);
+    assert.equal(baseDraftSettings().dimAlign, false);
+    click(6, 0); click(9, 0); click(7.5, 1.1);
+    near(dimensionLayout(dims().at(-1) as Dim).lines[2].a.y, 1.1);
+  });
+
+  it('shows a glyph and the shared line while aligned, and nothing otherwise', () => {
+    const r = alignDimensionLine({ x: 6, y: 0 }, { x: 9, y: 0 }, 'aligned', { x: 7.5, y: 1.2 }, [dim('aligned', { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 2, y: 1 })], 0.5);
+    const glyph = alignGlyph(r, 0.25);
+    assert.deepEqual(glyph.map((g) => g.type), ['line', 'polyline']);
+    assert.deepEqual(alignGlyph({ at: { x: 1, y: 1 }, guide: null }, 0.25), []);
+  });
+});
+
+describe('dragging a dimension line', () => {
+  const mine = newDraft('view-1', '0', dim('aligned', { x: 6, y: 0 }, { x: 9, y: 0 }, { x: 7.5, y: 3 }));
+  const other = newDraft('view-1', '0', dim('aligned', { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 2, y: 1 }));
+
+  it('snaps onto a close dimension line of the same view, and is one undo step', () => {
+    editDrafts({ add: [other, mine] });
+    const dragged = alignDraggedGrip(useProjectStore.getState().drafts, mine.id, 'at', { x: 7.5, y: 1.2 });
+    near(dragged.at.y, 1);
+    assert.ok(dragged.guide);
+    editDrafts({ update: new Map([[mine.id, moveGrip(mine.shape, 'at', dragged.at)]]) });
+    near(dimensionLayout(dims().at(-1) as Dim).lines[2].a.y, 1);
+    assert.ok(undoDrafts());
+    near((dims().at(-1) as Dim).at.y, 3);
+  });
+
+  it('does not snap other grips, and not to a line in another view', () => {
+    editDrafts({ add: [{ ...other, viewId: 'view-2' }, mine] });
+    assert.deepEqual(alignDraggedGrip(useProjectStore.getState().drafts, mine.id, 'at', { x: 7.5, y: 1.2 }), { at: { x: 7.5, y: 1.2 }, guide: null });
+    editDrafts({ add: [{ ...other, id: 'o2' }] });
+    assert.equal(alignDraggedGrip(useProjectStore.getState().drafts, mine.id, 'a', { x: 7.5, y: 1.2 }).guide, null);
   });
 });
