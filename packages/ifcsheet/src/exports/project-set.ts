@@ -23,13 +23,13 @@ export {
   type SnapHit, type SnapMode, type SymbolInstanceShape, type TextFrame,
 } from '../draft-types.js';
 export {
-  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, TEXT_OVERRIDES, dashOf, dimStyleOf, formatDimension, layerLocked, layerPen, layerShows, lookOf, naturalDecimals, overrideKey,
+  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashOf, dimStyleOf, formatDimension, layerLocked, layerPen, layerShows, lookOf, naturalDecimals, overrideKey,
   readableDeg, resolveDim, resolveText, textStyleOf, unitFactor, type LayerGroup, type LayerVisibilityScope, type LineType, type StyleBook,
 } from '../draft-look.js';
 export { arrowMark, formatLength, linearLayout, unitVector, type ArrowMark, type DimensionLayout, type LayoutOptions } from '../dimension-layout.js';
 export { DEFAULT_VIEW_SCALE, annotationAtFactor, annotationFactor, viewportPaperUnit } from '../viewport-annotation.js';
 // A schedule on paper, and where it sits on a sheet
-export type { ScheduleLayout, SchedulePrim } from '../schedule-prim.js';
+export type { ScheduleCell, ScheduleLayout, SchedulePrim } from '../schedule-prim.js';
 export {
   PAD, PEN, ROW, TEXT, layoutPagedTable, pageTitle, textWidth, wrapNote,
   type PagedOptions, type TableBlock, type TableItem,

@@ -38,10 +38,9 @@ import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
 import { useTableSheetLayouts } from './useTableSheetLayouts';
+import { fontFamily, tablesFace } from '@/drafting/styles';
 import { useSheetLocale } from '@/project/units-and-numbers';
 import { useRoomScheduleData, useRoomScheduleLabels, useRoomSummary } from './room-schedule-hooks';
-
-const FONT = 'ui-sans-serif, system-ui, sans-serif';
 
 export function useScheduleLabels(title: string): ScheduleLabels {
   const { t } = useTranslation();
@@ -278,7 +277,7 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   return useMemo(() => (tables.size > 0 ? new Map([...layouts, ...tables]) : layouts), [layouts, tables]);
 }
 
-function Prim({ p }: { p: SchedulePrim }) {
+function Prim({ p, face }: { p: SchedulePrim; face: ReturnType<typeof tablesFace> }) {
   if (p.kind === 'line') {
     return <line {...penTags('SCHEDULE', p.w)} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#000" strokeWidth={p.w} />;
   }
@@ -288,7 +287,8 @@ function Prim({ p }: { p: SchedulePrim }) {
   }
   return (
     <text
-      {...penTags('SCHEDULE', 0.18)} x={p.x} y={p.y} fontSize={p.size} fontFamily={FONT} fontWeight={p.bold ? 700 : 400} fill="#000"
+      {...penTags('SCHEDULE', 0.18)} data-dxf-font={face.styled ? face.font : undefined} x={p.x} y={p.y} fontSize={p.size} fontFamily={fontFamily(face.font)}
+      fontWeight={p.bold ? 700 : 400} fontStyle={face.italic ? 'italic' : undefined} fill="#000"
       textAnchor={p.anchor} transform={p.rotate ? `rotate(${p.rotate} ${p.x} ${p.y})` : undefined}
     >
       {p.text}
@@ -298,9 +298,12 @@ function Prim({ p }: { p: SchedulePrim }) {
 
 /** The schedule at (x, y) on the paper (its top-left corner). */
 export const ScheduleGraphic = memo(function ScheduleGraphic({ layout, x = 0, y = 0 }: { layout: ScheduleLayout; x?: number; y?: number }) {
+  // The project's "Tables" text style (#500): one face for every schedule, report and register.
+  const textStyles = useProjectStore((s) => s.textStyles);
+  const face = useMemo(() => tablesFace(textStyles), [textStyles]);
   return (
     <g transform={x || y ? `translate(${x} ${y})` : undefined}>
-      {layout.prims.map((p, i) => <Prim key={i} p={p} />)}
+      {layout.prims.map((p, i) => <Prim key={i} p={p} face={face} />)}
     </g>
   );
 });

@@ -49,7 +49,8 @@ async function builtDxfNames(args: string[], said = ''): Promise<string[]> {
   const dir = scratch();
   const c = capture();
   const code = await run(['build', FZK, '--handover', join(dir, 'h.zip'), '--name', 'Haus Test', ...args], c.io);
-  expect(c.err()).toBe(said);
+  // A project with no sheet says it lays a fresh set out (#479); these tests are about the language, so that note is set aside.
+  expect(c.err().split('\n').filter((l) => !l.includes('holds no drawing set')).join('\n')).toBe(said);
   expect(code).toBe(EXIT.ok);
   return Object.keys(unzipSync(new Uint8Array(readFileSync(join(dir, 'h.zip'))))).filter((n) => n.endsWith('.dxf')).sort();
 }

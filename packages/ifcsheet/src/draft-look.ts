@@ -12,7 +12,7 @@
  */
 
 import type { DraftLayer, DraftParamValue } from './draft-types.js';
-import { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID as STANDARD, type DimStyle, type TextStyle } from './draft-styles.js';
+import { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID as STANDARD, type DimStyle, type FontKind, type TextStyle } from './draft-styles.js';
 import { decimalsOf, lengthUnitOf, type SheetLocale } from './units-and-numbers.js';
 import { sheetNumber } from './sheet-number.js';
 
@@ -26,6 +26,15 @@ export interface LayerGroup {
 }
 
 export const DEFAULT_TEXT_STYLE: TextStyle = { id: STANDARD, name: 'Standard', height: 2.5, font: 'sans', bold: false, italic: false };
+
+/** The text style schedules, reports and the drawing register are set in (#500); absent from the project, they keep their own sans face. */
+export const TABLES_STYLE_ID = 'tables';
+
+/** The face the tables are set in: the project's "Tables" text style, or none (today's sans) when it has not made one. */
+export function tablesFace(textStyles: readonly TextStyle[] | undefined): { font: FontKind; italic: boolean; styled: boolean } {
+  const style = textStyles?.find((s) => s.id === TABLES_STYLE_ID);
+  return style ? { font: style.font, italic: style.italic, styled: true } : { font: 'sans', italic: false, styled: false };
+}
 
 /** The fields an element may override, by kind. */
 export const TEXT_OVERRIDES = ['height', 'font', 'bold', 'italic', 'color'] as const;

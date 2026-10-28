@@ -24,7 +24,7 @@
  */
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
-import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic, SheetPen, SheetText } from './sheet-graphic.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
 const PEN = { frame: 0.5, mark: 0.18 } as const;
@@ -34,6 +34,26 @@ async function packagedFont(): Promise<Uint8Array> {
   const { readFile } = await import('node:fs/promises');
   return new Uint8Array(await readFile(new URL('../fonts/Inter-Regular.ttf', import.meta.url)));
 }
+
+/** The bold file the package ships next to it (`fonts/Inter-Bold.ttf`); absent, bold text is set in the regular face. */
+async function packagedBold(): Promise<Uint8Array | undefined> {
+  try {
+    const { readFile } = await import('node:fs/promises');
+    return new Uint8Array(await readFile(new URL('../fonts/Inter-Bold.ttf', import.meta.url)));
+  } catch {
+    return undefined;
+  }
+}
+
+/** The characters beyond WinAnsi's printable Latin-1 and its 27 extras, which jsPDF's standard fonts (Times, Courier, Helvetica) can show. */
+const WIN_ANSI_EXTRA = new Set('€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ');
+const winAnsi = (text: string): boolean => {
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (!(c < 0x7f || (c >= 0xa0 && c <= 0xff) || WIN_ANSI_EXTRA.has(ch))) return false;
+  }
+  return true;
+};
 
 const binary = (bytes: Uint8Array): string => {
   let out = '';
@@ -49,6 +69,8 @@ export interface PdfOptions {
    * same file at `fonts/Inter-Regular.ttf`).
    */
   font?: Uint8Array;
+  /** The bold of that font. Default: the Inter Bold the package ships (Node); absent, bold text is set in the regular face. */
+  boldFont?: Uint8Array;
 }
 
 /** The set as one PDF, a page per sheet in the order given. Empty input makes no PDF. */
@@ -61,6 +83,11 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
   doc.setProperties({ title: options.title ?? '', creator: 'IfcSheet' });
   doc.addFileToVFS('Inter-Regular.ttf', binary(font));
   doc.addFont('Inter-Regular.ttf', 'Inter', 'normal', undefined, 'Identity-H');
+  const bold = options.boldFont ?? (options.font ? undefined : await packagedBold());
+  if (bold) {
+    doc.addFileToVFS('Inter-Bold.ttf', binary(bold));
+    doc.addFont('Inter-Bold.ttf', 'Inter', 'bold', undefined, 'Identity-H');
+  }
   doc.setFont('Inter', 'normal');
   sheets.forEach((sheet, i) => {
     if (i > 0) doc.addPage(page(sheet).format, page(sheet).orientation);
@@ -110,6 +137,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
+      doc.setFont(...pdfFont(t, Boolean(bold)));
       doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
     }
     // The logo: fitted whole and centred in its box (the app's `xMidYMid meet`); in a strip it reads upward.
@@ -131,9 +159,24 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
         console.warn('[ifcsheet] the logo could not be drawn in the PDF', error);
       }
     }
+    doc.setFont('Inter', 'normal');
     doc.outline.add(null, `${sheet.number} ${sheet.name}`.trim(), { pageNumber: i + 1 });
   });
   return new Uint8Array(doc.output('arraybuffer'));
+}
+
+/**
+ * The PDF font of a text: Inter (regular, or bold when `bold` and the bold file is embedded). A text with a face of its own (the "Tables"
+ * style: serif, mono or italic) is set in Times, Courier or Helvetica when every letter is in WinAnsi, which those standard fonts have,
+ * and in Inter when not (ș, ț, ă are not), as the app's issued PDF does (`issue/pdf-fonts.ts`).
+ */
+export function pdfFont(t: Pick<SheetText, 'text' | 'bold' | 'face'>, hasBold: boolean): [string, string] {
+  const face = t.face;
+  if (face && (face.font !== 'sans' || face.italic) && winAnsi(t.text)) {
+    const family = face.font === 'serif' ? 'times' : face.font === 'mono' ? 'courier' : 'helvetica';
+    return [family, t.bold ? (face.italic ? 'bolditalic' : 'bold') : face.italic ? 'italic' : 'normal'];
+  }
+  return ['Inter', t.bold && hasBold ? 'bold' : 'normal'];
 }
 
 /** A drawing with nothing in it: the sheet's shapes travel as the exporter's extra layers. */

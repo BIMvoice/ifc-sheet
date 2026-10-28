@@ -14,17 +14,37 @@ const nameOf = (c: ListScheduleColumn): string => c.label ?? (c.psetName ? `${c.
 /** A column to add, encoded for a select's value. */
 const encode = (source: ListScheduleColumn['source'], pset: string | undefined, name: string): string => JSON.stringify([source, pset ?? null, name]);
 
-export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; facts: ModelFacts; set: (patch: Partial<ListDraft>) => void }) {
+/** The select that adds a column: any attribute, property or quantity of the loaded models. The builder and the viewport card on the sheet (#446) offer the same choice. */
+export function AddColumnPicker({ facts, taken, onAdd }: { facts: ModelFacts; taken: ReadonlySet<string>; onAdd: (column: ListScheduleColumn) => void }) {
   const { t } = useTranslation();
-  const taken = new Set(draft.columns.map((c) => c.id));
   const add = (value: string): void => {
     const [source, pset, name] = JSON.parse(value) as [ListScheduleColumn['source'], string | null, string];
     const id = columnIdOf(source, pset ?? undefined, name);
     if (taken.has(id)) return;
     // The office classification's headings are the app's words, not the property names `Code` and `Title` (#351).
     const label = source === 'officeClassification' ? t(name === 'Title' ? 'class.list.title' : 'class.list.code') : undefined;
-    set({ columns: [...draft.columns, { id, source, ...(pset ? { psetName: pset } : {}), propertyName: name, ...(label ? { label } : {}) }] });
+    onAdd({ id, source, ...(pset ? { psetName: pset } : {}), propertyName: name, ...(label ? { label } : {}) });
   };
+  const option = (source: ListScheduleColumn['source'], pset: string | undefined, name: string, text = name) => (
+    <option key={encode(source, pset, name)} value={encode(source, pset, name)} disabled={taken.has(columnIdOf(source, pset, name))}>{text}</option>
+  );
+  return (
+    <label className={`${WALL_LABEL} mt-2`}>
+      {t('listSched.builder.addColumn')}
+      <select className={WALL_FIELD} value="" onChange={(e) => { if (e.target.value) add(e.target.value); }}>
+        <option value="">{t('listSched.builder.pick')}</option>
+        <optgroup label={t('listSched.builder.attributes')}>{facts.attributes.map((a) => option('attribute', undefined, a))}</optgroup>
+        <optgroup label={t('class.list.group')}>{option('officeClassification', undefined, 'Code', t('class.list.code'))}{option('officeClassification', undefined, 'Title', t('class.list.title'))}</optgroup>
+        {[...facts.quantities].map(([set, names]) => <optgroup key={`q:${set}`} label={t('listSched.builder.quantities', { set })}>{names.map((n) => option('quantity', set, n))}</optgroup>)}
+        {[...facts.properties].map(([set, names]) => <optgroup key={`p:${set}`} label={t('listSched.builder.properties', { set })}>{names.map((n) => option('property', set, n))}</optgroup>)}
+      </select>
+    </label>
+  );
+}
+
+export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; facts: ModelFacts; set: (patch: Partial<ListDraft>) => void }) {
+  const { t } = useTranslation();
+  const taken = new Set(draft.columns.map((c) => c.id));
   const move = (i: number, by: -1 | 1): void => {
     const columns = [...draft.columns];
     [columns[i], columns[i + by]] = [columns[i + by], columns[i]];
@@ -32,9 +52,6 @@ export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; f
   };
   const remove = (id: string): void => set({ columns: draft.columns.filter((c) => c.id !== id), groupBy: draft.groupBy.filter((g) => g !== id), sum: draft.sum.filter((g) => g !== id) });
   const flip = (list: readonly string[], id: string): string[] => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const option = (source: ListScheduleColumn['source'], pset: string | undefined, name: string, text = name) => (
-    <option key={encode(source, pset, name)} value={encode(source, pset, name)} disabled={taken.has(columnIdOf(source, pset, name))}>{text}</option>
-  );
   return (
     <fieldset className="m-0 mt-4 border-0 p-0">
       <legend className="p-0 text-xs text-sky-200">{t('listSched.builder.columns')}</legend>
@@ -64,16 +81,7 @@ export function ListScheduleColumns({ draft, facts, set }: { draft: ListDraft; f
           </tbody>
         </table>
       )}
-      <label className={`${WALL_LABEL} mt-2`}>
-        {t('listSched.builder.addColumn')}
-        <select className={WALL_FIELD} value="" onChange={(e) => { if (e.target.value) add(e.target.value); }}>
-          <option value="">{t('listSched.builder.pick')}</option>
-          <optgroup label={t('listSched.builder.attributes')}>{facts.attributes.map((a) => option('attribute', undefined, a))}</optgroup>
-          <optgroup label={t('class.list.group')}>{option('officeClassification', undefined, 'Code', t('class.list.code'))}{option('officeClassification', undefined, 'Title', t('class.list.title'))}</optgroup>
-          {[...facts.quantities].map(([set, names]) => <optgroup key={`q:${set}`} label={t('listSched.builder.quantities', { set })}>{names.map((n) => option('quantity', set, n))}</optgroup>)}
-          {[...facts.properties].map(([set, names]) => <optgroup key={`p:${set}`} label={t('listSched.builder.properties', { set })}>{names.map((n) => option('property', set, n))}</optgroup>)}
-        </select>
-      </label>
+      <AddColumnPicker facts={facts} taken={taken} onAdd={(column) => set({ columns: [...draft.columns, column] })} />
       <p className="m-0 mt-2 text-xs text-sky-200">{t('listSched.builder.groupHint')}</p>
       <label className="mt-2 flex items-center gap-2 text-xs text-sky-100">
         <input type="checkbox" checked={draft.totals} disabled={draft.groupBy.length === 0} onChange={(e) => set({ totals: e.target.checked })} />

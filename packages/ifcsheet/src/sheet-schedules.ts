@@ -13,7 +13,7 @@
 
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { ProjectSheet, SheetViewport } from './document.js';
-import { clipPolyline } from './clip.js';
+import { clipPolyline, pointInBox } from './clip.js';
 import { layoutListSchedule } from './list-schedule-layout.js';
 import type { ListScheduleTable } from './list-schedule.js';
 import { layoutTableOnSheet } from './schedule-place.js';
@@ -48,6 +48,8 @@ export interface SheetSchedules {
   locale: SheetLocale;
   /** The word a page after the first says in its title ("continued"); absent: the page counter alone. */
   continued?: string;
+  /** The project's "Tables" text style (`tablesFace`) when it has made one; absent: the sheet's Inter. */
+  face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
 }
 
 /** The word for "continued" in a schedule's title, by language (the app's `schedule.continued`). */
@@ -62,10 +64,8 @@ export function placedListSchedule(sheet: ProjectSheet, sheets: readonly Project
   return layoutTableOnSheet({ continued: schedules.continued, sheets, sheet, vp }, (paging) => layoutListSchedule(placed.table, { locale: schedules.locale, title: placed.name }, paging));
 }
 
-const inside = (p: Point2D, box: Rect): boolean => p.x >= box.x - 1e-6 && p.x <= box.x + box.w + 1e-6 && p.y >= box.y - 1e-6 && p.y <= box.y + box.h + 1e-6;
-
 /** A schedule's primitives on the paper: drawn at its box's top left (`layout.fit`), else centred on the viewport point, and clipped to that box. */
-export function scheduleGraphics(layout: ScheduleLayout, vp: Pick<SheetViewport, 'x' | 'y'>): { strokes: SheetStroke[]; texts: SheetText[]; box: Rect } {
+export function scheduleGraphics(layout: ScheduleLayout, vp: Pick<SheetViewport, 'x' | 'y'>, face?: SheetSchedules['face']): { strokes: SheetStroke[]; texts: SheetText[]; box: Rect } {
   const box = layout.fit?.box ?? { x: vp.x - layout.width / 2, y: vp.y - layout.height / 2, w: layout.width, h: layout.height };
   const at = (x: number, y: number): Point2D => ({ x: box.x + x, y: box.y + y });
   const clip = (pts: Point2D[]) => (layout.fit ? clipPolyline(pts, box) : [pts]);
@@ -79,8 +79,8 @@ export function scheduleGraphics(layout: ScheduleLayout, vp: Pick<SheetViewport,
     } else {
       const where = at(p.x, p.y);
       // A text whose anchor the clip cuts away is not on the sheet.
-      if (layout.fit && !inside(where, box)) continue;
-      texts.push({ at: where, text: p.text, size: p.size, align: p.anchor === 'middle' ? 'center' : p.anchor === 'end' ? 'right' : 'left', ...(p.rotate ? { angle: -p.rotate } : {}) });
+      if (layout.fit && !pointInBox(where, box)) continue;
+      texts.push({ at: where, text: p.text, size: p.size, align: p.anchor === 'middle' ? 'center' : p.anchor === 'end' ? 'right' : 'left', ...(p.rotate ? { angle: -p.rotate } : {}), ...(p.bold ? { bold: true as const } : {}), ...(face ? { face } : {}) });
     }
   }
   return { strokes, texts, box };

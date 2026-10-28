@@ -13,7 +13,7 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectSet, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectLanguage, readProjectSet, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
   type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
@@ -104,11 +104,20 @@ function projectOf(document: ProjectDocument): ProjectSheetSource | null {
   };
 }
 
-/** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them. */
+/**
+ * The language a loaded project's drafts and schedules are written in: the project's recorded `language`, else English, as
+ * `ifcsheet build --project` resolves it with no `--locale` (`resolveLanguage`), so the two print the same figures and words.
+ */
+export function drawLanguage(document: ProjectDocument): 'en' | 'ro' {
+  return readProjectLanguage((document as unknown as Record<string, unknown>).language).language ?? 'en';
+}
+
+/** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them, in the project's language (else English). */
 export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Promise<DrawnSet> {
   const { projectSheetOptions, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
   const project = projectOf(entry.set.document);
-  const extras = project ? projectSheetOptions(project, model.model, 'en', sheetFormat('en', entry.set.document.unitsAndNumbers), model.name) : {};
+  const language = drawLanguage(entry.set.document);
+  const extras = project ? projectSheetOptions(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name) : {};
   const sheets = await sheetGraphics(entry.set, model.model, extras);
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {

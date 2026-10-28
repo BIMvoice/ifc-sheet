@@ -49,6 +49,10 @@ export interface SheetText {
   align?: 'left' | 'center' | 'right';
   /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
   angle?: number;
+  /** Set in bold (a schedule's title, header and totals). */
+  bold?: true;
+  /** A face other than the sheet's Inter, with its italic (the project's "Tables" text style); absent: Inter. */
+  face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
 }
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
@@ -179,7 +183,7 @@ export function sheetGraphic(
     // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
     const schedule = project?.schedules ? placedListSchedule(sheet, doc.sheets, vp, project.schedules) : null;
     if (schedule) {
-      const g = scheduleGraphics(schedule, vp);
+      const g = scheduleGraphics(schedule, vp, project?.schedules?.face);
       strokes.push(...g.strokes);
       out.texts.push(...g.texts);
       out.viewports.push({ viewId: vp.viewId, box: g.box });

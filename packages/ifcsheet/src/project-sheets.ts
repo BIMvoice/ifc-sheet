@@ -9,6 +9,7 @@
  * `onLeftOut`, never dropped silently.
  */
 
+import { tablesFace } from './draft-look.js';
 import type { ProjectSet } from './project-set.js';
 import type { ClassificationMapping } from './classification.js';
 import type { BoqArticle } from './boq.js';
@@ -123,12 +124,13 @@ export function projectSheetOptions(
       if (view && (view.kind === 'drafting' || view.kind === '3d') && vp.keyPlanOf === undefined && drafted.has(view.id)) leaveOut(where, `the drafts on the ${view.kind} view "${view.name}"`);
     }
   }
+  const tableFace = tablesFace(set.textStyles);
   return {
     annotations: {
       drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, locale: format,
       onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
-    schedules: { tables, pages, locale: format, ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
+    schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
   };
 }
 
