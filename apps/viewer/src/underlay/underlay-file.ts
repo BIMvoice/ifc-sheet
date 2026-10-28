@@ -4,7 +4,7 @@
 
 /** Reading the project file's `underlays` (#457): a damaged entry fails the file with its path, a missing optional one takes its default. */
 
-import { fail, isNumber, isObject, isString, type Json } from '@/project/project-read';
+import { fail, isNumber, isObject, isString, type Json } from '@bimvoice/ifcsheet';
 import { isUnderlayHref, type ViewUnderlay } from './underlay';
 
 export function readUnderlay(v: unknown, path: string): ViewUnderlay {
