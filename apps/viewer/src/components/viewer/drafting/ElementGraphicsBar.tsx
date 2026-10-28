@@ -17,8 +17,11 @@ import { useViewerStore } from '@/store';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { hideElements, showAllHidden } from '@/project/element-graphics-actions';
 import { selectedElements } from '@/project/model-guids';
+import { FLIP_HINGE, FLIP_SWING, flipOnDrawing, flippableGlobalIds, resetFlipsOnDrawing } from '@/project/drawing-symbol-flips';
+import { useProjectStore } from '@/project/project-store';
 import { ElementGraphicsPanel } from './ElementGraphicsPanel';
 
+const NO_FLIPS: Record<string, number> = {};
 const BTN = 'h-7 whitespace-nowrap rounded-sm px-2 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800';
 
 interface Props {
@@ -38,6 +41,11 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
   const selectedId = useViewerStore((s) => s.selectedEntityId);
   const models = useViewerStore((s) => s.models);
   const elements = useMemo(() => selectedElements(), [selectedIds, selectedId, models]);
+  const flips = useProjectStore((s) => s.symbolFlips) ?? NO_FLIPS;
+  // Doors (and typed windows) among the selection: they can be turned on this drawing without touching the model.
+  const flippable = useMemo(() => flippableGlobalIds([...new Set([...(selectedIds ?? []), ...(selectedId !== null && selectedId !== undefined ? [selectedId] : [])])]), [selectedIds, selectedId, models]);
+  const flippedSelected = flippable.filter((g) => flips[g]);
+  const flippedCount = Object.keys(flips).length;
   const hiddenCount = hiddenElementIds(graphics).length + (graphics?.hiddenLines?.length ?? 0);
   const hide = () => {
     hideElements(viewId, elements.map((e) => e.globalId));
@@ -57,6 +65,19 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
             <button type="button" className={BTN} aria-expanded={panel} onClick={() => setPanel(!panel)}>{elements.length === 1 ? t('elgfx.graphics') : t('elgfx.graphicsMany')}</button>
           </>
         ) : null}
+        {flippable.length > 0 ? (
+          <>
+            <button type="button" className={BTN} onClick={() => flipOnDrawing(flippable, FLIP_SWING)}>{t('elgfx.flipSwing')}</button>
+            <button type="button" className={BTN} onClick={() => flipOnDrawing(flippable, FLIP_HINGE)}>{t('elgfx.flipHinge')}</button>
+          </>
+        ) : null}
+        {flippedSelected.length > 0 ? (
+          <>
+            <output className="px-1.5 text-xs text-primary">{t('elgfx.flipped')}</output>
+            <button type="button" className={BTN} onClick={() => resetFlipsOnDrawing(flippedSelected)}>{t('elgfx.flipReset')}</button>
+          </>
+        ) : null}
+        {flippedCount > flippedSelected.length ? <button type="button" className={BTN} onClick={() => resetFlipsOnDrawing()}>{t('elgfx.flipResetAll', { count: flippedCount })}</button> : null}
         <button type="button" className={BTN} aria-pressed={pickingLine} onClick={() => onPickLine(!pickingLine)}>{t('elgfx.hideLine')}</button>
         {hiddenCount > 0 ? (
           <>

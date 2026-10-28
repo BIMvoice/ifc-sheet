@@ -10,6 +10,6 @@
  */
 
 export {
-  PACK_NOT_SET, PACK_PARTS, ROMANIA_PACK_ID, STANDARD_PACK_VERSION, builtInPacks, packPartsOf as partsOf, romaniaPack,
+  GERMANY_PACK_ID, PACK_NOT_SET, PACK_PARTS, ROMANIA_PACK_ID, STANDARD_PACK_VERSION, builtInPacks, germanyPack, packPartsOf as partsOf, romaniaPack,
   type PackNotSet, type PackPart, type StandardPack,
 } from '@bimvoice/ifcsheet';

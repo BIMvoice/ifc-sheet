@@ -16,6 +16,8 @@
  * the sheet SVG, which only the browser renders today. The DXF here carries
  * linework only; its text is written once the app's DXF writer moves here.
  *
+ * The underlays a sheet prints (#457) are drawn under its drawings, as the app's sheet draws them; the DXF leaves them out.
+ *
  * The title block's logo is drawn when it is a PNG or JPEG (`printableLogo`).
  *
  * The drawings carry the app's pens (#34): each viewport's faces and lines as
@@ -72,6 +74,26 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
         doc.lines(deltas, pts[0].x, pts[0].y, [1, 1], 'S', false);
       }
     };
+    // The pictures laid under the views (#457), beneath everything else, each clipped to its viewport's box: the app's `<image>` and its `matrix`.
+    for (const u of sheet.underlays) {
+      try {
+        const { fileType } = doc.getImageProperties(u.src);
+        const [a, b, c, d, e, f] = u.matrix;
+        // jsPDF's `cm` is in PDF points with y up; the sheet's matrix is paper mm with y down. T = F M F^-1 for F(x, y) = (x s, (H - y) s).
+        const s = 72 / 25.4;
+        const H = sheet.paper.h;
+        doc.saveGraphicsState();
+        doc.rect(u.clip.x, u.clip.y, u.clip.w, u.clip.h, null);
+        doc.clip();
+        doc.discardPath();
+        doc.setGState(doc.GState({ opacity: u.opacity }));
+        doc.setCurrentTransformationMatrix(doc.Matrix(a, -b, -c, d, s * (c * H + e), s * (H - d * H - f)));
+        doc.addImage(u.src, fileType, 0, 0, u.widthPx, u.heightPx, undefined, 'FAST');
+        doc.restoreGraphicsState();
+      } catch (error) {
+        console.warn('[ifcsheet] an underlay could not be drawn in the PDF', error);
+      }
+    }
     // Every run is open: a closed ring repeats its first point (`sheet-graphic.ts`), a clipped one must not be closed across the cut.
     // A colour scheme's fills go down first, under every line; each region is one even-odd path, so a hole stays open.
     for (const fill of sheet.fills) {

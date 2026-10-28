@@ -37,6 +37,7 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
+import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
 
 export type Polyline = readonly Point2D[];
 
@@ -74,6 +75,20 @@ export interface SheetImage {
   angle?: 90;
 }
 
+/** A picture laid under a view that this sheet prints (#457): drawn under the viewport's linework, clipped to its box. */
+export interface SheetUnderlay {
+  viewId: string;
+  /** A PNG or JPEG data URL. */
+  src: string;
+  widthPx: number;
+  heightPx: number;
+  /** Pixels to paper mm, as the SVG `matrix` the app's sheet gives the same `<image>` (`underlayMatrix`). */
+  matrix: UnderlayMatrix;
+  opacity: number;
+  /** The viewport's box, paper mm. */
+  clip: Rect;
+}
+
 export interface SheetGraphic {
   sheetId: string;
   number: string;
@@ -95,6 +110,8 @@ export interface SheetGraphic {
   texts: SheetText[];
   /** The images the sheet carries: the title block's logo. */
   images: SheetImage[];
+  /** The underlays this sheet prints, beneath the drawings (#457). */
+  underlays: SheetUnderlay[];
   /** The box each viewport's drawing is clipped to, paper mm: the room the layout made for it. */
   viewports: { viewId: string; box: Rect }[];
 }
@@ -169,7 +186,7 @@ export function sheetGraphic(
   surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
 ): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
@@ -184,6 +201,10 @@ export function sheetGraphic(
     if (box) out.viewports.push({ viewId: vp.viewId, box });
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      // The pictures this sheet prints under the view: the app's transform (`underlayMatrix`) through this viewport's `placer`. Not on a key plan.
+      if (vp.keyPlanOf === undefined) {
+        for (const u of printedUnderlays(doc.underlays, vp.viewId, sheet.id)) out.underlays.push({ viewId: vp.viewId, src: u.href, widthPx: u.widthPx, heightPx: u.heightPx, matrix: underlayMatrix(u, at), opacity: u.opacity, clip: box });
+      }
       const scheme = schemes.get(vp.viewId);
       const surface = surfaces.get(vp.viewId);
       if (surface) out.fills.push(...viewportSurfaceFills(surface, at, box));
