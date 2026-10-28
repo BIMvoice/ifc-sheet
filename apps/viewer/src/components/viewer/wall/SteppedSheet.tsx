@@ -320,7 +320,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
           </div>
           {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (

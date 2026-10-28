@@ -11,7 +11,7 @@ export const manualValidationRo = {
   'manualValidation.name.placeholder': 'Listă de verificare fără titlu',
   'manualValidation.report.heading': 'Validare manuală: {name}',
   'manualValidation.report.noGroups': 'Nicio verificare în această listă.',
-  'manualValidation.report.passed': '{percent}% reușite ({pass} din {total} verificări)',
+  'manualValidation.report.passed': '{percent}% reușite (verificări: {pass} din {total})',
   'manualValidation.report.recordedAt': 'Înregistrat: {timestamp}',
   'manualValidation.report.recordedAtModel': 'Model: {model} · Înregistrat: {timestamp}',
   'manualValidation.report.untitledGroup': 'Grup fără titlu',

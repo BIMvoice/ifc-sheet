@@ -41,7 +41,7 @@ describe('Romanian on panels reached from the face', () => {
     const text = ui.textContent ?? '';
     assert.match(text, /Doar modelul activ/);
     assert.match(text, /Creați linkul/);
-    assert.match(text, /Toate cele 2 din 3 modele încărcate/);
+    assert.match(text, /Modelele încărcate: 2 din 3/);
     for (const key of SCOPE_KEYS) assert.ok(!text.includes(en[key]), `English "${en[key]}" is still on screen`);
   });
 

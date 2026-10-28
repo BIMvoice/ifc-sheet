@@ -9,6 +9,7 @@ export const standardsPacksRo = {
   'standards.pack.title': 'Standard de desenare',
   'standards.pack.intro': 'Instalează dintr-un singur pas un standard de desenare al biroului. O singură anulare le retrage pe toate, iar „Revino” readuce proiectul la valorile lui.',
   'standards.pack.ro-stas.description': 'Practica românească de desenare, pe grosimile de linie ISO 128 și literele ISO 3098: grosimi de linie și de hașuri, cartușul, virgulă la zecimale. Sunt valorile pe care IfcSheet le are deja; niciuna nu a fost verificată încă față de un text STAS.',
+  'standards.pack.de-din.description': 'Practica germană de desenare, pe grosimile de linie ISO 128 și literele ISO 3098: grosimi de linie și de hașuri, un cartuș cu texte în germană, virgulă la zecimale. Sunt valorile pentru care IfcSheet poate indica o sursă ISO; niciuna nu a fost verificată încă față de DIN 1356-1.',
   'standards.pack.part.pens': 'Grosimi de linie, de hașuri și litere',
   'standards.pack.part.titleBlock': 'Cartuș',
   'standards.pack.part.units': 'Format numeric',
@@ -27,4 +28,9 @@ export const standardsPacksRo = {
   'standards.pack.fromFile': 'Instalează din fișier...',
   'standards.pack.fromFile.label': 'Fișier cu pachet de standard',
   'standards.pack.refused': 'Nu s-a instalat: {reason}',
+  // The Tables text style (#512) lives in the drafting standards dialog; these
+  // move to `drafting-standards.ro.ts` once that catalogue lands.
+  'standards.tables.name': 'Tabele',
+  'standards.tables.make': 'Adaugă un stil Tabele',
+  'standards.tables.fontsNote': 'Tabelele, rapoartele și registrul de planșe urmează acest stil (font și cursiv). Sunt oferite doar cele trei fonturi pe care PDF-ul le poate scrie: fără serife (Inter), cu serife (Times) și monospațiat (Courier). Dimensiunile rămân cum sunt.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
