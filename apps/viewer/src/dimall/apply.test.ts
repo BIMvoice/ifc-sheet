@@ -10,6 +10,8 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, undoDrafts } from '@/drafting/draft-store.js';
 import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlaneProvider, submitCommandLine, useDraftingSession } from '@/drafting/session.js';
 import type { ProjectView } from '@/project/types';
+import { DEFAULT_DIM_STYLE } from '@/drafting/styles';
+import { paperUnitOf } from '@/project/drafting-standards';
 import { house } from './fixture.js';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
@@ -55,5 +57,35 @@ describe('DIMALL', () => {
     setWorkPlaneProvider(() => null, () => ({ ...view, kind: 'section' }) as unknown as ProjectView);
     submitCommandLine('DIMALL', null);
     assert.equal(dims().length, 0);
+  });
+});
+
+/** The nearest any placed dimension line stands off the points it measures, in paper millimetres. */
+function nearestStringMm(): number {
+  const offsets = dims().flatMap(({ shape }) => {
+    if (shape.type !== 'dimension') return [];
+    const len = Math.hypot(shape.b.x - shape.a.x, shape.b.y - shape.a.y);
+    return [Math.abs((shape.b.x - shape.a.x) * (shape.a.y - shape.at.y) - (shape.a.x - shape.at.x) * (shape.b.y - shape.a.y)) / len];
+  });
+  return Math.min(...offsets) / paperUnitOf('view-1');
+}
+
+describe('DIMALL offset', () => {
+  it('stands the first string 20 mm (paper) from the walls by default, leaving a row for tags', () => {
+    submitCommandLine('DIMALL', null);
+    assert.ok(Math.abs(nearestStringMm() - 20) < 1e-6, String(nearestStringMm()));
+  });
+
+  it('follows the dimension style setting', () => {
+    useProjectStore.setState({ dimStyles: [{ ...DEFAULT_DIM_STYLE, allOffset: 30 }] });
+    submitCommandLine('DIMALL', null);
+    assert.ok(Math.abs(nearestStringMm() - 30) < 1e-6, String(nearestStringMm()));
+  });
+
+  it('uses the default for a style saved without the setting', () => {
+    const { allOffset: _, ...old } = DEFAULT_DIM_STYLE;
+    useProjectStore.setState({ dimStyles: [old] });
+    submitCommandLine('DIMALL', null);
+    assert.ok(Math.abs(nearestStringMm() - 20) < 1e-6, String(nearestStringMm()));
   });
 });
