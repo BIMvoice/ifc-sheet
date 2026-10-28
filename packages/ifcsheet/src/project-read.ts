@@ -32,6 +32,7 @@ import { readUnitsAndNumbers, type UnitsAndNumbers } from './units-and-numbers.j
 import type { MeshData } from '@ifc-lite/geometry';
 import { knownGraphicStandard, graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
 import { readTitleBlockTemplate } from './title-block-template-read.js';
+import { readProjectLanguage, type NameLanguage } from './names.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import { readTitleBlock, readTitleBlockParams } from './title-block-file-read.js';
 import { readTitleSources, type TitleSources } from './title-block-sources.js';
@@ -65,6 +66,10 @@ export interface ProjectFacts extends JoineryProject {
   unknownGraphicStandard?: string;
   /** The title block layout the project keeps (the Romanian one, or any the app edited); absent: the standard layout. A build prints it on every sheet. */
   titleBlockTemplate?: TitleBlockTemplate;
+  /** The language the project's generated names were made in (`language` in the file, `ro` or `en`); absent when the file records none or one that is not accepted. A build names a new set in it. */
+  language?: NameLanguage;
+  /** A `language` the file records that is not `ro` or `en` (`readProjectLanguage`); ignored, and the build says so. */
+  unknownLanguage?: string;
   /** The title block values typed in the app (project number, designer, the F_01 fields, ...), by field id; absent when the file has none. A typed value beats the model's (`title-block-sources.ts`). */
   titleBlock?: Record<string, string>;
   /** The office's mapping of title block fields to model sources; absent: the defaults. */
@@ -95,6 +100,7 @@ export function readProjectFile(text: string): ProjectFacts {
   if (version > PROJECT_FILE_VERSION) throw new Error(`Project file version ${version} is newer than this build reads (${PROJECT_FILE_VERSION})`);
   const standard = knownGraphicStandard(parsed.graphicStandard);
   const titleBlockTemplate = readTitleBlockTemplate(parsed.titleBlockTemplate);
+  const language = readProjectLanguage(parsed.language);
   const titleBlock = readTitleBlock(parsed.titleBlock);
   const titleBlockSources = readTitleSources(parsed.titleBlockSources);
   const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
@@ -113,6 +119,8 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
     ...(standard.unknown !== undefined ? { unknownGraphicStandard: standard.unknown } : {}),
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
+    ...(language.language !== undefined ? { language: language.language } : {}),
+    ...(language.unknown !== undefined ? { unknownLanguage: language.unknown } : {}),
     ...(titleBlock ? { titleBlock } : {}),
     ...(titleBlockSources ? { titleBlockSources } : {}),
     ...(titleBlockParams?.length ? { titleBlockParams } : {}),

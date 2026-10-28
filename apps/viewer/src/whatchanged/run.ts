@@ -30,6 +30,7 @@ import { compareStates, type ModelChange } from './compare';
 import { currentSnapshot } from './current';
 import { renderFrameOffset } from './frame';
 import { followMovedElements } from './follow';
+import { followDimensions } from './follow-dimensions';
 import { annotationImpacts } from './impact';
 import { sheetChanges, type SheetChanges } from './report';
 import { sheetLines } from './say';
@@ -123,7 +124,12 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   for (const line of sheetLines(report, (id) => views.find((v) => v.id === id)?.name ?? '', (g) => byGuid.get(g))) say(line);
   // Tags and labels of the elements that moved go with them: derived from the model, so no undo step, as the text they read.
-  const followed = followMovedElements(drafts, changes, (id) => bands.find((b) => b.viewId === id));
+  // The first band of each view, as `bands.find` gave it, looked up in constant time: this runs once per annotation.
+  const bandById = new Map<string, ViewBand>();
+  for (const b of bands) if (!bandById.has(b.viewId)) bandById.set(b.viewId, b);
+  const bandOf = (id: string) => bandById.get(id);
+  // Dimensions snapped to an element that changed are measured again on the new version (#459).
+  const followed = followDimensions(followMovedElements(drafts, changes, bandOf), changes, bandOf);
   if (followed !== drafts) useProjectStore.setState({ drafts: followed as typeof drafts, dirty: true });
   // Clouds replace the last run's.
   ensureRevisionsLayer();
