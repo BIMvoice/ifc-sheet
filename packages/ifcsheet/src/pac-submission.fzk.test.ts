@@ -8,16 +8,18 @@
  * it; then the sheets in set order, so the page count is 1 + the sheets.
  */
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { unzipSync } from 'fflate';
 import { afterAll, describe, expect, it } from 'vitest';
 import { EXIT, run } from './cli.js';
 import { pacTemplateFor } from './cli-pac.js';
 import { PAC_WORDS_EN, PAC_WORDS_RO, generateDefaultSet, pacOpis, pacOpisTexts } from './index.js';
 import { openModel } from './headless.js';
+import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION } from './project-version.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -118,6 +120,44 @@ describe.skipIf(missing !== null)('ifcsheet build --pac, on AC20-FZK-Haus (#364)
     const [first] = await readPages(new Uint8Array(readFileSync(join(dir, 'pac.pdf'))));
     expect(first.map((i) => i.str).join(' ')).toContain(PAC_WORDS_EN['pac.opis.title']);
   });
+
+  it('one language for the run: the project\'s, else --locale, else Romanian; --locale xx is a usage error', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-pac-'));
+    dirs.push(dir);
+    const projectFile = (language: string) => {
+      const file = join(dir, `${language}.json`);
+      writeFileSync(file, JSON.stringify({ format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'P', language }));
+      return file;
+    };
+    const opisTitle = async (args: string[]) => {
+      const c = capture();
+      const pdf = join(dir, `${args.join('_').replace(/[^\w]/g, '')}.pdf`);
+      expect(await run(['build', FZK, '--pac', '--out', pdf, ...args], c.io)).toBe(EXIT.ok);
+      const [first] = await readPages(new Uint8Array(readFileSync(pdf)));
+      return { title: first.map((i) => i.str).join(' '), said: c.err() };
+    };
+    // A project that records en: the opis is English without --locale; the project wins over --locale ro, and says so.
+    const en = await opisTitle(['--project', projectFile('en')]);
+    expect(en.title).toContain(PAC_WORDS_EN['pac.opis.title']);
+    expect(en.said).toBe('');
+    const mismatch = await opisTitle(['--project', projectFile('en'), '--locale', 'ro']);
+    expect(mismatch.title).toContain(PAC_WORDS_EN['pac.opis.title']);
+    expect(mismatch.said).toBe("ifcsheet: --locale ro differs from the project's language en; using en.\n");
+    // A project that records ro and no --locale: Romanian.
+    expect((await opisTitle(['--project', projectFile('ro')])).title).toContain(PAC_WORDS_RO['pac.opis.title']);
+    // The PAC set template is named in that language too (the sheets, not only the opis): the handover's DXF files carry the sheet names.
+    const zip = join(dir, 'en.zip');
+    expect(await run(['build', FZK, '--pac', '--handover', zip, '--project', projectFile('en')], capture().io)).toBe(EXIT.ok);
+    const files = Object.keys(unzipSync(new Uint8Array(readFileSync(zip)))).filter((n) => n.endsWith('.dxf')).join('\n');
+    expect(files).toContain(PAC_WORDS_EN['pac.set.plans']);
+    expect(files).not.toContain(PAC_WORDS_RO['pac.set.plans']);
+    // The validator is the one the other commands use, and runs before anything is read or written.
+    const bad = capture();
+    const out = join(dir, 'refused.pdf');
+    expect(await run(['build', FZK, '--pac', '--locale', 'xx', '--out', out], bad.io)).toBe(EXIT.usage);
+    expect(bad.err()).toBe('ifcsheet: --locale must be one of en, ro, not "xx".\n');
+    expect(existsSync(out)).toBe(false);
+  }, 300_000);
 
   it('writes "Nu este cazul" for the items 1.4.4 lifts with --intervention interior, and asks 1.4.4 of an intervention on an existing building', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-pac-'));
