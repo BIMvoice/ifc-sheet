@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
 import { sceneActionsEn } from '../catalogues/scene-actions.en';
 import { scheduleExportEn } from '../catalogues/schedule-export.en';
@@ -120,6 +121,7 @@ export const enSZ = {
   ...wallKeysEn,
   ...wallMaterialsEn,
   ...wallReviewEn,
+  ...underlayEn,
   ...wallSectionsEn,
   ...wallEn,
   ...webgpuTroubleshootingEn,
