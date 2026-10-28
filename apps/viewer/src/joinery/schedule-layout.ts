@@ -113,6 +113,9 @@ interface TableRowSpec {
 }
 
 const mm = (m: number): number => Math.round(m * 1000);
+/** One side of the size as printed: `—` when the model states none of it (`unstated`), never the default it is drawn at. */
+const sizeMm = (e: ScheduleEntry, side: 'width' | 'height'): number | null => (e.unstated?.[side] ? null : mm(e[side]));
+const sizeText = (e: ScheduleEntry, side: 'width' | 'height'): string => String(sizeMm(e, side) ?? '—');
 
 /**
  * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) has only the kind's default sill,
@@ -131,8 +134,8 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const model: Record<string, () => TableRowSpec[]> = {
     name: () => [{ label: labels.name, value: (e) => e.name }],
     size: () => [{
-      label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
-      heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
+      label: labels.size, value: (e) => `${sizeText(e, 'width')} × ${sizeText(e, 'height')}`,
+      heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [sizeMm(e, 'width'), sizeMm(e, 'height')], num: true,
     }],
     operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],
     sill: () => [{ label: labels.sill, value: (e) => { const s = sillOf(e); return s === null ? '—' : String(mm(s)); }, raw: (e) => { const s = sillOf(e); return [s === null ? null : mm(s)]; }, num: true }],
@@ -259,8 +262,8 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
         prims.push({ kind: 'path', pts: [{ x: x0, y: base }, { x: x1, y: base }, { x: x1, y: base - e.height * k }, { x: x0, y: base - e.height * k }], closed: true, w: PEN.drawing.outline });
       }
       if (shown.elevation) {
-        dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, String(Math.round(e.width * 1000)));
-        dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, String(Math.round(e.height * 1000)));
+        dimension(prims, { x: x0, y: base + 4.5 }, { x: x1, y: base + 4.5 }, e.unstated?.width ? '—' : String(Math.round(e.width * 1000)));
+        dimension(prims, { x: x0 - 4, y: base }, { x: x0 - 4, y: base - h * k }, e.unstated?.height ? '—' : String(Math.round(e.height * 1000)));
       }
       tableRows.forEach((row, i) => {
         const value = row.value(e);
@@ -309,7 +312,7 @@ export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): 
       {
         name: labels.elements, workbookOnly: true, numeric: [3, 4],
         header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
-        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, e.name, mm(e.width), mm(e.height), o.level, o.globalId])),
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, e.name, sizeMm(e, 'width'), sizeMm(e, 'height'), o.level, o.globalId])),
       },
     ],
   };

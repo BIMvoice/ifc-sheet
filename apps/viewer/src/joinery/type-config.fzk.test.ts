@@ -35,8 +35,11 @@ const labels: ScheduleLabels = {
   op: (op) => op,
 };
 
-async function openFzk(): Promise<void> {
-  const store = await parseStep(new Uint8Array(readFileSync(new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url))));
+/** `unsized`: the file with every window's OverallHeight and OverallWidth removed (`$`), as a model from a tool that gives windows no size. */
+async function openFzk(unsized = false): Promise<void> {
+  let text = readFileSync(new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url), 'utf8');
+  if (unsized) text = text.replace(/(IFCWINDOW\([^\n]*?,'[^']*',)[^,]+,[^,]+(,[^,]+,[^,]+,[^,]+\);)/g, (_m, head: string, tail: string) => `${head}$,$${tail}`);
+  const store = await parseStep(new TextEncoder().encode(text));
   useViewerStore.setState({ models: new Map([[MODEL, { id: MODEL, name: MODEL, ifcDataStore: store, visible: true } as never]]) });
   invalidateJoineryReads();
 }
@@ -163,6 +166,39 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
     const mine = row.occurrences.find((o) => o.globalId === biggest[0].globalId)!;
     assert.equal(drawnJoinery(mine.modelId, mine.expressId)?.source, 'type', 'chosen for its type, not found by name');
     assert.equal(triangles(cellPrims(row!.name)).length, 4);
+  });
+});
+
+describe('a window type whose IFC states no size, configured', () => {
+  const sizeTexts = (): string[] => {
+    const data = scheduleData('window');
+    return layoutSchedule({ ...data, entries: data.entries.filter((e) => e.spec) }, labels, { scale: 20 }).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+  };
+
+  it('prints a dash for the size the model does not state, not the 1200 x 1500 the symbol is drawn at, on the sheet and in the CSV', async () => {
+    resetProject(); await openFzk(true);
+    const { biggest } = windowsByType();
+    assert.ok(biggest[0].width == null, 'the fixture states no width');
+    configure(biggest[0]);
+    invalidateJoineryReads();
+    const texts = sizeTexts();
+    assert.ok(texts.includes('— × —'), texts.join('|'));
+    assert.ok(!texts.some((t) => t.includes('1200') || t.includes('1500')), 'no default size is printed');
+    const data = scheduleData('window');
+    const [types] = joineryExport(data, joineryLabels(labels)).tables;
+    const col = types.header.indexOf('Width (mm)');
+    if (col >= 0) assert.deepEqual(types.rows[data.entries.findIndex((e) => e.spec)].slice(col, col + 2), [null, null]);
+  });
+
+  it('a type that states its sizes still prints them', () => {
+    const { biggest } = windowsByType();
+    const w = biggest[0];
+    assert.ok(w.width && w.height, 'FZK states a size');
+    configure(w);
+    invalidateJoineryReads();
+    const texts = sizeTexts();
+    assert.ok(texts.includes(`${Math.round(w.width * 1000)} × ${Math.round(w.height * 1000)}`), texts.join('|'));
+    assert.ok(!texts.includes('— × —'));
   });
 });
 

@@ -23,7 +23,7 @@ import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStor
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ScheduleTextRow } from './schedule-text.js';
-import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
+import { TYPE_ENTRY_PREFIX, fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
 
@@ -54,6 +54,11 @@ export interface ScheduleEntry {
   /** Metres. */
   width: number;
   height: number;
+  /**
+   * A configured type (`TYPE_ENTRY_PREFIX`) whose elements state no OverallWidth / OverallHeight: `width` / `height` are then the kind's default,
+   * only a size to draw the symbol at, and the schedule prints `—` for that side instead (a size the model does not state is never invented).
+   */
+  unstated?: { width: boolean; height: boolean };
   /** Count per level name. */
   counts: Record<string, number>;
   total: number;
@@ -262,6 +267,15 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       entry.counts[level] = (entry.counts[level] ?? 0) + 1;
       entry.total++;
       const attrs = attributes(live, id);
+      if (entry.spec?.id?.startsWith(TYPE_ENTRY_PREFIX)) {
+        const unit = getModelLengthUnitScale(dataStore) || 1;
+        const w = real(attrs?.[9]) * unit, h = real(attrs?.[8]) * unit;
+        const seen = entry.unstated ?? { width: true, height: true };
+        // Each side is stated once any element of the type states it; until then it is only the symbol's drawing size.
+        if (seen.width && w > 0) { seen.width = false; entry.width = w; }
+        if (seen.height && h > 0) { seen.height = false; entry.height = h; }
+        entry.unstated = seen;
+      }
       const tag = attrs?.[7];
       const cls = String(dataStore.getEntity(id)?.type ?? view?.getNewEntity(id)?.type ?? '').toUpperCase();
       // PredefinedType follows OverallWidth in both classes (IFC4 and later); IFC2X3 has none.
