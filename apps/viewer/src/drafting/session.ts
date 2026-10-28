@@ -164,7 +164,7 @@ function finish(result: StepResult): void {
 let sizeScale = 1;
 
 /** The settings as commands see them on the current target. */
-const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
+const scaledSettings = scaledDraftSettings(settings, () => sizeScale, () => set({ revision: get().revision + 1 }));
 
 /** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
 let userOrigin: Pt = { x: 0, y: 0 };

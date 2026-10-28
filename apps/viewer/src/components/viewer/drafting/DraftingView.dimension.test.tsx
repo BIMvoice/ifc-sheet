@@ -17,7 +17,7 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, undoDrafts } from '@/drafting/draft-store';
 import { dimensionLayout } from '@/drafting/annotation';
 import { chainOf, chainPoints } from '@/drafting/dimension-chain-edit';
-import { baseDraftSettings, cancelCommand, clickDrawing, patchDraftSettings, pressEnter, startDraftCommand, useDraftingSession } from '@/drafting/session';
+import { baseDraftSettings, cancelCommand, clickDrawing, patchDraftSettings, pressEnter, runningCommand, startDraftCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 import type { ProjectView } from '@/project/types';
 import { DraftingView } from './DraftingView.js';
 
@@ -73,12 +73,38 @@ describe('the dimension alignment toolbar toggle', () => {
     assert.ok(Math.abs(lineY() - 1) < 1e-9, 'on: the line snaps onto the existing one');
   });
 
-  it('is a labelled, keyboard-reachable button', () => {
+  // Review of #531: the ALIGN keyword wrote the setting without the toolbar following it.
+  it('follows the ALIGN keyword typed into a dimension command, both ways', () => {
+    const ui = render(<DraftingView view={plan} />);
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), 'true');
+    act(() => { startDraftCommand('dimaligned'); });
+    act(() => submitCommandLine('ALIGN', null));
+    assert.equal(baseDraftSettings().dimAlign, false);
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), 'false', 'the button shows off after ALIGN');
+    act(() => submitCommandLine('ALIGN', null));
+    assert.equal(baseDraftSettings().dimAlign, true);
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), 'true', 'and on again');
+  });
+
+  // The typed line refreshes the session after the keyword; the setting itself must also tell the toolbar, whoever writes it.
+  it('follows a command writing the ALIGN setting without a typed line after it', () => {
+    const ui = render(<DraftingView view={plan} />);
+    act(() => { startDraftCommand('dimaligned'); });
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), 'true');
+    act(() => { runningCommand()?.onKeyword?.('ALIGN'); });
+    assert.equal(baseDraftSettings().dimAlign, false);
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), 'false');
+  });
+
+  it('is a labelled button that changes the setting when pressed', () => {
     const ui = render(<DraftingView view={plan} />);
     const button = alignButton(ui);
-    assert.equal(button.type, 'button');
-    assert.equal(button.tabIndex, 0);
-    assert.equal(button.textContent, 'Align dimensions');
+    assert.ok(button, 'found by its accessible name');
+    assert.equal(button.getAttribute('aria-label') ?? button.textContent, 'Align dimensions');
+    const before = baseDraftSettings().dimAlign;
+    act(() => button.click());
+    assert.equal(baseDraftSettings().dimAlign, !before, 'pressing it changes dimAlign');
+    assert.equal(alignButton(ui).getAttribute('aria-pressed'), String(!before));
   });
 });
 
