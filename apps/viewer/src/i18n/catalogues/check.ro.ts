@@ -56,6 +56,12 @@ export const checkRo = {
   'check.what.label': { one: 'Denumirea', few: 'Denumirile', other: 'Denumirile' },
   'check.what.dimension': { one: 'Cota', few: 'Cotele', other: 'Cotele' },
   'check.danglingAnnotation': '{what} „{text}” din {view}, pe {sheet}: elementul ei ({element}) nu mai există în model.',
+  'check.orphanedOverride': {
+    one: '{schedule} pe {sheet}: {count} valoare introdusă pentru {element}, care nu mai există în model.',
+    few: '{schedule} pe {sheet}: {count} valori introduse pentru {element}, care nu mai există în model.',
+    other: '{schedule} pe {sheet}: {count} de valori introduse pentru {element}, care nu mai există în model.',
+  },
+  'check.remedy.dropHint': 'Elimină din tabel valorile introduse pentru acest element',
   'check.remedy.delete': 'Șterge',
   'check.remedy.reattach': 'Reatașează',
   'check.remedy.deleteHint': 'Șterge această adnotare din desen',
