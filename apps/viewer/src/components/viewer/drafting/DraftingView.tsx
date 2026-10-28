@@ -8,10 +8,10 @@
  * drafted entities and command previews over it, and the command line.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { isGeometry, type Pt } from '@/drafting/types';
-import { AXIS_NAME, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import { isGeometry } from '@/drafting/types';
+import { AXIS_NAME, type SectionAxisName } from '@/drafting/frame';
 import { parsePat } from '@/drafting/hatch/pattern';
 
 import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
@@ -32,6 +32,9 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Drawing2DCanvas } from '@/components/viewer/Drawing2DCanvas';
 
 import { useFocusOnFinding } from './useFocusOnFinding';
+import { Toggle } from './Toggle';
+import { targetFitTransform, type DraftingTarget } from './drafting-target';
+export type { DraftingTarget } from './drafting-target';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 
 import { useViewControls } from '@/hooks/useViewControls';
@@ -90,7 +93,7 @@ import { cropClipPath, isDetailMark, selectedDetailGrips } from '@/drafting/deta
 
 import { selectedSectionBand } from '@/drafting/section-depth';
 
-import { screenSigns, screenToDrawing } from '@/drafting/frame';
+import { screenToDrawing } from '@/drafting/frame';
 
 import { useModelCommandBridge } from './ModelCommandLayer';
 
@@ -147,17 +150,6 @@ import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 const NO_SHEET_TRANSFORM = { current: null };
 
 /**
- * A drafting target that is not a model view (a joinery type's front, plan or section, #492): the axis its coordinates run on, the box to
- * fit on opening, and what is drawn under the drafted shapes (the type's own lines). The view has no generated drawing, no model and no
- * plane; everything else, the commands, snaps, selection, undo and the command line, is this view's.
- */
-export interface DraftingTarget {
-  axis: SectionAxisName;
-  fit: { min: Pt; max: Pt };
-  underlay: (transform: ViewTransform) => ReactNode;
-}
-
-/**
  * `bare`: the drawing alone, as IfcSheet shows it inside a sheet: no toolbar,
  * no property grid; only the prompt line stays, it carries the tools' choices.
  */
@@ -208,12 +200,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
     if (drawing || !containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
     if (target) {
-      // A target's own box, filling most of the area (screen y runs down; a front frame is y up, so the box's middle sits at t.y - cy * scale).
-      const { min, max } = target.fit;
-      const scale = Math.max(1, Math.min((width * 0.8) / Math.max(max.x - min.x, 1e-6), (height * 0.8) / Math.max(max.y - min.y, 1e-6)));
-      const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2;
-      const { kx, ky } = screenSigns(target.axis);
-      setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale, x: width / 2 - cx * kx * scale, y: height / 2 - cy * ky * scale } : t));
+      setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? targetFitTransform(target, width, height) : t));
       return;
     }
     setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale: 40, x: width / 2, y: height / 2 } : t));
