@@ -302,6 +302,13 @@ export function editDrafts(edit: {
   return added.map((d) => d.id);
 }
 
+/** One undoable step that swaps a whole entity (its shape and its params) for `next`, found by id. */
+export function replaceDraft(next: DraftEntity): void {
+  const { drafts } = useProjectStore.getState();
+  if (!drafts.some((d) => d.id === next.id)) return;
+  commitDrafts(drafts.map((d) => (d.id === next.id ? next : d)));
+}
+
 export function setDraftParams(ids: ReadonlySet<string>, params: Record<string, DraftParamValue | null>): void {
   const { drafts } = useProjectStore.getState();
   commitDrafts(drafts.map((d) => {

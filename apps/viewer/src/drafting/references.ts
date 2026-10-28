@@ -12,6 +12,7 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { SnapIndex } from './snaps';
 import { pointInPolygon, signedArea } from './offset';
 import { nearestOnShape } from './curves';
+import type { ElementBox } from './dimension-anchor';
 import type { DraftShape, Pt } from './types';
 
 export interface ReferenceSet {
@@ -75,6 +76,37 @@ export function pickModelElement(drawing: Drawing2D, set: ReferenceSet, p: Pt, t
     if (d <= tolerance && (!nearest || d < nearest.d)) nearest = { id: set.owners[i], d };
   }
   return nearest?.id ?? null;
+}
+
+/**
+ * The elements a drawing point is a corner or an end of, nearest first, each with its box in the drawing (the bounds of the lines and
+ * cut outlines drawn from it): the elements a dimension snapped to that point can stay attached to. Empty where no drawn line
+ * of any element ends within `tolerance`.
+ */
+export function referenceElementBoxes(set: ReferenceSet, p: Pt, tolerance: number, guidOf: (id: number) => string | null): ElementBox[] {
+  const near = new Map<number, number>();
+  const min = { x: p.x - tolerance, y: p.y - tolerance };
+  const max = { x: p.x + tolerance, y: p.y + tolerance };
+  for (const i of set.index.query(min, max)) {
+    const s = set.shapes[i];
+    if (s.type !== 'line') continue;
+    const d = Math.min(Math.hypot(s.a.x - p.x, s.a.y - p.y), Math.hypot(s.b.x - p.x, s.b.y - p.y));
+    if (d <= tolerance && d < (near.get(set.owners[i]) ?? Infinity)) near.set(set.owners[i], d);
+  }
+  const out: ElementBox[] = [];
+  for (const [id] of [...near].sort((a, b) => a[1] - b[1])) {
+    const guid = guidOf(id);
+    if (!guid) continue;
+    let rect: ElementBox['rect'] | null = null;
+    set.shapes.forEach((s, i) => {
+      if (s.type !== 'line' || set.owners[i] !== id) return;
+      rect = rect
+        ? { x0: Math.min(rect.x0, s.a.x, s.b.x), y0: Math.min(rect.y0, s.a.y, s.b.y), x1: Math.max(rect.x1, s.a.x, s.b.x), y1: Math.max(rect.y1, s.a.y, s.b.y) }
+        : { x0: Math.min(s.a.x, s.b.x), y0: Math.min(s.a.y, s.b.y), x1: Math.max(s.a.x, s.b.x), y1: Math.max(s.a.y, s.b.y) };
+    });
+    if (rect) out.push({ guid, rect });
+  }
+  return out;
 }
 
 /** The reference shapes whose bounds meet the box. */
