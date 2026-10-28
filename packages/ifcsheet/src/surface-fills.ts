@@ -6,7 +6,8 @@
  * The coloured style of an elevation or section (#499): the visible surfaces beyond the plane, each filled with the colour the 3D
  * view shows for it. That colour is the mesh's own (`MeshData.color`), which the Rust style resolver makes: the SurfaceColour of the
  * element's IfcSurfaceStyleRendering (the apparent colour; a distinct DiffuseColour is only the shading colour), else the viewer's
- * default for the class. A face that crosses the plane is cut at it, so only the part beyond the plane is drawn. The fills go under the
+ * default for the class. A face that crosses the plane is cut at it, so only the part beyond the plane is drawn, and one that runs past
+ * the view depth is cut there too. The fills go under the
  * linework (the line and hatch styles stay on top), and the DXF keeps only the lines.
  *
  * The triangles are painted far to near, so a nearer face covers a farther one (the painter's order: a vector fill cannot be
@@ -46,7 +47,7 @@ export function surfaceColourOf(color: readonly number[]): string | null {
 
 interface Corner { p: { x: number; y: number; z: number }; d: number }
 
-/** The corners of a triangle's part at view depth 0 or more (none, a triangle or a quad), in order. */
+/** The corners of a polygon's part at view depth 0 or more (fewer than three when none is left), in order. */
 function beyondPlane(corners: readonly Corner[]): Corner[] {
   const out: Corner[] = [];
   corners.forEach((cur, i) => {
@@ -85,7 +86,9 @@ export function surfaceFills(
       const corners = [at(indices[t]), at(indices[t + 1]), at(indices[t + 2])].map((p) => ({ p, d: -signedDepth(p, plane) }));
       if (Math.min(...corners.map((c) => c.d)) > depth) continue;
       // The part of the face beyond the plane: a face the plane crosses is cut there, or its removed front part would paint over what lies behind.
-      const piece = beyondPlane(corners);
+      // It is cut again at the far end of the view depth (the same clip, with depth measured back from there), so nothing past it is painted.
+      const fromFar = (cs: readonly Corner[]): Corner[] => cs.map((c) => ({ p: c.p, d: depth - c.d }));
+      const piece = fromFar(beyondPlane(fromFar(beyondPlane(corners))));
       for (let k = 1; k + 1 < piece.length; k++) {
         const tri = [piece[0], piece[k], piece[k + 1]];
         const [a, b, c] = tri.map((v) => projectPointForPlane(v.p, plane));

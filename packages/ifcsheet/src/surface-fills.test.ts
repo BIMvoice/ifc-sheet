@@ -65,6 +65,20 @@ describe('the surfaces of a coloured elevation (#499)', () => {
     expect(surfaceFills([quad(1, 12, [1, 0, 0, 1])], south())).toEqual([]);
   });
 
+  it('cuts a face that runs past the view depth at that depth: nothing beyond it is painted', () => {
+    // Depth 3 from the plane at z = 10. The triangle runs from depth 1 (z = 9, along x = 0) to depth 9 (z = 1, at x = 8): depth = 1 + x.
+    const long = quad(1, 0, [1, 0, 0, 1]);
+    long.positions = new Float32Array([0, 0, 9, 8, 0, 1, 0, 1, 9]);
+    long.indices = new Uint32Array([0, 1, 2]);
+    const fills = surfaceFills([long], createSectionConfig('z', 10, { projectionDepth: 3, includeHiddenLines: false }));
+    expect(fills.length).toBeGreaterThan(0);
+    const xs = fills.flatMap((f) => f.polygon.outer.map((p) => p.x));
+    // Painted from depth 1 to depth 3 only: 2 wide on the drawing, not 8, and the area of that part (1.75 of the whole 4).
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2, 6);
+    const area = fills.reduce((sum, f) => { const [a, b, c] = f.polygon.outer; return sum + Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2; }, 0);
+    expect(area).toBeCloseTo(1.75, 6);
+  });
+
   it('draws nothing for a view with no depth, and glass as the paper shows it', () => {
     expect(surfaceFills([quad(1, 9, [1, 0, 0, 1])], createSectionConfig('y', 1, { projectionDepth: 0, includeHiddenLines: false }))).toEqual([]);
     expect(surfaceColourOf([0, 0, 0, 0.5])).toBe('#808080');
