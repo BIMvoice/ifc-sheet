@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/mutations",
+  "private": true,
   "version": "3.1.0",
   "description": "Mutation tracking and property editing for IFC-Lite",
   "type": "module",

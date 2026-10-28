@@ -41,7 +41,9 @@ describe.skipIf(skip)('a missing quantity on bloc-p4', () => {
     const list = capture();
     expect(await run(['list', BLOC, '--project', project()], list.io)).toBe(0);
     expect(list.out()).toMatch(/506\s+–\n/);
-    expect(list.out()).toMatch(/Total\s+506\s+–\n$/);
+    expect(list.out()).toMatch(/Total\s+506\s+–\n/);
+    // All 506 rows lack it: the total is a dash and the line under the table says how many rows it leaves out (#432).
+    expect(list.out()).toMatch(/leaves out 506 of 506 rows with no value\n$/);
     expect(list.out()).not.toMatch(/506\s+0\n/);
     const boq = capture();
     expect(await run(['boq', BLOC, '--project', project(), '--detail'], boq.io)).toBe(0);
