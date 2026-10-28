@@ -17,6 +17,10 @@ const view = { id: 'v', name: 'Plan', kind: 'plan', createdAt: 0 } as ProjectVie
 const vp = { id: 'vp', viewId: 'v', x: 100, y: 100, scale: 100 } as unknown as SheetViewport;
 const line = (layerId: string, params: DraftEntity['params'] = {}): DraftEntity =>
   ({ id: layerId, viewId: 'v', layerId, shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }, params }) as DraftEntity;
+const circle = (layerId: string, params: DraftEntity['params'] = {}): DraftEntity =>
+  ({ id: `${layerId}-c`, viewId: 'v', layerId, shape: { type: 'circle', c: { x: 0, y: 0 }, r: 2 }, params }) as DraftEntity;
+const arc = (layerId: string, params: DraftEntity['params'] = {}): DraftEntity =>
+  ({ id: `${layerId}-arc`, viewId: 'v', layerId, shape: { type: 'arc', c: { x: 0, y: 0 }, r: 2, start: 0, end: Math.PI / 2 }, params }) as DraftEntity;
 const strokes = (layers: DraftLayer[], drafts: DraftEntity[], lineTypes?: SheetAnnotations['lineTypes']) =>
   viewportAnnotations(
     { view, vp, at: (p) => ({ x: 100 + p.x, y: 100 - p.y }), frame: { kx: 1, ky: -1 }, box: null },
@@ -45,5 +49,24 @@ describe('a drafted line on the sheet', () => {
   it('reads the project\'s line types from the file, refusing a bad pattern', () => {
     expect(readProjectSet({ lineTypes: [{ id: 'c', name: 'C', dash: [4, 1] }] }).lineTypes).toEqual([{ id: 'c', name: 'C', dash: [4, 1] }]);
     expect(() => readProjectSet({ lineTypes: [{ id: 'c', name: 'C', dash: [4, 0] }] })).toThrow(/gaps above zero/);
+  });
+});
+
+describe('a drafted circle or arc on the sheet (#479)', () => {
+  it('is left out when its layer does not print', () => {
+    const out = strokes([layer('a'), layer('b', { print: false })], [circle('a'), arc('a'), circle('b'), arc('b')]);
+    expect(out).toHaveLength(2);
+    expect(out.every((s) => s.colour === '#112233')).toBe(true);
+  });
+
+  it('prints the dash pattern of a line type of the project\'s own, on its layer or its own', () => {
+    const types = [{ id: 'center', name: 'Centre', dash: [6, 1, 1, 1] }, { id: 'phantom', name: 'Phantom', dash: [8, 2] }];
+    const out = strokes([layer('a', { lineType: 'center' })], [circle('a'), arc('a'), arc('a', { 'o.lineType': 'phantom' })], types);
+    expect(out.map((s) => s.dash)).toEqual([[6, 1, 1, 1], [6, 1, 1, 1], [8, 2]]);
+  });
+
+  it('takes the element\'s own colour and weight over its layer\'s', () => {
+    const out = strokes([layer('a', { lineWeight: 0.5 })], [circle('a', { 'o.color': '#ff0000', 'o.lineWeight': 0.7 }), arc('a', { 'o.color': '#00ff00' })]);
+    expect(out.map((s) => [s.colour, s.width])).toEqual([['#ff0000', 0.7], ['#00ff00', 0.5]]);
   });
 });
