@@ -18,6 +18,7 @@ export {
   type ListCell, type ListFigureKind, type ListMissing, type ListScheduleColumn, type ListScheduleDef, type ListScheduleTable, type ListTableSource,
 } from '../list-schedule.js';
 export { listFigure, listTableCells, listTableText } from '../list-figures.js';
+export { MAX_LIST_OVERRIDES, clearListOverride, listColumnKey, orphanedOverrides, overrideOf, readListOverrides, setListOverride, withListOverrides, type ListCellOverride } from '../list-overrides.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';
 export { boqLineText, boqNotes, boqTable, boqTableCells, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
 export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '../schedule-csv.js';
@@ -42,6 +43,7 @@ export {
   MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
   type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,
 } from '../schedule-content.js';
+export { doorOperationOf, doorSwingFlips, parseDoorOperation, type DoorOperation, type Dir2 } from '../door-operation.js';
 export {
   DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
   type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,

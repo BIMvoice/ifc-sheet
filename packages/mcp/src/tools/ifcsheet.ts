@@ -25,6 +25,7 @@ import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
 import { drawSet } from './ifcsheet-draw.js';
 import { assertWithinLimit, outputPath } from './ifcsheet-shared.js';
+import { hostedModelCache } from './hosted-model-cache.js';
 import { addSheetModel, addSheetSet, getSheetModel, getSheetSet } from './ifcsheet-store.js';
 
 const MODEL_ID = { type: 'string', description: 'The model_id returned by ifcsheet_open_model.' } as const;
@@ -65,15 +66,18 @@ async function openEntry(input: Record<string, unknown>, ctx: ToolContext) {
   const { name, bytes, path } = await modelBytes(input, ctx);
   const { openModel } = await import('@bimvoice/ifcsheet/headless');
   let model;
+  let contentHash: string | undefined;
   try {
-    model = await openModel(bytes);
+    // The hosted endpoint keeps parsed models per instance by content hash, so a session that resends a model does not parse it again.
+    if (ctx.config.hosted) ({ model, hash: contentHash } = await hostedModelCache.open(bytes, openModel));
+    else model = await openModel(bytes);
   } catch (err) {
     throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `Failed to open '${name}': ${(err as Error).message}` });
   }
   if (model.dataStore.entityCount === 0) {
     throw new ToolExecutionError({ code: ToolErrorCode.PARSE_FAILED, message: `'${name}' holds no IFC entities: it is not an IFC or IFCX model.` });
   }
-  return addSheetModel(ctx, name, model, { bytes, path });
+  return addSheetModel(ctx, name, model, { bytes, path, contentHash });
 }
 
 export const ifcsheetOpenModel: Tool = {

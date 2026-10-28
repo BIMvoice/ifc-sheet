@@ -17,6 +17,7 @@ import { commandPaletteRo } from '../catalogues/command-palette.ro';
 import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
+import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { exportChangesReviewRo } from '../catalogues/export-changes-review.ro';
 import { exportDialogRo } from '../catalogues/export-dialog.ro';
@@ -49,6 +50,7 @@ export const roAL = {
   ...creditsRo,
   ...cutawayAxoRo,
   ...draftingRo,
+  ...draftingStandardsRo,
   ...elementGraphicsRo,
   ...exportChangesReviewRo,
   ...exportDialogRo,

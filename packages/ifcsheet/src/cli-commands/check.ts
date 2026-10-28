@@ -77,9 +77,10 @@ export const checkCommand: CliCommand = {
   help: `  check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain English, or JSON with --json. With --project, also what the
-          saved project's split schedules get wrong: an element listed in more than one
-          part, or in no part. With --ids byggesaksbim (or a project that opted in), also the
-          requirements of Norway's ByggesaksBIM (DiBK) that the model fails.`,
+          saved project's split schedules get wrong (an element listed in more than one
+          part, or in no part) and the title block values its layout cuts short on a sheet.
+          With --ids byggesaksbim (or a project that opted in), also the requirements of Norway's
+          ByggesaksBIM (DiBK) that the model fails.`,
   async run(rest, values, io) {
     if (rest.length !== 1 || values.out || values.dxf || values.name || values.csv || values.detail || values.locale !== undefined || values.handover || values.pattern || values.template !== undefined || values.schedule !== undefined) {
       io.stderr('ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n');

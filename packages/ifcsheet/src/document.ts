@@ -12,6 +12,7 @@
  * issues and the rest). It round-trips as JSON.
  */
 
+import type { NameLanguage } from './names.js';
 import type { ViewGraphics } from './view-graphics-types.js';
 import type { ProjectViewTemplate } from './view-templates.js';
 import type { ThreeDProjectView } from './view-3d-types.js';
@@ -21,6 +22,7 @@ import type { TitleSources } from './title-block-sources.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
+import type { ViewUnderlay } from './underlay.js';
 
 export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
@@ -317,6 +319,10 @@ export interface ProjectDocument {
   includeFarElements?: boolean;
   /** How the files of the handover package are named (`handover.ts`): tokens `{project} {number} {sheet} {revision} {date} {issue}`. Absent is the default pattern. */
   handoverPattern?: string;
+  /** The language the project's generated names (sheets, views, view templates) were made in, `ro` or `en` (any other value in a file is ignored by both readers); absent: not recorded, which a command-line build reads as the language it is told with `--locale`, else English; the app then names in its interface language. Recorded so the same set is named the same wherever it is generated; names already stored are never rewritten. */
+  language?: NameLanguage;
   /** The project's "Units and numbers" setting (`units-and-numbers.ts`, #88). Absent follows the language and each drawing's own style. */
   unitsAndNumbers?: UnitsAndNumbers;
+  /** PDF pages and images laid under views (#457); a sheet prints those that name it in `printOnSheets` (`underlay.ts`). */
+  underlays?: ViewUnderlay[];
 }

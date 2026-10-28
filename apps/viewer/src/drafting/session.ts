@@ -25,13 +25,13 @@ import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
-import { hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
+import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
 import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -121,7 +121,7 @@ export function visibleEntities(viewId: string): DraftEntity[] {
 }
 
 function context(viewId: string): DraftContext {
-  return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt }, {
+  return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt, elementBoxesAt }, {
     layerId: currentLayerId(),
     axis: get().axis,
     settings: scaledSettings,
@@ -161,6 +161,9 @@ function finish(result: StepResult): void {
  * (as on a 1:100 view): 0.25 m text is 2.5 mm on paper.
  */
 let sizeScale = 1;
+
+/** How many drawing units a settings unit of size (text height, hatch scale) is on the current target: 1 on a view, 10 on a sheet. */
+export const draftSizeScale = (): number => sizeScale;
 
 /** The settings as commands see them on the current target. */
 const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
