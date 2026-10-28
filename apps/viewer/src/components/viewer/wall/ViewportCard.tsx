@@ -23,6 +23,7 @@ import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
 import { ViewportMarksControls } from './ViewportMarksControls';
+import type { ModelExtent } from '@/project/drawing-set';
 import { ScheduleContentCard } from './ScheduleContentCard';
 import { ScheduleExportCard } from './ScheduleExportCard';
 import { ScheduleFilterSection } from './ScheduleFilterCard';
@@ -50,9 +51,11 @@ interface ViewportCardProps {
   onChoose: (viewportId: string | null) => void;
   /** The chosen drawing's extent, metres, once generated: says when it does not fit the sheet. */
   drawingBounds?: { min: { x: number; y: number }; max: { x: number; y: number } } | null;
+  /** The model's extent: a scale change lays the sheet out again (`ScaleField`). */
+  extent?: ModelExtent | null;
 }
 
-export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null }: ViewportCardProps) {
+export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null }: ViewportCardProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
@@ -100,7 +103,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                 />
               </label>
-              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} /> : null}
+              {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} extent={extent} /> : null}
             </>
           )}
           {view ? <ViewportMarksControls sheet={sheet} slot={slot} view={view} /> : null}

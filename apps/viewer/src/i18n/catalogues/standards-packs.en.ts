@@ -8,6 +8,7 @@ export const standardsPacksEn = {
   'standards.pack.title': 'Drawing standard',
   'standards.pack.intro': 'Install an office drawing standard in one step. One undo takes all of it back, and "Reset" returns the project to its own values.',
   'standards.pack.ro-stas.description': 'Romanian drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, the cartuș, a comma for decimals. These are the values IfcSheet already encodes; none is checked against a STAS text yet.',
+  'standards.pack.de-din.description': 'German drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, a title block with German captions, a comma for decimals. These are the values IfcSheet can name an ISO source for; none is checked against DIN 1356-1 yet.',
   'standards.pack.part.pens': 'Pens, hatch weights and lettering',
   'standards.pack.part.titleBlock': 'Title block',
   'standards.pack.part.units': 'Number format',
