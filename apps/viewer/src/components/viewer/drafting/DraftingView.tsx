@@ -100,6 +100,8 @@ import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
+import { UnderlayLayer } from './UnderlayLayer';
+import { UnderlayPanel } from './UnderlayPanel';
 
 import { roofAtPoint } from '@/project/roof-plan';
 
@@ -301,6 +303,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         >
           {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
+        <UnderlayPanel viewId={view.id} />
         <IconButton label={t('standards.open')} className="size-7" onClick={() => openStandards('layers')}><Layers className="size-4" /></IconButton>
         <IconButton label={t('drafting.undo')} className="size-7" onClick={undoLatest}><Undo2 className="size-4" /></IconButton>
         <IconButton label={t('drafting.redo')} className="size-7" onClick={redoEarliest}><Redo2 className="size-4" /></IconButton>
@@ -340,6 +343,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
             sectionAxis={axis}
           />
         ) : null}
+        <UnderlayLayer viewId={view.id} transform={viewTransform} axis={axis} />
         <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}

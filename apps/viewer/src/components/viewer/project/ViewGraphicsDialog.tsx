@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateProjectView, useProjectStore } from '@/project/project-store';
-import { DETAIL_LEVELS, defaultDetailLevel, type DetailLevel } from '@bimvoice/ifcsheet';
+import { DETAIL_LEVELS, defaultDetailLevel, templateOf, type DetailLevel } from '@bimvoice/ifcsheet';
 import { DEFAULT_VIEW_PRESET, VIEW_CATEGORIES } from '@/project/view-graphics';
 import { gridSettings } from '@/project/grid-overlay';
 import { builtInPatterns } from '@/drafting/hatch/library';
@@ -42,6 +42,8 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const patterns = useMemo(() => [...builtInPatterns(), ...parsePat(patternText).patterns].map((p) => p.name), [patternText]);
   const graphics = view.graphics ?? {};
+  const templates = useProjectStore((s) => s.viewTemplates);
+  const inherited = templateOf(view, templates ?? [])?.graphics.detailLevel;
   const presetId = graphics.presetId === undefined ? DEFAULT_VIEW_PRESET : graphics.presetId;
 
   const setPreset = (value: string) => updateProjectView(view.id, { graphics: { ...graphics, presetId: value === NONE ? null : value } });
@@ -81,7 +83,7 @@ export function ViewGraphicsDialog({ view, open, onOpenChange }: Props) {
         <div className="flex items-center gap-2 text-xs">
           <span className="text-zinc-500">{t('viewGraphics.detail')}</span>
           <select aria-label={t('viewGraphics.detail')} className={select} value={graphics.detailLevel ?? BY_PRESET} onChange={(e) => setDetail(e.target.value)}>
-            <option value={BY_PRESET}>{t('viewGraphics.detail.auto', { level: t(`viewGraphics.detail.${defaultDetailLevel(view.scale)}` as TranslationKey) })}</option>
+            <option value={BY_PRESET}>{inherited ? t('viewGraphics.detail.template', { level: t(`viewGraphics.detail.${inherited}` as TranslationKey) }) : t('viewGraphics.detail.auto', { level: t(`viewGraphics.detail.${defaultDetailLevel(view.scale)}` as TranslationKey) })}</option>
             {DETAIL_LEVELS.map((level) => <option key={level} value={level}>{t(`viewGraphics.detail.${level}` as TranslationKey)}</option>)}
           </select>
         </div>

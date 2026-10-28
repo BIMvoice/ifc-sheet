@@ -17,7 +17,7 @@ export const roomScheduleRo = {
   'roomSched.noLevel': 'Fără nivel',
   'roomSched.empty': 'Modelele încărcate nu au încăperi (IfcSpace).',
   'roomSched.note.source': 'Aria: NetFloorArea din model, în lipsa ei GrossFloorArea (Qto_SpaceBaseQuantities, altfel orice set de cantități). Totalul clădirii este Au din foaia de indicatori urbanistici: aceleași încăperi, aceleași arii.',
-  'roomSched.note.geometry': '* Modelul nu dă aria acestei încăperi: se ia aria amprentei geometriei ei ({count} încăperi).',
+  'roomSched.note.geometry': '* Arie estimată: modelul nu dă NetFloorArea sau GrossFloorArea pentru această încăpere, deci se ia aria amprentei geometriei ei ({count} încăperi).',
   'roomSched.note.none': '{count} încăperi nu au arie (modelul nu o dă și nu au geometrie); sunt listate și nu intră în totaluri.',
   'roomSched.note.leftOut': 'Excluse: {external} exterioare (balcoane, terase), {gfa} din schema de arii (GFA), {parents} împărțite în încăperi proprii.',
   'ready.estimatedAreas.go': 'Mergi la prima încăpere',
