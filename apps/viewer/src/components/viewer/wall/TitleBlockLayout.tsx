@@ -17,6 +17,7 @@ import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { addTemplateItem, clearTemplateFit, customiseTitleBlock, removeTemplateItem, resetTitleBlockTemplate, setTemplateField, applyRomanianTitleBlock } from '@/project/title-block-template-actions';
 import { standardTitleBlock, type TemplateItem } from '@/project/title-block-template';
 import { romanianTitleBlock } from '@/project/title-block-ro';
+import { TitleBlockImport } from './TitleBlockImport';
 import { WALL_PILL } from './wall-type';
 
 const quiet = WALL_PILL;
@@ -121,6 +122,7 @@ export function TitleBlockLayout() {
       <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('tblayout.intro')}</p>
       <button type="button" className={`${quiet} mt-2`} onClick={() => applyRomanianTitleBlock(romanianTitleBlock(t, standard))}>{t('tblayout.useRo')}</button>
       <p className="m-0 mt-1 text-xs leading-relaxed text-sky-200/80">{t('tblayout.roHint')}</p>
+      <TitleBlockImport />
       {!template ? (
         <button type="button" className={`${quiet} mt-2`} onClick={() => customiseTitleBlock(standardTitleBlock(t, standard))}>{t('tblayout.edit')}</button>
       ) : (
