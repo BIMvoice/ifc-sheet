@@ -11,8 +11,13 @@
  * parser, the geometry engine or the writers.
  */
 
-export { openModel, type OpenedModel, type OpenModelOptions } from './model.js';
+export { ModelRefusal, modelFormatOf, openModel, type FarElementInfo, type OpenedModel, type OpenModelOptions } from './model.js';
 export { generateViewDrawings, sectionConfigFor } from './view-drawings.js';
-export { sheetGraphic, type Polyline, type SheetGraphic, type SheetText } from './sheet-graphic.js';
-export { sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
+export { sheetGraphic, type Polyline, type SheetGraphic, type SheetImage, type SheetPen, type SheetText, type SheetUnderlay } from './sheet-graphic.js';
+export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
 export { exportDxf, exportPdf } from './export.js';
+export { IFC_GUID, isPhysicalElement, readModelFacts, readinessOfModel, type FactSource } from './readiness-read.js';
+export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
+export * from './project.js';
+export { createHeadlessListProvider } from './list-provider.js';
+export { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, runListScheduleOn, type HeadlessListOptions } from './list-headless.js';

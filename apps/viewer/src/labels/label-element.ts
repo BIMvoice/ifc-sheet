@@ -12,6 +12,7 @@
 
 import { extractAllEntityAttributes, type IfcDataStore } from '@ifc-lite/parser';
 import type { ListDataProvider } from '@ifc-lite/lists';
+import { tagClassification } from '@/classification/classification-model';
 import { createListDataProvider } from '@/lib/lists/adapter';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
@@ -77,6 +78,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
         case 'Name': return p.getEntityName(expressId);
         case 'Tag': return p.getEntityTag(expressId);
         case 'LongName': return longNameOf(modelId, expressId);
+        case 'RoomNumber': return longNameOf(modelId, expressId) ? p.getEntityName(expressId) : '';
         case 'Mark': return markOf(p.getEntityTag(expressId));
         case 'TagName': return '';
         case 'ObjectType': return p.getEntityObjectType(expressId);
@@ -93,6 +95,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
     typeQuantitySets: () => (p.getTypeQuantitySets?.(expressId) ?? []).map(withLengths),
     materials: () => p.getMaterialNames?.(expressId) ?? [],
     storey: () => p.getStoreyName?.(expressId) ?? '',
+    classification: () => tagClassification({ className: p.getEntityTypeName(expressId), typeName: p.getEntityDefiningTypeName?.(expressId) || null, materials: p.getMaterialNames?.(expressId) ?? [], modelId, expressId }),
     lengthUnitScale: () => lengthScale,
     tagFields: useProjectStore.getState().tagFields,
   };

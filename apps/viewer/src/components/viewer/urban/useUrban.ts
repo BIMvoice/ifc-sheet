@@ -12,14 +12,16 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { formatLocaleNumber, useTranslation } from '@/i18n';
+import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { ensureWasm, wasmLoaded } from '@/lib/wasm/ensure-wasm';
 import { collectUrbanAreas, type UrbanAreas } from '@/urban/urban-models';
-import { urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
+import { CUT_BASEMENT_MAX_CLEAR_HEIGHT, urbanIndicators, type UrbanIndicators } from '@/urban/indicators';
 import { signedLevel, type UrbanLabels } from '@/urban/urban-layout';
 import { siteAreaOf, type SiteAreaChoice } from '@/urban/site-area';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
 /** The footprints, rooms and model site area; null until they can be measured. `enabled` false skips the work. */
 export function useUrbanAreas(enabled = true): UrbanAreas | null {
@@ -49,6 +51,15 @@ export function useUrbanAreas(enabled = true): UrbanAreas | null {
   return areas;
 }
 
+/** What the indicators read from the project besides the measured areas. */
+export type UrbanProject = Pick<ReturnType<typeof useProjectStore.getState>, 'siteArea' | 'views' | 'drafts' | 'urbanSettings'>;
+
+/** The indicators of `areas` on the site area `siteAreaOf` picks and the project's urban settings; `site` says which it took. The hook and the exports share it. */
+export function urbanResultOf(areas: UrbanAreas, project: UrbanProject): { areas: UrbanAreas; result: UrbanIndicators; site: SiteAreaChoice } {
+  const site = siteAreaOf({ siteArea: project.siteArea, views: project.views, drafts: project.drafts }, areas.modelSiteArea);
+  return { areas, result: urbanIndicators({ ...areas, siteArea: site.area, settings: project.urbanSettings }), site };
+}
+
 /** The indicators, on the site area `siteAreaOf` picks and the project's urban settings; `site` says which it took. */
 export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result: UrbanIndicators; site: SiteAreaChoice } | null {
   const areas = useUrbanAreas(enabled);
@@ -57,51 +68,70 @@ export function useUrbanIndicators(enabled = true): { areas: UrbanAreas; result:
   const views = useProjectStore((s) => s.views);
   const drafts = useProjectStore((s) => s.drafts);
   const settings = useProjectStore((s) => s.urbanSettings);
-  return useMemo(() => {
-    if (!areas) return null;
-    const site = siteAreaOf({ siteArea, views, drafts }, areas.modelSiteArea);
-    return { areas, result: urbanIndicators({ ...areas, siteArea: site.area, settings }), site };
-  }, [areas, siteArea, views, drafts, settings]);
+  return useMemo(() => (areas ? urbanResultOf(areas, { siteArea, views, drafts, urbanSettings: settings }) : null), [areas, siteArea, views, drafts, settings]);
+}
+
+type T = ReturnType<typeof useTranslation>['t'];
+
+/** Where the site area came from, in words: one sentence for every table that prints it. */
+export function siteSourceNote(t: T, locale: SheetLocale, site: SiteAreaChoice): string {
+  if (site.source === 'typed') {
+    return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: sheetNumber(locale, site.plot) });
+  }
+  return t(`urban.siteSource.${site.source ?? 'none'}`);
 }
 
 /** Where the site area came from, in words: one sentence for every table that prints it. */
 export function useSiteSourceNote(): (site: SiteAreaChoice) => string {
-  const { t, locale } = useTranslation();
-  return useMemo(() => (site: SiteAreaChoice) => {
-    if (site.source === 'typed') {
-      return site.plot === null ? t('urban.siteSource.typedNoPlot') : t('urban.siteSource.typed', { plot: formatLocaleNumber(locale, site.plot, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) });
-    }
-    return t(`urban.siteSource.${site.source ?? 'none'}`);
-  }, [t, locale]);
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
+  return useMemo(() => (site: SiteAreaChoice) => siteSourceNote(t, locale, site), [t, locale]);
 }
 
-/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
-export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
-  const { t } = useTranslation();
-  const siteNote = useSiteSourceNote();
+/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. Pure: the Wall's export builds them too. */
+export function urbanLabelsOf(t: T, locale: SheetLocale, title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
   const assumed = areas?.assumedInterior.join(', ') ?? '';
   const leftOut = areas?.spacesLeftOut ?? null;
-  return useMemo(() => ({
+  // The figures inside a sentence are written like every other figure on the sheet: a literal "±0.00" or "1.80" would keep its point under a comma project.
+  const mark = sheetLevel(locale, 0);
+  const limit = sheetNumber(locale, CUT_BASEMENT_MAX_CLEAR_HEIGHT, 2, { group: false });
+  const estimated = areas?.estimated ?? null;
+  return {
+    locale,
     title,
     level: t('urban.level'), elevation: t('urban.elevation'), built: t('urban.built'), useful: t('urban.useful'),
     inCut: t('urban.inCut'), yes: t('urban.yes'), no: t('urban.no'),
     belowGround: (name: string) => t('urban.belowGround', { name }),
-    ground: (name: string) => t('urban.ground', { name }),
+    ground: (name: string) => t('urban.ground', { name, mark }),
     category: t('urban.category'), area: t('urban.area'),
     ac: t('urban.ac'), ad: t('urban.ad'), adCut: t('urban.adCut'), au: t('urban.au'), site: t('urban.site'), pot: t('urban.pot'), cut: t('urban.cut'),
     rules: (r: UrbanIndicators) => {
       const left = r.storeys.filter((s) => !s.inCut).map((s) => s.name);
       const out = [
-        t('urban.rule.areas', { level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
-        t('urban.rule.cut', { levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
-        t('urban.rule.ground', { terrain: signedLevel(r.terrainLevel), zero: r.zero.elevation.toFixed(2), source: t(`urban.rule.zero.${r.zero.source}`) }),
+        t('urban.rule.areas', { mark, level: r.storeys.find((s) => s.ground)?.name ?? '—' }),
+        t('urban.rule.cut', { limit, levels: left.length ? left.join(', ') : t('urban.rule.cutNone') }),
+        t('urban.rule.ground', { mark, terrain: signedLevel(locale, r.terrainLevel), zero: sheetNumber(locale, r.zero.elevation, 2, { group: false }), source: t(`urban.rule.zero.${r.zero.source}`) }),
       ];
+      if (estimated) out.push(t('urban.rule.auEstimated', { count: estimated.count, area: sheetNumber(locale, estimated.area, 1, { kind: 'area' }), share: sheetNumber(locale, estimated.share, 0), list: estimated.rooms.map((r) => r.name).join(', ') }));
       if (leftOut) out.push(t('urban.rule.au', { external: leftOut.external, gfa: leftOut.gfa, parents: leftOut.parents }));
-      if (site) out.push(siteNote(site));
+      if (site) out.push(siteSourceNote(t, locale, site));
       return out;
     },
     note: assumed ? t('urban.assumedInterior', { levels: assumed }) : '',
     atLeast: (value: string) => t('urban.atLeast', { value }),
     unmeasured: (count: number, level: string) => t('urban.unmeasured', { count, level }),
-  }), [t, title, assumed, leftOut, site, siteNote]);
+  };
+}
+
+/** The schedule's labels; `site`, when given, adds the line saying where the site area came from. */
+export function useUrbanLabels(title: string, areas: UrbanAreas | null, site?: SiteAreaChoice): UrbanLabels {
+  const { t } = useTranslation();
+  const locale = useSheetLocale();
+  const assumed = areas?.assumedInterior.join(', ') ?? '';
+  const leftOut = areas?.spacesLeftOut ?? null;
+  const estimated = areas?.estimated ?? null;
+  return useMemo(() => urbanLabelsOf(t, locale, title, areas, site),
+    // assumed / leftOut / estimated: the only parts of `areas` the labels read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, locale, title, assumed, leftOut, estimated, site]);
 }

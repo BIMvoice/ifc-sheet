@@ -17,6 +17,7 @@ import {
   sectionAxisRange,
   storeyCutElevation,
   worldToPercent,
+  worldToSliderPercent,
 } from './section-distance.js';
 
 const box = (min: [number, number, number], max: [number, number, number]) => ({
@@ -58,14 +59,23 @@ describe('percent <-> world along an axis', () => {
     assert.equal(sectionAxisRange(box([0, 2, 0], [1, 2, 1]), 'down'), null, 'a flat axis has no range');
   });
 
-  it('round-trips a position through metres and clamps out-of-range metres', () => {
+  it('round-trips a position through metres, also outside the bounds (#226)', () => {
     const range = sectionAxisRange(bounds, 'down')!;
     assert.equal(percentToWorld(50, range), 1);
     assert.equal(percentToWorld(0, range), -1);
     assert.equal(worldToPercent(1, range), 50);
     assert.equal(worldToPercent(1.2, range), 55.00000000000001);
-    assert.equal(worldToPercent(99, range), 100);
-    assert.equal(worldToPercent(-99, range), 0);
+    // Outside the -1..3 range the position leaves 0..100 and turns back into the same metres.
+    assert.equal(worldToPercent(5, range), 150);
+    assert.equal(worldToPercent(-3, range), -50);
+    assert.ok(Math.abs(percentToWorld(worldToPercent(4.2, range), range) - 4.2) < 1e-12);
+  });
+
+  it('clamps only the slider position to 0..100', () => {
+    const range = sectionAxisRange(bounds, 'down')!;
+    assert.equal(worldToSliderPercent(1, range), 50);
+    assert.equal(worldToSliderPercent(99, range), 100);
+    assert.equal(worldToSliderPercent(-99, range), 0);
   });
 });
 
@@ -98,7 +108,19 @@ describe('collectStoreys', () => {
     assert.deepEqual(collectStoreys(new Map(), null), []);
   });
 
-  it('a plan cut sits 1.2 m above the floor', () => {
-    assert.equal(storeyCutElevation({ elevation: 2.8 }), 4);
+  it('a plan cut sits 1.2 m above the floor of an ordinary storey (#256)', () => {
+    // 2.8 m to the next storey is more than 1.7 m, so the rule keeps exactly 1.2 m.
+    assert.equal(storeyCutElevation({ elevation: 2.8 }, [{ elevation: 0 }, { elevation: 2.8 }]), 4);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 3 }]), 1.2);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 1.7 }]), 1.2);
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }]), 1.2, 'a lone storey keeps 1.2 m');
+  });
+
+  it('a plan cut stays below a close next storey, as the sheet plan does (#256)', () => {
+    // min(1.2, max(gap - 0.5, gap / 2)): gap 1.0 -> 0.5, gap 0.6 -> 0.3 (the midpoint), gap 1.25 -> 0.75.
+    assert.equal(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 1 }]), 0.5);
+    assert.equal(storeyCutElevation({ elevation: -1.25 }, [{ elevation: -1.25 }, { elevation: 0 }]), -0.5, 'the Duplex T/FDN storey');
+    assert.ok(Math.abs(storeyCutElevation({ elevation: 0 }, [{ elevation: 0 }, { elevation: 0.6 }]) - 0.3) < 1e-12);
+    assert.equal(storeyCutElevation({ elevation: 1 }, [{ elevation: 0 }, { elevation: 1 }]), 2.2, 'the top storey has no next one');
   });
 });

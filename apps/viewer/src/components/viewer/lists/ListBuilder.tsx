@@ -549,7 +549,7 @@ const SOURCE_TAG: Record<ColumnDefinition['source'], string> = {
   property: 'pset',
   quantity: 'qty',
   material: 'mat',
-  classification: 'cls',
+  classification: 'cls', officeClassification: 'office',
   spatial: 'storey',
   model: 'model',
   zone: 'zone',

@@ -802,15 +802,17 @@ describe('SectionSlice — last-used mode persistence', () => {
       });
     });
 
-    it('clamps cardinal `position` to [0, 100] on restore', () => {
-      // Belt-and-braces: position is clamped at the slice level too,
-      // but a tampered or stale value shouldn't poison the slider.
+    it('keeps a cut beyond the model on restore, and bounds an absurd one', () => {
+      shim.storage.setItem(SECTION_MODE_KEY, JSON.stringify({ kind: 'cardinal', axis: 'down', position: 127.5, flipped: false }));
+      const beyond = loadLastSectionMode();
+      assert.ok(beyond.kind === 'cardinal' && beyond.position === 127.5, 'a top storey cut above the model is not moved onto its face');
+      // A tampered or stale value shouldn't poison the slider.
       shim.storage.setItem(SECTION_MODE_KEY, JSON.stringify({
         kind: 'cardinal', axis: 'down', position: 9999, flipped: false,
       }));
       const m = loadLastSectionMode();
       assert.strictEqual(m.kind, 'cardinal');
-      if (m.kind === 'cardinal') assert.strictEqual(m.position, 100);
+      if (m.kind === 'cardinal') assert.strictEqual(m.position, 1100);
     });
 
     it('falls back to pick when JSON is corrupted', () => {

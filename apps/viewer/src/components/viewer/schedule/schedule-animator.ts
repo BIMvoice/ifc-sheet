@@ -251,12 +251,6 @@ function isRemovalTask(task: ScheduleTaskInfo): boolean {
   return REMOVAL_TASK_TYPES.has((task.predefinedType ?? '').toUpperCase());
 }
 
-/** Merge RGBA b over a using the `a.alpha` and `b.alpha` terms — standard
- *  "src-over" compositing. Only used for emptyPhase initialization. */
-function withAlpha(rgba: RGBA, alpha: number): RGBA {
-  return [rgba[0], rgba[1], rgba[2], Math.min(1, Math.max(0, alpha))];
-}
-
 const MS_PER_DAY = 86_400_000;
 
 // ─────────────────────────────────────────────────────────────────────────

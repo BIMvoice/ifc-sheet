@@ -8,6 +8,8 @@
  * (`document.ts`, which re-exports them).
  */
 
+import type { ColourScheme } from './colour-scheme.js';
+
 export type CategoryLineWeight = 'heavy' | 'medium' | 'light' | 'hairline';
 
 /** How one element category draws in a view. Absent fields keep the preset's look. */
@@ -52,6 +54,55 @@ export interface ViewGridGraphics {
   ends?: GridEnds;
 }
 
+/** A model element's IFC GlobalId: the key a view uses for anything it says about one element, so it survives a model reload. */
+export type GlobalId = string;
+
+/** How a line is drawn: one pattern, or a dash. */
+export type ElementLineStyle = 'solid' | 'dashed';
+
+/**
+ * How ONE element draws in ONE view (#32). It lies over its category's graphics (and the template's): a field left out keeps what
+ * the category gives. The cut and the projection (the lines seen beyond the cut) take a weight each.
+ */
+export interface ElementGraphics {
+  /** `true` shows an element its category hides; `false` hides it (the same as listing it in `hiddenElements`). */
+  visible?: boolean;
+  lineColor?: string;
+  fillColor?: string;
+  cutWeight?: CategoryLineWeight;
+  projectionWeight?: CategoryLineWeight;
+  lineStyle?: ElementLineStyle;
+  /** A hatch pattern name drawn over the element's cut faces. */
+  cutHatch?: string;
+  hatchScale?: number;
+  /** What the element was called when this was set ("IfcWall Basement wall"): how an orphan is recognised once the model no longer has it. */
+  about?: string;
+}
+
+/** What a style rule says of the items it matches. A material rule uses `fillColor`, `cutHatch` and `hatchScale` only (a material is a cut band, a face: its outline stays the element's). */
+export interface StyleRuleStyle {
+  lineColor?: string;
+  fillColor?: string;
+  lineWeight?: CategoryLineWeight;
+  /** A hatch pattern name drawn over the matched cut faces. */
+  cutHatch?: string;
+  hatchScale?: number;
+}
+
+/**
+ * One line of a view template's mapping (#31): everything of an IFC class (`by: 'class'`, `match` the class names, `IfcWall` also
+ * taking `IfcWallStandardCase`) or of a building material (`by: 'material'`, `match` the IfcMaterial names, case and spacing aside)
+ * draws like `style`. Listed groups ("load-bearing masonry" = several names) are one rule with several `match` entries.
+ */
+export interface StyleRule {
+  id: string;
+  by: 'class' | 'material';
+  match: string[];
+  style: StyleRuleStyle;
+}
+
+import type { DetailLevel } from './detail-level.js';
+
 export interface ViewGraphics {
   /** The structural grid's axes and bubbles. */
   grid?: ViewGridGraphics;
@@ -61,4 +112,29 @@ export interface ViewGraphics {
   phases?: ViewPhases;
   /** By category id (`VIEW_CATEGORIES`). */
   categories?: Record<string, CategoryGraphics>;
+  /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
+  colourScheme?: ColourScheme;
+  /** Elements hidden in this view, by GlobalId (#33). The 3D view's hide / isolate state is not followed. */
+  hiddenElements?: GlobalId[];
+  /** Per-element overrides, by GlobalId (#32): the most specific layer, over the category's. */
+  elements?: Record<GlobalId, ElementGraphics>;
+  /** Single lines of the model drawing hidden in this view (#33): `<GlobalId>|<key>` (`lineKey`), never an index into the drawing. */
+  hiddenLines?: string[];
+  /**
+   * The class and material mapping of a view TEMPLATE (#31); `resolveViewGraphics` reads it from the template only (a view's own, left by detaching
+   * from a template, is used when it follows none). Layers (`view-style.ts`): the template's category graphics < class rules < material rules < the view's own
+   * category graphics.
+   */
+  styleRules?: StyleRule[];
+  /**
+   * The detail level of the view (#444): coarse draws walls, slabs and roofs by their outline, fine every material layer. Absent: it
+   * follows the scale (`defaultDetailLevel`). A template carries it; a view's own overrides it.
+   */
+  detailLevel?: DetailLevel;
+}
+
+/** The graphics a view draws with, as `resolveViewGraphics` resolves them: the view's own, plus what only a resolution knows. */
+export interface ResolvedViewGraphics extends ViewGraphics {
+  /** Set with a template's `styleRules`: the view's OWN category graphics, which beat the mapping (`categories` holds the template's under them). */
+  ownCategories?: Record<string, CategoryGraphics>;
 }

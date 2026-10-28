@@ -31,19 +31,30 @@ interface WallSheetProps {
   pinned?: boolean;
   /** Print only the clouds of the sheet's current revision (an issue's option). */
   currentCloudsOnly?: boolean;
+  /** The date an issue is dated: the title block prints it as the sheet's date (an issue's option). */
+  issueDate?: string;
+  /** Take new drawings in a deferred render (the Wall's sheets; see `SheetContentOptions`). */
+  deferDrawings?: boolean;
 }
 
 const NO_DRAFTS: DraftEntity[] = [];
 
-export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false }, ref) {
+/** The project's hatch patterns, parsed once for every sheet, so each sheet's memo on them sees the same list (#154). */
+let parsedPatterns: { text: string; patterns: ReturnType<typeof parsePat>['patterns'] } | null = null;
+function patternsOf(text: string): ReturnType<typeof parsePat>['patterns'] {
+  if (parsedPatterns?.text !== text) parsedPatterns = { text, patterns: parsePat(text).patterns };
+  return parsedPatterns.patterns;
+}
+
+export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false, issueDate, deferDrawings = false }, ref) {
   // What is drawn on the paper itself hangs with it.
   const drafts = useProjectStore((s) => s.drafts);
   const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
   const layers = useProjectStore((s) => s.draftLayers);
   const projectName = useProjectStore((s) => s.name);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
-  const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
-  const own = useSheetContent(sheet);
+  const extraPatterns = useMemo(() => patternsOf(patternText), [patternText]);
+  const own = useSheetContent(sheet, { deferDrawings });
   const { content, boxOf } = sheetContent ?? own;
   const byView = useViewDrawings((s) => s.byView);
   const views = useProjectStore((s) => s.views);
@@ -62,6 +73,7 @@ export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function Wall
         pxPerMm={pxPerMm}
         sheetDrafts={sheetDrafts}
         currentCloudsOnly={currentCloudsOnly}
+        issueDate={issueDate}
       />
       {/* Screen only: laid over the paper's SVG, never inside it, so no export reads it. */}
       {(sheet.viewports ?? []).map((vp) => {

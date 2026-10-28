@@ -132,3 +132,11 @@ export function convexHull(pts: readonly Pt[]): Pt[] {
   };
   return [...half(p), ...half([...p].reverse())];
 }
+
+/** The box round `rects`, or null for none; a fold, not a spread: `Math.min(...boxes)` overflows the stack at about 120 000 boxes. */
+export function unionRect(rects: readonly Rect[]): Rect | null {
+  if (rects.length === 0) return null;
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const r of rects) { if (r.x0 < x0) x0 = r.x0; if (r.y0 < y0) y0 = r.y0; if (r.x1 > x1) x1 = r.x1; if (r.y1 > y1) y1 = r.y1; }
+  return { x0, y0, x1, y1 };
+}

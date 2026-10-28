@@ -13,44 +13,25 @@
  */
 
 import type { DraftEntity } from '@/drafting/types';
+import { cloudRevisionId, currentRevisionOf, REVISION_ID_PARAM, sheetRevisions, type CurrentRevision } from '@bimvoice/ifcsheet';
 import type { ProjectDocument, ProjectRevision, ProjectSheet } from './types';
 
-/** The draft parameter that ties a cloud to its revision. */
-export const REVISION_ID_PARAM = 'revisionId';
+/** The revision functions the title block reads are the engine's (`packages/ifcsheet/src/revisions.ts`): the PDF prints the same revision as the sheet. */
+export { cloudRevisionId, currentRevisionOf, REVISION_ID_PARAM, sheetRevisions, type CurrentRevision };
+
+/**
+ * The `revision` draft parameter WHATCHANGED stamps on the clouds it draws. A cloud carrying it is automatic;
+ * one drawn by hand (the revision cloud tool) does not carry it.
+ */
+export const REVISION_STAMP = 'whatchanged';
+
+/** Whether the cloud was drawn by WHATCHANGED, not by hand. */
+export function isAutomaticCloud(draft: Pick<DraftEntity, 'params'>): boolean {
+  return draft.params.revision === REVISION_STAMP;
+}
 
 /** What the revision functions read of the project. */
 export type RevisionSource = Pick<ProjectDocument, 'drafts'> & { revisions?: readonly ProjectRevision[] };
-
-/** The revision a cloud belongs to; none for a draft that is not a revision cloud. */
-export function cloudRevisionId(draft: Pick<DraftEntity, 'params'>): string | null {
-  const id = draft.params[REVISION_ID_PARAM];
-  return typeof id === 'string' && id ? id : null;
-}
-
-/** The sheet's own revisions, in the order of the project's records. */
-export function sheetRevisions(sheet: ProjectSheet, project: RevisionSource): ProjectRevision[] {
-  const records = project.revisions ?? [];
-  if (records.length === 0) return [];
-  const surfaces = new Set([sheet.id, ...(sheet.viewports ?? []).map((v) => v.viewId)]);
-  const named = new Set(sheet.revisionIds ?? []);
-  for (const d of project.drafts) {
-    const id = surfaces.has(d.viewId) ? cloudRevisionId(d) : null;
-    if (id) named.add(id);
-  }
-  return records.filter((r) => named.has(r.id));
-}
-
-export interface CurrentRevision {
-  id: string;
-  code: string;
-  date: string;
-}
-
-/** The latest of the sheet's revisions: what its title block, the drawing list and the register read. None when it has none. */
-export function currentRevisionOf(sheet: ProjectSheet, project: RevisionSource): CurrentRevision | null {
-  const last = sheetRevisions(sheet, project).at(-1);
-  return last ? { id: last.id, code: last.code, date: last.date } : null;
-}
 
 /** The revision a new cloud belongs to when none is chosen: the latest record. */
 export function latestRevisionId(project: Pick<ProjectDocument, 'revisions'>): string | null {

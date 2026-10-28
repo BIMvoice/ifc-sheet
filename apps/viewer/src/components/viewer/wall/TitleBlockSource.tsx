@@ -12,6 +12,7 @@
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { resetTitleBlockField, setTitleBlockSources } from '@/project/sheets';
 import { PRESET_SOURCES, sameSource, sourceText, sourcesOf, type OwnerPart, type ResolvedField, type TitleSource, type TitleSources } from '@/project/title-block-sources';
+import { WALL_PILL } from './wall-type';
 
 const OWNER_LABELS: Record<OwnerPart, TranslationKey> = {
   organisation: 'wall.tbsrc.owner.organisation',
@@ -21,7 +22,7 @@ const OWNER_LABELS: Record<OwnerPart, TranslationKey> = {
 };
 
 const select = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-xs text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
+const quiet = WALL_PILL;
 
 /** A source as the person reads it in the picker. */
 function useSourceLabel(): (s: TitleSource) => string {

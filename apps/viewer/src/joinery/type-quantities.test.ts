@@ -12,11 +12,12 @@ import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
 import { elementTypeQuantities, typeQuantities, type TypeElement } from './type-quantities';
 import { collectTypeElements } from './type-quantities-models';
-import { typeQuantitiesCsv, typeQuantityLines, type TypeQuantityLabels } from './type-quantities-layout';
+import { typeQuantityLines, typeQuantityTable, type TypeQuantityLabels } from './type-quantities-layout';
+import { csvLines, tableCsv } from './export-test-util';
 
 const LABELS: TypeQuantityLabels = {
-  title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³',
-  noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey',
+  locale: 'en', title: 'Quantities', type: 'Type', class: 'Class', level: 'Storey', count: 'Count', length: 'Length m', area: 'Area m²', volume: 'Volume m³',
+  noQto: 'No Qto', total: 'Total', noType: '(no type)', noLevel: 'No storey', classification: 'Classification', classificationTitle: 'Title', unclassified: 'No classification',
 };
 
 const el = (p: Partial<TypeElement>): TypeElement => ({ className: 'IfcWall', typeClass: 'IfcWallType', typeName: 'W1', level: 'L0', elevation: 0, length: null, area: null, volume: null, ...p });
@@ -66,10 +67,10 @@ describe('typeQuantities', () => {
       ['=SUM(A1)', 'L0', 1, 1], ['W1', 'L0', 1, 1.5], ['W1', 'L1', 1, 2], ['W1', 'Total', 2, 3.5], ['Total', '', 3, 4.5],
     ]);
     assert.equal(lines.at(-1)!.className, 'IfcWall');
-    const csv = typeQuantitiesCsv(out, LABELS).split('\n');
+    const csv = csvLines(tableCsv(typeQuantityTable(out, LABELS)));
     assert.equal(csv[0], 'Type,Class,Storey,Count,Length m,Area m²,Volume m³,No Qto');
-    assert.equal(csv[4], 'W1,IfcWallType,Total,2,3.5,,,0');
-    assert.equal(csv[5], 'Total,IfcWall,,3,4.5,,,0');
+    assert.equal(csv[4], 'W1,WallType,Total,2,3.5,,,');
+    assert.equal(csv[5], 'Total,Wall,,3,4.5,,,');
     assert.ok(csv[1].startsWith("'=SUM(A1)"), csv[1]);
   });
 

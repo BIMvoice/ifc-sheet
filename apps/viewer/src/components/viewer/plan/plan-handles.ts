@@ -21,11 +21,9 @@
  */
 
 import type { ViewerState } from '@/store';
-import { resolveEntityRef } from '@/store/resolveEntityRef';
-import { canMutate } from '@/store/mutation-permission';
 import type { Vec2 } from '@/lib/snap/types';
-import type { Vec3, Workplane } from '@/lib/commands/modeling/types';
-import { buildStoreyWorkplane, elementStoreyId, isWorkplane } from '@/lib/commands/modeling/workplane';
+import type { Workplane } from '@/lib/commands/modeling/types';
+
 type WallEnd = 'start' | 'end';
 
 export type PlanHandle =
@@ -38,24 +36,6 @@ export type PlanHandle =
 export const PLAN_HANDLE_RADIUS_PX = 6;
 /** How far from a handle's centre a press still grabs it, px. */
 export const PLAN_HANDLE_REACH_PX = 10;
-
-/** The one element the handles are for, or null (none, several, or not the session's). */
-function singleSelection(s: ViewerState): { modelId: string; expressId: number } | null {
-  const id = s.selectedEntityId;
-  if (id === null) return null;
-  if (s.selectedEntityIds.size > 1 || (s.selectedEntityIds.size === 1 && !s.selectedEntityIds.has(id))) return null;
-  return resolveEntityRef(id);
-}
-
-/** Storey-local → plan-local, through render space (the storey's and the plan's workplanes). */
-function storeyToPlan(s: ViewerState, modelId: string, storeyId: number, plane: Workplane): ((p: Vec3) => Vec2) | null {
-  const storey = buildStoreyWorkplane(s, modelId, storeyId, 0);
-  if (!isWorkplane(storey)) return null;
-  return (p) => {
-    const local = plane.renderToLocal(storey.localToRender(p));
-    return [local[0], local[1]];
-  };
-}
 
 /**
  * The selected element's handles in the plan of `plane`; empty when it has

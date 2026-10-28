@@ -27,9 +27,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useViewerStore } from '@/store';
 import { IDSPanel } from './IDSPanel.js';
 import { IDS_FOCUS_COLOR } from '@/hooks/ids/idsColorSystem.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { get: () => 800, configurable: true });
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { get: () => 600, configurable: true });
+stubBoxSize(800, 600);
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;

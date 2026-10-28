@@ -63,8 +63,11 @@ export interface SceneContents {
     device: GPUDevice,
     pipeline: RenderPipeline,
     isStreaming?: boolean,
+    deferUpload?: boolean,
   ): void;
   hasPendingBatches(): boolean;
+  /** True once after a `deferUpload` append left batches pending; the caller then rebuilds them (#154). */
+  takeDeferredBatchUpload(): boolean;
   rebuildPendingBatches(device: GPUDevice, pipeline: RenderPipeline): void;
   hasStreamingFragments(): boolean;
   finalizeStreaming(device: GPUDevice, pipeline: RenderPipeline): void;

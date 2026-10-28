@@ -7,161 +7,37 @@
  * configured type (one row per catalogue entry, merged across models) with
  * its occurrences counted per level — with the doors / windows the
  * project's symbol mapping assigns to it — and the rest grouped by class and
- * size. Levels are merged by name and
+ * size, each group marked D1, W1… (`markUntyped`). Levels are merged by name and
  * ordered by elevation, top floor last. Every occurrence is numbered within
  * its type, level by level (`occurrenceMark`: W1.3), the numbering a plan
  * tag, the Elements sheet and `schedule-numbering.ts` share.
  */
 
-import { joineryTypesInStore, occurrencesOfTypeInStore, type JoinerySpec } from '@ifc-lite/create';
-import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
-import type { IfcDataStore } from '@ifc-lite/parser';
+import { DEFAULT_JOINERY_MAPPING, scheduleFilterProperties, type ScheduleContent } from '@bimvoice/ifcsheet';
+import { joineryScheduleData, occurrenceMark, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence } from '@bimvoice/ifcsheet/project';
 import { useViewerStore } from '@/store';
+import { useProjectStore } from '@/project/project-store';
 import { entityName } from '@/lib/commands/modeling/authored-kinds';
-import { getModelLengthUnitScale } from '@/lib/length-unit-scale';
 import { catalogue } from './catalog';
-import { drawnJoinery } from './mapped-joinery';
 
-export type ScheduleKind = 'door' | 'window' | 'all';
+// The row loop is the engine's (`joineryScheduleData`): the headless check and the app list the same rows.
+export { occurrenceMark };
+export type { ScheduleData, ScheduleEntry, ScheduleKind, ScheduleOccurrence };
 
-export interface ScheduleOccurrence {
-  modelId: string;
-  expressId: number;
-  globalId: string;
-  level: string;
-  /** The element's Tag as it is in the model. */
-  tag: string | null;
-  /** 1-based, within the type, lowest level first. */
-  number: number;
-}
-
-export interface ScheduleEntry {
-  key: string;
-  kind: 'door' | 'window';
-  /** The configured type; null for elements without one. */
-  spec: JoinerySpec | null;
-  mark: string;
-  name: string;
-  /** Metres. */
-  width: number;
-  height: number;
-  /** Count per level name. */
-  counts: Record<string, number>;
-  total: number;
-  occurrences: ScheduleOccurrence[];
-}
-
-/** An occurrence's mark: its type's mark and its number (`W1.3`); a number alone for an untyped element. */
-export function occurrenceMark(entry: ScheduleEntry, o: ScheduleOccurrence): string {
-  return entry.mark && entry.mark !== '—' ? `${entry.mark}.${o.number}` : `${entry.name}-${o.number}`;
-}
-
-export interface ScheduleData {
-  entries: ScheduleEntry[];
-  /** Level names, lowest first. */
-  levels: string[];
-}
-
-interface Live { dataStore: IfcDataStore; view: MutablePropertyView | null }
-
-function attributes({ dataStore, view }: Live, id: number): unknown[] | null {
-  if (view?.isDeleted(id)) return null;
-  const entity = view?.getNewEntity(id) ?? dataStore.getEntity(id);
-  if (!entity) return null;
-  const attrs = [...entity.attributes] as unknown[];
-  for (const [index, value] of view?.getPositionalMutationsForEntity(id) ?? []) attrs[index] = value;
-  return attrs;
-}
-
-const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
-
-export function scheduleData(kind: ScheduleKind): ScheduleData {
+/**
+ * The rows of the joinery schedule of `kind` over the loaded models, with the open project's catalogue and mapping; sorted and numbered by `content` when given.
+ * The rows carry the properties the project's filters name (`scheduleFilterProperties`, as the headless check reads them) and IsExternal, so a sub-report or a
+ * schedule can be cut by property value.
+ */
+export function scheduleData(kind: ScheduleKind, content?: ScheduleContent): ScheduleData {
   const s = useViewerStore.getState();
-  const byKey = new Map<string, ScheduleEntry>();
-  const levelElevation = new Map<string, number>();
-  const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
-  const fromCatalogue = new Map(catalogue().map((spec) => [spec.id, spec]));
-
+  const models: ScheduleModel[] = [];
   for (const [modelId, model] of s.models) {
     const dataStore = model.ifcDataStore;
     if (!dataStore) continue;
-    const live: Live = { dataStore, view: s.mutationViews.get(modelId) ?? null };
-    const hierarchy = dataStore.spatialHierarchy;
-    const levelOf = (id: number): string => {
-      const storey = hierarchy?.elementToStorey.get(id);
-      if (storey === undefined) return '—';
-      const name = entityName(live, storey) || `#${storey}`;
-      levelElevation.set(name, hierarchy?.storeyElevations.get(storey) ?? 0);
-      return name;
-    };
-    const count = (entry: ScheduleEntry, id: number) => {
-      const level = levelOf(id);
-      entry.counts[level] = (entry.counts[level] ?? 0) + 1;
-      entry.total++;
-      const attrs = attributes(live, id);
-      const tag = attrs?.[7];
-      entry.occurrences.push({ modelId, expressId: id, globalId: String(attrs?.[0] ?? ''), level, tag: typeof tag === 'string' ? tag : null, number: 0 });
-    };
-    const typed = new Set<number>();
-    let types: ReturnType<typeof joineryTypesInStore> = [];
-    try { types = joineryTypesInStore(dataStore, live.view); } catch { types = []; }
-    for (const type of types) {
-      if (!wanted(type.spec.kind)) continue;
-      // The catalogue's current entry wins over the copy stored in the model.
-      const spec = (type.spec.id && fromCatalogue.get(type.spec.id)) || type.spec;
-      const key = spec.id ?? `${modelId}:${type.typeId}`;
-      const entry = byKey.get(key) ?? { key, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] };
-      byKey.set(key, entry);
-      for (const id of occurrencesOfTypeInStore(dataStore, type.typeId, live.view)) {
-        if (live.view?.isDeleted(id)) continue;
-        typed.add(id);
-        count(entry, id);
-      }
-    }
-    // Doors and windows without a configured type, by class and size.
-    const unit = getModelLengthUnitScale(dataStore) || 1;
-    for (const { expressId: id, type } of iterateEffectiveEntityIds(dataStore, live.view, ['IFCDOOR', 'IFCWINDOW', 'IFCDOORSTANDARDCASE', 'IFCWINDOWSTANDARDCASE'])) {
-      if (typed.has(id)) continue;
-      const k: 'door' | 'window' = String(type).toUpperCase().startsWith('IFCDOOR') ? 'door' : 'window';
-      if (!wanted(k)) continue;
-      const attrs = attributes(live, id);
-      if (!attrs) continue;
-      // Mapped to a catalogue entry by the project (`symbol-mapping.ts`): listed with that entry.
-      const mapped = drawnJoinery(modelId, id)?.entry;
-      const mappedSpec = mapped?.id ? fromCatalogue.get(mapped.id) : undefined;
-      if (mappedSpec?.id) {
-        const entry = byKey.get(mappedSpec.id) ?? { key: mappedSpec.id, kind: mappedSpec.kind, spec: mappedSpec, mark: mappedSpec.mark, name: mappedSpec.name, width: mappedSpec.width, height: mappedSpec.height, counts: {}, total: 0, occurrences: [] };
-        byKey.set(mappedSpec.id, entry);
-        count(entry, id);
-        continue;
-      }
-      const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
-      const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
-      const key = `untyped:${k}:${size}`;
-      const entry = byKey.get(key) ?? {
-        key, kind: k, spec: null, mark: '—', name: k === 'door' ? 'Door' : 'Window',
-        width: Number.isFinite(width) ? width : 0, height: Number.isFinite(height) ? height : 0, counts: {}, total: 0, occurrences: [],
-      };
-      byKey.set(key, entry);
-      count(entry, id);
-    }
+    const view = s.mutationViews.get(modelId) ?? null;
+    models.push({ modelId, dataStore, view, nameOf: (id) => entityName({ dataStore, view }, id) });
   }
-  // Catalogue types not placed yet still belong in the schedule (with no count).
-  for (const spec of fromCatalogue.values()) {
-    if (!spec.id || byKey.has(spec.id) || !wanted(spec.kind)) continue;
-    byKey.set(spec.id, { key: spec.id, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] });
-  }
-  const entries = [...byKey.values()]
-    .filter((e) => e.total > 0 || e.spec)
-    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
-      || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
-  const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
-  if (entries.some((e) => e.counts['—'])) levels.push('—');
-  // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.
-  const order = new Map(levels.map((l, i) => [l, i]));
-  for (const e of entries) {
-    e.occurrences.sort((a, b) => (order.get(a.level) ?? 99) - (order.get(b.level) ?? 99) || a.modelId.localeCompare(b.modelId) || a.expressId - b.expressId);
-    e.occurrences.forEach((o, i) => { o.number = i + 1; });
-  }
-  return { entries, levels };
+  const p = useProjectStore.getState();
+  return joineryScheduleData(models, { joineryTypes: catalogue(p), joineryMapping: p.joineryMapping ?? DEFAULT_JOINERY_MAPPING, symbolFlips: p.symbolFlips }, kind, content, scheduleFilterProperties(p.schedules ?? []));
 }

@@ -20,9 +20,9 @@ import { waitFor } from '@/test/render';
 import { ClashPanel } from './ClashPanel.js';
 import { ClashManualGroupDialog } from './ClashManualGroupDialog.js';
 import { Toaster } from '@/components/ui/toast.js';
+import { stubBoxSize } from '@/test/dom-layout.js';
 
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 });
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
+stubBoxSize(800, 600);
 
 function clash(id: string, a: number, b: number): Clash {
   return {

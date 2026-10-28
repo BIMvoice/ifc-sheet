@@ -1,0 +1,388 @@
+{
+ "version": 1,
+ "figures": {
+  "storeys": [
+   "Dachgeschoss",
+   "Erdgeschoss"
+  ],
+  "rooms": 7,
+  "au": 173.34,
+  "levelTotals": {
+   "Dachgeschoss": 74.51,
+   "Erdgeschoss": 98.83
+  },
+  "areaFromGeometry": 0,
+  "roomsWithoutArea": 0,
+  "extent": "-0.5 -0.2 -10.5 12.5 6.32 0.5"
+ },
+ "sheets": {
+  "A-101": {
+   "name": "Floor plans",
+   "paper": "420 x 297 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Dachgeschoss 1:100",
+    "Erdgeschoss 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    410,
+    287
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "9c68313187596d03"
+   },
+   "cut": {
+    "paths": 242,
+    "points": 2539,
+    "hash": "b826dfe449c0dc45"
+   },
+   "lines": {
+    "paths": 820,
+    "points": 1640,
+    "hash": "c985359e09b9fefd"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 572,
+     "regions": 0,
+     "points": 1144,
+     "hash": "8b76f81dcc76c007"
+    },
+    "CUT stroke=#000000 fill=- #2": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 248,
+     "regions": 0,
+     "points": 496,
+     "hash": "05965269420601db"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 155,
+     "points": 1664,
+     "hash": "11b5628bea02796a"
+    },
+    "FILL stroke=- fill=#d4d4d8 #2": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 64,
+     "points": 875,
+     "hash": "56edd9ecd045872a"
+    }
+   },
+   "texts": [
+    "1:100 @362,282.5 h4.5",
+    "2026-10-21 @232,285 h3.5",
+    "A-101 @362,266.5 h9",
+    "Address @297,240.2 h2",
+    "Checked by @297,270.2 h2",
+    "Client @232,250.2 h2",
+    "Dachgeschoss  1:100 @287.5,186.5 h3.5 center",
+    "Date @232,280.2 h2",
+    "Drawn by @232,270.2 h2",
+    "Erdgeschoss  1:100 @132.5,186.5 h3.5 center",
+    "Floor plans @232,265 h3.5",
+    "Organisation @297,250.2 h2",
+    "Project @232,240.2 h2",
+    "Projekt-FZK-Haus @232,245 h3.5",
+    "Revision @297,280.2 h2",
+    "Scale @362,274.2 h2",
+    "Sheet no. @362,254.2 h2",
+    "Title @232,260.2 h2"
+   ],
+   "images": 0
+  },
+  "A-201": {
+   "name": "Elevations, south and north",
+   "paper": "420 x 297 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "North Elevation 1:100",
+    "South Elevation 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    410,
+    287
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "9c68313187596d03"
+   },
+   "cut": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "lines": {
+    "paths": 3248,
+    "points": 6496,
+    "hash": "95413b06e2ffe971"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 1624,
+     "regions": 0,
+     "points": 3248,
+     "hash": "6e15fa6792ea8570"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 1624,
+     "regions": 0,
+     "points": 3248,
+     "hash": "4449644ea1b3c912"
+    }
+   },
+   "texts": [
+    "1:100 @362,282.5 h4.5",
+    "2026-10-21 @232,285 h3.5",
+    "A-201 @362,266.5 h9",
+    "Address @297,240.2 h2",
+    "Checked by @297,270.2 h2",
+    "Client @232,250.2 h2",
+    "Date @232,280.2 h2",
+    "Drawn by @232,270.2 h2",
+    "Elevations, south and north @232,265 h3.5",
+    "North Elevation  1:100 @287.5,164.09 h3.5 center",
+    "Organisation @297,250.2 h2",
+    "Project @232,240.2 h2",
+    "Projekt-FZK-Haus @232,245 h3.5",
+    "Revision @297,280.2 h2",
+    "Scale @362,274.2 h2",
+    "Sheet no. @362,254.2 h2",
+    "South Elevation  1:100 @132.5,164.09 h3.5 center",
+    "Title @232,260.2 h2"
+   ],
+   "images": 0
+  },
+  "A-202": {
+   "name": "Elevations, east and west",
+   "paper": "420 x 297 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "East Elevation 1:100",
+    "West Elevation 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    410,
+    287
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "9c68313187596d03"
+   },
+   "cut": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "lines": {
+    "paths": 4500,
+    "points": 9000,
+    "hash": "4e2a9aa9c08d03ec"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 2242,
+     "regions": 0,
+     "points": 4484,
+     "hash": "1f270a87fca0fdaa"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 2258,
+     "regions": 0,
+     "points": 4516,
+     "hash": "4301dc6b2a102a7b"
+    }
+   },
+   "texts": [
+    "1:100 @362,282.5 h4.5",
+    "2026-10-21 @232,285 h3.5",
+    "A-202 @362,266.5 h9",
+    "Address @297,240.2 h2",
+    "Checked by @297,270.2 h2",
+    "Client @232,250.2 h2",
+    "Date @232,280.2 h2",
+    "Drawn by @232,270.2 h2",
+    "East Elevation  1:100 @142.5,164.09 h3.5 center",
+    "Elevations, east and west @232,265 h3.5",
+    "Organisation @297,250.2 h2",
+    "Project @232,240.2 h2",
+    "Projekt-FZK-Haus @232,245 h3.5",
+    "Revision @297,280.2 h2",
+    "Scale @362,274.2 h2",
+    "Sheet no. @362,254.2 h2",
+    "Title @232,260.2 h2",
+    "West Elevation  1:100 @277.5,164.09 h3.5 center"
+   ],
+   "images": 0
+  },
+  "A-301": {
+   "name": "Sections",
+   "paper": "420 x 297 mm",
+   "scales": [
+    "1:100"
+   ],
+   "views": [
+    "Section A-A 1:100",
+    "Section B-B 1:100"
+   ],
+   "bbox": [
+    10,
+    10,
+    410,
+    287
+   ],
+   "frame": {
+    "paths": 11,
+    "points": 28,
+    "hash": "9c68313187596d03"
+   },
+   "cut": {
+    "paths": 55,
+    "points": 2012,
+    "hash": "1c3db11e34149290"
+   },
+   "lines": {
+    "paths": 3547,
+    "points": 7094,
+    "hash": "a8dd19643d622ccd"
+   },
+   "marks": {
+    "paths": 0,
+    "points": 0,
+    "hash": "e3b0c44298fc1c14"
+   },
+   "pens": {
+    "CUT stroke=#000000 fill=- #1": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 308,
+     "regions": 0,
+     "points": 616,
+     "hash": "771213967ab0573e"
+    },
+    "CUT stroke=#000000 fill=- #2": {
+     "width": 0.5,
+     "dash": "",
+     "paths": 740,
+     "regions": 0,
+     "points": 1480,
+     "hash": "cda61385963c5433"
+    },
+    "FILL stroke=- fill=#d4d4d8 #1": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 28,
+     "points": 609,
+     "hash": "dc227531388c1391"
+    },
+    "FILL stroke=- fill=#d4d4d8 #2": {
+     "width": 0,
+     "dash": "",
+     "paths": 0,
+     "regions": 27,
+     "points": 1403,
+     "hash": "6d3e2e393d7614e2"
+    },
+    "HIDDEN stroke=#000000 fill=- #1": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 385,
+     "regions": 0,
+     "points": 770,
+     "hash": "b48901bc25804210"
+    },
+    "HIDDEN stroke=#000000 fill=- #2": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 836,
+     "regions": 0,
+     "points": 1672,
+     "hash": "a420544b3d828eb4"
+    },
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 1272,
+     "regions": 0,
+     "points": 2544,
+     "hash": "4dae8ad54946b372"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 1227,
+     "regions": 0,
+     "points": 2454,
+     "hash": "c94f147d29ace9c1"
+    }
+   },
+   "texts": [
+    "1:100 @362,282.5 h4.5",
+    "2026-10-21 @232,285 h3.5",
+    "A-301 @362,266.5 h9",
+    "Address @297,240.2 h2",
+    "Checked by @297,270.2 h2",
+    "Client @232,250.2 h2",
+    "Date @232,280.2 h2",
+    "Drawn by @232,270.2 h2",
+    "Organisation @297,250.2 h2",
+    "Project @232,240.2 h2",
+    "Projekt-FZK-Haus @232,245 h3.5",
+    "Revision @297,280.2 h2",
+    "Scale @362,274.2 h2",
+    "Section A-A  1:100 @142.5,164.09 h3.5 center",
+    "Section B-B  1:100 @277.5,164.09 h3.5 center",
+    "Sections @232,265 h3.5",
+    "Sheet no. @362,254.2 h2",
+    "Title @232,260.2 h2"
+   ],
+   "images": 0
+  }
+ }
+}

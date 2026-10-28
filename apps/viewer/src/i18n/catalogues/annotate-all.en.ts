@@ -17,6 +17,7 @@ export const annotateAllEn = {
   'drafting.tool.ceilTag': 'Tag ceiling heights',
   'drafting.msg.ceilTagCeilingPlanOnly': 'CEILTAG works on a reflected ceiling plan.',
   'drafting.msg.ceilTagDone': 'Tagged {count} ceilings with their height above the level. Already tagged: {already}.',
+  'drafting.msg.ceilTagStacked': 'Ceilings that share another one\'s tag, lying exactly under it (same spot, same height): {stacked}. Tags in all: {tags}.',
   'drafting.msg.ceilTagNone': 'Every ceiling of this plan has its height already ({already}), or the plan has none.',
   'drafting.tool.tagAll': 'Tag doors, windows and rooms',
   'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan.',
@@ -32,5 +33,6 @@ export const annotateAllEn = {
   'drafting.msg.levelAllViewOnly': 'LEVELALL works on a section or an elevation.',
   'drafting.msg.levelAllEmpty': 'Nothing to mark: this view shows no model elements.',
   'drafting.msg.levelAllHave': 'This view has all its level marks already ({count}).',
-  'drafting.msg.levelAllDone': 'Added {count} level marks on the {side} of the building, in line. Already there: {already}.',
+  'drafting.msg.levelAllDoneLeft': 'Added {count} level marks on the left of the building, in line. Already there: {already}.',
+  'drafting.msg.levelAllDoneRight': 'Added {count} level marks on the right of the building, in line. Already there: {already}.',
 } as const satisfies Record<string, TranslationValue>;

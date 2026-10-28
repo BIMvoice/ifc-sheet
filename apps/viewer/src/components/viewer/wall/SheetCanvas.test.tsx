@@ -9,6 +9,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanup, press, render } from '@/test/render.js';
+import { rebindAction, resetAllBindings, unbindAction } from '@/lib/commands/key-bindings';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { SheetCanvas } from './SheetCanvas.js';
@@ -100,5 +101,23 @@ describe('SheetCanvas', () => {
     press(window, 'Delete');
     assert.deepEqual(sheetOf().viewports, []);
     assert.equal(chosen, null);
+  });
+});
+
+describe('SheetCanvas Delete is the Erase action\'s keys', () => {
+  it('does not take the drawing off once Erase has no Delete, and takes it on the key Erase was given', () => {
+    chosen = 'vp';
+    unbindAction('drafting.erase');
+    render(<Harness />);
+    press(window, 'Delete');
+    press(window, 'Backspace');
+    assert.equal(sheetOf().viewports?.length, 1, 'no key, no removal');
+    rebindAction('drafting.erase', { key: 'q' });
+    press(window, 'Delete');
+    assert.equal(sheetOf().viewports?.length, 1, 'Delete is no longer Erase');
+    press(window, 'q');
+    assert.deepEqual(sheetOf().viewports, []);
+    assert.equal(chosen, null);
+    resetAllBindings();
   });
 });

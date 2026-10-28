@@ -13,18 +13,22 @@
 
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { readStored } from '@/labels/label-resolve';
+import { TAG_FIELDS as TAG_FIELD_NAMES, type TagFieldName } from '@/catalogue/types';
 import { elementClassLabel } from '@/project/element-label';
 import { firstValue, tagKindOf, tagToolSourcesOf, type TagFieldId } from './tag-fields';
 
-export type TagField = 'mark' | 'name' | 'class';
+/** The fields the TAG tool can show: the one list (`catalogue/types.ts`), so an annotation type and the tool offer the same. */
+export type TagField = TagFieldName;
 
-export const TAG_FIELDS: readonly TagField[] = ['mark', 'name', 'class'];
+export const TAG_FIELDS: readonly TagField[] = TAG_FIELD_NAMES;
 
 /** The text of an element tag, or null when the element is no longer in the model. */
 export function elementLabel(globalId: string, field: TagField): string | null {
   if (field === 'class') return elementClassLabel(globalId);
   const el = labelElementByGlobalId(globalId);
   if (!el) return null;
+  // The classification (#89) is the engine's one answer (`classificationOf`), read through the label element like the {Classification} placeholder.
+  if (field === 'classification' || field === 'classificationTitle') return el.classification?.()?.[field === 'classification' ? 'code' : 'title'] || '?';
   const kind = tagKindOf(el.className());
   const read = (f: TagFieldId): string => String(firstValue(tagToolSourcesOf(el.tagFields, kind, f), (ref) => readStored(ref, el)).value ?? '');
   const name = read('name');

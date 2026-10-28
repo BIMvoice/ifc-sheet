@@ -15,6 +15,10 @@
  * into it. The tools are positional (`code:Digit1`, as the viewer's Alt+digit
  * panel keys are): Option+1 on a Mac types a glyph, not "1".
  *
+ * These rows are also the Wall's action registry (`action-registry.ts`): a
+ * row's keys are the action's default binding, which a person may change
+ * (`key-bindings.ts`). Every surface reads the binding in force from there.
+ *
  * Ctrl/Cmd+P is print: it is taken over only where the Wall's own print path
  * applies (a sheet in front, its print button showing); anywhere else the
  * handler declines and the browser prints.
@@ -43,6 +47,15 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.print', labelKey: 'wall.export.pdf', category: 'wall', when: 'wall', keys: [{ key: 'p', mod: true }] },
   { id: 'wall.prevSheet', labelKey: 'commands.wall.prevSheet', category: 'wall', when: 'wall', keys: [{ key: 'pageup' }] },
   { id: 'wall.nextSheet', labelKey: 'commands.wall.nextSheet', category: 'wall', when: 'wall', keys: [{ key: 'pagedown' }] },
+  // The sheet's other commands ship with no key; a person can give them one (#166).
+  { id: 'wall.back', labelKey: 'wall.keys.action.back', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.leaveEdit', labelKey: 'wall.leaveEdit', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.comment', labelKey: 'wall.keys.action.comment', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.paper', labelKey: 'wall.paper.button', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.titleBlock', labelKey: 'wall.tb.title', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.revisions', labelKey: 'wall.keys.action.revisions', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.printPreview', labelKey: 'wall.keys.action.printPreview', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.exportDxf', labelKey: 'wall.keys.action.exportDxf', category: 'wall', when: 'wall', keys: [] },
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type WallKeyId = (typeof WALL_KEY_COMMANDS)[number]['id'];

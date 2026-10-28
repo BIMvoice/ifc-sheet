@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import type { VisibilityChannel } from '@/lib/visibility/ownership';
 import { formatLocaleCount } from './formatLocaleCount';
 import { ListRowVisibilityActions } from './ListRowVisibilityActions';
-import { formatCellValue, type DisplayItem } from './list-table-utils';
+import { formatSumValue, type DisplayItem } from './list-table-utils';
 
 type GroupItem = Extract<DisplayItem, { kind: 'group' }>;
 
@@ -89,7 +89,7 @@ export function ListGroupHeaderRow({
               </>
             )}
             {sumColumnIds.includes(col.id) && (
-              <span className="ml-auto font-mono tabular-nums">{formatCellValue(item.sums[col.id])}</span>
+              <span className="ml-auto font-mono tabular-nums">{formatSumValue(item.sums[col.id])}</span>
             )}
           </span>
         ))}

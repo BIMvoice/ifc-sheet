@@ -2,25 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { CompactEntityIndex, parseIfcx, createSyntheticDataStore, attachDataStoreAccessors, contiguousSourceBytes, type IfcDataStore, type IfcSourceBytes, type IfcStoreData, type PointCloudExtraction } from '@ifc-lite/parser';
-import { type GeometryResult, type MeshData, type PointCloudAsset } from '@ifc-lite/geometry';
+import { CompactEntityIndex, parseIfcx, buildIfcxDataStore, createSyntheticDataStore, type IfcDataStore, type PointCloudExtraction } from '@ifc-lite/parser';
+import { convertIfcxMeshes, type GeometryResult, type MeshData, type PointCloudAsset } from '@ifc-lite/geometry';
 import { parseGLB, parseGLBToMeshData, parseGLBImageResources } from '@ifc-lite/cache';
 import type { SchemaVersion } from '../../store/types.js';
-import { calculateMeshBounds, createCoordinateInfo, normalizeColor } from '../../utils/localParsingUtils.js';
-
-interface RawIfcxMesh {
-  expressId?: number;
-  express_id?: number;
-  id?: number;
-  positions: Float32Array | number[];
-  indices: Uint32Array | number[];
-  normals: Float32Array | number[];
-  color?: [number, number, number, number] | [number, number, number];
-  ifcType?: string;
-  ifc_type?: string;
-  uvs?: Float32Array;
-  texture?: MeshData['texture'];
-}
+import { calculateMeshBounds, createCoordinateInfo } from '../../utils/localParsingUtils.js';
 
 export interface ViewerModelPayload {
   dataStore: IfcDataStore;
@@ -42,31 +28,15 @@ export interface ParseIfcxOptions {
   allowEmptyGeometry?: boolean;
 }
 
+/** The IFCX store and mesh builders are shared with the command line (`@bimvoice/ifcsheet`'s `openModel`): one reader, not two. */
+export { buildIfcxDataStore, convertIfcxMeshes };
+
 export function getViewerSchemaVersion(dataStore: IfcDataStore | null): SchemaVersion {
   if (!dataStore) return 'IFC4';
   if (dataStore.schemaVersion === 'IFC4X3') return 'IFC4X3';
   if (dataStore.schemaVersion === 'IFC4') return 'IFC4';
   if (dataStore.schemaVersion === 'IFC5') return 'IFC5';
   return 'IFC2X3';
-}
-
-export function convertIfcxMeshes(rawMeshes: RawIfcxMesh[]): MeshData[] {
-  return rawMeshes.map((mesh) => {
-    const positions = mesh.positions instanceof Float32Array ? mesh.positions : new Float32Array(mesh.positions || []);
-    const indices = mesh.indices instanceof Uint32Array ? mesh.indices : new Uint32Array(mesh.indices || []);
-    const normals = mesh.normals instanceof Float32Array ? mesh.normals : new Float32Array(mesh.normals || []);
-
-    return {
-      expressId: mesh.expressId ?? mesh.express_id ?? mesh.id ?? 0,
-      positions,
-      indices,
-      normals,
-      uvs: mesh.uvs,
-      texture: mesh.texture,
-      color: normalizeColor(mesh.color),
-      ifcType: mesh.ifcType ?? mesh.ifc_type ?? 'IfcProduct',
-    };
-  }).filter((mesh) => mesh.positions.length > 0 && mesh.indices.length > 0);
 }
 
 export function createMinimalGlbDataStore(buffer: ArrayBuffer, meshCount: number): IfcDataStore {
@@ -110,94 +80,6 @@ export function getMaxExpressId(
   }
   const maxExpressIdFromPoints = pointClouds.reduce((max, asset) => Math.max(max, asset.expressId), 0);
   return Math.max(maxExpressIdFromMeshes, maxExpressIdFromEntities, maxExpressIdFromPoints);
-}
-
-/**
- * The slice of an IFCX parse result the data store is built from. `spatialHierarchy`
- * is only carried into the store (never read here), so it is optional — which keeps
- * the regression test from having to fabricate a full hierarchy.
- */
-type IfcxParse = Awaited<ReturnType<typeof parseIfcx>>;
-type IfcxStoreInput = Pick<
-  IfcxParse,
-  'fileSize' | 'entityCount' | 'parseTime' | 'strings' | 'entities' | 'properties' | 'quantities' | 'relationships' | 'georeferencing'
-> & { spatialHierarchy?: IfcxParse['spatialHierarchy'] };
-
-/**
- * Build the `IfcDataStore` for an IFCX import. Exported for regression coverage of
- * the selection-time accessor path (see viewerModelIngest.test.ts).
- *
- * IFCX carries real data tables, so unlike the GLB path we can't route through
- * `createSyntheticDataStore` (it builds empty tables) — we attach the accessors to
- * the populated store instead. Without this, selecting an entity in an IFCX-imported
- * model threw "this.store.getQuantities is not a function".
- *
- * `attachDataStoreAccessors` then wires `getEntity`/`getEntitiesByType` through the
- * STEP `BufferEntitySource`, which cannot read an IFCX store (the source is IFCX JSON
- * and the byte index is empty) and would return null/[] for every entity. We override
- * both to serve the `IfcEntity` contract from the populated IFCX entity table. (Raw
- * STEP attribute lists don't exist for IFCX, so `attributes` is empty — identity rides
- * `type`, and name/GlobalId come from the entity table via the store's other accessors.)
- */
-export function buildIfcxDataStore(ifcxResult: IfcxStoreInput, buffer: ArrayBuffer): IfcDataStore {
-  // Annotated deliberately. The object literal below ends in `as unknown as
-  // IfcStoreData` (the IFCX tables do not have the STEP shape), and that cast
-  // silences every field inside it -- including this one. When `source` became
-  // an accessor (#2183) this producer kept handing over a bare Uint8Array and
-  // the whole-monorepo typecheck stayed green, so every IFCX model reached
-  // consumers calling `.materialize()` on a plain array. The annotation puts a
-  // compiler gate back on the one field the cast must not be allowed to cover.
-  const source: IfcSourceBytes = contiguousSourceBytes(new Uint8Array(buffer));
-  const dataStore = attachDataStoreAccessors({
-    fileSize: ifcxResult.fileSize,
-    schemaVersion: 'IFC5' as const,
-    entityCount: ifcxResult.entityCount,
-    parseTime: ifcxResult.parseTime,
-    source,
-    entityIndex: { byId: new Map(), byType: new Map() },
-    strings: ifcxResult.strings,
-    entities: ifcxResult.entities,
-    properties: ifcxResult.properties,
-    quantities: ifcxResult.quantities,
-    relationships: ifcxResult.relationships,
-    spatialHierarchy: ifcxResult.spatialHierarchy,
-    georeferencing: ifcxResult.georeferencing ? {
-      hasGeoreference: true, source: 'mapConversion',
-      projectedCRS: { id: 0, name: ifcxResult.georeferencing.IfcProjectedCRS.Name, mapUnit: 'METRE', mapUnitScale: 1 },
-      mapConversion: { id: 0, sourceCRS: 0, targetCRS: 0,
-        eastings: ifcxResult.georeferencing.IfcMapConversion.Eastings,
-        northings: ifcxResult.georeferencing.IfcMapConversion.Northings,
-        orthogonalHeight: ifcxResult.georeferencing.IfcMapConversion.OrthogonalHeight,
-        xAxisAbscissa: ifcxResult.georeferencing.IfcMapConversion.XAxisAbscissa,
-        xAxisOrdinate: ifcxResult.georeferencing.IfcMapConversion.XAxisOrdinate,
-        scale: ifcxResult.georeferencing.IfcMapConversion.Scale,
-      },
-    } : undefined,
-  } as unknown as IfcStoreData);
-
-  const entityTable = ifcxResult.entities;
-  const idsByType = new Map<string, number[]>();
-  const knownIds = new Set<number>();
-  for (const id of entityTable.expressId) {
-    if (!id) continue;
-    knownIds.add(id);
-    const key = entityTable.getTypeName(id).toUpperCase();
-    const bucket = idsByType.get(key);
-    if (bucket) bucket.push(id);
-    else idsByType.set(key, [id]);
-  }
-  dataStore.getEntity = (expressId) =>
-    knownIds.has(expressId)
-      ? { expressId, type: entityTable.getTypeName(expressId), attributes: [] }
-      : null;
-  dataStore.getEntitiesByType = (typeName) =>
-    (idsByType.get(typeName.toUpperCase()) ?? []).map((expressId) => ({
-      expressId,
-      type: entityTable.getTypeName(expressId),
-      attributes: [],
-    }));
-
-  return dataStore;
 }
 
 export async function parseIfcxViewerModel(

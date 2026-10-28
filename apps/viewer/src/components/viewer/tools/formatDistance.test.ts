@@ -146,3 +146,24 @@ describe('formatSplitHoverLabel', () => {
     );
   });
 });
+
+// #269: the labels that land on a drawing are written in the language.
+describe('formatDistance with a locale', () => {
+  it('writes the auto-scaled metric in the locale\'s separators', () => {
+    assert.strictEqual(formatDistance(3, {}, 'ro'), '3,000 m');
+    assert.strictEqual(formatDistance(3, {}, 'en'), '3.000 m');
+    assert.strictEqual(formatDistance(0.25, {}, 'ro'), '25,0 cm');
+    assert.strictEqual(formatDistance(0.00125, {}, 'ro'), '1,3 mm');
+    assert.strictEqual(formatDistance(1500, {}, 'ro'), '1,50 km');
+  });
+
+  it('still applies a unit override, in the locale\'s separators', () => {
+    assert.strictEqual(formatDistance(1, { LENGTHUNIT: 'ft' }, 'ro'), '3,2808 ft');
+    assert.strictEqual(formatDistance(1, { LENGTHUNIT: 'ft' }, 'en'), '3.2808 ft');
+    assert.strictEqual(formatDistance(0.25, { LENGTHUNIT: 'ft' }, 'ro'), '0,8202 ft');
+  });
+
+  it('is unchanged without a locale', () => {
+    assert.strictEqual(formatDistance(3, {}, undefined), '3.000 m');
+  });
+});

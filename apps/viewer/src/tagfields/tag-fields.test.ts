@@ -63,8 +63,8 @@ describe('tag field sources', () => {
   it('show in a label as the Mark and TagName placeholders, with the template fallback after them', () => {
     const config: TagFieldConfig = { door: { mark: [pset('Pset_DoorCommon', 'Blank')] } };
     const el = { ...door(), tagFields: config };
-    assert.equal(resolveTemplate(parseTemplate('{Mark ?? Name}'), el), 'Door 1');
-    assert.equal(resolveTemplate(parseTemplate('{Mark ?? Name}'), { ...door(), tagFields: { door: { mark: [pset('Office', 'Nr')] } } }), 'ș ț ă î â');
+    assert.equal(resolveTemplate(parseTemplate('{Mark ?? Name}'), el, 'en'), 'Door 1');
+    assert.equal(resolveTemplate(parseTemplate('{Mark ?? Name}'), { ...door(), tagFields: { door: { mark: [pset('Office', 'Nr')] } } }, 'en'), 'ș ț ă î â');
   });
 
   it('keep what was set, the default list too, remove on null, and an empty list is an answer', () => {

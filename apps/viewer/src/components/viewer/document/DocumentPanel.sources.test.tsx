@@ -164,6 +164,6 @@ describe('Document field source and page-break UI (#6485)', () => {
     assert.ok(values.includes(path));
     await choose(picker, path);
     await settle();
-    assert.equal(ui.querySelector('[data-preview-block="text"] [data-block-text]')?.textContent, '7.00 m');
+    assert.equal(ui.querySelector('[data-preview-block="text"] [data-block-text]')?.textContent, '+7.00 m');
   });
 });

@@ -121,7 +121,8 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | bSDD | `bsdd_search`, `bsdd_class`, `bsdd_property_sets`, `bsdd_match` |
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
-| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_export_pdf` |
+| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
+| Quantity takeoff | `ifcsheet_rooms`, `ifcsheet_materials`, `ifcsheet_boq`, `ifcsheet_list`, `ifcsheet_classify` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
 `join_walls` joins two straight walls in the same placement frame through the
@@ -194,18 +195,82 @@ Pre-baked prompts ship the BIM expertise:
 `compare_versions`, `space_program_check`, `clash_review`,
 `prop_quality_pass`, `migrate_to_ifcx`, `visual_audit`,
 `interactive_property_inspect`, `visualize_query`.
+The drawing-set prompts are `prepare_permit_set`, `update_set_for_new_model`
+and `check_readiness_and_fix` (see Drawing sets below).
 
 ## Drawing sets (IfcSheet)
 
-Three tools lay out and print the starting drawing set of a model, on the
-`@bimvoice/ifcsheet` engine (issue #165, first slice). They keep their own
-handles and do not need `model_load`.
+These tools lay out, edit and print the drawing set of a model, on the
+`@bimvoice/ifcsheet` engine (issue #165). They keep their own handles and do
+not need `model_load`. A set is held by the session as the engine's project
+document: `ifcsheet_generate_set`, `ifcsheet_apply_template` and
+`ifcsheet_load_project` each make one (a `document_id`), and the editing tools
+replace it, so the PDF, DXF and issue always draw the latest edit. Lengths are
+metres in the viewer frame (X east, Y up, Z south), paper sizes millimetres, a
+scale is its denominator (100 is 1:100). The tools write only to paths the
+caller gives, inside `--allow`, and never to the model that was opened or to an
+`.ifc` file, except the annotated copy that `ifcsheet_issue_set` writes as a new
+file when `annotated_ifc` is true.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `ifcsheet_open_model` | `file_path` or `ifc_base64` (exactly one), optional `name` | `model_id`, project name, storeys with elevations, element and mesh counts |
+| `ifcsheet_open_model` | `file_path` or `ifc_base64` (exactly one), optional `name` | `model_id`, project name, storeys with elevations, element and mesh counts, the building's `extent` |
 | `ifcsheet_generate_set` | `model_id`, optional `name` | `document_id`, the sheets (number, name, paper, viewports), the views (kind, level) and the full project document as JSON |
 | `ifcsheet_export_pdf` | `document_id`, optional `file_path` | page count, sheet numbers, byte size and the written `file_path`; without `file_path` the PDF as `pdf_base64` |
+| `ifcsheet_apply_template` | `model_id`, `template_path` or `template_json` (a `.bvset`), optional `name`, `dry_run` | a new `document_id`, the sheets and the notes of what the rules met; as `ifcsheet build --template` |
+| `ifcsheet_list_sheets` | `document_id` | per sheet: id, number, name, paper, the views on it (slot, kind, scale); the views not placed; the title block fields |
+| `ifcsheet_add_view` | `document_id`, `kind` (`plan` with `level`, `elevation` with `direction`, `section` by `axis` and `offset_m` or by a line `from`/`to`, `axonometric` with `preset`, optionally cut away by `cut_level` and `cut_height_m` or a box), optional `dry_run` | the new view; it is not on a sheet yet |
+| `ifcsheet_place_view` | `document_id`, `view`, optional `sheet`, `scale`, `slot`, `dry_run` | the sheet it is on; without `sheet` the engine's rule picks or makes one; errors when the views do not fit at the scale |
+| `ifcsheet_set_title_block` | `document_id`, `fields` (client, drawnBy, project, date, phase, projectNumber...), optional `sheet`, `dry_run` | the fields in force and the ones that changed; project-wide, or one sheet's own |
+| `ifcsheet_renumber` | `document_id`, optional `preset` (`default`, `sequential`), `discipline`, `overrides`, `dry_run` | the old to new numbers |
+| `ifcsheet_add_schedule` | `document_id`, `kind` (`rooms`; `boq` with `project_path`/`project_json`; or `list` with `list`, a Lists-engine definition: filter, columns, groupBy, sum, totals), optional `paper`, `locale`, `dry_run` | a schedule sheet (A-601...); the rows come from the model each time the set is drawn; for rooms `total_row`, the building total (Au); a `list` gives the rows and totals the app's Lists panel gives for that definition |
+| `ifcsheet_export_dxf` | `document_id`, `directory`, optional `sheet` | a DXF per sheet, named like `ifcsheet build --dxf` |
+| `ifcsheet_issue_set` | `document_id`, `directory`, optional `handover`, `pattern`, `annotated_ifc` | the PDF, a DXF per sheet, `register.csv`, the schedules as CSV and, with `handover`, `handover.zip` (with the IFC as opened); with `annotated_ifc` also `<model>.annotated.ifc`, which carries no annotations in this build (see below) |
+| `ifcsheet_save_project` | `document_id`, `file_path` (`.json`) | writes `.ifclite-project.json`; what a loaded file held besides the set is written back unchanged |
+| `ifcsheet_undo` | `document_id` | the set as it was before its last edit (add_view, place_view, set_title_block, add_schedule, renumber); `changed`, `undo_steps`, `redo_steps` |
+| `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
+| `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
+| `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
+| `ifcsheet_rooms` | `model_id` or `document_id`, optional `project_path`/`project_json`, `locale` | the room and area schedule of `ifcsheet rooms`: levels, rooms (number, name, `area` m² or null, `perimeter`, `source`), totals, plus `text` and `csv`; the project's "Units and numbers" formats `text` only |
+| `ifcsheet_materials` | `model_id` or `document_id`, optional `project_path`/`project_json` | the materials and how each draws, as `ifcsheet materials --json`, plus `text` |
+| `ifcsheet_boq` | `model_id` or `document_id`, `project_path` or `project_json`, optional `detail`, `locale` | the bill of quantities of `ifcsheet boq`: per article `total` (null when no element has the quantity, never 0), `matched`, `counted`, the `missing` elements, `refused`, `byType`; plus `text` and `csv` |
+| `ifcsheet_list` | `model_id` or `document_id`, `project_path` or `project_json`, optional `schedule`, `locale` | a Lists-engine schedule as `ifcsheet list --json` (`header`, `rows`, `totals`; a missing value is null), plus `text` and `csv` |
+| `ifcsheet_classify` | `model_id` or `document_id`, `project_path` or `project_json`, optional `system` | the types with their classification code and where it came from, as `ifcsheet classify --json`, plus `text` and `csv` |
+
+`dry_run: true` on `ifcsheet_add_view`, `ifcsheet_place_view`,
+`ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template`
+and `ifcsheet_renumber` runs the same code as the real call and reports the
+same result, but nothing in the session changes (a dry run of
+`ifcsheet_apply_template` makes no `document_id`). Ids a dry run reports are
+not kept. `ifcsheet_undo` takes back the last edit of a set (`{ "document_id": "sheetset-1" }`), also after several, and `ifcsheet_redo` re-applies it; a dry run is not an edit, a new edit after an undo clears redo, and the last 50 edits are kept. With nothing to undo the result says so (`changed: false`) and is not an error.
+
+Limits, as the tools state them: the engine's DXF holds lines and no text; the
+plain title block of the PDF prints the project, sheet number and name, scale
+and date, and the other title block fields (phase, project number, roles,
+address) are kept in the project for the app's title block layouts; a schedule
+sheet draws as many rows as fit its paper (`rows_left_off`), and the issue's CSV
+has all of them. `annotated_ifc` runs the engine's annotated-IFC export over the
+IFC as opened. The annotations of a set are drafts (dimensions, tags, notes),
+which belong to the app and which these tools do not hold, so the copy has no
+annotations written into it and the result says so (`annotated_ifc.note`,
+`drafts_not_written`).
+
+### Resources and prompts
+
+| Resource | Content |
+| --- | --- |
+| `ifcsheet://project/schema` | The JSON Schema (draft 2020-12) of the project document. Its enumerations and bounds are read from the engine when it is served, and a test holds its properties to the engine's TypeScript types. It cannot say that a viewport's `viewId` names a view of the file; `ifcsheet_load_project` checks that. |
+| `ifcsheet://session/project` | The project document of the set the session made or loaded last, as `ifcsheet_save_project` would write it. Read-only; listed once the session holds a set. |
+| `ifcsheet://session/sheets` | The sheets of that set, as `ifcsheet_list_sheets` returns them. Read-only. |
+
+| Prompt | Arguments | Steps |
+| --- | --- | --- |
+| `prepare_permit_set` | `model_path`, `output_dir`; optional `template_path`, `phase` (default DTAC), `project_number`, `address`, `project_manager`, `designer`, `drawn_by`, `checked_by`, `client`, `date`, `au_reference` | open, readiness, lay out (template or default), title block (dry run first), room schedule and the Au total, sheets, readiness again, save, issue with handover |
+| `update_set_for_new_model` | `model_path`, `project_path`, `output_dir`; optional `handover` | open the new model, load the saved project, find storeys without a plan and add them, readiness, save, issue |
+| `check_readiness_and_fix` | optional `model_path` or `model_id`, `project_path` | readiness, each finding explained, what only the model's author can fix |
+
+The prompts say only what the tools return and make no claim about what a permit
+authority requires.
 
 Add the server to Claude Desktop (`claude_desktop_config.json`) or Cursor with
 `--allow` for the folders it may read and write, and to Claude Code with one
@@ -235,6 +300,59 @@ An example conversation:
 > `pages: 4`.
 >
 > **Claude:** Done: a four-page set is at `/path/to/project/fzk-set.pdf`.
+
+### Examples
+
+A permit set (the `prepare_permit_set` prompt runs this order for you; the
+figures are those of AC20-FZK-Haus):
+
+```text
+ifcsheet_open_model      {"file_path": "/work/AC20-FZK-Haus.ifc"}
+                         -> model_id "sheetmodel-1", storeys Erdgeschoss (0) and Dachgeschoss (2.7)
+ifcsheet_check_readiness {"model_id": "sheetmodel-1"}
+                         -> ready false; noMaterials: 4 of 82 elements have no material
+ifcsheet_generate_set    {"model_id": "sheetmodel-1"}
+                         -> document_id "sheetset-1": A-101, A-201, A-202, A-301; 9 views
+ifcsheet_set_title_block {"document_id": "sheetset-1", "fields": {"phase": "DTAC", "projectNumber": "42/2026"}, "dry_run": true}
+                         -> "Dry run, nothing changed. Would set phase, projectNumber for the project."
+ifcsheet_set_title_block {"document_id": "sheetset-1", "fields": {"phase": "DTAC", "projectNumber": "42/2026"}}
+ifcsheet_add_schedule    {"document_id": "sheetset-1", "kind": "rooms", "locale": "ro"}
+                         -> sheet A-601; total_row is the building total (Au)
+ifcsheet_save_project    {"document_id": "sheetset-1", "file_path": "/work/issue/fzk.ifclite-project.json"}
+ifcsheet_issue_set       {"document_id": "sheetset-1", "directory": "/work/issue", "handover": true}
+                         -> PDF, dxf/A-101.dxf ... A-601.dxf, register.csv, schedules/A-601.csv, handover.zip
+```
+
+Quantity takeoff on an opened model (read-only). Each tool returns what the command of the same name prints with
+`--json`, numbers as numbers, plus `text` and `csv`:
+
+```text
+ifcsheet_rooms    {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json"}
+                  -> levels, rooms with area (m2) and perimeter (m), total; text in the project's number format
+ifcsheet_boq      {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json"}
+                  -> articles: total in the article's unit, or null with the elements that lack the quantity
+ifcsheet_list     {"model_id": "sheetmodel-1", "project_path": "/work/fzk.ifclite-project.json", "schedule": "walls"}
+                  -> header, rows, totals
+```
+
+A new version of the model: `ifcsheet_open_model` on the new file, then
+`ifcsheet_load_project` `{"model_id": ..., "project_path": "/work/issue/fzk.ifclite-project.json"}`,
+`ifcsheet_list_sheets` to see which storeys have no plan, `ifcsheet_add_view`
+and `ifcsheet_place_view` for those, and `ifcsheet_issue_set`.
+
+An agent can also read `ifcsheet://project/schema` before it writes a project
+file by hand, and `ifcsheet://session/project` to see the set the tools hold.
+`llms.txt` in this package is the short version of this section for agents.
+
+## Hosted endpoint (opt-in)
+
+The web app can serve the drawing-set tools over Streamable HTTP at `/mcp`. It is OFF unless the deployment sets the environment variable `IFCSHEET_HOSTED_MCP=1`; without it the endpoint answers 404 and nothing else changes.
+
+- POST only, JSON in and JSON out (a single message or a batch). No server-side sessions, no resources, no prompts, no server-initiated stream: every request starts from nothing unless it carries a session token (below), and a batch (at most 20 messages) shares one state and runs its messages one after the other, in order, so `ifcsheet_open_model` then a tool taking its `model_id` works inside one batch: the ids are sequential within a request (`sheetmodel-1`, `sheetmodel-2`, ...), so the first model a batch opens is `sheetmodel-1`. Across requests only a session token carries a project over. A body that is not a JSON-RPC 2.0 message is answered with -32600 (Invalid Request), invalid JSON with -32700.
+- Only the `ifcsheet_*` tools. The server has no file system for you: every file path (`file_path`, `*_path`, `directory`) is refused with PERMISSION_DENIED. Send the model as `ifc_base64`, a template or project as `template_json` or `project_json`, and read results from the response (`ifcsheet_export_pdf` without `file_path` returns `pdf_base64`). `ifcsheet_generate_set` takes `ifc_base64` directly, so one call turns a model into a set.
+- Nothing is saved on the server: edits are returned in the response, never stored.
+- Sessions (opt-in, client-held). The server keeps nothing between requests, because serverless instances do not share memory. Set `IFCSHEET_HOSTED_MCP_SECRET` (32 characters or more) and every tool takes an optional `session_token` and returns a fresh one in `structuredContent.session_token`: the project built so far (the sets and their schedules, gzip, base64url) and a SHA-256 reference to each model, signed with HMAC-SHA-256 and valid for an hour from the call that issued it (`session_expires_at`). Send it back on the next call. A model is too big to carry, so a call that names a `model_id` or `document_id` also sends the same file as `ifc_base64`; the server checks it against the hash in the token and parses it again unless this instance already holds it (a cache of 2 models / about 200 MB, least recently used out first). A changed, foreign or expired token, a missing model and different bytes are each answered with an error result saying what to do. One request carries one session (a batch must send the same token), a session names at most 8 models, a token is at most 1 MiB, and undo history is not carried. A token is a bearer value: anyone holding it can replay that project state until it expires. It holds no path and grants no file access, and nothing of a token or a model is logged. Without the secret the endpoint stays stateless and the tools take no `session_token`.
+- Limits: a model of at most 25 MB (larger is refused with an error result), a request body to match, and 50 seconds per request (stopped with HTTP 504 and a JSON-RPC error). The 50 s limit is checked between messages and answered when it passes, but it cannot interrupt a synchronous parse or layout already running: such a call runs to its end (the platform's own function limit is then the stop). The hosting platform may set a smaller body limit than 25 MB (Vercel: 4.5 MB), which then applies first.
 
 ## Programmatic embedding
 

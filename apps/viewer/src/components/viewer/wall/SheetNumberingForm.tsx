@@ -14,13 +14,14 @@ import { NUMBER_GROUPS, numberAt, SCHEME_PRESETS, type OverrideMode } from '@/pr
 import { numberingScheme, useProjectStore } from '@/project/project-store';
 import { issuedAmong, previewRenumber, renumberAll, setSchemeForNewSheets } from '@/project/sheet-renumber';
 import type { GroupPattern, NumberGroup, NumberingScheme } from '@/project/types';
+import { WALL_FIELD, WALL_PILL } from './wall-type';
 
 const GROUP_LABELS: Record<NumberGroup, TranslationKey> = {
   general: 'site.viewName', plans: 'wall.group.plans', elevations: 'wall.group.elevations', sections: 'wall.group.sections', interiors: 'wall.group.interiors', details: 'wall.group.drafting', schedules: 'wall.group.schedules', other: 'wall.group.other',
 };
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-sm text-white';
-const quiet = 'rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70 disabled:opacity-40';
+const field = WALL_FIELD;
+const quiet = `${WALL_PILL} disabled:opacity-40`;
 
 /** `scheme` with `patch` applied to every group's pattern. */
 function withAll(scheme: NumberingScheme, patch: Partial<GroupPattern>): NumberingScheme {

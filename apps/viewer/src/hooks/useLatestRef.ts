@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useRef, useEffect, type MutableRefObject } from 'react';
+import { useRef, type MutableRefObject } from 'react';
 
 /**
  * Keep a ref in sync with a value on every render.

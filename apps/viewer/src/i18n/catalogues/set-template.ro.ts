@@ -1,0 +1,42 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import { SET_TEMPLATE_RO } from '@bimvoice/ifcsheet';
+import type { TranslationKey } from '../en';
+import type { TranslationValue } from '../types';
+
+/** Romanian for `set-template.en.ts` (#21). The notes are the engine's own Romanian (`SET_TEMPLATE_RO`), so the command line and the app say the same. Term choices: `../ro-glossary.md`. The command names (TAGALL, DIMALL, LEVELALL) stay as typed. */
+export const setTemplateRo = {
+  ...SET_TEMPLATE_RO,
+  'setTemplate.dir.south': 'sud',
+  'setTemplate.dir.north': 'nord',
+  'setTemplate.dir.east': 'est',
+  'setTemplate.dir.west': 'vest',
+  'setTemplate.what.titleBlockTemplate': 'aspectul cartușului',
+  'setTemplate.what.titleBlockParams': 'parametrii cartușului',
+  'setTemplate.what.tagFields': 'câmpurile etichetelor',
+  'wall.setTemplate.save': 'Salvați ca șablon de set',
+  'wall.setTemplate.saveHint': 'Păstrează cum este făcut acest set, nu desenele: un plan pe nivel, fațadele și secțiunile, hârtia și scara fiecărei planșe, numerotarea, tabelele. Aplicat pe alt model, același set apare pentru clădirea aceea.',
+  'wall.setTemplate.name': 'Numele șablonului',
+  'wall.setTemplate.summary': 'Planșe: {sheets}. Desene găsite după regulă: {slots}. Tabele: {schedules}.',
+  'wall.setTemplate.annotations': 'Comenzi de adnotare pe aceste vederi: {commands}.',
+  'wall.setTemplate.nothing': 'Nicio vedere în plan, nicio fațadă și nicio secțiune nu este pe o planșă a acestui proiect, deci nu sunt reguli de salvat.',
+  'wall.setTemplate.download': 'Salvați {file}',
+  'wall.setTemplate.keep': 'Păstrați în acest browser',
+  'wall.setTemplate.saved': 'S-a salvat {file}.',
+  'wall.setTemplate.kept': 'S-a păstrat în acest browser ca {name}.',
+  'wall.setTemplate.new': 'Proiect nou dintr-un șablon de set',
+  'wall.setTemplate.pickFile': 'Alegeți un fișier de șablon de set…',
+  'wall.setTemplate.keptTitle': 'Păstrate în acest browser',
+  'wall.setTemplate.use': 'Folosiți {name}',
+  'wall.setTemplate.forget': 'Uitați {name}',
+  'wall.setTemplate.armed': 'Șablonul {name} este pregătit. Alegeți modelul: setul lui se face după regulile șablonului.',
+  'wall.setTemplate.chooseModel': 'Alegeți modelul (.ifc)…',
+  'wall.setTemplate.disarm': 'Nu folosiți șablonul',
+  'wall.setTemplate.refused': 'Fișierul nu poate fi folosit ca șablon de set: {detail}',
+  'wall.setTemplate.report.title': 'Făcut după șablonul {name}',
+  'wall.setTemplate.report.allMet': 'Fiecare regulă a șablonului și-a găsit desenul în acest model.',
+  'wall.setTemplate.report.annotating': 'Comenzile înregistrate în șablon (TAGALL, DIMALL, LEVELALL) rulează pe setul nou.',
+  'wall.setTemplate.report.annotated': 'Comenzile înregistrate în șablon au rulat pe setul nou: {added} adăugate pe {views} vederi; vederi omise: {skipped}.',
+} as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

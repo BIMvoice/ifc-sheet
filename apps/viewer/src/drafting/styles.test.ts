@@ -36,9 +36,9 @@ describe('styles and overrides', () => {
   });
 
   it('formats in the style\'s unit and precision', () => {
-    assert.equal(formatDimension(3.2456, { unit: 'm', precision: 2 }), '3.25');
-    assert.equal(formatDimension(3.2456, { unit: 'mm', precision: 0 }), '3246');
-    assert.equal(formatDimension(3.2456, { unit: 'cm', precision: 1 }), '324.6');
+    assert.equal(formatDimension('en', 3.2456, { unit: 'm', precision: 2 }), '3.25');
+    assert.equal(formatDimension('en', 3.2456, { unit: 'mm', precision: 0 }), '3246');
+    assert.equal(formatDimension('en', 3.2456, { unit: 'cm', precision: 1 }), '324.6');
   });
 });
 

@@ -18,7 +18,8 @@ import { WallIntro } from '@/components/viewer/wall/WallIntro';
 import { CutHeightControl } from '@/components/viewer/wall/ViewControls';
 import { useWallNav } from '@/components/viewer/wall/wall-nav';
 import { DxfR2000 } from '@/components/viewer/sheets/dxf-r2000';
-import { layoutMaterialTakeoff, takeoffCsv } from '@/joinery/material-takeoff-layout';
+import { layoutMaterialTakeoff, takeoffTable } from '@/joinery/material-takeoff-layout';
+import { tableCsv } from '@/joinery/export-test-util';
 import { checkCatalogue } from './catalogue-problems';
 import { chooseLocale, provideLocaleActivator } from './locale-service';
 import { LOCALE_STORAGE_KEY, activateStartupLocale, createLocaleActivator } from './locale-activation';
@@ -45,7 +46,7 @@ const texts = (ui: HTMLElement, selector: string) => [...ui.querySelectorAll(sel
 
 beforeEach(() => {
   resetProject();
-  useWallNav.setState({ stepped: null, focus: null, visit: 0, drawer: true });
+  useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: 'drawer' });
   useProjectStore.setState({ levels: LEVELS, views: defaultViews(LEVELS) });
   startDrawingSet(null, HOUSE);
   registerLocale('ro', checkCatalogue(ro).catalogue);
@@ -105,11 +106,11 @@ describe('Figures follow the locale on screen, never in an export', () => {
 
   it('writes the takeoff table in the locale and its CSV and a DXF coordinate the same in every locale', () => {
     const rows = [{ material: 'Beton', elements: 3, volume: 12.5, area: 1234.5, classes: ['IfcWall'] }];
-    const labels = { title: 'T', material: 'M', elements: 'E', volume: 'V', area: 'A', usedIn: 'U', total: 'Tot' };
-    const cells = (l: typeof labels & { number?: (v: number, d: number) => string }) => layoutMaterialTakeoff(rows, l).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
-    assert.ok(cells(labels).includes('1234.50'));
-    assert.ok(cells({ ...labels, number: (v, d) => formatLocaleFixed('ro', v, d) }).includes('1.234,50'));
-    assert.match(takeoffCsv(rows, labels), /,1234\.5,/);
+    const labels = { locale: 'en', title: 'T', material: 'M', elements: 'E', volume: 'V', area: 'A', usedIn: 'U', total: 'Tot' };
+    const cells = (l: typeof labels) => layoutMaterialTakeoff(rows, l).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+    assert.ok(cells(labels).includes('1,234.50'));
+    assert.ok(cells({ ...labels, locale: 'ro' }).includes('1.234,50'));
+    assert.match(tableCsv(takeoffTable(rows, labels)), /,1234\.5,/);
 
     const dxf = (locale: string) => {
       act(() => setLocale(locale));

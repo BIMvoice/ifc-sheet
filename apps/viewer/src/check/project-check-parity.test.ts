@@ -1,0 +1,177 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * #260: `ifcsheet check --project` and the app say the same thing about the same project and model. The app reads
+ * the project file with its own reader (`parseProjectFile`) and builds the schedule rows from its live store
+ * (`scheduleData`); the engine reads the same text with `readProjectFile` and builds them with `joineryScheduleData`.
+ * Both are run over one project that has a catalogue, a symbol mapping (by dimension, by alias, a per-type choice, a per-element "no symbol")
+ * and three overlapping or incomplete parts, and must agree on the project read, the rows and the findings.
+ */
+import '@/test/setup-dom.js';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, TITLE_BLOCK_CAPTIONS_RO, describeReadiness, romanianTitleBlock, standardTitleBlock } from '@bimvoice/ifcsheet';
+import { joineryScheduleData, readProjectFile, readinessWithProject } from '@bimvoice/ifcsheet/headless';
+import { readinessOfModel } from '@bimvoice/ifcsheet/readiness-read';
+import { PROJECT_MIGRATIONS } from '@/project/project-migrations';
+import { parseProjectFile } from '@/project/project-file';
+import { loadProjectDocument, resetProject, useProjectStore } from '@/project/project-store';
+import { useViewerStore } from '@/store';
+import { parseStep } from '@/test/properties-panel-harness.js';
+import { scheduleData } from '@/joinery/schedule-data';
+import { subReportChecks } from './sub-report-check';
+import { sheetTitleBlockMisfits } from './title-block-fit';
+import { effectiveTitleBlock } from '@/project/title-block-model';
+
+let ifcDataStore: Awaited<ReturnType<typeof parseStep>>;
+
+beforeEach(async () => {
+  resetProject();
+  ifcDataStore ??= await parseStep(new Uint8Array(readFileSync(new URL('../../public/samples/bloc-p4.ifc', import.meta.url))));
+  useViewerStore.setState({ models: new Map([['m', { ifcDataStore, name: 'bloc-p4.ifc' }]]) } as never);
+});
+afterEach(() => {
+  useViewerStore.setState({ models: new Map() } as never);
+});
+
+const door = (id: string, name: string, mark: string, width: number, height: number) => ({ id, kind: 'door', name, mark, width, height });
+
+function projectText(mapping: Record<string, unknown>, content?: unknown): string {
+  const schedule = (id: string, name: string, sub?: unknown) => ({ id, name, kind: 'all', createdAt: 1, scale: 50, ...(sub ? { sub } : {}), ...(content && !sub ? { content } : {}) });
+  return JSON.stringify({
+    format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'Bloc P4',
+    // The catalogue: 800x2100 and 900x2100 doors. The mapping decides which element takes which (the file's doors are all named "Door").
+    joineryTypes: [door('d800', 'Flat door', 'T1', 0.8, 2.1), door('d900', 'Bathroom door', 'T2', 0.9, 2.1)],
+    joineryMapping: { byName: true, byDimensions: true, tolerance: 0.02, aliases: {}, types: {}, elements: {}, ...mapping },
+    schedules: [
+      schedule('s1', 'Joinery'),
+      schedule('s2', 'Doors', { parent: 's1', filter: { kinds: ['door'], types: ['d800'] } }),
+      schedule('s3', 'Windows', { parent: 's1', filter: { kinds: ['window'], levels: ['Parter', 'Etaj 1'] } }),
+      schedule('s4', 'Pick', { parent: 's1', filter: { types: ['d800', 'untyped:window:750×2250'] } }),
+    ],
+  });
+}
+
+/** The mappings run: by dimension, with one element given another entry and one given none; and by name (an alias that every door matches). */
+const mappings = (gids: string[]) => ({
+  'by dimension, with manual choices': { elements: { [gids[0]]: null, [gids[1]]: 'd900' } },
+  'by name, through an alias': { aliases: { d900: ['Door'] } },
+});
+
+describe('the engine and the app read the same project and build the same rows', () => {
+  for (const name of Object.keys(mappings(['a', 'b']))) {
+    it(`agree on the project read, the schedule rows and the findings: ${name}`, () => {
+      const [first, second] = scheduleData('all').entries.filter((e) => e.kind === 'door').flatMap((e) => e.occurrences.map((o) => o.globalId));
+      const text = projectText(mappings([first, second])[name as keyof ReturnType<typeof mappings>]);
+      const doc = parseProjectFile(text);
+      loadProjectDocument(doc);
+      const project = readProjectFile(text);
+      assert.deepEqual(project.schedules, doc.schedules);
+      assert.deepEqual(project.joineryTypes, doc.joineryTypes);
+      assert.deepEqual(project.joineryMapping, doc.joineryMapping);
+
+      for (const kind of ['all', 'door', 'window'] as const) {
+        const engine = joineryScheduleData([{ modelId: 'm', dataStore: ifcDataStore, view: null }], project, kind);
+        assert.deepEqual(engine, scheduleData(kind), `rows of ${kind}`);
+      }
+      // The mapping did something: the catalogue's types are in the rows.
+      const rows = scheduleData('all').entries;
+      const heldBy = (key: string) => rows.find((e) => e.key === key)?.occurrences.map((o) => o.globalId) ?? [];
+      if (name.startsWith('by dimension')) {
+        assert.ok(heldBy('d800').length > 0, 'doors mapped by dimension');
+        assert.ok(!heldBy('d800').includes(first) && !heldBy('d900').includes(first), 'an element told it has no symbol');
+        assert.ok(heldBy('d900').includes(second), 'an element given another entry');
+      } else {
+        assert.equal(heldBy('d900').length, 86, 'every door is named Door, so the alias takes them all');
+      }
+
+      const inApp = readinessOfModel({ dataStore: ifcDataStore, storeys: [] }, subReportChecks(useProjectStore.getState().schedules ?? []));
+      const headless = readinessWithProject({ dataStore: ifcDataStore, storeys: [] }, project, 'm');
+      assert.ok(inApp.some((f) => f.kind === 'subReportDuplicates') && inApp.some((f) => f.kind === 'subReportGaps'), 'the project has both problems');
+      assert.deepEqual(headless.map((f) => [f.kind, f.params, describeReadiness(f)]), inApp.map((f) => [f.kind, f.params, describeReadiness(f)]));
+    });
+  }
+
+  it('agree on a schedule with a content choice: the rows sorted and numbered, and the marks the findings name', () => {
+    const [first, second] = scheduleData('all').entries.filter((e) => e.kind === 'door').flatMap((e) => e.occurrences.map((o) => o.globalId));
+    const content = { sort: { by: 'count', descending: true }, numbering: { marks: 'sequence', typeStart: 40, elementStart: 5 }, rows: { hidden: ['u'] } };
+    const text = projectText({ elements: { [first]: null, [second]: 'd900' } }, content);
+    const doc = parseProjectFile(text);
+    loadProjectDocument(doc);
+    const project = readProjectFile(text);
+    assert.deepEqual(project.schedules, doc.schedules);
+    assert.deepEqual(project.schedules[0].content, content, 'the choice survives both readers');
+    const chosen = project.schedules[0].content;
+    for (const kind of ['all', 'door', 'window'] as const) {
+      const engine = joineryScheduleData([{ modelId: 'm', dataStore: ifcDataStore, view: null }], project, kind, chosen);
+      assert.deepEqual(engine, scheduleData(kind, chosen), `rows of ${kind}`);
+    }
+    // The choice did something, checked on its own terms: most numerous first, doors marked D40, D41..., windows W40, W41..., elements from 5.
+    const rows = scheduleData('all', chosen).entries;
+    const totals = rows.map((e) => e.total);
+    assert.deepEqual(totals, [...totals].sort((a, b) => b - a));
+    for (const kind of ['door', 'window'] as const) {
+      assert.deepEqual(rows.filter((e) => e.kind === kind).map((e) => e.mark), rows.filter((e) => e.kind === kind).map((_, i) => `${kind === 'door' ? 'D' : 'W'}${40 + i}`));
+    }
+    for (const e of rows) assert.deepEqual(e.occurrences.map((o) => o.number), e.occurrences.map((_, i) => 5 + i));
+
+    // The checks name the marks the schedule prints, in the app and headless alike.
+    const inApp = readinessOfModel({ dataStore: ifcDataStore, storeys: [] }, subReportChecks(useProjectStore.getState().schedules ?? []));
+    const headless = readinessWithProject({ dataStore: ifcDataStore, storeys: [] }, project, 'm');
+    assert.ok(inApp.length > 0);
+    assert.deepEqual(headless.map((f) => [f.kind, f.params, describeReadiness(f)]), inApp.map((f) => [f.kind, f.params, describeReadiness(f)]));
+    const named = inApp.flatMap((f) => describeReadiness(f).missing.match(/\b[DW]\d+/g) ?? []).map((m) => Number(m.slice(1)));
+    assert.ok(named.length > 0 && named.every((n) => n >= 40), `the findings name the schedule's marks: ${named.join(',')}`);
+  });
+
+  it('reads an old project the way the app does: without a version, a sub-report or a catalogue', () => {
+    const text = JSON.stringify({ format: PROJECT_FILE_FORMAT, name: 'Old', schedules: [{ id: 's1', name: 'Joinery', kind: 'door' }, { id: 's2', kind: 'materials', sub: { parent: 's1' } }, 'junk'] });
+    const doc = parseProjectFile(text);
+    const project = readProjectFile(text);
+    assert.deepEqual(project.schedules, doc.schedules);
+    assert.deepEqual(project.joineryTypes, doc.joineryTypes);
+    assert.equal(project.schedules.find((s) => s.id === 's2')?.sub, undefined, 'only a joinery list can be split');
+  });
+});
+
+describe('the title block that does not fit: the app and the command line list the same findings', () => {
+  const LONG = 'S.C. Societatea Comercială de Construcții și Investiții Imobiliare Reunite S.R.L.';
+  const ABSURD = Array.from({ length: 12 }, () => LONG).join(' ');
+  const sheets = [{ id: 'a', number: 'A-101', name: 'Plan parter', createdAt: 1 }, { id: 'b', number: 'A-102', name: 'Plan etaj', createdAt: 2, titleBlock: { client: 'Alfa SRL' } }, { id: 'c', number: 'A-103', name: 'Sectiune', createdAt: 3 }];
+  const ro = romanianTitleBlock((k) => TITLE_BLOCK_CAPTIONS_RO[k]);
+  const fitOf = (findings: ReturnType<typeof readinessWithProject>) => findings.filter((f) => f.kind === 'titleBlockFit').map((f) => [f.kind, f.params, describeReadiness(f)]);
+
+  /** The findings of one project text, in the app (its store and its title block reader) and headless. */
+  function both(extra: Record<string, unknown>) {
+    const text = JSON.stringify({ format: PROJECT_FILE_FORMAT, version: PROJECT_FILE_VERSION, name: 'Bloc P4', sheets, ...extra });
+    loadProjectDocument(parseProjectFile(text));
+    const s = useProjectStore.getState();
+    const misfits = sheetTitleBlockMisfits(s.titleBlockTemplate, s.sheets, { projectFields: effectiveTitleBlock(), projectName: s.name, params: s.titleBlockParams, sheets: s.sheets, schedules: s.schedules, revisions: s.revisions, drafts: s.drafts, views: s.views, asIndicated: 'As indicated' });
+    return {
+      inApp: fitOf(readinessOfModel({ dataStore: ifcDataStore, storeys: [] }, [], undefined, misfits)),
+      headless: fitOf(readinessWithProject({ dataStore: ifcDataStore, storeys: [] }, readProjectFile(text), 'm')),
+    };
+  }
+
+  it('say the same for a beneficiary beyond the smallest size, on each sheet that shows it', () => {
+    const { inApp, headless } = both({ titleBlockTemplate: ro, titleBlock: { client: ABSURD } });
+    assert.deepEqual(inApp.map((f) => (f[1] as { sheet: string }).sheet), ['A-101 Plan parter', 'A-103 Sectiune'], 'the sheet that says a short client itself has none');
+    assert.deepEqual(headless, inApp);
+  });
+
+  it('say nothing for a project whose values fit, or whose layout is the standard one', () => {
+    for (const extra of [{ titleBlockTemplate: ro, titleBlock: { client: LONG } }, { titleBlockTemplate: standardTitleBlock(), titleBlock: { client: ABSURD } }]) {
+      const { inApp, headless } = both(extra);
+      assert.deepEqual([inApp, headless], [[], []]);
+    }
+  });
+});
+
+describe('the headless reader needs no migration the app has', () => {
+  it('has none to carry over: the day PROJECT_MIGRATIONS gets a step, `readProjectFile` must run it too', () => {
+    assert.deepEqual(Object.keys(PROJECT_MIGRATIONS), []);
+  });
+});

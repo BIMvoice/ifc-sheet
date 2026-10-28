@@ -22,7 +22,7 @@ import { placementSourceIdentity } from '@/lib/model-placement/source-identity';
 import { projectDocument } from '../project-store';
 import { modelRef } from '../project-sync';
 import type { ProjectDocument } from '../types';
-import { buildPackage, zipPackage, type ModelInput, type PackageFiles } from './package-io';
+import { buildPackage, zipPackage, zipPackageOffThread, type ModelInput, type PackageFiles } from './package-io';
 import { segment, type PackageManifest, type PackageVersionInfo } from './format';
 
 const APP = { name: 'BIMVoice', version: '4.0.0' };
@@ -56,7 +56,7 @@ async function modelTables(dataStore: IfcDataStore, modelId: string): Promise<Ma
   return new Map(Object.entries(unzipSync(bos)).filter(([name]) => name.endsWith('.parquet')));
 }
 
-export async function packageCurrentProject(projectId: string, options: { versionInfo?: PackageVersionInfo; onProgress?: (label: string) => void; analytics?: boolean } = {}): Promise<PackagedProject> {
+export async function packageCurrentProject(projectId: string, options: { versionInfo?: PackageVersionInfo; onProgress?: (label: string) => void; analytics?: boolean; offMainThread?: boolean } = {}): Promise<PackagedProject> {
   const state = useViewerStore.getState();
   const edited = new Set(collectChangedModels(state).models.map((m) => m.id));
   const doc = projectDocument();
@@ -89,5 +89,5 @@ export async function packageCurrentProject(projectId: string, options: { versio
   // Keep a reference the document had to a model not loaded right now.
   for (const ref of doc.models) if (!renamed.has(ref.key) && !saved.models.some((m) => m.key === ref.key)) saved.models.push(ref);
   const { files, manifest } = await buildPackage({ projectId, doc: saved, models, app: APP, versionInfo: options.versionInfo, extras });
-  return { bytes: zipPackage(files), files, manifest, doc: saved };
+  return { bytes: options.offMainThread ? await zipPackageOffThread(files) : zipPackage(files), files, manifest, doc: saved };
 }

@@ -10,26 +10,11 @@
  * own and are not fields here. The store writes are in `sheets.ts`.
  */
 
+import { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from '@bimvoice/ifcsheet';
 import type { ProjectDocument, ProjectSheet } from './types';
 
-/**
- * The text fields that are typed, in the order the title block prints them. The revision is
- * not one: a sheet's title block reads its latest revision (`currentRevisionOf`).
- */
-export const TITLE_BLOCK_FIELDS = ['project', 'address', 'client', 'organisation', 'drawnBy', 'checkedBy', 'date'] as const;
-export type TitleBlockField = (typeof TITLE_BLOCK_FIELDS)[number];
-
-/** The logo: an image data URL, project-wide only. */
-export const LOGO_FIELD = 'logo';
-/** Larger logos would swell every saved project file. */
-export const LOGO_MAX_BYTES = 512 * 1024;
-
-/** What `sheet` prints: the project's fields, its own on top, the project's name when no project field is set. */
-export function titleBlockOf(sheet: Pick<ProjectSheet, 'titleBlock'>, project: Record<string, string> | undefined, projectName: string): Record<string, string> {
-  const fields = { ...project, ...sheet.titleBlock };
-  if (!fields.project) fields.project = projectName;
-  return fields;
-}
+/** The fields, the logo and what a sheet prints are the engine's (`packages/ifcsheet/src/title-block-fields.ts`): the PDF reads them the same way. */
+export { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField };
 
 /**
  * A project saved before the title block was the project's: every sheet

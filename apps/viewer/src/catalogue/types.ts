@@ -20,7 +20,7 @@ import type { MissingMode } from '@/labels/label-resolve';
 export const ANNOTATION_TOOLS = ['text', 'leader', 'tag', 'label', 'dimaligned', 'dimlinear', 'dimradius', 'dimdiameter', 'dimangular', 'level', 'axis', 'hatch'] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
-export const TAG_FIELDS = ['mark', 'name', 'class'] as const;
+export const TAG_FIELDS = ['mark', 'name', 'class', 'classification', 'classificationTitle'] as const;
 export type TagFieldName = (typeof TAG_FIELDS)[number];
 
 /**
@@ -76,7 +76,8 @@ export interface DraftSymbol {
   shapes: SymbolShape[];
 }
 
-export const LEGEND_CATEGORIES = ['materials', 'layers', 'hatches', 'symbols', 'annotations'] as const;
+/** `colours` lists the values of the views a colour scheme paints (#92); it is not on a legend until the legend is made for them. */
+export const LEGEND_CATEGORIES = ['materials', 'layers', 'hatches', 'symbols', 'annotations', 'colours'] as const;
 export type LegendCategory = (typeof LEGEND_CATEGORIES)[number];
 
 /** What a legend lists and how it is laid out. It stores WHAT to list, never the graphics. */

@@ -5,7 +5,7 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { useViewerStore } from '@/store';
-import { ELEVATION_INSET_M } from '@/project/view-plane';
+import { ELEVATION_CLEARANCE_M } from '@/project/view-plane';
 import { bodyElevationOffset, mainBodyExtent } from './body.js';
 
 /** An element 1 x 1 x 1 whose local box is carried to (x, 0, z) by its placement. */
@@ -32,8 +32,8 @@ describe('a new elevation stands at the building, not at the model box', () => {
     load([element(0, 0), element(1, 7), element(40, 50)], { minZ: 0, maxZ: 51 });
     const north = bodyElevationOffset('north') as number;
     const south = bodyElevationOffset('south') as number;
-    assert.ok(Math.abs(north - (0 + ELEVATION_INSET_M)) < 1e-9);
-    assert.ok(Math.abs(south - (8 - ELEVATION_INSET_M)) < 1e-9);
+    assert.ok(Math.abs(north - (0 - ELEVATION_CLEARANCE_M)) < 1e-9);
+    assert.ok(Math.abs(south - (8 + ELEVATION_CLEARANCE_M)) < 1e-9);
   });
 
   it('has no offset when no model is loaded', () => {
@@ -81,7 +81,7 @@ describe('a georeferenced model is sized to its building too', () => {
     loadGeoreferenced([georeferenced(0, 0), georeferenced(1, 7), georeferenced(40, 50)], { minX: 0, maxX: 41, minZ: 0, maxZ: 51 });
     const north = bodyElevationOffset('north') as number;
     const south = bodyElevationOffset('south') as number;
-    assert.ok(Math.abs(north - (0 + ELEVATION_INSET_M)) < 1e-6, String(north));
-    assert.ok(Math.abs(south - (8 - ELEVATION_INSET_M)) < 1e-6, String(south));
+    assert.ok(Math.abs(north - (0 - ELEVATION_CLEARANCE_M)) < 1e-6, String(north));
+    assert.ok(Math.abs(south - (8 + ELEVATION_CLEARANCE_M)) < 1e-6, String(south));
   });
 });

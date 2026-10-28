@@ -11,7 +11,9 @@
 import { dimensionDrafts, isDimAll } from '@/dimall/apply';
 import { stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
 import { planDimensions } from '@/dimall/plan';
-import { paperUnitOf } from '@/project/drafting-standards';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { paperUnitOf, styleBook } from '@/project/drafting-standards';
+import { dimStyleOf } from '../styles';
 import { useProjectStore } from '@/project/project-store';
 import { draftsOfView, editDrafts } from '../draft-store';
 import type { DraftCommandDef } from './types';
@@ -31,13 +33,13 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllNotOnDetail');
       return;
     }
-    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight });
+    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight, firstMm: dimStyleOf(styleBook(), ctx.settings.currentDimStyle).allOffset });
     if (plan.strings.length === 0) {
       ctx.say('drafting.msg.dimAllNone');
       return;
     }
     const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }, here.filter(isDimAll), here);
+    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId }, here.filter(isDimAll), here);
     if (drafts.length === 0) {
       ctx.say('drafting.msg.dimAllHave');
       return;

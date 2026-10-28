@@ -10,7 +10,7 @@
  * another viewport shows.
  */
 
-import { useTranslation, formatLocaleNumber } from '@/i18n';
+import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { drawingToScreen, screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import type { AnnotationShape, SymbolInstanceShape } from '@/drafting/types';
 import type { Rect } from '@/siteplan/key-plan';
@@ -21,17 +21,17 @@ import { AnnotationGraphics } from '../drafting/AnnotationGraphics';
 import { shapePath } from '../drafting/DraftOverlay';
 import { penTags } from '../sheets/dxf-tags';
 import type { SiteContent } from './useSheetSite';
+import { useSheetLocale } from '@/project/units-and-numbers';
 
-const FONT = 'ui-sans-serif, system-ui, sans-serif';
 const DIM_TEXT_MM = 2.5;
 const NO_PATTERNS: never[] = [];
 const ENCROACHMENT_COLOR = PLOT_BOUNDARY_LAYER.color;
 
 /** Footprint and setbacks, in the viewport's drawing → paper transform. */
 export function SiteOverlay({ site, transform: t, axis, scale }: { site: SiteContent; transform: ViewTransform; axis: SectionAxisName; scale: number }) {
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const height = (DIM_TEXT_MM * scale) / 1000;
-  const fmt = (v: number) => formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v: number) => sheetNumber(locale, v, 2, { kind: 'length' });
   return (
     <g data-site-plan="true">
       {site.footprint?.map((ring, i) => (
@@ -62,14 +62,14 @@ export function SiteSymbols({ site, transform: t, axis, scale, box, live, symbol
   /** The symbols drafted on the view, as shown here: the coordinate points' labels are kept clear. */
   symbols: readonly SymbolInstanceShape[];
 }) {
-  const { locale } = useTranslation();
+  const locale = useSheetLocale();
   const toPaper = (p: { x: number; y: number }) => drawingToScreen(p, t, axis);
   const labels = symbols.filter((s) => s.symbolId === COORDINATE_POINT_ID)
     .map((s) => coordinateLabelBox(toPaper(s.p), s.scale * t.scale, live.coordinates?.(s.p) ?? []));
   const places = siteSymbolPlaces({
     viewport: { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height }, scale, toPaper,
     boundary: site.boundary, footprint: site.footprint, setbacks: site.setbacks, labels,
-    setbackText: (v) => formatLocaleNumber(locale, v, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    setbackText: (v) => sheetNumber(locale, v, 2, { kind: 'length' }),
   });
   const arrow: AnnotationShape = { type: 'symbol', symbolId: NORTH_ARROW_ID, p: screenToDrawing(places.arrow, t, axis), scale: SITE_ARROW_SCALE / t.scale, rotation: 0, followsNorth: true };
   const bar: AnnotationShape = { type: 'symbol', symbolId: SCALE_BAR_ID, p: screenToDrawing(places.bar, t, axis), scale: 1, rotation: 0 };

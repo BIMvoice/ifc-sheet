@@ -13,8 +13,9 @@ import { useTranslation } from '@/i18n';
 import { keepLegendOnSheets, toggleLegendCategory, updateLegend } from '@/legend/legend-actions';
 import { useLegendLabels } from '../legend/LegendGraphic';
 import { CategoryToggles } from './CategoryToggles';
+import { WALL_FIELD } from './wall-type';
 
-const field = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1.5 text-base text-white';
+const field = WALL_FIELD;
 
 export function LegendCard({ legend }: { legend: ProjectLegend }) {
   const { t } = useTranslation();
@@ -26,7 +27,7 @@ export function LegendCard({ legend }: { legend: ProjectLegend }) {
   };
   return (
     <div data-owns-keys>
-      <label className="mt-3 block text-sm text-sky-200">
+      <label className="mt-3 block text-xs text-sky-200">
         {t('wall.legend.cardTitle')}
         <input
           key={legend.id}
@@ -36,7 +37,7 @@ export function LegendCard({ legend }: { legend: ProjectLegend }) {
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         />
       </label>
-      <label className="mt-3 block text-sm text-sky-200">
+      <label className="mt-3 block text-xs text-sky-200">
         {t('wall.legend.columns')}
         <select className={field} value={legend.columns} onChange={(e) => change(() => updateLegend(legend.id, { columns: Number(e.target.value) }))}>
           {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}

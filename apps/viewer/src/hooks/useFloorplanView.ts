@@ -28,6 +28,7 @@ import {
 export function useFloorplanView() {
   const { models, ifcDataStore, geometryResult } = useIfc();
   const setSectionPlaneAxis = useViewerStore((s) => s.setSectionPlaneAxis);
+  const placeSectionPlane = useViewerStore((s) => s.placeSectionPlane);
   const setSectionPlanePosition = useViewerStore((s) => s.setSectionPlanePosition);
   const setActiveTool = useViewerStore((s) => s.setActiveTool);
   const openPanelInHome = useViewerStore((s) => s.openPanelInHome);
@@ -41,22 +42,23 @@ export function useFloorplanView() {
 
   // Activate a floorplan view at the given storey elevation
   const activateFloorplan = useCallback((storey: SectionStorey) => {
-    // The plan cut sits 1.2 m above the floor (standard architectural
-    // practice), expressed as a percentage of the merged Y bounds — the
+    // The plan cut sits above the floor by the sheet plans' rule (1.2 m,
+    // lower when the next storey is close, #256), expressed as a percentage of the merged Y bounds — the
     // same conversion the Section bar's distance field uses.
     const range = sectionAxisRange(mergedSectionBounds(models, geometryResult), 'down');
     // Fallback bounds if no coordinate info available
-    const percentage = range ? worldToPercent(storeyCutElevation(storey), range) : 50;
+    const percentage = range ? worldToPercent(storeyCutElevation(storey, availableStoreys), range) : 50;
 
     // 2. Set section plane: axis=down (Y), position=calculated, enabled
     setSectionPlaneAxis('down');
-    setSectionPlanePosition(percentage);
+    // Past 100 (or below 0) when the storey's cut stands outside the model: the 3D view then shows no cut, like the sheet plan.
+    if (range) placeSectionPlane(percentage); else setSectionPlanePosition(percentage);
     setActiveTool('section', 'programmatic');
 
     // 3. Show the cut: dock the Drawing panel (no forced 3D camera change —
     // "Match 3D" in its header does that on request, #5497).
     openPanelInHome('drawing', 'programmatic');
-  }, [models, geometryResult, setSectionPlaneAxis, setSectionPlanePosition, setActiveTool, openPanelInHome]);
+  }, [models, geometryResult, availableStoreys, setSectionPlaneAxis, placeSectionPlane, setSectionPlanePosition, setActiveTool, openPanelInHome]);
 
   return { availableStoreys, activateFloorplan };
 }

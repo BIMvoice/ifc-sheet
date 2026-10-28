@@ -26,6 +26,8 @@ import { effectiveTitleBlock, lacksProjectData, modelFacts, resolvedTitleBlock }
 import { DEFAULT_SOURCES, fieldsWithoutSource, projectNameFromFile, type TitleSource } from './title-block-sources';
 
 const nonIfc = (name: string): FederatedModel => ({ id: name, name, ifcDataStore: null, visible: true } as unknown as FederatedModel);
+/** Every title block field but the two a model without an IFC project fills (the project name from its file, the date). */
+const UNFILLED = TITLE_BLOCK_FIELDS.filter((f) => f !== 'project' && f !== 'date');
 const open = (...names: string[]): void => useViewerStore.setState({ models: new Map(names.map((n) => [n, nonIfc(n)])) });
 
 beforeEach(() => { resetProject(); useViewerStore.setState({ models: new Map() }); });
@@ -36,6 +38,15 @@ describe('projectNameFromFile', () => {
     assert.equal(projectNameFromFile('Hello_Wall-v2.glb'), 'Hello Wall v2');
     assert.equal(projectNameFromFile('  site  plan.LandXML '), 'site plan');
     assert.equal(projectNameFromFile('Plan 1.2'), 'Plan 1 2'.replace('1 2', '1.2'));
+  });
+});
+
+describe('a loaded model whose entry has no name (a models-map load)', () => {
+  it('reads as no file name, so the next source applies', () => {
+    assert.equal(projectNameFromFile(undefined), '');
+    useViewerStore.setState({ models: new Map([['m', { id: 'm', ifcDataStore: null } as unknown as FederatedModel]]) });
+    assert.equal(effectiveTitleBlock().project, undefined);
+    assert.equal(modelFacts().file?.() ?? '', '');
   });
 });
 
@@ -56,7 +67,7 @@ describe('a model with no IFC project', () => {
     open('hello-wall.glb');
     seedProjectTitleBlock(modelTitleBlock());
     const missing = fieldsWithoutSource(TITLE_BLOCK_FIELDS, resolvedTitleBlock(useProjectStore.getState().titleBlock, undefined));
-    assert.deepEqual(missing, ['address', 'client', 'organisation', 'drawnBy', 'checkedBy']);
+    assert.deepEqual(missing, UNFILLED);
   });
 
   it('a typed project name beats the file name, and typed values round-trip through save and reopen', () => {
@@ -71,7 +82,7 @@ describe('a model with no IFC project', () => {
     assert.equal(block.project, 'Casa Lunga');
     assert.equal(block.address, 'Str. Mare 1');
     assert.equal(block.date, '2026-10-21');
-    assert.deepEqual(fieldsWithoutSource(TITLE_BLOCK_FIELDS, resolvedTitleBlock(useProjectStore.getState().titleBlock, undefined)), ['client', 'organisation', 'drawnBy', 'checkedBy']);
+    assert.deepEqual(fieldsWithoutSource(TITLE_BLOCK_FIELDS, resolvedTitleBlock(useProjectStore.getState().titleBlock, undefined)), UNFILLED.filter((f) => f !== 'address'));
   });
 
   it('nothing is loaded: nothing is invented', () => {

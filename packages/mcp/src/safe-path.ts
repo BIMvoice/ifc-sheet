@@ -36,7 +36,7 @@ import { ToolErrorCode, ToolExecutionError } from './errors.js';
  * test double that need not fabricate a whole `LoadedModel`.
  */
 interface PathContext {
-  config: Pick<ServerConfig, 'allowedPaths'>;
+  config: Pick<ServerConfig, 'allowedPaths' | 'hosted'>;
   registry: { list(): ReadonlyArray<Pick<LoadedModel, 'filePath'>> };
 }
 
@@ -90,6 +90,12 @@ export async function resolveSafePath(
   ctx: PathContext,
   mode: PathMode,
 ): Promise<string> {
+  if (ctx.config.hosted) {
+    throw new ToolExecutionError({
+      code: ToolErrorCode.PERMISSION_DENIED,
+      message: 'The hosted endpoint has no access to a file system: file paths are refused. Send the content in the request instead (ifc_base64, template_json, project_json), and take results from the response.',
+    });
+  }
   if (typeof raw !== 'string' || raw.length === 0) {
     throw new ToolExecutionError({
       code: ToolErrorCode.INVALID_INPUT,

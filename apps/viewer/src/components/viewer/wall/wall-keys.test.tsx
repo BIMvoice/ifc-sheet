@@ -12,6 +12,7 @@ import { cleanup, press, render } from '@/test/render.js';
 import { setPlatform } from '@/test/platform.js';
 import type { KeyChord } from '@/lib/commands/chord';
 import { ariaKeyShortcuts, shortcutLabel } from '@/lib/commands/shortcut-label';
+import { rebindAction, resetAllBindings } from '@/lib/commands/key-bindings';
 import { DRAFTING_KEY_COMMANDS } from '@/lib/commands/drafting-key-commands';
 import { attachDraftingView, cancelCommand, clickDrawing, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { resolveEnglish as t } from '@/i18n/registry';
@@ -127,7 +128,7 @@ describe('the Wall\'s keys', () => {
     assert.deepEqual(calls, []);
     // ...and with the command line not focused, the Wall's keys still arrive (the drafting view does not eat them).
     for (const row of WALL_KEY_COMMANDS) for (const chord of row.keys) stroke(document.body, chord);
-    assert.equal(calls.length, WALL_KEY_COMMANDS.length);
+    assert.equal(calls.length, WALL_KEY_COMMANDS.reduce((n, c) => n + c.keys.length, 0));
     assert.deepEqual(typed, ['l']);
   });
 
@@ -238,7 +239,7 @@ describe('a sheet stepped into', () => {
     const stepped: string[] = [];
     render(<SteppedSheet sheet={sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={(id) => stepped.push(id)} />);
     const page = (id: 'wall.nextSheet' | 'wall.prevSheet'): KeyboardEvent => {
-      const event = keydown(WALL_KEY_COMMANDS.find((c) => c.id === id)!.keys[0]);
+      const event = keydown(WALL_KEY_COMMANDS.find((c) => c.id === id)!.keys[0]!);
       act(() => { document.body.dispatchEvent(event); });
       return event;
     };
@@ -292,10 +293,35 @@ describe('a sheet stepped into', () => {
     }
   });
 
+  it('leaves the sheet on the key the person gave Back, and not on another', () => {
+    const sheets = useProjectStore.getState().sheets;
+    let backs = 0;
+    rebindAction('wall.back', { key: 'g' });
+    try {
+      render(<SteppedSheet sheet={sheets[1]} extent={HOUSE} proposals={[]} onBack={() => { backs += 1; }} onStep={() => {}} />);
+      stroke(document.body, { key: 'j' });
+      assert.equal(backs, 0);
+      stroke(document.body, { key: 'g' });
+      assert.equal(backs, 1);
+    } finally {
+      resetAllBindings();
+    }
+  });
+
+  it('keeps the PDF button short so the toolbar stays on one row at 1280 px, with its full name for a screen reader and the tooltip (#227)', () => {
+    setPlatform('Win32');
+    const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
+    const pdf = [...ui.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === t('wall.export.pdf'));
+    assert.ok(pdf, 'the PDF button is named in full');
+    assert.equal(pdf.textContent?.trim(), t('wall.export.pdfShort'));
+    assert.ok(pdf.getAttribute('title')?.startsWith(t('wall.export.pdf')), 'the tooltip carries the full name too');
+  });
+
   it('gives the sheet\'s Fit and Print buttons the key of their row as aria-keyshortcuts (#119 review)', () => {
     setPlatform('Win32');
     const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
-    const named = (label: string) => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+    // A button's accessible name is its aria-label when it has one, else its text.
+    const named = (label: string) => [...ui.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent)?.trim() === label);
     assert.equal(named(t('wall.fit'))?.getAttribute('aria-keyshortcuts'), ariaKeyShortcuts('wall.fit', false));
     assert.equal(named(t('wall.export.pdf'))?.getAttribute('aria-keyshortcuts'), 'Control+P');
     for (const b of ui.querySelectorAll('button[title]')) {
@@ -303,17 +329,36 @@ describe('a sheet stepped into', () => {
     }
   });
 
+  it('runs a sheet button from the key a person gave it, and the button announces that key (#166)', () => {
+    setPlatform('Win32');
+    try {
+      rebindAction('wall.paper', { key: 'code:KeyP', alt: true });
+      const ui = render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
+      const paper = () => [...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('wall.paper.button'));
+      assert.equal(paper()?.getAttribute('aria-pressed'), 'false');
+      assert.equal(paper()?.getAttribute('aria-keyshortcuts'), 'Alt+P');
+      stroke(document.body, { key: 'code:KeyP', alt: true });
+      assert.equal(paper()?.getAttribute('aria-pressed'), 'true');
+      // Rebound while the sheet is showing: the button names the new key at once.
+      act(() => { rebindAction('wall.paper', { key: 'code:KeyO', alt: true }); });
+      assert.equal(paper()?.getAttribute('aria-keyshortcuts'), 'Alt+O');
+    } finally {
+      resetAllBindings();
+    }
+  });
+
   it('offers the whole keymap through the bus, and nothing once the sheet is left', () => {
     const sheets = useProjectStore.getState().sheets;
     render(<SteppedSheet sheet={sheets[0]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
-    // The first sheet has no previous one: that row is not on offer.
-    assert.deepEqual(availableWallCommands(), WALL_KEY_COMMANDS.map((c) => c.id).filter((id) => id !== 'wall.prevSheet'));
+    // The first sheet has no previous one, and with no drawing in front there is no edit mode to leave: those rows are not on offer.
+    assert.deepEqual(availableWallCommands(), WALL_KEY_COMMANDS.map((c) => c.id).filter((id) => id !== 'wall.prevSheet' && id !== 'wall.leaveEdit'));
     cleanup();
     assert.deepEqual(availableWallCommands(), []);
   });
 
   it('has a handler for every row (a row without one does not compile; this is the runtime twin)', () => {
-    const handlers = steppedHandlers({ startTool: () => {}, toggleAdd: () => {}, fit: () => {}, print: () => {}, previous: () => {}, next: () => {} });
+    const f = () => {};
+    const handlers = steppedHandlers({ startTool: f, toggleAdd: f, fit: f, print: f, previous: f, next: f, back: f, leaveEdit: f, comment: f, paper: f, titleBlock: f, revisions: f, printPreview: f, exportDxf: f });
     assert.deepEqual(Object.keys(handlers).sort(), WALL_KEY_COMMANDS.map((c) => c.id).sort());
     for (const handler of Object.values(handlers)) assert.equal(typeof handler, 'function');
   });

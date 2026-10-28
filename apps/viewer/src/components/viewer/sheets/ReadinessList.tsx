@@ -11,35 +11,124 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
+import { useNextTaskValue } from '@/hooks/useNextTaskValue';
 import { describeEffect, describeMissing } from '@/check/readiness-say';
-import { modelReadiness } from '@/check/readiness';
+import { modelReadiness, type ModelFacts } from '@/check/readiness';
 import { currentModelFacts } from '@/check/readiness-read';
 import { useViewerStore } from '@/store';
+import { permitPackOf, setIncludeFarElements, useProjectStore } from '@/project/project-store';
+import { subReportChecks } from '@/check/sub-report-check';
+import { boqMissing } from '@bimvoice/ifcsheet';
+import { ruralScopeOf } from '@bimvoice/ifcsheet/urban';
+import { useUrbanIndicators } from '../urban/useUrban';
+import { sheetTitleBlockMisfits } from '@/check/title-block-fit';
+import { useEffectiveTitleBlock } from '@/project/title-block-model';
+import { useBoqArticles, useBoqResult } from '../boq/useBoq';
 import type { SetSkin } from './set-skin';
+import { setReview } from '../wall/wall-nav';
+import { goToRoom } from '@/check/room-go';
 
-/** The findings of the models open now; null while none is open (nothing to say yet). */
+const EMPTY_FACTS: ModelFacts = { storeys: 0, spaces: 0, elements: 0, elementsWithoutStorey: 0, elementsWithoutMaterial: 0, elementsWithoutQuantities: 0, duplicateGlobalIds: 0, duplicatedEntities: 0 };
+
+/**
+ * The findings of the models open now; null while none is open (nothing to say yet). `owners` names, for each sub-report finding in
+ * the order they come, the schedule it is about (`modelReadiness` emits a duplicates finding then a gaps finding per check), so a
+ * finding can open the review of that schedule.
+ */
 function useModelReadiness() {
   const models = useViewerStore((s) => s.models);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const schedules = useProjectStore((s) => s.schedules);
+  const catalogue = useProjectStore((s) => s.joineryTypes);
+  const mapping = useProjectStore((s) => s.joineryMapping);
+  const includeFar = useProjectStore((s) => s.includeFarElements);
+  const levels = useProjectStore((s) => s.levels);
+  // What the bill of quantities could not state (#75); nothing while the project holds no article.
+  const boqResult = useBoqResult(useBoqArticles().length > 0);
+  // The values the project's own (Romanian) title block cuts short on a sheet, judged on what each sheet shows.
+  const { t, locale } = useTranslation();
+  const template = useProjectStore((s) => s.titleBlockTemplate);
+  const sheets = useProjectStore((s) => s.sheets);
+  const views = useProjectStore((s) => s.views);
+  const projectName = useProjectStore((s) => s.name);
+  const params = useProjectStore((s) => s.titleBlockParams);
+  const revisions = useProjectStore((s) => s.revisions);
+  const drafts = useProjectStore((s) => s.drafts);
+  const projectFields = useEffectiveTitleBlock();
+  const asIndicated = t('sheets.asIndicated');
+  const misfits = useMemo(
+    () => sheetTitleBlockMisfits(template, sheets, { projectFields, projectName, params, sheets, schedules, revisions, drafts, views, asIndicated, language: locale }),
+    [template, sheets, projectFields, projectName, params, schedules, revisions, drafts, views, asIndicated, locale],
+  );
+  // The model against the simplified PAC's scope, for a project in that mode only: measured from the same indicators as everywhere, and read again as they change.
+  const rural = useProjectStore((s) => permitPackOf(s) === 'pacRural');
+  const urban = useUrbanIndicators(rural);
+  const scope = rural && urban ? ruralScopeOf(urban.result) : undefined;
+  const inputs = useMemo(() => ({ models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits, scope }), [models, mutationVersion, schedules, catalogue, mapping, includeFar, levels, boqResult, misfits, scope?.levels, scope?.sd, scope?.sdAtLeast]);
+  // Read in a task of its own (#154): the facts walk every element and room of the model (about 50 to 60 ms on a large
+  // one), and the model's arrival changes `models` in the same render that finishes the 3D and lays the set out, so
+  // reading them there made one long task of it. A list that appears reads them at once.
+  const settled = useNextTaskValue(inputs);
   return useMemo(() => {
-    void mutationVersion; // an edit can add or remove what the facts count
-    return models.size === 0 ? null : modelReadiness(currentModelFacts());
-  }, [models, mutationVersion]);
+    void settled.mutationVersion; // an edit can add or remove what the facts count
+    // A schedule split into parts must list every element once: the same check the card on the Wall shows.
+    if (settled.models.size === 0 && settled.misfits.length === 0) return null;
+    const checks = subReportChecks(settled.schedules ?? []);
+    const owners = checks.flatMap((c) => [...(c.duplicates.length > 0 ? [c.parent.id] : []), ...(c.gaps.length > 0 ? [c.parent.id] : [])]);
+    return { findings: modelReadiness(settled.models.size === 0 ? EMPTY_FACTS : currentModelFacts(), checks, boqMissing(settled.boqResult), settled.misfits, settled.scope), owners };
+  }, [settled]);
+}
+
+/** The project setting that frames the views on everything again, the small far-away elements too (`framing.ts` in the engine). */
+function FramingSetting({ skin }: { skin: SetSkin }) {
+  const { t } = useTranslation();
+  const on = useProjectStore((s) => s.includeFarElements === true);
+  return (
+    <div className="mt-2">
+      <label className={`flex items-center gap-2 ${skin.heading}`}>
+        <input type="checkbox" checked={on} aria-describedby="framing-far-hint" onChange={(e) => setIncludeFarElements(e.target.checked)} />
+        <span>{t('ready.framing.label')}</span>
+      </label>
+      <p id="framing-far-hint" className={`m-0 ${skin.note}`}>{t('ready.framing.hint')}</p>
+    </div>
+  );
+}
+
+/** Opens the review by element of the schedule a sub-report finding is about (#186). */
+function ReviewLink({ scheduleId, skin }: { scheduleId: string | undefined; skin: SetSkin }) {
+  const { t } = useTranslation();
+  if (!scheduleId) return null;
+  return (
+    <button type="button" className={`${skin.note} underline`} onClick={() => setReview(scheduleId)}>{t('wall.review.open')}</button>
+  );
+}
+
+/** Opens the plan of the first room whose area is estimated and zooms to it. */
+function RoomLink({ guid, skin }: { guid: string; skin: SetSkin }) {
+  const { t } = useTranslation();
+  return <button type="button" className={`${skin.note} underline`} onClick={() => goToRoom(guid)}>{t('ready.estimatedAreas.go')}</button>;
 }
 
 export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
   const { t } = useTranslation();
-  const findings = useModelReadiness();
-  if (findings === null) return null;
-  if (findings.length === 0) return compact ? null : <p className={skin.note}>{t('ready.none')}</p>;
+  const readiness = useModelReadiness();
+  if (readiness === null) return null;
+  const { findings, owners } = readiness;
+  let nextOwner = 0;
+  if (findings.length === 0) return compact ? null : <><p className={skin.note}>{t('ready.none')}</p><FramingSetting skin={skin} /></>;
   return (
+    <>
     <ul className="m-0 list-none p-0">
       {findings.map((f) => (
-        <li key={f.kind} className="py-0.5">
+        <li key={`${f.kind}-${f.params.schedule ?? ''}-${f.params.sheet ?? ''}-${f.params.field ?? ''}`} className="py-0.5">
           <p className={`m-0 ${compact ? skin.note : skin.heading}`}>{describeMissing(f)}</p>
           {compact ? null : <p className={`m-0 ${skin.note}`}>{describeEffect(f)}</p>}
+          {f.kind === 'estimatedAreas' ? <RoomLink guid={String(f.params.first)} skin={skin} /> : null}
+          {f.kind === 'subReportDuplicates' || f.kind === 'subReportGaps' ? <ReviewLink scheduleId={owners[nextOwner++]} skin={skin} /> : null}
         </li>
       ))}
     </ul>
+    {compact ? null : <FramingSetting skin={skin} />}
+    </>
   );
 }

@@ -24,9 +24,9 @@ import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 
 const DxfParser = DxfParserModule as unknown as new () => DxfParserInstance;
 
-/** A 10 × 4 m drawing: one diagonal line corner to corner, one hidden line, one 1 m cut square. */
-const drawing = (): Drawing2D => ({
-  config: { plane: { axis: 'y', position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 50 },
+/** A 10 × 4 m drawing, cut along `axis` (an elevation by default): one diagonal line corner to corner, one hidden line, one 1 m cut square. */
+const drawing = (axis: 'x' | 'y' | 'z' = 'z'): Drawing2D => ({
+  config: { plane: { axis, position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 50 },
   lines: [
     { line: { start: { x: 0, y: 0 }, end: { x: 10, y: 4 } }, category: 'projection', visibility: 'visible', entityId: 1, ifcType: 'IfcWall', modelIndex: 0, depth: 0 },
     { line: { start: { x: 0, y: 4 }, end: { x: 10, y: 0 } }, category: 'hidden', visibility: 'hidden', entityId: 2, ifcType: 'IfcWall', modelIndex: 0, depth: 0 },
@@ -56,6 +56,12 @@ describe('a sheet laid out as shapes', () => {
     expect(graphic().lines).toEqual([[{ x: 100, y: 190 }, { x: 300, y: 110 }]]);
   });
 
+  it('a plan keeps its second axis pointing down the paper, an east elevation mirrors its first (the sheet in the app does the same, #279)', () => {
+    const lines = (axis: 'x' | 'y' | 'z') => sheetGraphic(sheet(), doc([sheet()]), new Map([['v1', drawing(axis)]])).lines;
+    expect(lines('y')).toEqual([[{ x: 100, y: 110 }, { x: 300, y: 190 }]]);
+    expect(lines('x')).toEqual([[{ x: 300, y: 190 }, { x: 100, y: 110 }]]);
+  });
+
   it('closes a cut ring and leaves hidden lines out', () => {
     expect(graphic().cut).toEqual([[{ x: 120, y: 170 }, { x: 140, y: 170 }, { x: 140, y: 150 }, { x: 120, y: 150 }, { x: 120, y: 170 }]]);
   });
@@ -75,7 +81,7 @@ describe('a sheet laid out as shapes', () => {
 
   it('prints the sheet number and name, the project and the scale in the title block', () => {
     const texts = graphic().texts.map((t) => t.text);
-    expect(texts).toEqual(expect.arrayContaining(['A-101', 'Secțiuni și fațade', 'Locuință ș ț', '1:50   2026-10-21', 'Parter  1:50']));
+    expect(texts).toEqual(expect.arrayContaining(['A-101', 'Secțiuni și fațade', 'Locuință ș ț', '1:50', '2026-10-21', 'Parter  1:50']));
   });
 });
 
@@ -125,8 +131,19 @@ describe('the PDF', () => {
 describe('the DXF', () => {
   it('writes the same points in paper millimetres with y up from the paper\'s bottom edge', () => {
     const parsed = new DxfParser().parseSync(exportDxf(graphic()));
-    const lines = (parsed?.entities ?? []).filter((e): e is IPolylineEntity => e.layer === 'VIEW-LINES');
+    const lines = (parsed?.entities ?? []).filter((e): e is IPolylineEntity => e.layer === 'VIEW-SEEN-025');
     // The paper is 297 mm high: y 190 from the top is 107 from the bottom.
     expect(lines.map((e) => e.vertices.map((v) => [v.x, v.y]))).toEqual([[[100, 107], [300, 187]]]);
+  });
+
+  it('carries the app\'s pens (#34): the line seen beyond on the seen pen, the hidden line on the hidden pen, a category colour in its layer', () => {
+    const layers = (g: SheetGraphic) => Object.keys(new DxfParser().parseSync(exportDxf(g))?.tables.layer.layers ?? {});
+    expect(layers(graphic())).toEqual(expect.arrayContaining(['VIEW-SEEN-025', 'VIEW-HIDDEN-018']));
+    const s = sheet();
+    const red = sheetGraphic(s, { ...doc([s]), views: doc([s]).views.map((v) => ({ ...v, graphics: { categories: { walls: { lineColor: '#cc0000', lineWeight: 'heavy' } } } })) }, new Map([['v1', drawing()]]));
+    expect(red.pens.find((p) => p.layer === 'SEEN')).toMatchObject({ stroke: '#cc0000', width: 0.35 });
+    expect(red.pens.find((p) => p.layer === 'HIDDEN')).toMatchObject({ stroke: '#cc0000', width: 0.18, dash: [1.5, 1] });
+    expect(red.pens.find((p) => p.layer === 'FILL')).toMatchObject({ fill: '#d4d4d8' });
+    expect(layers(red)).toEqual(expect.arrayContaining(['VIEW-SEEN-035-CC0000', 'VIEW-HIDDEN-018-CC0000']));
   });
 });

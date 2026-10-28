@@ -1,0 +1,10 @@
+IfcSheet
+Made by BIMvoice, https://github.com/BIMvoice/ifcsheet
+Licensed under the Mozilla Public License 2.0 (see LICENSE).
+
+IfcSheet is a derivative of ifc-lite, https://github.com/LTplus-AG/ifc-lite,
+by LTplus-AG and the ifc-lite contributors, also licensed under the
+Mozilla Public License 2.0.
+
+Source files keep their Mozilla Public License 2.0 headers. The source of
+IfcSheet is available at https://github.com/BIMvoice/ifcsheet.

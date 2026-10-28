@@ -18,7 +18,7 @@ import { useProjectStore } from '@/project/project-store';
 import { LOGO_FIELD } from '@/project/title-block';
 import { useEffectiveTitleBlock } from '@/project/title-block-model';
 import { resolveParamText } from '@/project/title-block-params';
-import { standardTitleBlock, textSizeFor, type TemplateItem } from '@/project/title-block-template';
+import { fitCell, standardTitleBlock, type TemplateItem } from '@/project/title-block-template';
 import type { ProjectSheet } from '@/project/types';
 import { penTags } from './dxf-tags';
 import { useSheetParamLookup } from './useSheetParams';
@@ -34,17 +34,18 @@ function Item({ item, ox, oy, lookup, logo }: { item: TemplateItem; ox: number; 
     case 'logo':
       return logo ? <image data-export-ignore-dxf="true" href={logo} x={ox + item.x} y={oy + item.y} width={item.w} height={item.h} preserveAspectRatio="xMidYMid meet" /> : null;
     default: {
-      const shown = resolveParamText(item.text, lookup);
-      return <text x={ox + item.x} y={oy + item.y} fontSize={textSizeFor(item, shown)} fontWeight={item.bold ? 700 : undefined} fontFamily={FONT} fill={item.muted ? '#52525b' : '#000'}>{shown}</text>;
+      // The same fit the PDF prints (`fitCell`): a long value wraps or shrinks, one line of text per printed line.
+      const { size, lines } = fitCell(item, resolveParamText(item.text, lookup));
+      return <>{lines.map((line, i) => <text key={i} x={ox + item.x} y={oy + item.y + line.dy} fontSize={size} fontWeight={item.bold ? 700 : undefined} fontFamily={FONT} fill={item.muted ? '#52525b' : '#000'}>{line.text}</text>)}</>;
     }
   }
 }
 
-export function TitleBlockGraphic({ sheet, projectName, w, h }: { sheet: ProjectSheet; projectName: string; w: number; h: number }) {
+export function TitleBlockGraphic({ sheet, projectName, w, h, issueDate }: { sheet: ProjectSheet; projectName: string; w: number; h: number; issueDate?: string }) {
   const { t } = useTranslation();
   const logo = useEffectiveTitleBlock()?.[LOGO_FIELD];
   const edited = useProjectStore((s) => s.titleBlockTemplate);
-  const lookup = useSheetParamLookup(sheet, projectName);
+  const lookup = useSheetParamLookup(sheet, projectName, issueDate);
   const standard = useGraphicStandard();
   const template = useMemo(() => edited ?? standardTitleBlock(t, standard), [edited, t, standard]);
   const frame = frameOf(sheet);

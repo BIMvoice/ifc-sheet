@@ -12,7 +12,10 @@ import { attachDraftingView, cancelCommand, runningCommand, setPlanPartsProvider
 import { EMPTY_VIEW_DRAWING, patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
 import { house } from '@/dimall/fixture.js';
-import { fixFinding, goToFinding, type FindingNav } from './go.js';
+import { fixFinding, fixOutcome, goToFinding, removeFindingAnnotation, waitForView, type FindingNav } from './go.js';
+import { danglingAnnotations } from './findings.js';
+import { newDraft } from '@/drafting/draft-store.js';
+import { clearFocus, useFocusRequest } from './focus.js';
 import type { Finding } from './types';
 
 const view = { id: 'v1', kind: 'plan', scale: 100 } as unknown as ProjectView;
@@ -67,6 +70,49 @@ describe('fixFinding', () => {
   });
 });
 
+describe('a drawing that fails to be made', () => {
+  it('ends the wait at once, saying why, instead of holding the fix for the full 20 seconds', async () => {
+    patchViewDrawing('v1', { status: 'error' });
+    const started = Date.now();
+    assert.equal(await waitForView('v1', true), 'error');
+    assert.equal(await fixOutcome(finding({}), nav), 'drawingFailed');
+    assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+    assert.equal(dims().length, 0);
+  });
+
+  it('tells apart nothing to fix, nowhere to go and a command that did not start', async () => {
+    assert.equal(await fixOutcome(finding({ fix: undefined }), nav), 'noFix');
+    assert.equal(await fixOutcome(finding({}), { open: () => false }), 'noPlace');
+    assert.equal(await fixOutcome(finding({ fix: 'TAGALL' }), nav), 'done');
+  });
+});
+
+describe('goToFinding on elements', () => {
+  it('asks the drawing to zoom to the elements a finding is about', () => {
+    clearFocus();
+    goToFinding(finding({ guids: ['G1', 'G2'] }), nav);
+    const request = useFocusRequest.getState().request;
+    assert.deepEqual([request?.viewId, request?.guids], ['v1', ['G1', 'G2']]);
+    clearFocus();
+  });
+
+  it('zooms to the box of an annotation whose element is gone, and not to its element', () => {
+    clearFocus();
+    const box = { min: { x: 1, y: 2 }, max: { x: 3, y: 4 } };
+    goToFinding(finding({ draftId: 'd1', guids: ['G1'], box }), nav);
+    const request = useFocusRequest.getState().request;
+    assert.deepEqual([request?.viewId, request?.guids, request?.box], ['v1', [], box]);
+    clearFocus();
+  });
+
+  it('does not, for a finding about an annotation with no box or one with no elements', () => {
+    clearFocus();
+    goToFinding(finding({ draftId: 'd1', guids: ['G1'] }), nav);
+    goToFinding(finding({}), nav);
+    assert.equal(useFocusRequest.getState().request, null);
+  });
+});
+
 describe('goToFinding', () => {
   it('opens the place and selects the annotation once the view is in front', async () => {
     assert.equal(goToFinding(finding({ draftId: 'd1' }), nav), true);
@@ -78,5 +124,23 @@ describe('goToFinding', () => {
   it('has nowhere to go when the surface cannot open it', () => {
     assert.equal(goToFinding(finding({ draftId: 'd1' }), { open: () => false }), false);
     assert.equal(useDraftingSession.getState().selection.size, 0);
+  });
+});
+
+describe('the remedies of a finding on an annotation', () => {
+  const tagDraft = () => newDraft('v1', 'l', { type: 'leader', pts: [{ x: 0, y: 0 }, { x: 1, y: 1 }], text: 'Haustuer', height: 0.25 }, { tagOf: 'GONE' });
+  it('delete removes the annotation as one undo step and the finding with it', () => {
+    const d = tagDraft();
+    useProjectStore.setState({ drafts: [d] });
+    const f = danglingAnnotations({ views: [{ id: 'v1', name: 'EG', kind: 'plan' }], sheets: [], projectName: '', drafts: [d], planElements: () => [], elementExists: () => false });
+    assert.equal(f.length, 1);
+    assert.equal(removeFindingAnnotation(f[0]), true);
+    assert.equal(useProjectStore.getState().drafts.length, 0);
+    assert.deepEqual(danglingAnnotations({ views: [], sheets: [], projectName: '', drafts: useProjectStore.getState().drafts, planElements: () => [], elementExists: () => false }), []);
+  });
+  it('refuses a finding that offers no delete', () => {
+    useProjectStore.setState({ drafts: [tagDraft()] });
+    assert.equal(removeFindingAnnotation(finding({ draftId: useProjectStore.getState().drafts[0].id })), false);
+    assert.equal(useProjectStore.getState().drafts.length, 1);
   });
 });

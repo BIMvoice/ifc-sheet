@@ -15,9 +15,10 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import type { MutablePropertyView } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
-import { typeOf } from '@/lib/commands/modeling/authored-kinds';
+import { typeIndex, typeOf } from '@/lib/commands/modeling/authored-kinds';
 import { getModelLengthUnitScale } from '@/lib/length-unit-scale';
 import { joineryOfElement } from './element-spec';
+import { idOf } from './object-id';
 import {
   DEFAULT_JOINERY_MAPPING, fitToElement, resolveMapping, type ElementFacts, type MappingSource,
 } from './symbol-mapping';
@@ -46,8 +47,17 @@ function attributes({ dataStore, view }: Live, id: number): unknown[] | null {
 const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
-/** What the mapping matches a door or window by; null for anything else. */
-export function elementFacts(modelId: string, expressId: number): ElementFacts | null {
+/**
+ * What the mapping matches a door or window by; null for anything else.
+ * `typeIdOf` finds the element's type; a caller reading many elements passes
+ * one backed by a `typeIndex`, so the model's types are read once, not once
+ * per element.
+ */
+export function elementFacts(
+  modelId: string,
+  expressId: number,
+  typeIdOf: (live: Live, expressId: number) => number | null = typeOf,
+): ElementFacts | null {
   const s = useViewerStore.getState();
   const dataStore = s.models.get(modelId)?.ifcDataStore;
   if (!dataStore) return null;
@@ -60,7 +70,7 @@ export function elementFacts(modelId: string, expressId: number): ElementFacts |
   const unit = getModelLengthUnitScale(dataStore) || 1;
   const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
   let typeId: number | null = null;
-  try { typeId = typeOf(live, expressId); } catch { typeId = null; }
+  try { typeId = typeIdOf(live, expressId); } catch { typeId = null; }
   const typeAttrs = typeId === null ? null : attributes(live, typeId);
   const names = [text(typeAttrs?.[2]), text(attrs[4]), text(attrs[2])].filter((n): n is string => n !== null);
   return {
@@ -73,25 +83,24 @@ export function elementFacts(modelId: string, expressId: number): ElementFacts |
   };
 }
 
-interface Memo { key: string; byElement: Map<number, DrawnJoinery | null> }
+interface Memo {
+  key: string;
+  byElement: Map<number, DrawnJoinery | null>;
+  /** Every occurrence's type, read once for this key (`typeIndex`). */
+  types?: Map<number, number | null>;
+}
 const memo = new Map<string, Memo>();
-// Distinct objects get distinct numbers, so a key changes whenever the mapping or the catalogue is replaced.
-const ids = new WeakMap<object, number>();
-let nextId = 1;
-const idOf = (o: object): number => {
-  let id = ids.get(o);
-  if (id === undefined) { id = nextId++; ids.set(o, id); }
-  return id;
-};
 
 /** The joinery element `expressId` of `modelId` is drawn with, or null (drawn from its mesh). */
 export function drawnJoinery(modelId: string, expressId: number): DrawnJoinery | null {
   const s = useViewerStore.getState();
   const p = useProjectStore.getState();
+  const dataStore = s.models.get(modelId)?.ifcDataStore;
+  if (!dataStore) return null;
   const view = s.mutationViews.get(modelId) ?? null;
   const mapping = p.joineryMapping ?? DEFAULT_JOINERY_MAPPING;
   const list = p.joineryTypes ?? [];
-  const key = `${view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-'}|${idOf(mapping)}|${idOf(list)}|${idOf(p.symbolFlips ?? {})}`;
+  const key = `${idOf(dataStore)}|${view ? `${view.getMutationCount()}:${view.getNewEntities().length}` : '-'}|${idOf(mapping)}|${idOf(list)}|${idOf(p.symbolFlips ?? {})}`;
   let m = memo.get(modelId);
   if (!m || m.key !== key) {
     m = { key, byElement: new Map() };
@@ -101,9 +110,12 @@ export function drawnJoinery(modelId: string, expressId: number): DrawnJoinery |
   let out: DrawnJoinery | null = null;
   const own = joineryOfElement(modelId, expressId);
   if (own) {
-    out = { spec: own.spec, flips: own.flips, source: 'model' };
+    // The drawing's own flips (by GlobalId) turn it from the way the model states it; the model keeps its own.
+    const guid = elementFacts(modelId, expressId, () => null)?.globalId;
+    out = { spec: own.spec, flips: own.flips ^ (guid ? p.symbolFlips?.[guid] ?? 0 : 0), source: 'model' };
   } else {
-    const facts = elementFacts(modelId, expressId);
+    const held = m;
+    const facts = elementFacts(modelId, expressId, (live, id) => (held.types ??= typeIndex(live)).get(id) ?? null);
     const match = facts ? resolveMapping(mapping, list, facts) : null;
     if (facts && match) {
       const flips = facts.globalId ? p.symbolFlips?.[facts.globalId] ?? 0 : 0;

@@ -11,14 +11,16 @@
 
 import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
-import { dimensionLayout, entitySkeleton, nextAxisLabel } from '../annotation';
+import { entitySkeleton, nextAxisLabel } from '../annotation';
 import { continueDimension, type DimensionShape } from '../dimension-chain';
-import { alignDimensionLine } from '../dimension-align';
+import { alignDimensionLine, alignGlyph } from '../dimension-align';
+import { anchorParams, encodedAnchorAt } from '../dimension-anchor';
 import { orthoGuides, snapLeaderEnd } from '../leader-segments';
 import { findPattern } from '../hatch/library';
 import { regionAt } from '../hatch/region';
-import type { AnnotationShape, AxisShape, DraftShape, Pt } from '../types';
+import type { AnnotationShape, AxisShape, DraftParamValue, DraftShape, Pt } from '../types';
 import type { DraftCommandDef, DraftContext, StepResult } from './types';
+import { dimAngularCommand, dimDiameterCommand, dimRadiusCommand } from './dim-radial';
 
 /** The drafting command that draws a shape. */
 export function toolOfShape(shape: AnnotationShape): string {
@@ -30,9 +32,9 @@ export function toolOfShape(shape: AnnotationShape): string {
   }
 }
 
-function add(ctx: DraftContext, shape: AnnotationShape): void {
+function add(ctx: DraftContext, shape: AnnotationShape, extra: Record<string, string> = {}): void {
   // The current style, and an override when the height was typed differently.
-  const params = styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle });
+  const params: Record<string, DraftParamValue> = { ...styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle }), ...extra };
   const type = ctx.settings.annotationType;
   if (type && type.tool === toolOfShape(shape)) params.atype = type.id;
   editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, params)] });
@@ -127,17 +129,26 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
       const pts: Pt[] = [];
       /** The last dimension placed: the chain continues from its end. */
       let last: DimensionShape | null = null;
+      /** What each point of the dimension being drawn is attached to (a model element's corner it was snapped to), if anything. */
+      const anchors: (string | undefined)[] = [];
+      let lastAnchorB: string | undefined;
+      const anchorAt = (p: Pt): string | undefined => encodedAnchorAt(p, ctx.elementBoxesAt?.(p) ?? []);
       const shape = (at: Pt): DimensionShape => ({ type: 'dimension', variant, a: pts[0], b: pts[1], at, height: ctx.settings.textHeight });
       /** The dimension line's place for a cursor: aligned to a close existing dimension line (within two text heights). */
       const place = (cursor: Pt) => {
-        const existing = ctx.entities().flatMap((e) => (e.shape.type === 'dimension' ? [e.shape] : []));
+        const existing = ctx.settings.dimAlign ? ctx.entities().flatMap((e) => (e.shape.type === 'dimension' ? [e.shape] : [])) : [];
         return alignDimensionLine(pts[0], pts[1], variant, cursor, existing, 2 * ctx.settings.textHeight);
       };
       return {
-        prompt: () => ({ key: last ? 'drafting.prompt.dimNext' : pts.length === 0 ? 'drafting.prompt.dimFirst' : pts.length === 1 ? 'drafting.prompt.dimSecond' : 'drafting.prompt.dimLine' }),
+        prompt: () => ({ key: last ? 'drafting.prompt.dimNext' : pts.length === 0 ? 'drafting.prompt.dimFirst' : pts.length === 1 ? 'drafting.prompt.dimSecond' : 'drafting.prompt.dimLineAlign' }),
         input: () => 'point',
         basePoint: () => last?.b ?? pts.at(-1) ?? null,
         onKeyword(word) {
+          if (word === 'ALIGN') {
+            ctx.settings.dimAlign = !ctx.settings.dimAlign;
+            ctx.say(ctx.settings.dimAlign ? 'drafting.msg.dimAlignOn' : 'drafting.msg.dimAlignOff');
+            return 'continue';
+          }
           if (word !== 'SINGLE' && word !== 'CONTINUOUS') return undefined;
           ctx.settings.dimContinuous = word === 'CONTINUOUS';
           return 'continue';
@@ -146,17 +157,21 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
           if (last) {
             const next = continueDimension(last, p);
             if (next) {
-              add(ctx, next);
+              const anchorB = anchorAt(p);
+              add(ctx, next, anchorParams(lastAnchorB, anchorB));
               last = next;
+              lastAnchorB = anchorB;
             }
             return 'continue';
           }
           if (pts.length < 2) {
             pts.push(p);
+            anchors.push(anchorAt(p));
             return 'continue';
           }
           last = shape(place(p).at);
-          add(ctx, last);
+          lastAnchorB = anchors[1];
+          add(ctx, last, anchorParams(anchors[0], anchors[1]));
           return ctx.settings.dimContinuous ? 'continue' : 'done';
         },
         onEnter: () => 'done',
@@ -167,8 +182,8 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
           }
           if (pts.length === 1) return [{ type: 'line', a: pts[0], b: cursor }];
           if (pts.length === 2) {
-            const { at, guide } = place(cursor);
-            return [...skeleton(shape(at)), ...(guide ? [{ type: 'line' as const, a: guide.a, b: guide.b }] : [])];
+            const aligned = place(cursor);
+            return [...skeleton(shape(aligned.at)), ...alignGlyph(aligned, ctx.settings.textHeight)];
           }
           return [];
         },
@@ -179,66 +194,6 @@ function linearDim(variant: 'aligned' | 'linear'): DraftCommandDef {
 
 export const dimAlignedCommand = linearDim('aligned');
 export const dimLinearCommand = linearDim('linear');
-
-/** DIMRADIUS / DIMDIAMETER: pick a circle or arc, then where the label goes. */
-function radialDim(diameter: boolean): DraftCommandDef {
-  return {
-    id: diameter ? 'dimdiameter' : 'dimradius',
-    aliases: diameter ? ['DIMDIAMETER', 'DDI'] : ['DIMRADIUS', 'DRA'],
-    labelKey: diameter ? 'drafting.cmd.dimDiameter' : 'drafting.cmd.dimRadius',
-    create(ctx) {
-      let circle: { c: Pt; r: number } | null = null;
-      const shape = (at: Pt): AnnotationShape => ({ type: 'radial', c: (circle as { c: Pt }).c, r: (circle as { r: number }).r, at, diameter, height: ctx.settings.textHeight });
-      return {
-        prompt: () => ({ key: circle ? 'drafting.prompt.dimLine' : 'drafting.prompt.pickCircle' }),
-        input: () => (circle ? 'point' : 'pick'),
-        basePoint: () => circle?.c ?? null,
-        onPick(entity) {
-          if (entity.shape.type === 'circle' || entity.shape.type === 'arc') circle = { c: entity.shape.c, r: entity.shape.r };
-          else ctx.say('drafting.msg.pickCircle');
-          return 'continue';
-        },
-        onPoint(p) {
-          if (!circle) return 'continue';
-          add(ctx, shape(p));
-          return 'done';
-        },
-        preview: (cursor) => (circle ? skeleton(shape(cursor)) : []),
-      };
-    },
-  };
-}
-
-export const dimRadiusCommand = radialDim(false);
-export const dimDiameterCommand = radialDim(true);
-
-export const dimAngularCommand: DraftCommandDef = {
-  id: 'dimangular',
-  aliases: ['DIMANGULAR', 'DAN'],
-  labelKey: 'drafting.cmd.dimAngular',
-  create(ctx) {
-    const pts: Pt[] = [];
-    const shape = (at: Pt): AnnotationShape => ({ type: 'angular', c: pts[0], a: pts[1], b: pts[2], at, height: ctx.settings.textHeight });
-    return {
-      prompt: () => ({ key: ['drafting.prompt.angleVertex', 'drafting.prompt.angleFirst', 'drafting.prompt.angleSecond', 'drafting.prompt.dimLine'][pts.length] as 'drafting.prompt.dimLine' }),
-      input: () => 'point',
-      basePoint: () => pts[0] ?? null,
-      onPoint(p) {
-        if (pts.length < 3) {
-          pts.push(p);
-          return 'continue';
-        }
-        add(ctx, shape(p));
-        return 'done';
-      },
-      preview(cursor) {
-        if (pts.length === 1 || pts.length === 2) return [{ type: 'polyline', pts: [...pts.slice(1), pts[0], cursor].slice(-3), closed: false }];
-        if (pts.length === 3) return dimensionLayout(shape(cursor) as Extract<AnnotationShape, { type: 'angular' }>).lines.map((l) => ({ type: 'line' as const, a: l.a, b: l.b }));
-        return [];
-      },
-    };
-  },
-};
 
 export const levelCommand: DraftCommandDef = {
   id: 'level',

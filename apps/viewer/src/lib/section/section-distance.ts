@@ -6,7 +6,7 @@
  * The Section bar's distance arithmetic (#5499, charter #5478 §6).
  *
  * The store keeps a cardinal cut as a PERCENTAGE of the model bounds along
- * its axis (`SectionPlane.position`, 0..100), which is what every reader
+ * its axis (`SectionPlane.position`, 0..100 inside the bounds), which is what every reader
  * (renderer, drawing generation, BCF, export) resolves against the merged
  * `shiftedBounds`. The bar shows the same cut in world METRES — "+1.20 m",
  * not "37.5 %" — because a distance is what a user reasons about, and a
@@ -17,11 +17,12 @@
  *
  * Storeys are collected here too (shared with the floor-plan command,
  * `useFloorplanView`), because a storey is the bar's snap target: a plan cut
- * sits `PLAN_CUT_HEIGHT_M` above its floor, the same architectural
- * convention the floor plan applies.
+ * sits `defaultPlanCutHeight` above its floor, the one rule the sheet plans
+ * use too (#256), so the live cut and the sheet cannot disagree.
  */
 
 import type { GeometryResult } from '@ifc-lite/geometry';
+import { defaultPlanCutHeight } from '@bimvoice/ifcsheet';
 import type { SectionPlaneAxis } from '@/store/types';
 
 interface Vec3Like { x: number; y: number; z: number }
@@ -52,9 +53,6 @@ export interface SectionStorey {
   /** Floor elevation, metres, in the model's (Z-up) frame. */
   elevation: number;
 }
-
-/** Height of a plan cut above its storey's floor (the architectural convention). */
-export const PLAN_CUT_HEIGHT_M = 1.2;
 
 /** Viewer is Y-up: `down` cuts along viewer Y (IFC Z), `front` along viewer Z (IFC Y), `side` along X. */
 export function sectionAxisKey(axis: SectionPlaneAxis): 'x' | 'y' | 'z' {
@@ -108,10 +106,37 @@ export function percentToWorld(position: number, range: AxisRange): number {
   return range.min + (position / 100) * (range.max - range.min);
 }
 
-/** A world coordinate along the axis as the clamped 0..100 `position`. */
+/**
+ * A world coordinate along the axis as a `position`: the exact inverse of
+ * `percentToWorld`, NOT clamped. A plane outside the bounds (a plan cut above
+ * the model top, an elevation standing outside the facade) is below 0 or past
+ * 100, and every reader turns it back into the same metres. Clamping here
+ * moved such a cut onto the face of the bounds, i.e. onto geometry (#226).
+ */
 export function worldToPercent(world: number, range: AxisRange): number {
-  const pct = ((world - range.min) / (range.max - range.min)) * 100;
-  return Math.min(100, Math.max(0, pct));
+  return ((world - range.min) / (range.max - range.min)) * 100;
+}
+
+/**
+ * A world coordinate as the Section bar slider's position: the one clamped
+ * conversion, for a cut the user drags. The slider spans the model (0..100)
+ * widened to include the plane it already holds (`current`, a position), so a
+ * plane standing beyond the model stays reachable and a drag cannot push it
+ * further out. A programmatic placement (a storey's plan cut, an alignment
+ * station) goes through `worldToPercent`, never this.
+ */
+export function worldToSliderPercent(world: number, range: AxisRange, current = 50): number {
+  const lo = Math.min(0, current);
+  const hi = Math.max(100, current);
+  return Math.min(hi, Math.max(lo, worldToPercent(world, range)));
+}
+
+/** The world span the Section bar slider walks: the model's, widened to the plane it holds. */
+export function sliderWorldRange(range: AxisRange, current: number): AxisRange {
+  return {
+    min: Math.min(range.min, percentToWorld(current, range)),
+    max: Math.max(range.max, percentToWorld(current, range)),
+  };
 }
 
 /**
@@ -147,7 +172,13 @@ export function collectStoreys(
   return Array.from(seen.values()).sort((a, b) => b.elevation - a.elevation);
 }
 
-/** Where a plan cut through `storey` sits: its floor plus the plan-cut height. */
-export function storeyCutElevation(storey: Pick<SectionStorey, 'elevation'>): number {
-  return storey.elevation + PLAN_CUT_HEIGHT_M;
+/**
+ * Where a plan cut through `storey` sits: its floor plus
+ * {@link defaultPlanCutHeight}, the sheet plans' rule (1.2 m, kept below the
+ * next storey's floor build-up when that is closer). `storeys` is every storey
+ * of the model(s), the list the rule looks the next storey up in; it is
+ * required so a caller cannot fall back to a plain floor + 1.2 m (#256).
+ */
+export function storeyCutElevation(storey: Pick<SectionStorey, 'elevation'>, storeys: readonly Pick<SectionStorey, 'elevation'>[]): number {
+  return storey.elevation + defaultPlanCutHeight(storey, storeys);
 }

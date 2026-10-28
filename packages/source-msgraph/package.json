@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/source-msgraph",
+  "private": true,
   "version": "0.3.0",
   "description": "Microsoft Graph file-source provider for the signed-in user's own OneDrive",
   "type": "module",
