@@ -117,7 +117,17 @@ export function styledDrawing(
   /** The GlobalId of a drawing item's element (the drawing carries renderer ids): how the view's hidden elements, lines and per-element graphics (#32, #33) find theirs. */
   globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
-  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), scheme);
+  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), shownRooms(scheme, graphics, globalIdOf));
+}
+
+/**
+ * The scheme without the rooms the view hides (the Spaces category, or the one room, #33). A room's colour and its hatch are both made
+ * from `schemeFills`, so this is the one visibility check for the two: a hidden room keeps neither on the paper.
+ */
+function shownRooms(scheme: SchemeResult | null | undefined, graphics: ViewGraphics | undefined, globalIdOf?: (entityId: number) => string | null | undefined): SchemeResult | null | undefined {
+  if (!scheme || !graphics) return scheme;
+  const fills = scheme.fills.filter((f) => elementShown(graphics, globalIdOf?.(f.entityId), 'IfcSpace'));
+  return fills.length === scheme.fills.length ? scheme : { ...scheme, fills };
 }
 
 function styledByGraphics(

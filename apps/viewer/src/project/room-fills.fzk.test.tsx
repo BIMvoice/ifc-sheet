@@ -32,6 +32,7 @@ import { schemeResultOf } from './view-colour-scheme';
 import { styledDrawing, type StyledDrawing } from './view-graphics';
 import { useViewDrawings } from './view-drawings';
 import { planViewFor } from './view-defaults';
+import { renderIdGlobalId } from './element-guid';
 import type { ProjectSheet, ProjectView } from './types';
 import type { ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 
@@ -62,7 +63,7 @@ let ground: ProjectView;
 let raw: Drawing2D;
 
 const withScheme = (view: ProjectView, scheme: ColourScheme | undefined): ProjectView => ({ ...view, graphics: scheme ? { colourScheme: scheme } : undefined } as ProjectView);
-const styled = (view: ProjectView): StyledDrawing => styledDrawing(raw, view.graphics, undefined, undefined, undefined, null, schemeResultOf(view, raw, meshes));
+const styled = (view: ProjectView): StyledDrawing => styledDrawing(raw, view.graphics, undefined, undefined, undefined, null, schemeResultOf(view, raw, meshes), renderIdGlobalId);
 const pensOf = (view: ProjectView, unit?: number, scale = T.scale): Pen[] => viewportPens(styled(view), view.graphics, { ...T, scale }, 'down', [], undefined, undefined, undefined, undefined, unit);
 const hatchPens = (view: ProjectView): Pen[] => pensOf(view).filter((p) => p.schemeHatch);
 const sheetOf = (view: ProjectView): ProjectSheet => ({ id: 's', number: 'A-101', name: 'Plans', createdAt: 1, paper: 'A1', orientation: 'landscape', titleBlock: {}, viewports: [{ id: 'vp', viewId: view.id, x: 400, y: 300, scale: 100, width: 700, height: 500, center: null }] });
@@ -124,6 +125,26 @@ describe('rooms filled by name with one value hatched', { skip }, () => {
     assert.equal(entities(dxf, 'LINE') + entities(dxf, 'LWPOLYLINE'), entities(flat, 'LINE') + entities(flat, 'LWPOLYLINE'), 'no stroke of the pattern is written as a line');
     assert.equal(entities(flat, 'HATCH'), GROUND_ROOMS.length);
     assert.ok(!flat.includes('\nPARQUET\n'));
+  });
+
+  it('keeps no pattern on a room the view hides, nor on any room when it hides the Spaces category (#516)', () => {
+    const wohnen = meshes.find((x) => x.ifcType === 'IfcSpace' && schemeResultOf(withScheme(ground, HATCHED), raw, meshes)!.fills.some((f) => f.entityId === x.expressId && f.key === 'wohnen'))!.expressId;
+    const withGraphics = (extra: object): ProjectView => ({ ...withScheme(ground, HATCHED), graphics: { colourScheme: HATCHED, ...extra } } as ProjectView);
+    const shown = withGraphics({});
+    assert.equal(hatchPens(shown).length, 1, 'shown: one pattern pen');
+    assert.equal(pensOf(shown).filter((p) => p.layer === 'COLOUR').length, GROUND_ROOMS.length);
+    // One room hidden (#33): its colour and its pattern both go; the other rooms keep their colours.
+    const room = withGraphics({ hiddenElements: [renderIdGlobalId(wohnen)!] });
+    assert.equal(pensOf(room).filter((p) => p.layer === 'COLOUR').length, GROUND_ROOMS.length - 1, 'the fill follows the hidden room');
+    assert.equal(hatchPens(room).length, 0, 'so does its hatch');
+    // The Spaces category hidden: no fill and no pattern at all.
+    const category = withGraphics({ categories: { spaces: { visible: false } } });
+    assert.equal(pensOf(category).filter((p) => p.layer === 'COLOUR').length, 0);
+    assert.equal(hatchPens(category).length, 0);
+    // Through the sheet SVG, which the PDF and the DXF are made from.
+    const svg = svgOf(category);
+    assert.equal(svg.querySelectorAll('path[data-dxf-pattern]').length, 0);
+    cleanup();
   });
 
   it('draws nothing when the view\'s switch is off, and keeps the scheme to switch on again', () => {
