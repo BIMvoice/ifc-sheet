@@ -16,6 +16,7 @@ import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from
 import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
+import { underlayNotes } from '../cli-underlays.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
@@ -94,7 +95,12 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
     return EXIT.failed;
   }
-  const sheets = await sheetGraphics(set, model, { ...(standard.pens ? { pens: standard.pens } : {}), language });
+  // The project's underlays (#457) are printed on the sheets they name. The set built here has its own ids, so one that names a view or sheet this set does not have cannot print: say so.
+  const underlays = project?.underlays ?? [];
+  const document = underlays.length > 0 ? { ...set.document, underlays } : set.document;
+  const underlayWarnings = underlayNotes(document, { dxf: Boolean(args.dxf || args.handover) });
+  for (const note of underlayWarnings) io.stderr(`${note}\n`);
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), language });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);

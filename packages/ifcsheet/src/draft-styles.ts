@@ -39,6 +39,11 @@ export interface DimStyle {
   precision: number;
   unit: DraftLengthUnit;
   color?: string;
+  /**
+   * Paper millimetres from the building to the first string DIMALL places (the next ones follow at a fixed step).
+   * Absent in a style saved before the setting existed: DIMALL then uses the default below.
+   */
+  allOffset?: number;
 }
 
 /** The id of the project's own text and dimension style. */
@@ -47,4 +52,6 @@ export const STANDARD_STYLE_ID = 'standard';
 export const DEFAULT_DIM_STYLE: DimStyle = {
   id: STANDARD_STYLE_ID, name: 'Standard', textStyle: STANDARD_STYLE_ID, arrow: 'tick', arrowSize: 1.5, extGap: 1, extOver: 1.5,
   placement: 'above', textGap: 0.8, precision: 2, unit: 'm',
+  // 20 mm: the 8 mm step between strings on top of the 12 mm it used to be, so a row of tags fits between the wall and the first string.
+  allOffset: 20,
 };
