@@ -24,7 +24,6 @@ import { openStandards } from '@/project/standards-dialog-store';
 
 import { useTranslation } from '@/i18n';
 
-
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
 
@@ -53,6 +52,8 @@ import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView,
   currentLayerId,
+  baseDraftSettings,
+  patchDraftSettings,
   pressEscape,
   runningCommand,
   setCurrentLayer,
@@ -63,6 +64,7 @@ import {
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
 
@@ -139,7 +141,6 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
-import { Toggle } from './Toggle';
 
 
 const NO_SHEET_TRANSFORM = { current: null };
@@ -161,6 +162,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const orthoToggled = useDraftingSession((s) => s.ortho);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
@@ -296,6 +298,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
         <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
           className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"

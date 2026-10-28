@@ -25,8 +25,21 @@
  *      tsconfig `paths` and relative paths rather than through package.json
  *      (packages/ifcsheet is one), so the manifest alone proves nothing.
  *
- * Usage: node scripts/ci-viewer-affected.mjs <file listing changed paths>
- * Prints the reason on stderr and `true` or `false` on stdout.
+ * Before those rules, test files that nothing imports are set aside (#538):
+ *
+ *   - lane `tests` (the shards): a `*.test.*` file in a closure package other
+ *     than apps/viewer. The shards run only the tests found under
+ *     apps/viewer/src, and a package's tests are not emitted to its dist.
+ *   - lane `build` (the production build): additionally a `*.test.*` file in
+ *     apps/viewer, which the bundle reaches only through an import.
+ *   Either way the file must not be mentioned, by its name without extension
+ *   (`foo.test`), in apps/viewer, the closure packages or the root config
+ *   (markdown excluded), so a test helper that is imported stays a trigger. A
+ *   test file in apps/viewer always runs the shards.
+ *
+ * Usage: node scripts/ci-viewer-affected.mjs <file listing changed paths> [tests|build]
+ * Prints the reason on stderr and `true` or `false` on stdout. The lane
+ * defaults to `tests`; an unknown lane is an error, hence `true`.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -105,14 +118,34 @@ function gitMentions(root, needles, pathspecs) {
   }
 }
 
+const TEST_FILE = /\.test\.(ts|tsx|mjs|js)$/;
+
 /**
- * @param {{root: string, files: string[], mentions?: typeof gitMentions}} input
+ * @param {{root: string, files: string[], lane?: 'tests'|'build', mentions?: typeof gitMentions}} input
  * @returns {{affected: boolean, reason: string}}
  */
-export function viewerAffected({ root, files, mentions = gitMentions }) {
+export function viewerAffected({ root, files, lane = 'tests', mentions = gitMentions }) {
+  if (lane !== 'tests' && lane !== 'build') throw new Error(`unknown lane ${lane}`);
   if (files.length === 0) return { affected: true, reason: 'no files given' };
   const packages = workspacePackages(root);
   const closure = viewerClosure(packages);
+  const readerDirs = [...closure].filter((d) => existsSync(join(root, d)));
+  const readerSpecs = [...readerDirs, ...ROOT_CONFIG.filter((f) => existsSync(join(root, f)))];
+  const inert = [];
+  const rest = files.filter((file) => {
+    if (!TEST_FILE.test(file)) return true;
+    const owner = ownerOf(file, packages);
+    if (!owner || !closure.has(owner)) return true;
+    if (owner === VIEWER && lane !== 'build') return true;
+    const stem = file.split('/').pop().replace(/\.[^.]+$/, '');
+    if (mentions(root, [stem], [...readerSpecs, `:(exclude)${file}`])) return true;
+    inert.push(file);
+    return false;
+  });
+  if (rest.length === 0) {
+    return { affected: false, reason: `only test files nothing imports changed (${inert.length})` };
+  }
+  files = rest;
   const owners = new Set();
   for (const file of files) {
     const owner = ownerOf(file, packages);
@@ -120,8 +153,7 @@ export function viewerAffected({ root, files, mentions = gitMentions }) {
     if (closure.has(owner)) return { affected: true, reason: `${file} is in the viewer's closure (${owner})` };
     owners.add(owner);
   }
-  const readers = [...closure].filter((d) => existsSync(join(root, d)));
-  const pathspecs = [...readers, ...ROOT_CONFIG.filter((f) => existsSync(join(root, f)))];
+  const pathspecs = readerSpecs;
   for (const dir of owners) {
     const { name } = packages.get(dir);
     const base = dir.split('/')[1];
@@ -138,7 +170,7 @@ if (isMainEntry(import.meta.url)) {
   try {
     const listing = readFileSync(process.argv[2], 'utf8');
     const files = listing.split('\n').map((l) => l.trim()).filter(Boolean);
-    result = viewerAffected({ root: process.cwd(), files });
+    result = viewerAffected({ root: process.cwd(), files, lane: process.argv[3] ?? 'tests' });
   } catch (err) {
     result = { affected: true, reason: `error, running the viewer lane: ${err.message}` };
   }

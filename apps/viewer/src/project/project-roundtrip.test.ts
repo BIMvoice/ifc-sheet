@@ -154,7 +154,7 @@ const legend: Required<ProjectLegend> = {
   columns: 2, rowHeight: 9, swatchWidth: 22, textStyle: 'big', headings: false,
 };
 
-const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'dashdot', group: 'g1' };
+const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'lt-centre', group: 'g1', print: false };
 
 const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, placed: true, placedPages: [{ page: 3, x: 120, y: 80 }], keyPlanOf: 'vp0', drawingNumber: '7',
