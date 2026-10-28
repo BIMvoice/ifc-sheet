@@ -11,18 +11,21 @@
  */
 
 import { resolveCadLayer, type CadLayerRule } from '@/project/cad-layers';
-import type { LineType } from '@/drafting/styles';
 import type { PenSpec } from './dxf-r2000';
-
-const LINE_TYPES = new Set<LineType>(['continuous', 'dashed', 'dotted', 'dashdot']);
 
 /** The pen of the layer an element is on (from its tags), and the element's own colour. */
 function pensOf(tag: (name: string) => string | undefined, colour: string): TaggedPens {
   const lt = tag('ltype');
-  const lineType = LINE_TYPES.has(lt as LineType) ? (lt as LineType) : 'continuous';
-  const lw = Number(tag('lw'));
-  const lineWeight = Number.isFinite(lw) && lw > 0 ? lw : 0.25;
-  return { layer: { color: tag('color') ?? colour, lineType, lineWeight }, own: { color: colour, lineType, lineWeight } };
+  const lineType = lt || 'continuous';
+  const weight = (name: string) => {
+    const n = Number(tag(name));
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  const lineWeight = weight('lw') ?? 0.25;
+  return {
+    layer: { color: tag('color') ?? colour, lineType, lineWeight, ...(tag('print') === '0' ? { print: false } : {}) },
+    own: { color: colour, lineType: tag('own-ltype') || lineType, lineWeight: weight('own-lw') ?? lineWeight },
+  };
 }
 
 export interface TaggedPens { layer: PenSpec; own: PenSpec }
@@ -40,6 +43,7 @@ export function layerAndPens(
   const choice = resolveCadLayer(rules, { source: name, kind: tag('kind'), ifcClass: tag('class'), material: tag('material') });
   if (!choice) return { name, ...pens };
   const over = (p: PenSpec): PenSpec => ({
+    ...p,
     color: choice.color ?? p.color,
     lineType: choice.lineType ?? p.lineType,
     lineWeight: choice.lineWeight ?? p.lineWeight,

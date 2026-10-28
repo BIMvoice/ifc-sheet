@@ -70,8 +70,8 @@ export const checkCommand: CliCommand = {
   help: `  check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
           quantity sets, unique GlobalIds) and which drawings and schedules are
           weaker for it. Plain text in the language the project records, else --locale (ro or en), else English; or JSON with --json. With --project, also what the
-          saved project's split schedules get wrong: an element listed in more than one
-          part, or in no part.`,
+          saved project's split schedules get wrong (an element listed in more than one
+          part, or in no part) and the title block values its layout cuts short on a sheet.`,
   async run(rest, values, io) {
     const badLocale = localeProblem(values.locale);
     if (badLocale) {

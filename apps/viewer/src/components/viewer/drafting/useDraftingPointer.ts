@@ -10,12 +10,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, setOrthoHeld, useDraftingSession, windowSelect } from '@/drafting/session';
+import { baseDraftSettings, clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, setOrthoHeld, useDraftingSession, windowSelect } from '@/drafting/session';
 import { findSnap } from '@/drafting/snaps';
 import { capturePointer } from '@/lib/pointer-capture';
 import { referencesIn, type ReferenceSet } from '@/drafting/references';
 import type { DraftShape, Pt, SnapHit, SnapMode } from '@/drafting/types';
 import { gripAt, moveGrip, type Grip } from '@/drafting/grips';
+import { alignDraggedGrip } from '@/drafting/dimension-align';
 import { editDrafts, runAsOneUndoStep } from '@/drafting/draft-store';
 import { depthFromPoint } from '@/drafting/section-depth';
 import { moveDetailGrip } from '@/drafting/detail-mark';
@@ -65,6 +66,11 @@ export interface DraftingPointerState {
 /** The canvas cursor over a grip: an open hand to pick it up by click or drag, a closed one while it is carried; null elsewhere. */
 export function gripCursor(state: Pick<DraftingPointerState, 'gripDrag' | 'gripHover'>): 'grab' | 'grabbing' | null {
   return state.gripDrag ? 'grabbing' : state.gripHover ? 'grab' : null;
+}
+
+/** A dimension line dragged near another dimension line goes onto it, unless the toggle is off (`dimAlign`). */
+function alignedDragPoint(grip: Grip, p: Pt): Pt {
+  return baseDraftSettings().dimAlign ? alignDraggedGrip(useProjectStore.getState().drafts, grip.id, grip.key, p).at : p;
 }
 
 export function useDraftingPointer({ containerRef, transform, setTransform, axis, entityShapes, references, grips = [] }: Params) {
@@ -129,7 +135,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       // which a horizontal / vertical hold would only project onto, so neither is held).
       const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
       const free = hit?.point ?? raw;
-      const at = held.detail || held.section ? free : constrainFrom(held.at, free);
+      const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(held.at, free));
       setState({ cursor: at, snap: hit, hoverId: null, window: null, gripDrag: { grip: held, at }, gripHover: null });
       return;
     }

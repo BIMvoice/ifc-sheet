@@ -33,12 +33,17 @@ export type SchedulePrim =
   | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
+/** A cell of a column table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) and the column (id) it is. */
+export interface ScheduleCell { x: number; y: number; w: number; h: number; guid: string; column: string; /** The cell holds a value typed over the model's: the editor marks it, the print does not. */ overridden?: true }
+
 export interface ScheduleLayout {
   width: number;
   height: number;
   prims: SchedulePrim[];
   /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
   pages?: number;
+  /** The cells of this page a person can pick (a list schedule's element rows), by the table's row and column. */
+  cells?: ScheduleCell[];
   /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
   minBox?: { width: number; height: number };
   /**
@@ -93,7 +98,7 @@ const BAND_GAP = 8;
 const DEFAULT_MAX_WIDTH = 380;
 
 export function operationText(entry: ScheduleEntry, labels: ScheduleLabels): string {
-  if (!entry.spec) return '—';
+  if (!entry.spec) return entry.operations?.length ? entry.operations.map(labels.op).join(' + ') : '—';
   const ops = [...new Set(normalisedPanels(entry.spec).map((p) => p.operation))];
   return ops.map(labels.op).join(' + ');
 }
@@ -127,7 +132,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
       label: labels.size, value: (e) => `${mm(e.width)} × ${mm(e.height)}`,
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
-    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec ? operationText(e, labels) : null] }],
+    operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec || e.operations?.length ? operationText(e, labels) : null] }],
     sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
     levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],

@@ -46,7 +46,7 @@ type Step =
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard'] as const;
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips'] as const;
 type StepField = (typeof STEP_FIELDS)[number];
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
@@ -300,6 +300,13 @@ export function editDrafts(edit: {
   if (added.length === 0 && remove.size === 0 && update.size === 0) return [];
   commitDrafts([...next, ...added]);
   return added.map((d) => d.id);
+}
+
+/** One undoable step that swaps a whole entity (its shape and its params) for `next`, found by id. */
+export function replaceDraft(next: DraftEntity): void {
+  const { drafts } = useProjectStore.getState();
+  if (!drafts.some((d) => d.id === next.id)) return;
+  commitDrafts(drafts.map((d) => (d.id === next.id ? next : d)));
 }
 
 export function setDraftParams(ids: ReadonlySet<string>, params: Record<string, DraftParamValue | null>): void {
