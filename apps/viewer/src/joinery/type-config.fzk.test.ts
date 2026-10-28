@@ -22,7 +22,8 @@ import { setGraphicStandard } from '@/project/graphic-standard-actions';
 import { openingSymbols } from '@/drafting/opening-symbols';
 import { drawnJoinery, elementFacts } from './mapped-joinery';
 import { invalidateJoineryReads } from './element-spec';
-import { layoutSchedule, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
+import { joineryExport, layoutSchedule, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
+import { joineryLabels } from './export-test-util';
 import { scheduleData } from './schedule-data';
 import { configureElementType, typeOpeningOf } from './type-config-actions';
 import { setOpeningConvention } from './opening-convention';
@@ -103,6 +104,20 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
       if (extra.some((o) => o.globalId === f.globalId)) continue;
       assert.notEqual(drawn(f)?.entry?.id, row.spec.id, 'a window of another type is not drawn with it');
     }
+  });
+
+  it('claims no sill height: the IFC states none per type, so the sill cell is empty, not the default frame\'s 900', () => {
+    const { biggest } = windowsByType();
+    configure(biggest[0]);
+    invalidateJoineryReads();
+    const data = scheduleData('window');
+    const [types] = joineryExport(data, joineryLabels(labels)).tables;
+    const sill = types.header.indexOf(labels.sill);
+    assert.ok(sill > 0, 'the schedule has a sill column');
+    const row = types.rows[data.entries.findIndex((e) => e.spec)];
+    assert.equal(row[sill], null);
+    const texts = layoutSchedule({ ...data, entries: data.entries.filter((e) => e.spec) }, labels, { scale: 20 }).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+    assert.ok(!texts.includes('900'), 'no sill of 900 is printed');
   });
 
   it('the schedule\'s elevation shows the opening lines of the type: a side triangle and a tilt triangle per leaf', () => {
