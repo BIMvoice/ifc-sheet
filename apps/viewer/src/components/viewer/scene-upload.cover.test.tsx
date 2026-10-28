@@ -29,6 +29,7 @@ import { Scene } from '../../../../../packages/renderer/src/scene.js';
 import { useAnimationLoop, type UseAnimationLoopParams } from './useAnimationLoop.js';
 import { useGeometryStreaming, type UseGeometryStreamingParams } from './useGeometryStreaming.js';
 import { coverViewport } from './viewport-cover.js';
+import { shardBytes } from '@/test/ifns-shard-bytes.js';
 
 const covers: Array<() => void> = [];
 function cover(): () => void { const lift = coverViewport(); covers.push(lift); return lift; }
@@ -96,17 +97,19 @@ function realSceneRenderer(gpu: Gpu): { renderer: Renderer; scene: Scene } {
 const ref = <T,>(current: T) => ({ current });
 const noop = () => {};
 
-function Harness({ renderer, geometry }: { renderer: Renderer; geometry: MeshData[] }) {
+type Shards = Array<{ modelId: string; bytes: ArrayBuffer }> | null;
+
+function Harness({ renderer, geometry, shards = null, clearShards = noop }: { renderer: Renderer; geometry: MeshData[]; shards?: Shards; clearShards?: () => void }) {
   const rendererRef = useRef<Renderer | null>(renderer);
   const canvasRef = useRef<HTMLCanvasElement | null>(Object.assign(document.createElement('canvas'), { width: 256, height: 256 }));
   useGeometryStreaming({
     rendererRef, isInitialized: true, geometry, geometryVersion: 1, isStreaming: false, modelCount: 1,
     geometryBoundsRef: ref({ min: { x: -100, y: -100, z: -100 }, max: { x: 100, y: 100, z: 100 } }),
     pendingMeshColorUpdates: null, pendingColorUpdates: null, pendingMeshRemovals: null,
-    pendingMeshTranslations: null, pendingMeshRotations: null, pendingInstancedShards: null,
+    pendingMeshTranslations: null, pendingMeshRotations: null, pendingInstancedShards: shards,
     clearPendingMeshColorUpdates: noop, clearPendingColorUpdates: noop, clearPendingMeshRemovals: noop,
     pruneGeometryMeshes: noop, clearPendingMeshTranslations: noop, clearPendingMeshRotations: noop,
-    clearInstancedShards: noop, clearColorRef: ref<[number, number, number, number]>([0, 0, 0, 1]),
+    clearInstancedShards: clearShards, clearColorRef: ref<[number, number, number, number]>([0, 0, 0, 1]),
   } as UseGeometryStreamingParams);
   useAnimationLoop({
     canvasRef, rendererRef, isInitialized: true,
@@ -162,6 +165,33 @@ async function load(renderer: Renderer, geometry: MeshData[]): Promise<(next: Me
 const MODEL = [mesh(1, [1, 0, 0, 1]), mesh(2, [0, 0, 1, 1]), mesh(3, [1, 0, 0, 1])];
 
 describe('3D scene upload while the viewport is covered (#154)', () => {
+  it('registers instanced elements behind the Wall for the data readers, and uploads them when it lifts', async () => {
+    const gpu: Gpu = { buffers: 0, renders: 0, renderRequested: false };
+    const { renderer, scene } = realSceneRenderer(gpu);
+    const lift = cover();
+    const root = createRoot(document.createElement('div'));
+    mounted.push(root);
+    let shards: Shards = [{ modelId: 'a', bytes: shardBytes(41) }, { modelId: 'a', bytes: shardBytes(42) }];
+    const render = () => root.render(<Harness renderer={renderer} geometry={MODEL} shards={shards} clearShards={() => { shards = null; render(); }} />);
+    await act(async () => { render(); });
+    await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+    await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+    // What takeoff, type quantities, urban indicators, joinery and the exports read (urban-models.ts, element-meshes.ts).
+    assert.deepEqual([...scene.getInstancedEntityIds()].sort(), [41, 42], 'the instanced elements are in the data');
+    assert.ok(scene.getInstancedMeshDataPieces(41)?.length, 'and materialize to triangles');
+    assert.equal(scene.getAllInstancedMeshData().length, 2, 'and reach the exports');
+    assert.equal(shards, null, 'the raw shard bytes are released');
+    assert.equal(scene.getInstancedTemplates().length, 0, 'no GPU template behind the Wall');
+    assert.equal(scene.hasDeferredInstancedUploads(), true);
+
+    const before = gpu.buffers;
+    lift();
+    await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+    assert.equal(scene.getInstancedTemplates().length, 2, 'uploaded once the cover lifts');
+    assert.ok(gpu.buffers > before);
+    assert.equal(scene.hasDeferredInstancedUploads(), false);
+  });
+
   it('makes no GPU buffer behind the Wall, yet registers the meshes', async () => {
     const gpu: Gpu = { buffers: 0, renders: 0, renderRequested: false };
     const { renderer, scene } = realSceneRenderer(gpu);

@@ -7,11 +7,11 @@
  */
 
 import { destroyInstancedTemplateGpu, type InstancedTemplateGPU, type InstancedOccurrence, type InstancedTemplateCpu } from './scene-instance-types.js';
-import { createInstancedRteDeltaStream, invalidateInstancedRteDeltas, type InstancedRteDeltaStream } from './instanced-rte.js';
+import { invalidateInstancedRteDeltas } from './instanced-rte.js';
 import { materializeInstances } from './scene-instance-materialization.js';
 import { InstanceSuppression } from './scene-instance-suppression.js';
 import { createSceneBatch } from './scene-batch-upload.js';
-import { createStaticGpuBuffer } from './gpu-static-upload.js';
+import { registerInstancedShard as registerShard, uploadInstancedTemplates as uploadTemplates, type DeferredInstancedTemplate } from './scene-instanced-shard.js';
 import { createSceneAppearancePreview, rebindSceneAppearanceAccess, type SceneAppearanceAccess } from './scene-appearance-preview.js';
 import { AppearanceBuckets } from './scene-appearance-buckets.js';
 import { AuthoredPreparationRegistry, prepareSceneAuthoredOwner } from './scene-authored-owner.js';
@@ -59,14 +59,11 @@ import {
 } from './partial-batch-cache.js';
 import type { DecodedInstancedShard } from '@ifc-lite/geometry';
 import {
-  prepareInstancedRender,
   foldOccurrenceWorldBox,
-  INSTANCE_STRIDE_BYTES,
   INSTANCE_COLOR_OFFSET,
   INSTANCE_FLAGS_OFFSET,
   INSTANCE_FLAG_SELECTED,
   INSTANCE_FLAG_HIDDEN,
-  INSTANCE_FINISH_FLAGS_MASK,
 } from './instanced-render.js';
 import { translateInstanceRecord } from './scene-instance-translation.js';
 import { discardSceneGpuResourcesForRecovery, prepareSceneDeviceRecovery, repartitionHydratedRecoveryBucket, restoreSceneGpuResourcesAfterRecovery, type SceneDeviceRecoveryPreparation, type SceneRecoveryHost } from './scene-device-recovery.js';
@@ -298,6 +295,8 @@ export class Scene {
    *  (so equally sparse) for CPU consumers. Also emptied wholesale on geometry
    *  release — every reader already tolerates a missing entry. */
   private instancedTemplateCpu: (InstancedTemplateCpu | undefined)[] = [];
+  /** Registered templates whose GPU buffers are not created yet (their `instancedTemplates` slot is a hole). */
+  private deferredInstanced: DeferredInstancedTemplate[] = [];
   private instancedDevice?: GPUDevice;                              // cached for per-instance flag/colour writeBuffer updates
   private instancedSelected: Set<number> = new Set();              // currently flag-selected instanced express_ids
   private instancedSelectedItemExpressId?: number; private instancedSelectedItemId?: number;  // #4382: RenderOptions.selectedItemId
@@ -2879,6 +2878,7 @@ export class Scene {
     for (const t of this.instancedTemplates) {
       if (t) seen.add(t.modelIndex);
     }
+    for (const d of this.deferredInstanced) seen.add(d.modelIndex);
     return [...seen];
   }
 
@@ -2915,6 +2915,12 @@ export class Scene {
       this.instancedTemplateCpu[i] = undefined;
       freed.add(i);
     }
+    this.deferredInstanced = this.deferredInstanced.filter((d) => {
+      if (d.modelIndex !== modelIndex) return true;
+      this.instancedTemplateCpu[d.templateIndex] = undefined;
+      freed.add(d.templateIndex);
+      return false;
+    });
     if (freed.size === 0) return 0;
 
     for (const [eid, occurrences] of this.instancedEntityMap) {
@@ -3008,172 +3014,47 @@ export class Scene {
    * GPU upload.
    */
   addInstancedShard(device: GPUDevice, shard: DecodedInstancedShard, modelIndex = 0): void {
+    this.registerInstancedShard(shard, modelIndex);
+    this.uploadDeferredInstanced(device);
+  }
+
+  /**
+   * The CPU half of `addInstancedShard` (#154): record the shard's templates and occurrences (what takeoff,
+   * quantities, bounds, picking and exports read) without touching the GPU. The templates draw once
+   * `uploadDeferredInstanced` runs, which a viewer that is covered can leave until it is shown again.
+   */
+  registerInstancedShard(shard: DecodedInstancedShard, modelIndex = 0): void {
     if (shard.instances.some(instance => this.instanceSuppression.owns(instance.entityId))) {
       throw new Error('Cannot append geometry to a retained appearance occurrence');
     }
+    this.deferredInstanced.push(...registerShard({
+      templates: this.instancedTemplates, cpu: this.instancedTemplateCpu, occurrences: this.instancedEntityMap,
+      boundingBoxes: this.boundingBoxes, modelTranslations: this.modelTranslations,
+    }, shard, modelIndex));
+  }
+
+  /** True while registered templates still wait for `uploadDeferredInstanced`. */
+  hasDeferredInstancedUploads(): boolean { return this.deferredInstanced.length > 0; }
+
+  /** The GPU half: create the buffers of every registered template, in registration order. */
+  uploadDeferredInstanced(device: GPUDevice): void {
+    if (this.deferredInstanced.length === 0) return;
     this.instancedDevice = device; // cached for per-instance selection/overlay writeBuffer
-    const prepared = prepareInstancedRender(shard);
-    // Selected ids whose occurrences arrived in THIS shard (selection recorded
-    // before the shard streamed in) — their flags are written after upload.
-    const lateSelectedEids = new Set<number>();
-    // Same for COLOUR (#3890): an override is recorded against ids with no
-    // occurrence yet, and nothing consulted it when they arrived. The viewer's
-    // catch-up cannot cover this — a shard-only streaming event never moves the
-    // geometry counter it keys on.
-    const lateOverriddenEids = new Set<number>();
-    for (const t of prepared) {
-      const vcount = Math.floor(t.positions.length / 3);
-      if (vcount === 0 || t.indices.length === 0 || t.instanceCount === 0) continue;
-
-      // Interleave the template's local positions + normals into the 28-byte
-      // (pos3f + norm3f + entityId u32) vertex layout the instanced pipeline's
-      // slot 0 expects. entityId is a 0 placeholder (vs_instanced ignores it).
-      const vtx = new ArrayBuffer(vcount * 28);
-      const vf = new Float32Array(vtx);
-      for (let i = 0; i < vcount; i++) {
-        const o = i * 7;
-        vf[o + 0] = t.positions[i * 3 + 0];
-        vf[o + 1] = t.positions[i * 3 + 1];
-        vf[o + 2] = t.positions[i * 3 + 2];
-        // normals may be shorter/absent on degenerate meshes — default to 0.
-        vf[o + 3] = i * 3 + 0 < t.normals.length ? t.normals[i * 3 + 0] : 0;
-        vf[o + 4] = i * 3 + 1 < t.normals.length ? t.normals[i * 3 + 1] : 0;
-        vf[o + 5] = i * 3 + 2 < t.normals.length ? t.normals[i * 3 + 2] : 0;
-        // vf[o + 6] (entityId lane) stays 0.
-      }
-
-      const vertexBuffer = createStaticGpuBuffer(device, vtx, GPUBufferUsage.VERTEX);
-      const indexBuffer = createStaticGpuBuffer(device, t.indices, GPUBufferUsage.INDEX);
-
-      // instanceBuffer is already the interleaved mat4 + entityId + rgba block
-      // (INSTANCE_STRIDE_BYTES per occurrence) from prepareInstancedRender.
-      this.modelTranslations.placeInstances(
-        t.instanceBuffer,
-        modelIndex,
-        INSTANCE_STRIDE_BYTES,
-        t.canonicalAnchors,
-        t.canonicalMatrixTranslations,
-      );
-      const instSize = t.instanceCount * INSTANCE_STRIDE_BYTES;
-      const instanceBuffer = createStaticGpuBuffer(
-        device,
-        new Uint8Array(t.instanceBuffer, 0, instSize),
-        GPUBufferUsage.VERTEX,
-      );
-      let rteDeltas: InstancedRteDeltaStream;
-      try {
-        rteDeltas = createInstancedRteDeltaStream(device, t.instanceCount);
-      } catch (error) {
-        // Nothing references this template's buffers yet; free them rather than leak them.
-        vertexBuffer.destroy(); indexBuffer.destroy(); instanceBuffer.destroy();
-        throw error;
-      }
-
-      // Always append: slots are stable identities, never recycled.
-      const templateIndex = this.instancedTemplates.length;
-      const template: InstancedTemplateGPU = {
-        modelIndex,
-        vertexBuffer,
-        indexBuffer,
-        indexCount: t.indices.length,
-        instanceBuffer,
-        instanceCount: t.instanceCount,
-        canonicalAnchors: t.canonicalAnchors,
-        rteDeltas,
-        bounds: null,
-        maxOccRadius: 0,
-        selectedCount: 0,
-      };
-      this.instancedTemplates[templateIndex] = template;
-
-      // Template-local AABB (used to derive per-occurrence world AABBs cheaply).
-      let lmnx = Infinity, lmny = Infinity, lmnz = Infinity;
-      let lmxx = -Infinity, lmxy = -Infinity, lmxz = -Infinity;
-      for (let i = 0; i < t.positions.length; i += 3) {
-        const x = t.positions[i], y = t.positions[i + 1], z = t.positions[i + 2];
-        if (x < lmnx) lmnx = x; if (y < lmny) lmny = y; if (z < lmnz) lmnz = z;
-        if (x > lmxx) lmxx = x; if (y > lmxy) lmxy = y; if (z > lmxz) lmxz = z;
-      }
-      // Retain the compact CPU geometry + the packed instance records (mat4 per
-      // occurrence) so CPU consumers can reach instanced geometry without a full
-      // per-occurrence MeshData each. These are references into the decoded shard.
-      // Slot-assigned because release empties the CPU array while GPU slots live on; push would misalign them.
-      this.instancedTemplateCpu[templateIndex] = {
-        modelIndex,
-        positions: t.positions,
-        normals: t.normals,
-        indices: t.indices,
-        instanceData: t.instanceBuffer,
-        canonicalAnchors: t.canonicalAnchors,
-        canonicalMatrixTranslations: t.canonicalMatrixTranslations,
-        localMin: [lmnx, lmny, lmnz],
-        localMax: [lmxx, lmxy, lmxz],
-      };
-
-      // Map each occurrence's express_id -> (template, byte offset, original
-      // colour) so selection (flag byte) + lens/IDS overlays (colour bytes) can
-      // patch individual occurrences via writeBuffer without a re-upload. Also fold
-      // each occurrence's world AABB (template local box × its mat4) into
-      // boundingBoxes so getEntityBoundingBox + the CPU raycast-bounds path
-      // (BCF anchors, large/released-model picking, frame-selection) see instanced
-      // geometry. (Templates with no finite local box — empty geometry — are skipped.)
-      const cdv = new DataView(t.instanceBuffer);
-      const haveBox = Number.isFinite(lmnx);
-      for (let i = 0; i < t.instanceCount; i++) {
-        const byteOffset = i * INSTANCE_STRIDE_BYTES;
-        const eid = t.entityIds[i];
-        const originalColor: [number, number, number, number] = [
-          cdv.getFloat32(byteOffset + INSTANCE_COLOR_OFFSET, true),
-          cdv.getFloat32(byteOffset + INSTANCE_COLOR_OFFSET + 4, true),
-          cdv.getFloat32(byteOffset + INSTANCE_COLOR_OFFSET + 8, true),
-          cdv.getFloat32(byteOffset + INSTANCE_COLOR_OFFSET + 12, true),
-        ];
-        let arr = this.instancedEntityMap.get(eid);
-        if (!arr) {
-          arr = [];
-          this.instancedEntityMap.set(eid, arr);
-        }
-        // #2985; no id column or the 0 sentinel ⇒ none. ASSIGNED, never conditionally spread: ONE object shape for records that outlive the shard.
-        arr.push({ templateIndex, byteOffset, originalColor, itemId: t.itemIds?.[i] || undefined, finishBits: (cdv.getUint32(byteOffset + INSTANCE_FLAGS_OFFSET, true) & INSTANCE_FINISH_FLAGS_MASK) >>> 0 });
-
-        // A shard can stream in AFTER a selection was recorded (its ids may
-        // exist in earlier shards or the flat path). setInstancedSelection
-        // diffs by id and would early-return on the unchanged set, so seed the
-        // late occurrences here: count them for the contribution-cull
-        // exemption and remember the id to write its selected flag below.
-        if (this.instancedSelected.has(eid)) {
-          template.selectedCount++;
-          lateSelectedEids.add(eid);
-        }
-        if (this.instancedOverrideColors?.has(eid)) lateOverriddenEids.add(eid);
-
-        if (haveBox) {
-          const w = this.unionInstancedWorldAabb(eid, cdv, byteOffset, t.canonicalAnchors, lmnx, lmny, lmnz, lmxx, lmxy, lmxz);
-          // Fold the occurrence's world box into the template's cull metadata
-          // (union bounds + largest occurrence bounding-sphere radius) for the
-          // per-frame instanced frustum/contribution culls. Non-finite boxes
-          // poison the template so it fails OPEN (never culled).
-          foldOccurrenceWorldBox(template, w);
-        }
-      }
-    }
+    const queue = this.deferredInstanced;
+    this.deferredInstanced = [];
+    const { lateSelected, lateOverridden } = uploadTemplates(device, this.instancedTemplates, queue, this.instancedSelected, this.instancedOverrideColors);
     this.refreshLiveInstancedTemplates();
-    // Write the selected flag for ids whose occurrences arrived after the
-    // selection was recorded (idempotent for their pre-existing occurrences),
-    // so the highlight shows on late-streamed geometry too.
-    for (const eid of lateSelectedEids) {
-      this.writeInstanceFlags(device, eid);
-    }
+    // Write the selected flag for ids whose occurrences arrived after the selection was recorded (idempotent for
+    // their pre-existing occurrences), so the highlight shows on late-streamed geometry too.
+    for (const eid of lateSelected) this.writeInstanceFlags(device, eid);
     // Paint ids whose override predates their occurrences.
-    for (const eid of lateOverriddenEids) {
+    for (const eid of lateOverridden) {
       const rgba = this.instancedOverrideColors?.get(eid);
       if (rgba) this.writeInstanceColor(device, eid, composeInstancedOverrideColor(rgba, this.instancedGhosted.has(eid), this.lastGhostAlpha));
     }
-    // New occurrences default to flags=0 (visible). Force the next setInstancedVisibility
-    // to recompute so an already-active isolate/hide also applies to geometry that
-    // streamed in after the visibility was set. X-Ray needs the same: new
-    // occurrences of an already-ghosted id arrive at their uploaded, solid
-    // colour, and the ghost set's membership has not changed to reveal it.
+    // New occurrences default to flags=0 (visible). Force the next setInstancedVisibility to recompute so an
+    // already-active isolate/hide also applies to geometry that streamed in after the visibility was set. X-Ray
+    // needs the same: new occurrences of an already-ghosted id arrive at their uploaded, solid colour.
     this.instancedVisibilityDirty = true;
     this.instancedGhostDirty = true;
   }
@@ -3195,7 +3076,7 @@ export class Scene {
     const occurrences = this.instancedEntityMap.get(expressId);
     if (this.geometryReleased || this.finalizeInProgress || this.streamingFragments.length
       || this.pendingBatchKeys.size || !occurrences?.length
-      || occurrences.some(o => this.instancedTemplates[o.templateIndex]?.modelIndex !== modelIndex
+      || occurrences.some(o => this.instancedTemplateCpu[o.templateIndex]?.modelIndex !== modelIndex
         || !this.instancedTemplateCpu[o.templateIndex]?.positions.length)) {
       throw new Error('Appearance requires resident instances owned by the specified model');
     }
@@ -3662,6 +3543,7 @@ export class Scene {
     this.instancedTemplates = [];
     this.liveInstancedTemplates = [];
     this.instancedTemplateCpu = [];
+    this.deferredInstanced = [];
     this.instanceSuppression.forget();
     this.instancedEntityMap.clear();
     this.instancedSelected.clear();

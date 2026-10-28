@@ -47,46 +47,56 @@ export interface InstancedShardDrainParams {
 
 /**
  * GPU-instancing shards. The geometry worker collates each batch into an IFNS shard; the loader pushes the raw bytes
- * into pendingInstancedShards, tagged with the owning model's id. Drain here: decode, re-home each occurrence's id onto
- * that model's express-id space, and upload under that model's modelIndex (#1912, a federated model's shards used to be
- * dropped before ever reaching this drain, since the loader only forwarded the primary's).
+ * into pendingInstancedShards, tagged with the owning model's id. Drain here in two halves (#154):
+ *
+ *   - DATA, always: decode, re-home each occurrence's id onto that model's express-id space and register the
+ *     occurrences with the scene (`registerInstancedShard`). Takeoff, type quantities, urban indicators, joinery and
+ *     the exports read instanced geometry from there, and IfcSheet keeps the viewport covered for the whole session,
+ *     so this half must not wait for the cover. It frees the raw bytes straight away: the scene holds what it needs.
+ *   - GPU, when the viewport is not covered: create the buffers of everything registered so far, in arrival order
+ *     (`uploadDeferredInstanced`). Nobody can see an instance behind the cover, so the upload waits for it to lift.
+ *
+ * Each model is registered under its own modelIndex (#1912, a federated model's shards used to be dropped before
+ * ever reaching this drain, since the loader only forwarded the primary's).
  */
 export function useInstancedShardDrain(params: InstancedShardDrainParams): void {
   const { rendererRef, isInitialized, pendingInstancedShards, modelIdToIndex, modelIdToOffset, currentLevelY, clearInstancedShards } = params;
-  // Covered (the Wall is in front, #154): nobody can see an instance, so the drain waits, leaving the shards queued in
-  // the store in the order they arrived, and runs when the viewport is uncovered.
   const covered = useViewportCovered();
   useEffect(() => {
-    if (pendingInstancedShards === null || !isInitialized || covered) return;
+    if (!isInitialized) return;
     const renderer = rendererRef.current;
     if (!renderer) return;
     const device = renderer.getGPUDevice();
     const scene = renderer.getScene();
     if (!device) return;
+    const trace = activeLoadTrace(); // #6979: shards only arrive while a load streams
 
-    if (pendingInstancedShards.length > 0) {
-      const trace = activeLoadTrace(); // #6979: shards only arrive while a load streams
+    if (pendingInstancedShards !== null) {
       for (const { modelId, bytes } of pendingInstancedShards) {
-        // CRITICAL: never let a shard decode/upload throw OUT of this effect.
-        // addInstancedShard creates GPU buffers; on a degraded
-        // backend whose device is being lost (e.g. CI's SwiftShader), createBuffer
-        // throws — and an uncaught throw in a React effect tears down the Viewport
-        // subtree via the error boundary, unmounting the <canvas> entirely. Instanced
-        // overlays are non-essential, so swallow per-shard failures: the flat geometry
-        // still renders.
+        // CRITICAL: never let a shard decode/registration throw OUT of this effect: an uncaught throw in a React
+        // effect tears down the Viewport subtree via the error boundary, unmounting the <canvas> entirely. Instanced
+        // overlays are non-essential, so swallow per-shard failures: the flat geometry still renders.
         try {
           const shard = trace.span('instanced.decode', () => decodeInstancedShard(new Uint8Array(bytes)));
           if (!shard) continue;
           applyFederationOffsetToShard(shard, modelIdToOffset?.get(modelId) ?? 0);
           liftNewInstancedOccurrences(shard, currentLevelY ?? new Map());
-          const modelIndex = modelIdToIndex?.get(modelId) ?? 0;
-          trace.span('instanced.upload', () => scene.addInstancedShard(device, shard, modelIndex));
+          scene.registerInstancedShard(shard, modelIdToIndex?.get(modelId) ?? 0);
         } catch (err) {
-          console.warn('[useGeometryStreaming] instanced shard upload failed (device lost?), skipping:', err);
+          console.warn('[useGeometryStreaming] instanced shard registration failed, skipping:', err);
         }
       }
-      renderer.requestRender();
+      clearInstancedShards();
     }
-    clearInstancedShards();
+
+    if (covered || !scene.hasDeferredInstancedUploads()) return;
+    try {
+      trace.span('instanced.upload', () => scene.uploadDeferredInstanced(device));
+    } catch (err) {
+      // addInstancedShard creates GPU buffers; on a degraded backend whose device is being lost (e.g. CI's
+      // SwiftShader), createBuffer throws. The flat geometry still renders.
+      console.warn('[useGeometryStreaming] instanced shard upload failed (device lost?), skipping:', err);
+    }
+    renderer.requestRender();
   }, [pendingInstancedShards, modelIdToIndex, modelIdToOffset, isInitialized, clearInstancedShards, covered]);
 }

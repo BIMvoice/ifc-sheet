@@ -6,7 +6,8 @@
  * The end of a load, split into tasks (#154). A model's arrival used to append 11,000 meshes, fit the camera, drain the
  * instanced shards and render the panels in one 180 ms task. Now:
  *   - the hook's effects run in the task after the store update, not in the update's own render;
- *   - the instanced shards wait while the viewport is covered, and drain in arrival order once it is not;
+ *   - the instanced shards are registered with the scene at once (the data side), and their GPU upload waits while the
+ *     viewport is covered and runs in arrival order once it is not;
  *   - the first camera fit runs in a task of its own while covered, at the moment the cover lifts if that comes first,
  *     and in the effect itself when nothing is covered (no frame can draw an unfitted camera).
  * Each deferred piece of work must still happen, and in order.
@@ -23,24 +24,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { laterTasksUntil, updateInThisTask } from '@/test/react-tasks.js';
 import { useGeometryStreaming, type UseGeometryStreamingParams } from './useGeometryStreaming.js';
 import { coverViewport } from './viewport-cover.js';
-
-/** One template (a triangle) and one instance of `entityId`, as IFNS bytes (packed-instanced-decoder.ts's layout). */
-function shardBytes(entityId: number): ArrayBuffer {
-  const posLen = 9, nrmLen = 9, idxLen = 3;
-  const templateTableOff = 32, instanceTableOff = templateTableOff + 48, posOff = instanceTableOff + 88;
-  const nrmOff = posOff + posLen * 4, idxOff = nrmOff + nrmLen * 4;
-  const buf = new ArrayBuffer(idxOff + idxLen * 4);
-  const dv = new DataView(buf);
-  [0x4946_4e53, 1, 1, 1, posLen, nrmLen, idxLen, 0].forEach((v, i) => dv.setUint32(i * 4, v, true));
-  [0, posLen, 0, nrmLen, 0, idxLen].forEach((v, i) => dv.setUint32(templateTableOff + i * 4, v, true));
-  dv.setUint32(instanceTableOff, 0, true);
-  dv.setUint32(instanceTableOff + 4, entityId, true);
-  [1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1].forEach((v, i) => dv.setFloat32(instanceTableOff + 8 + i * 4, v, true));
-  new Float32Array(buf, posOff, posLen).set([0, 0, 0, 1, 0, 0, 0, 1, 0]);
-  new Float32Array(buf, nrmOff, nrmLen).set([0, 0, 1, 0, 0, 1, 0, 0, 1]);
-  new Uint32Array(buf, idxOff, idxLen).set([0, 1, 2]);
-  return buf;
-}
+import { shardBytes } from '@/test/ifns-shard-bytes.js';
 
 const mesh = (expressId: number): MeshData => ({
   expressId, modelIndex: 0, positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
@@ -59,10 +43,13 @@ const record = (name: string, detail?: number) => log.push({ name, task, detail 
 const entries = (name: string) => log.filter((e) => e.name === name);
 
 function fakeRenderer(): Renderer {
+  const registered: number[] = [];
   const scene = {
     clear: () => {}, clearFlatGeometry: () => {}, getInstancedModelIndices: () => [],
     removeInstancedTemplatesForModel: () => 0,
-    addInstancedShard: (_d: unknown, shard: { instances: Array<{ entityId: number }> }) => record('shard', shard.instances[0].entityId),
+    registerInstancedShard: (shard: { instances: Array<{ entityId: number }> }) => { registered.push(shard.instances[0].entityId); record('register', shard.instances[0].entityId); },
+    hasDeferredInstancedUploads: () => registered.length > 0,
+    uploadDeferredInstanced: () => { for (const id of registered.splice(0)) record('shard', id); },
     appendToBatches: () => { record('append'); afterAppend?.(); },
     queueMeshes: () => {}, hasQueuedMeshes: () => false, getBatchedMeshes: () => [], flushPending: () => true,
     hasPendingBatches: () => false, rebuildPendingBatches: () => {}, removeMeshesForEntities: () => {},
@@ -131,25 +118,23 @@ describe('the end of a load, in tasks (#154)', () => {
     assert.equal(entries('append').length, 1);
   });
 
-  it('holds the instanced shards while the viewport is covered, then drains them in arrival order', async () => {
+  it('registers the instanced shards at once while covered, uploads them in arrival order when the cover lifts', async () => {
     const lift = cover();
     await load({ shards: [{ modelId: 'a', bytes: shardBytes(11) }, { modelId: 'a', bytes: shardBytes(22) }, { modelId: 'a', bytes: shardBytes(33) }] });
-    await laterTasksUntil(() => entries('append').length === 1);
+    await laterTasksUntil(() => entries('clear').length === 1);
     await idle();
-    assert.equal(entries('shard').length, 0, 'nothing is drained behind the cover');
-    assert.equal(entries('clear').length, 0, 'the shards stay queued, none is dropped');
-    assert.equal(useInputs.getState().shards?.length, 3);
+    assert.deepEqual(entries('register').map((e) => e.detail), [11, 22, 33], 'the data side does not wait for the cover');
+    assert.equal(entries('shard').length, 0, 'no GPU upload behind the cover');
+    assert.equal(useInputs.getState().shards, null, 'the raw bytes are released once registered');
     await act(async () => { lift(); });
     await laterTasksUntil(() => entries('shard').length === 3);
-    assert.deepEqual(entries('shard').map((e) => e.detail), [11, 22, 33], 'in the order they arrived');
-    await laterTasksUntil(() => entries('clear').length === 1);
-    assert.equal(useInputs.getState().shards, null);
+    assert.deepEqual(entries('shard').map((e) => e.detail), [11, 22, 33], 'uploaded in the order they arrived');
   });
 
-  it('drains the shards after the model is appended when nothing is covered', async () => {
+  it('registers and uploads the shards after the model is appended when nothing is covered', async () => {
     await load({ shards: [{ modelId: 'a', bytes: shardBytes(11) }, { modelId: 'a', bytes: shardBytes(22) }] });
-    await laterTasksUntil(() => entries('clear').length === 1);
-    assert.deepEqual(log.filter((e) => e.name !== 'fit').map((e) => e.name), ['append', 'shard', 'shard', 'clear']);
+    await laterTasksUntil(() => entries('shard').length === 2);
+    assert.deepEqual(log.filter((e) => e.name !== 'fit' && e.name !== 'clear').map((e) => e.name), ['append', 'register', 'register', 'shard', 'shard']);
     assert.deepEqual(entries('shard').map((e) => e.detail), [11, 22]);
   });
 

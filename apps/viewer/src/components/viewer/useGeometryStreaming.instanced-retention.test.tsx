@@ -99,10 +99,12 @@ class FakeScene {
     const had = this.instancedModelIndices.delete(modelIndex);
     return had ? 1 : 0;
   }
-  addInstancedShard(_device: unknown, _shard: unknown, modelIndex = 0): void {
+  registerInstancedShard(_shard: unknown, modelIndex = 0): void {
     this.calls.push('addInstancedShard');
     this.instancedModelIndices.add(modelIndex);
   }
+  hasDeferredInstancedUploads(): boolean { return false; }
+  uploadDeferredInstanced(): void {}
   appendToBatches(): void { this.calls.push('appendToBatches'); }
   queueMeshes(): void { this.calls.push('queueMeshes'); }
   hasQueuedMeshes(): boolean { return false; }
