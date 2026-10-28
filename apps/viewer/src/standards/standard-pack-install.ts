@@ -28,6 +28,8 @@ function capture(pack: StandardPack, already: StandardPreviousValues): StandardP
   const s = state();
   const out: StandardPreviousValues = { ...already };
   if (pack.graphicStandard !== undefined && !('graphicStandard' in out)) out.graphicStandard = s.graphicStandard ?? null;
+  // Choosing a graphic standard also sets the opening-line direction (`setGraphicStandard`), so it is kept with it.
+  if (pack.graphicStandard !== undefined && !('openingLines' in out)) out.openingLines = s.openingLines ?? null;
   if (pack.titleBlockTemplate !== undefined && !('titleBlockTemplate' in out)) out.titleBlockTemplate = s.titleBlockTemplate ?? null;
   if (pack.unitsAndNumbers !== undefined && !('unitsAndNumbers' in out)) out.unitsAndNumbers = s.unitsAndNumbers ?? null;
   if (pack.sheetNumbering !== undefined && !('sheetNumbering' in out)) out.sheetNumbering = s.sheetNumbering ?? null;
@@ -67,6 +69,8 @@ export function resetStandard(): boolean {
   const { previous } = installed;
   runAsOneUndoStep(() => {
     if ('graphicStandard' in previous) setGraphicStandard(previous.graphicStandard ?? 'default');
+    // After the standard: putting it back sets the direction that standard names, and the project's own choice comes first.
+    if ('openingLines' in previous) useProjectStore.setState({ openingLines: previous.openingLines ?? undefined, dirty: true });
     if ('titleBlockTemplate' in previous) {
       if (previous.titleBlockTemplate) applyRomanianTitleBlock(previous.titleBlockTemplate); else resetTitleBlockTemplate();
     }

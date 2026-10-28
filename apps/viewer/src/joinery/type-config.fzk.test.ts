@@ -25,6 +25,7 @@ import { invalidateJoineryReads } from './element-spec';
 import { joineryExport, layoutSchedule, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
 import { joineryLabels } from './export-test-util';
 import { scheduleData, type ScheduleEntry } from './schedule-data';
+import { typeEntryId } from '@bimvoice/ifcsheet/project';
 import { configureElementType, typeOpeningOf } from './type-config-actions';
 import { setOpeningConvention } from './opening-convention';
 import type { ElementFacts } from './symbol-mapping';
@@ -104,6 +105,7 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
       assert.deepEqual(drawn.spec.panels.map((p) => p.operation), ['tilt-turn-left', 'tilt-turn-right']);
       assert.deepEqual([drawn.spec.width, drawn.spec.height], [f.width, f.height], 'the size is the IFC\'s');
     }
+    assert.ok(others.length > 0, 'the model has windows of another type');
     for (const f of others) {
       assert.equal(drawn(f)?.entry?.id ?? null, null, 'a window of another type is not drawn with the configured entry');
       const own: ScheduleEntry | undefined = data.entries.find((e) => e !== row && e.occurrences.some((o) => o.globalId === f.globalId));
@@ -125,6 +127,25 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
     assert.ok(!texts.includes('900'), 'no sill of 900 is printed');
   });
 
+  it('prints a sill the user typed for the configured type, and the default frame\'s 900 stays hidden', () => {
+    const { biggest } = windowsByType();
+    configure(biggest[0]);
+    const entryId = typeEntryId(biggest[0].typeGlobalId!);
+    const sillCell = (): { cell: unknown; texts: string[] } => {
+      invalidateJoineryReads();
+      const data = scheduleData('window');
+      const [types] = joineryExport(data, joineryLabels(labels)).tables;
+      const row = types.rows[data.entries.findIndex((e) => e.spec)];
+      const texts = layoutSchedule({ ...data, entries: data.entries.filter((e) => e.spec) }, labels, { scale: 20 }).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+      return { cell: row[types.header.indexOf(labels.sill)], texts };
+    };
+    assert.equal(sillCell().cell, null, 'untouched: no sill is claimed');
+    useProjectStore.setState({ joineryTypes: (useProjectStore.getState().joineryTypes ?? []).map((e) => (e.id === entryId ? { ...e, sillHeight: 1.1 } : e)) });
+    const typed = sillCell();
+    assert.equal(typed.cell, 1100, 'the CSV and XLSX cell');
+    assert.ok(typed.texts.includes('1100'), 'and the sheet');
+  });
+
   it('the schedule\'s elevation shows the opening lines of the type: a side triangle and a tilt triangle per leaf', () => {
     const { biggest } = windowsByType();
     configure(biggest[0]);
@@ -140,15 +161,16 @@ describe('configuring a window type of FZK-Haus as a double tilt-turn', () => {
     const f = biggest[0];
     const w = f.width!, h = f.height!;
     const pts = [-w / 2, w / 2].flatMap((x) => [0, h].flatMap((y) => [-0.1, 0.1].flatMap((z) => [x, y, z])));
-    const mesh = { expressId: 7, ifcType: 'IfcWindow', positions: new Float32Array(pts), localToWorld: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } as unknown as MeshData;
+    const id = scheduleData('window').entries.flatMap((e) => e.occurrences).find((o) => o.globalId === f.globalId)!.expressId;
+    const mesh = { expressId: id, ifcType: 'IfcWindow', positions: new Float32Array(pts), localToWorld: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } as unknown as MeshData;
     const plan = { axis: 'y' as const, position: h / 2, flipped: false };
-    const dashedBefore = openingSymbols([mesh], plan, () => 0, () => drawnJoinery(MODEL, 0))[0]?.dashed?.length ?? 0;
-    assert.equal(dashedBefore, 0);
+    const typedOf = (i: number) => drawnJoinery(MODEL, i);
+    assert.equal(typedOf(id), null, 'this very window is drawn with nothing before');
+    assert.equal(openingSymbols([mesh], plan, () => 0, typedOf)[0]?.dashed?.length ?? 0, 0);
     configure(f);
     invalidateJoineryReads();
-    const row = scheduleData('window').entries.find((e) => e.spec)!;
-    const typed = () => ({ spec: drawnJoinery(MODEL, row.occurrences.find((o) => o.globalId === f.globalId)!.expressId)!.spec, flips: 0, source: 'type' });
-    const [symbol] = openingSymbols([mesh], plan, () => 0, typed);
+    assert.equal(typedOf(id)?.source, 'type');
+    const [symbol] = openingSymbols([mesh], plan, () => 0, typedOf);
     assert.equal(symbol.dashed?.length, 2, 'one swing arc per hinged leaf');
   });
 
@@ -186,8 +208,9 @@ describe('a window type whose IFC states no size, configured', () => {
     assert.ok(!texts.some((t) => t.includes('1200') || t.includes('1500')), 'no default size is printed');
     const data = scheduleData('window');
     const [types] = joineryExport(data, joineryLabels(labels)).tables;
-    const col = types.header.indexOf('Width (mm)');
-    if (col >= 0) assert.deepEqual(types.rows[data.entries.findIndex((e) => e.spec)].slice(col, col + 2), [null, null]);
+    const col = types.header.indexOf(joineryLabels(labels).widthMm!);
+    assert.ok(col >= 0, 'the CSV has a width column, so the cells below are read');
+    assert.deepEqual(types.rows[data.entries.findIndex((e) => e.spec)].slice(col, col + 2), [null, null]);
   });
 
   it('a type that states its sizes still prints them', () => {

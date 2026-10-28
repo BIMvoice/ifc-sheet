@@ -46,7 +46,7 @@ type Step =
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard'] as const;
+const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'openingLines', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard'] as const;
 type StepField = (typeof STEP_FIELDS)[number];
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
