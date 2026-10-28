@@ -19,7 +19,7 @@ import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
 import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { frameOf, frameRect, titleBlockRect } from '@/project/sheet-frame';
+import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect as PaperRect } from '@/project/sheet-frame';
 import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from '@/project/viewport-annotation';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
@@ -52,7 +52,9 @@ import { CivilDrawingGraphic } from '../civil/CivilDrawingGraphic';
 import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
-import { useLiveSymbolContext } from '@/siteplan/site-frame';
+import { useLiveSymbolContext, useSiteFrame } from '@/siteplan/site-frame';
+import { useSheetLocale } from '@/project/units-and-numbers';
+import { ViewportMarks, viewportMarkShapes } from './ViewportMarks';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
 import { KeyPlanHighlight, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
 import { SiteBalance } from '../siteplan/SiteBalance';
@@ -128,8 +130,10 @@ function TitleNumber({ number, x, baseline, size }: { number: string | undefined
 
 const pensMemo = sharedMemo<ReturnType<typeof viewportPens>>();
 
-const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, layers, extraPatterns, selected, highlight = null }: {
+const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, layers, extraPatterns, selected, drawingArea, highlight = null }: {
   sheetId: string; vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
+  /** The frame above the title block, paper mm: the marks stay inside it (`drawingAreaIn`). */
+  drawingArea: PaperRect;
   /** On a key plan: the part its keyed viewport shows, paper mm. */
   highlight?: Rect | null;
 }) {
@@ -178,6 +182,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const keyPlan = vp.keyPlanOf !== undefined;
   // The pictures this sheet prints under the view (#457): chosen per sheet, drawn beneath the linework with the same transform.
   const underlays = keyPlan || !view ? [] : printedUnderlays(allUnderlays, view.id, sheetId);
+  // The north arrow and scale bar the viewport asks for, the engine's shapes (`viewport-marks.ts`) in the drawing's corners. A site plan keeps its own free-spot symbols (`SiteSymbols`, clear of the plot), so it takes no corner marks (proper avoidance for every drawing: issue #430).
+  const north = useSiteFrame().north;
+  const sheetLocale = useSheetLocale();
+  const marks = content.site ? null : viewportMarkShapes({ vp, view, drawing, drawingArea, north, locale: sheetLocale });
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
@@ -201,6 +209,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
             : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
+      {marks ? <ViewportMarks shapes={marks} /> : null}
       <rect
         x={left} y={top} width={box.width} height={box.height} fill="transparent"
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
@@ -330,6 +339,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   }, [currentCloudsOnly, sheet, revisions, projectDrafts]);
   const pen = useGraphicStandard().sheet.frame;
   const frame = frameRect({ w, h }, frameOf(sheet));
+  const drawingArea = useMemo(() => drawingAreaIn({ w, h }, frameOf(sheet)), [w, h, sheet.frame]);
   return (
     <svg ref={ref} data-sheet-id={sheet.id} xmlns="http://www.w3.org/2000/svg" width={w * pxPerMm} height={h * pxPerMm} viewBox={`0 0 ${w} ${h}`} className="block bg-white shadow-lg">
       <rect data-export-ignore-dxf="true" x={0} y={0} width={w} height={h} fill="#fff" />
@@ -341,7 +351,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
-          : <ViewportGraphic key={vp.id} sheetId={sheet.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} highlight={keyedExtent(sheet, vp, content, c)} />;
+          : <ViewportGraphic key={vp.id} sheetId={sheet.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} drawingArea={drawingArea} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
       <g data-sheet-notes="" {...penTags('VIEWPORT-LABELS', 0.25)}>

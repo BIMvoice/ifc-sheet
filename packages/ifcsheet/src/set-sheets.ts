@@ -15,6 +15,8 @@ import { propertyValueReader } from './colour-scheme-read.js';
 import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 import { readStoreFacts } from './title-block-records.js';
 import { projectTitleFields } from './title-block-sources.js';
+import { northOfStore } from './true-north.js';
+import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.js';
 import { resolveViewGraphics } from './view-templates.js';
@@ -28,6 +30,10 @@ export interface SheetGraphicsOptions {
   onDrawingError?: (view: ProjectView, error: unknown) => void;
   /** The pens the drawings are drawn with (a graphic standard's, #365); default: `PEN_TABLE`, the pens the sheets have always printed with. */
   pens?: PenTable;
+  /** The language the scale bars' figures are written in (default `en`); the project's "Units and numbers" setting (`doc.unitsAndNumbers`) applies on top. */
+  locale?: string;
+  /** The project's "Units and numbers" setting; default: the set document's. */
+  units?: UnitsAndNumbers;
   /** The language the title blocks' dates are written in (`formatTitleBlockDate`); absent: as stored (ISO). */
   language?: string;
 }
@@ -79,5 +85,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const materialOf = model.dataStore ? headlessMaterialOf(model.dataStore) : undefined;
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }));
 }

@@ -91,7 +91,7 @@ const viewport: Schema = {
   required: ['viewId', 'x', 'y', 'scale'],
   properties: {
     id: str, viewId: str, x: num, y: num, scale: positive, width: { type: 'number', minimum: 0 }, height: { type: 'number', minimum: 0 }, center: nullable({ type: 'object', required: ['x', 'y'], properties: { x: num, y: num } }),
-    hiddenLayers: strings, page: { type: 'integer', minimum: 0 }, placed: bool, placedPages: { type: 'array', items: obj }, keyPlanOf: str, drawingNumber: str,
+    hiddenLayers: strings, page: { type: 'integer', minimum: 0 }, placed: bool, placedPages: { type: 'array', items: obj }, keyPlanOf: str, northArrow: bool, scaleBar: bool, drawingNumber: str,
   },
 };
 

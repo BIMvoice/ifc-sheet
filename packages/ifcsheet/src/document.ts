@@ -216,6 +216,12 @@ export interface SheetViewport {
   placedPages?: { page: number; x: number; y: number }[];
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
+  /**
+   * A north arrow in the viewport's corner, turned to the model's true north (plans only), and a graphic scale bar sized for its scale
+   * (`viewport-marks.ts`). `true` / `false` is the user's choice; absent follows the view: on for a site plan, off otherwise.
+   */
+  northArrow?: boolean;
+  scaleBar?: boolean;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
   drawingNumber?: string;
 }

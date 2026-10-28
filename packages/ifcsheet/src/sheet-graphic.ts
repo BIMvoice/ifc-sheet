@@ -37,6 +37,9 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
+import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
+import type { PlanDirection } from './true-north.js';
+import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
 
 export type Polyline = readonly Point2D[];
@@ -105,6 +108,11 @@ export interface SheetGraphic {
   lines: Polyline[];
   /** What the PDF and DXF draw of the viewports' drawings: their faces and lines by pen, as the app's sheet pens them, in paint order. */
   pens: SheetPen[];
+  /**
+   * The north arrows and scale bars of the viewports that show them (`viewport-marks.ts`): `strokes` are open runs, `solids` closed rings
+   * to fill. Their figures and the arrow's N are in `texts`. The DXF writes both on the `SITE-SYMBOLS` layer, as the app's sheet does.
+   */
+  symbols: { strokes: Polyline[]; solids: Polyline[] };
   /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
   marks: Polyline[];
   texts: SheetText[];
@@ -182,9 +190,11 @@ export function sheetGraphic(
   projectFields?: Record<string, string>,
   /** The language the title block's dates are written in (`formatTitleBlockDate`); absent: as stored. */
   language?: string,
+  /** The model's true north (`trueNorthOf`) and the language and number setting the scale bar's figures are written in. */
+  marks: { north: PlanDirection | null; locale: SheetLocale } = { north: null, locale: 'en' },
 ): SheetGraphic {
   const paper = paperOf(sheet);
-  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], underlays: [], viewports: [] };
+  const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
   // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
   const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
@@ -226,6 +236,15 @@ export function sheetGraphic(
         const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
+    }
+    const flags = viewportMarkFlags(vp, view);
+    const marksBox = box && drawing ? markBox(vp, box) : null;
+    const area = marksBox ? markArea(marksBox, drawingAreaIn(paper, frameOf(sheet))) : null;
+    if (area && drawing && (flags.northArrow || flags.scaleBar)) {
+      const shapes = viewportMarks({ area, scale: vp.scale, arrowDegrees: flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null, bar: flags.scaleBar, locale: marks.locale });
+      out.symbols.strokes.push(...shapes.strokes);
+      out.symbols.solids.push(...shapes.solids);
+      out.texts.push(...shapes.texts);
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }

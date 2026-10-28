@@ -30,7 +30,7 @@ import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
 import { FILL_HATCH } from './sheet-colours.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
-const PEN = { frame: 0.5, mark: 0.18 } as const;
+const PEN = { frame: 0.5, mark: 0.18, symbol: 0.25 } as const;
 
 /** The font file the package ships (`fonts/Inter-Regular.ttf`, SIL Open Font License), read from disk in Node. */
 async function packagedFont(): Promise<Uint8Array> {
@@ -122,6 +122,10 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     doc.setDrawColor('#000000');
     stroke(sheet.frame, PEN.frame);
     stroke(sheet.marks, PEN.mark);
+    // The viewports' north arrows and scale bars: the solid halves in black, every outline at the pen of the app's SITE-SYMBOLS layer.
+    doc.setFillColor('#000000');
+    for (const pts of sheet.symbols.solids) doc.path([{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]).fill();
+    stroke(sheet.symbols.strokes, PEN.symbol);
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
@@ -203,6 +207,9 @@ export function exportDxf(sheet: SheetGraphic): string {
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
       ...penLayers(sheet),
       { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
+      // The north arrows and scale bars, on the layer the app's DXF gives them (`SITE-SYMBOLS`); the solid halves are their closed outlines (R12 has no hatch).
+      // Only a sheet that has any gets the layer, so a sheet that asks for none writes the file it always did.
+      ...(sheet.symbols.strokes.length + sheet.symbols.solids.length > 0 ? [{ name: 'SITE-SYMBOLS', color: '#000000', polylines: [...sheet.symbols.strokes, ...sheet.symbols.solids], closed: false }] : []),
       ...colourLayers(sheet),
     ],
   });
