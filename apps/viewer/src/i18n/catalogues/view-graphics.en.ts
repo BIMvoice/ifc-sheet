@@ -8,6 +8,7 @@ export const viewGraphicsEn = {
   'viewGraphics.preset': 'Graphic preset',
   'viewGraphics.detail': 'Detail level',
   'viewGraphics.detail.auto': 'By scale ({level})',
+  'viewGraphics.detail.template': 'From the template ({level})',
   'viewGraphics.detail.coarse': 'Coarse (outlines only)',
   'viewGraphics.detail.medium': 'Medium',
   'viewGraphics.detail.fine': 'Fine (every layer)',
