@@ -123,7 +123,7 @@ export const TITLE_BLOCK_CAPTIONS_DE: Record<StandardCaption, string> = {
 };
 
 /**
- * "Deutschland: DIN / ISO 128". Only values IfcSheet can name a source for:
+ * "German practice (ISO 128 line series)". Only values IfcSheet can name a source for:
  *  - pens: the German graphic standard (`GERMAN_PRACTICE`): ISO 128 line widths and ISO 3098 lettering (the DIN EN ISO
  *    editions), the 0.5 line group; none checked against DIN 1356-1;
  *  - title block: the standard layout with German captions, the organisation field captioned Entwurfsverfasser;
@@ -136,7 +136,7 @@ export const TITLE_BLOCK_CAPTIONS_DE: Record<StandardCaption, string> = {
 export function germanyPack(): StandardPack {
   return {
     id: GERMANY_PACK_ID,
-    name: 'Deutschland: DIN / ISO 128',
+    name: 'German practice (ISO 128 line series)',
     version: STANDARD_PACK_VERSION,
     description: 'German drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, a title block with German captions, a comma for decimals, material hatches by German names, the default sheet numbering. Values are the ones IfcSheet can name an ISO source for; none is checked against DIN 1356-1.',
     graphicStandard: GERMAN_PRACTICE.id,

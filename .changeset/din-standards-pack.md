@@ -2,4 +2,4 @@
 "@bimvoice/ifcsheet": minor
 ---
 
-Adds a German drawing standards pack (DIN / ISO 128).
+Adds a German drawing standards pack (ISO 128 line series, not checked against DIN).
