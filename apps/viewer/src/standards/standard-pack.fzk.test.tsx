@@ -28,7 +28,7 @@ import { useViewerStore } from '@/store';
 import { cleanup, render } from '@/test/render.js';
 import { standardsSection } from '@/components/viewer/wall/drawer-sections/standards';
 import { setOpeningConvention } from '@/joinery/opening-convention';
-import { romaniaPack } from './standard-pack';
+import { builtInPacks, romaniaPack } from './standard-pack';
 import { parseStandardPack, serializeStandardPack } from './standard-pack-file';
 import { installStandard, isApplied, resetStandard } from './standard-pack-install';
 
@@ -216,6 +216,7 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     const buttons = [...render(<Section go={() => {}} onClose={() => {}} extent={null} />).querySelectorAll('button')].map((b) => ({ text: b.textContent, disabled: b.disabled }));
     cleanup();
     assert.deepEqual(buttons.filter((b) => b.text === 'Installed'), [{ text: 'Installed', disabled: true }], JSON.stringify(buttons));
-    assert.equal(buttons.some((b) => /Install standard/i.test(b.text ?? '')), false, JSON.stringify(buttons));
+    // The other pack on offer (the German one) is still to install: exactly one "Install standard" button is left, not the Romanian card's.
+    assert.equal(buttons.filter((b) => /Install standard/i.test(b.text ?? '')).length, builtInPacks(resolve as never).length - 1, JSON.stringify(buttons));
   });
 });

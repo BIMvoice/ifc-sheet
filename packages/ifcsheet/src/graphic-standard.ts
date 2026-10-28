@@ -121,7 +121,43 @@ export const ROMANIAN_PRACTICE: GraphicStandard = {
   openingLines: 'towardsHandle',
 };
 
-export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE];
+const DE_TEXT_STYLES: readonly TextStyle[] = [
+  { id: 'de-text-25', name: 'Text 2.5', height: 2.5, font: 'sans', bold: false, italic: false },
+  { id: 'de-text-35', name: 'Text 3.5', height: 3.5, font: 'sans', bold: false, italic: false },
+  { id: 'de-title-50', name: 'Title 5', height: 5, font: 'sans', bold: false, italic: false },
+  { id: 'de-title-70', name: 'Title 7', height: 7, font: 'sans', bold: true, italic: false },
+];
+
+/**
+ * German practice: ISO 128 line widths and ISO 3098 lettering heights (DIN EN ISO 128 / DIN EN ISO 3098 are the German
+ * editions). No value below was checked against DIN 1356-1 (Bauzeichnungen), whose text is not available to this project;
+ * each says "series" (a member of the ISO series, which a test enforces) or "practice" (a choice, not a clause).
+ */
+export const GERMAN_PRACTICE: GraphicStandard = {
+  id: 'de-practice',
+  // DIN is not in the label: no value was checked against a DIN text.
+  name: 'German practice (ISO 128 / ISO 3098)',
+  // practice: the 0.5 line group of ISO 128-20 (thick 0.5, thin 0.25: thin is half the thick width). Cut 0.5, everything seen at the thin width; hatch 0.13 (series). Which group DIN 1356-1 prefers at 1:100 is UNVERIFIED.
+  pens: { cut: 0.5, outline: 0.25, seen: 0.25, hidden: 0.25, hatch: 0.13 },
+  // series, paired thick : thin at 2:1 or the next step of the series (practice); UNVERIFIED against DIN 1356-1.
+  weights: {
+    heavy: { cut: 0.7, projection: 0.35 }, medium: { cut: 0.5, projection: 0.25 },
+    light: { cut: 0.35, projection: 0.18 }, hairline: { cut: 0.18, projection: 0.13 },
+  },
+  materialHatch: { heavy: 0.35, medium: 0.25, light: 0.18, hairline: 0.13 },
+  // practice: frame 0.7 (ISO 5457 asks for a thick border; its minimum width was not re-read), title block outline 0.5, dividers 0.35, rules 0.18.
+  sheet: { frame: 0.7, titleOuter: 0.5, titleDivider: 0.35, titleRule: 0.18 },
+  // practice: which ISO 3098 height serves which role.
+  type: { caption: 2.5, value: 3.5, number: 7, scale: 5, viewTitle: 5 },
+  textStyles: DE_TEXT_STYLES,
+  // practice: the engine's default dimension style (arrow and gaps) under the pack's own text style; DIN 1356-1's dimensioning conventions were not checked.
+  dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'de-dim', name: 'Dimensions 2.5', textStyle: 'de-text-25' }],
+  current: { textStyle: 'de-text-25', dimStyle: 'de-dim' },
+  // Unchanged from before the setting existed: no German source for the direction was checked.
+  openingLines: 'towardsHandle',
+};
+
+export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE, GERMAN_PRACTICE];
 
 /** The standard a project names; an unknown or absent id is the default. */
 export function graphicStandardOf(id: string | undefined): GraphicStandard {

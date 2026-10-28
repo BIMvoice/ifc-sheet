@@ -12,13 +12,16 @@
  * each door / window mesh the plan's cut passes through is projected onto
  * the drawing, and the minimum-area rectangle around that footprint gives
  * the opening — its long side the width, its short side the wall depth.
- * The swing side is not in the mesh; it defaults to one side consistently
- * (the drawing's +x / +y normal), until the element says otherwise.
+ * The swing side is not in the mesh: it comes from the door's stated operation
+ * (`IfcDoor.OperationType`, else its type's: `door-operation.ts`) read against its
+ * placement, and defaults to one side consistently (the drawing's +x / +y
+ * normal) when the model states none; the per-door flips toggle from there.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { JoinerySpec } from '@ifc-lite/create';
+import { doorSwingFlips, type DoorOperation } from '@bimvoice/ifcsheet';
 import { typedPlanSymbol } from '@/joinery/plan-placement';
 import { worldToDrawing } from './frame';
 import type { DraftShape, Pt } from './types';
@@ -103,13 +106,13 @@ export const DOUBLE_LEAF_WIDTH = 1.4;
  * thickness, drawn heavy) and its swing arc from the leaf's tip back to the
  * closed position (thin). By default hinged on the −u jamb and swinging to
  * the +n side; `flips` bit 1 hinges it on the other jamb, bit 2 swings it to
- * the other side. Wider than `DOUBLE_LEAF_WIDTH`: two leaves, one per jamb.
+ * the other side. Two leaves, one per jamb, when `leafCount` says so, else when wider than `DOUBLE_LEAF_WIDTH`.
  */
-export function doorSymbol(r: OpeningRect, flips = 0): { thin: DraftShape[]; heavy: DraftShape[] } {
+export function doorSymbol(r: OpeningRect, flips = 0, leafCount?: 1 | 2): { thin: DraftShape[]; heavy: DraftShape[] } {
   const sh = flips & 1 ? 1 : -1;
   const sn = flips & 2 ? -1 : 1;
   const t = Math.min(0.05, Math.max(0.02, r.depth * 0.4));
-  const leaves = r.width > DOUBLE_LEAF_WIDTH ? [sh, -sh] : [sh];
+  const leaves = (leafCount ?? (r.width > DOUBLE_LEAF_WIDTH ? 2 : 1)) === 2 ? [sh, -sh] : [sh];
   const w = r.width / leaves.length;
   const thin: DraftShape[] = [], heavy: DraftShape[] = [];
   for (const side of leaves) {
@@ -151,6 +154,15 @@ export interface OpeningSymbol {
 /** Every shape of a symbol, whatever its weight. */
 export const symbolShapes = (s: OpeningSymbol): DraftShape[] => [...s.shapes, ...(s.heavy ?? []), ...(s.dashed ?? [])];
 
+/** The flips that draw `op` as the model states it, from the placement `l2w` (row-major, renderer frame: IFC local X is column 0, local Y minus column 2); null when its axes do not run along the opening. */
+function statedFlips(op: DoorOperation, l2w: readonly number[], plane: SectionPlaneConfig, rect: OpeningRect): number | null {
+  const dir = (x: number, y: number, z: number): Pt => {
+    const a = worldToDrawing(plane, { x: 0, y: 0, z: 0 }), b = worldToDrawing(plane, { x, y, z });
+    return { x: b.x - a.x, y: b.y - a.y };
+  };
+  return doorSwingFlips(op, dir(l2w[0], l2w[4], l2w[8]), dir(-l2w[2], -l2w[6], -l2w[10]), rect.u, rect.n);
+}
+
 const KIND: Record<string, 'door' | 'window'> = { IFCDOOR: 'door', IFCDOORSTANDARDCASE: 'door', IFCWINDOW: 'window', IFCWINDOWSTANDARDCASE: 'window' };
 
 /**
@@ -161,6 +173,7 @@ const KIND: Record<string, 'door' | 'window'> = { IFCDOOR: 'door', IFCDOORSTANDA
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
   typedOf: (id: number) => { spec: JoinerySpec; flips: number; source?: string } | null = () => null,
+  operationOf: (id: number) => DoorOperation | null = () => null,
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
@@ -206,7 +219,10 @@ export function openingSymbols(
     const rect = minAreaRect(entry.pts);
     if (!rect) continue;
     if (entry.kind === 'door') {
-      const door = doorSymbol(rect, flipsOf(id));
+      const stated = operationOf(id);
+      const own = stated && entry.l2w ? statedFlips(stated, entry.l2w, plane, rect) : null;
+      // The manual flips toggle the stated hand, as they toggle the default one.
+      const door = doorSymbol(rect, (own ?? 0) ^ flipsOf(id), own === null ? undefined : stated?.leaves);
       out.push({ id, kind: 'door', shapes: door.thin, heavy: door.heavy });
     } else out.push({ id, kind: 'window', shapes: windowSymbol(rect) });
   }

@@ -162,6 +162,9 @@ function finish(result: StepResult): void {
  */
 let sizeScale = 1;
 
+/** How many drawing units a settings unit of size (text height, hatch scale) is on the current target: 1 on a view, 10 on a sheet. */
+export const draftSizeScale = (): number => sizeScale;
+
 /** The settings as commands see them on the current target. */
 const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
 
