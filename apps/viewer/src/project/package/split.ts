@@ -19,7 +19,7 @@ type Json = Record<string, unknown>;
 const GROUPS: Record<string, readonly string[]> = {
   'project/views.json': ['views'],
   'project/sheets.json': ['sheets', 'issues'],
-  'project/standards.json': ['draftLayers', 'layerGroups', 'textStyles', 'dimStyles', 'hatchPatterns'],
+  'project/standards.json': ['draftLayers', 'layerGroups', 'textStyles', 'dimStyles', 'hatchPatterns', 'lineTypes'],
   'project/catalogs.json': ['joineryTypes', 'currentJoinery', 'joineryMapping', 'joineryOverrides', 'elementTypes', 'currentTypes', 'schedules', 'structureProfiles', 'civilDrawings', 'typicalSections', 'annotationTypes', 'symbols', 'legends'],
 };
 const DOCUMENT = 'project/document.json';

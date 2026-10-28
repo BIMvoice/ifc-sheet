@@ -8,7 +8,7 @@
  * `ifcsheet check --project` and `ifcsheet_check_readiness` build the same findings from it as the app does.
  *
  * Reads only what the checks and the build use. The graphic standard and the title block layout are read for `ifcsheet build`
- * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters); the views and the sheets are not read: no readiness finding
+ * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters); the sheets are read only as far as the title block's fit needs (`project-title-block-fit.ts`); no other readiness finding
  * depends on them yet (the set-side checks of the app's Check panel do, and are not in the engine). Everything read
  * is read as the app reads it (`readSchedule`, `readJoinerySpec`, `readJoineryMapping` are the app's own readers),
  * and what is malformed is dropped, so an old file, or one with a damaged section, loads with that section empty.
@@ -39,6 +39,7 @@ import type { TitleBlockTemplate } from './title-block-template.js';
 import { readTitleBlock, readTitleBlockParams } from './title-block-file-read.js';
 import { readTitleSources, type TitleSources } from './title-block-sources.js';
 import type { TitleBlockParam } from './title-block-params.js';
+import { projectTitleBlockMisfits, readProjectSheets, type ProjectSheets } from './project-title-block-fit.js';
 import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
@@ -46,7 +47,7 @@ import type { StoreyInput } from './view-defaults.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
 
 /** What the checks read of a project file. */
-export interface ProjectFacts extends JoineryProject {
+export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   /** The project's name; empty when the file has none. */
   name: string;
   /** The version the file declares. */
@@ -110,6 +111,7 @@ export function readProjectFile(text: string): ProjectFacts {
   const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+  const sheets = readProjectSheets(parsed);
   return {
     name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
     version,
@@ -129,6 +131,8 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(titleBlock ? { titleBlock } : {}),
     ...(titleBlockSources ? { titleBlockSources } : {}),
     ...(titleBlockParams?.length ? { titleBlockParams } : {}),
+    // The saved sheets, as far as a title block reads them: what `ready.titleBlockFit` is judged on.
+    ...(sheets.sheets.length > 0 ? sheets : {}),
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
@@ -152,7 +156,9 @@ export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & {
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];
   const boq = articles.length > 0 ? boqMissing(computeBoq(readBoqElements(storeSource(modelId, model.dataStore), new Set(boqPropertyNames(articles))), articles)) : undefined;
+  // The title block values the project's layout cuts short on its saved sheets: the `fitCell` the sheets print with, judged on the same lookup (`project-title-block-fit.ts`).
+  const misfits = project ? projectTitleBlockMisfits(project, model.dataStore) : [];
   // Against the simplified PAC's scope, for a project in that mode only (measuring the footprints reads the geometry).
   const rural = project?.pacMode === 'rural' ? ruralScopeOfModel({ ...model, storeys: model.storeys.filter(isStorey) }, project.urbanSettings) : undefined;
-  return readinessOfModel(model, checks, boq, rural);
+  return readinessOfModel(model, checks, boq, misfits, rural);
 }

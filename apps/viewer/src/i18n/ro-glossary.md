@@ -109,7 +109,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 
 The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar, and the export dialogs its palette opens: IFC, GLB, KMZ, USD, energy model, the to-scale PDF, the anonymized subset, the review before the modified IFC and the Cesium ion upload), the drafting tools' panels
 and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the sheet PDF setup and title-block dialogs (`sheetsPdf.sheetSetup.*`, `sheetsPdf.titleBlock.*`) and the
-drafting standards stay English; a missing key falls back to English one by one.
+drafting standards stay English except the layer print flag, the line types editor and the per-element line overrides (`catalogues/drafting-standards.ro.ts`: strat, tip de linie, tipar, grosime, culoare, tipărire); a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule
 sheet made before this change, and anything a person typed are stored text and stay
 as they were. Storey names come from the IFC and are never translated.

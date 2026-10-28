@@ -10,7 +10,7 @@
  */
 
 import { dimensionLayout } from './annotation';
-import type { AnnotationShape, Pt } from './types';
+import type { AnnotationShape, DraftEntity, DraftShape, Pt } from './types';
 import { COINCIDENT, add, cross, dist, dot, scale, sub } from './vec';
 
 type DimensionShape = Extract<AnnotationShape, { type: 'dimension' }>;
@@ -60,4 +60,28 @@ export function alignDimensionLine(
   const ends = [best.other.a, best.other.b, moved.a, moved.b].map((p) => ({ p, t: dot(p, dir) }));
   ends.sort((x, y) => x.t - y.t);
   return { at, guide: { a: ends[0].p, b: ends[ends.length - 1].p } };
+}
+
+/** The glyph that shows a dimension line has snapped to another: a small diamond on the line, beside the guide line the other dimension's line is extended to. */
+export function alignGlyph(alignment: DimensionAlignment, size: number): DraftShape[] {
+  if (!alignment.guide) return [];
+  const { at } = alignment;
+  const h = size / 2;
+  return [
+    { type: 'line', a: alignment.guide.a, b: alignment.guide.b },
+    { type: 'polyline', pts: [{ x: at.x - h, y: at.y }, { x: at.x, y: at.y - h }, { x: at.x + h, y: at.y }, { x: at.x, y: at.y + h }], closed: true },
+  ];
+}
+
+/**
+ * Where grip `key` of dimension `id` goes when dragged to `p`: its line (`at`)
+ * aligns to a close parallel dimension line of the same view, as it does while
+ * being placed. Any other grip, entity or no near line: `p` as it is, no guide.
+ */
+export function alignDraggedGrip(drafts: readonly DraftEntity[], id: string, key: string, p: Pt): DimensionAlignment {
+  const entity = drafts.find((e) => e.id === id);
+  const shape = entity?.shape;
+  if (!entity || shape?.type !== 'dimension' || key !== 'at') return { at: p, guide: null };
+  const others = drafts.flatMap((e) => (e.id !== id && e.viewId === entity.viewId && e.shape.type === 'dimension' ? [e.shape] : []));
+  return alignDimensionLine(shape.a, shape.b, shape.variant, p, others, 2 * shape.height);
 }

@@ -49,6 +49,7 @@ export {
   MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
   type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,
 } from '../schedule-content.js';
+export { doorOperationOf, doorSwingFlips, parseDoorOperation, type DoorOperation, type Dir2 } from '../door-operation.js';
 export {
   DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
   type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,
