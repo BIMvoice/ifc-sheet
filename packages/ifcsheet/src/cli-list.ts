@@ -59,7 +59,7 @@ export interface ListOutput {
   /** True when no element of the model matches the list: the command prints nothing and exits 1. */
   empty: boolean;
   /** What `--json` prints (before it is written as text). */
-  json: { file: string; project: string; schedule: { id: string; name: string }; header: string[]; rows: ListScheduleTable['rows']; totals: ListScheduleTable['rows'][number] | null };
+  json: { file: string; project: string; schedule: { id: string; name: string }; header: string[]; rows: ListScheduleTable['rows']; totals: ListScheduleTable['rows'][number] | null; missing: ListScheduleTable['missing']; notes: string[] };
   csv: string;
   text: string;
 }
@@ -71,7 +71,7 @@ export function listOutput(file: string, projectName: string, model: OpenedModel
   return {
     table,
     empty: listTableIsEmpty(table),
-    json: { file, project: projectName, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null },
+    json: { file, project: projectName, schedule: { id: found.id, name: found.name }, header: table.header, rows: table.rows.filter((_, i) => i !== total), totals: total >= 0 ? table.rows[total] : null, missing: table.missing, notes: table.notes },
     csv: listScheduleCsv(table, locale),
     text: listTableText(table, sheetFormat(locale, project.unitsAndNumbers)),
   };
