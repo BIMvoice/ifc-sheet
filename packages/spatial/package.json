@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/spatial",
+  "private": true,
   "version": "1.15.0",
   "description": "Spatial indexing for IFC-Lite",
   "type": "module",

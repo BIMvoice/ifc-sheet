@@ -60,6 +60,7 @@ import { norwayPermitField } from './norway-permit';
 import { pacInterventionField } from './pac-intervention';
 import { pacModeField } from './pac-mode';
 import { siteAreaField } from './site-area';
+import { underlaysField } from './underlays';
 import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
 import { defineField, listField, optionalField, recordField, whenPresent, whenUsable, type DocumentField, type FieldKey } from './define';
@@ -140,6 +141,8 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // The project's own line types (#496); absent: only the built-in ones.
   listField('lineTypes', (raw) => at(raw, 'lineTypes', readLineType), { presentOnly: true }),
+  // PDF pages and images under views, to trace over (#457); absent: none.
+  underlaysField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'];

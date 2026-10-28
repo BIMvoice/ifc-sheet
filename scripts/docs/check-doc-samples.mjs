@@ -119,7 +119,7 @@ function existsOrFail(path, what) {
  *
  * "Published" is decided exactly as check-package-readmes.mjs decides it -
  * a non-dotfile directory carrying a readable package.json whose `private`
- * is not `true` - so the set of READMEs that gate REQUIRES to exist is the
+ * is not `true` (or which still carries a publishConfig, as the vendored packages do) - so the set of READMEs that gate REQUIRES to exist is the
  * set this gate TYPECHECKS. check-doc-samples.test.mjs drives both rules
  * over the real packages/ layout and asserts the two sets are equal.
  *
@@ -139,7 +139,7 @@ function publishedPackages() {
     const pkgJson = join(packagesDir, dir, 'package.json');
     if (!existsOrFail(pkgJson, 'package manifest')) continue;
     const pkg = JSON.parse(readFileSync(pkgJson, 'utf-8'));
-    if (pkg.private === true) continue;
+    if (pkg.private === true && pkg.publishConfig == null) continue; // the rule check-package-readmes and check-changeset-required share
     out.push({ dir, pkg });
   }
   return out;
