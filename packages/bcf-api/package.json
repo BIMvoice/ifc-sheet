@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/bcf-api",
+  "private": true,
   "version": "0.2.4",
   "description": "BCF API (OpenCDE) REST client for connecting to BCF servers",
   "type": "module",

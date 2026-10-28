@@ -127,7 +127,7 @@ export const commandsEn = {
   'commands.drafting.redo': 'Redo',
   'commands.drafting.snap': 'Snap on or off',
   'commands.drafting.ortho': 'Ortho on or off (or hold Ctrl)',
-  'commands.drafting.cancel': 'Cancel the command',
+  'commands.drafting.cancel': 'Cancel the command, or end the current tool. It never leaves the drawing: use Back to sheet. In a tool card, a list or number field lets Escape end the tool; a text field keeps its own Escape.',
   'commands.drafting.erase': 'Erase the selection',
   'commands.drafting.confirm': 'Confirm, or repeat the last command',
   'commands.help.shortcuts': 'Show keyboard shortcuts',
