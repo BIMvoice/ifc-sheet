@@ -25,7 +25,7 @@ export type Text = Extract<SchedulePrim, { kind: 'text' }>;
 export const textsOf = (l: ScheduleLayout): Text[] => l.prims.filter((p): p is Text => p.kind === 'text');
 
 /** A drawn figure read back as a number: the sheet's `1,234.50`, `+2.70`, `±0.00`, `15.00*`, `20.00 %`. */
-const figureOf = (drawn: string): number => Number(drawn.replace(/^(>= )/, '').replace(/,/g, '').replace('±', '').replace(/(\*| %)$/, ''));
+const figureOf = (drawn: string): number => Number(drawn.replace(/^(>= )/, '').replace(/,/g, '').replace('±', '').replace(/( m²)?( \*| %|\*)$/, ''));
 
 /** Does the drawn text show this cell? A figure to the sheet's two decimals; an empty cell as nothing or a dash. */
 export function shows(drawn: string, cell: ExportCell): boolean {
