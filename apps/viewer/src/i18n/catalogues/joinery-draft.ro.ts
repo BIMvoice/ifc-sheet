@@ -14,4 +14,5 @@ export const joineryDraftRo = {
   'joinery.draft.done': 'Înapoi la tabel',
   'joinery.draft.hint': 'Tot ce desenați aici aparține tipului și se tipărește în fiecare tabel care îl arată. Se păstrează liniile, arcele, cercurile, textele și hașurile.',
   'joinery.draft.enter': 'Faceți dublu clic pe o vedere a unui tip ca să desenați pe ea',
+  'joinery.draft.refused': 'Indisponibil într-o vedere a tabelului; desenați linii, arce, text sau hașuri.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

@@ -23,12 +23,19 @@ import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import { joineryEntry, updateJoinery } from './catalog';
 import { isJoineryDraftViewId, joineryDraftViewId } from './view-draft-id';
 
-/** A stored draft as a working-copy entity; one whose shape the drafting reader refuses is left out. */
-function entityOf(viewId: string, d: JoineryViewDraft): DraftEntity[] {
+/**
+ * The stored drafts of a type's view the drafting reader refuses, by view id. They are not in the working copy, but they are still the
+ * type's data: every write-back keeps them, so opening and closing a view never removes a draft.
+ */
+const kept = new Map<string, JoineryViewDraft[]>();
+
+/** A stored draft as a working-copy entity; one whose shape the drafting reader refuses is null (and is kept as it is, see `kept`). */
+function entityOf(viewId: string, d: JoineryViewDraft): DraftEntity | null {
   try {
-    return [{ id: d.id, viewId, layerId: d.layerId ?? '0', shape: readShape(d.shape, `joinery draft ${d.id}`), params: { ...d.params } }];
-  } catch {
-    return [];
+    return { id: d.id, viewId, layerId: d.layerId ?? '0', shape: readShape(d.shape, `joinery draft ${d.id}`), params: { ...d.params } };
+  } catch (err) {
+    console.warn(`[joinery] draft ${d.id} of ${viewId} cannot be edited and is kept as stored:`, err);
+    return null;
   }
 }
 
@@ -49,7 +56,8 @@ export function writeBackJoineryDrafts(typeId: string, view: JoineryViewName): v
   const spec = joineryEntry(typeId);
   if (!spec) return;
   const { drafts, draftLayers } = useProjectStore.getState();
-  const stored = draftsOfView(joineryDraftViewId(typeId, view), drafts).flatMap((e) => storedOf(e, draftLayers));
+  const viewId = joineryDraftViewId(typeId, view);
+  const stored = [...draftsOfView(viewId, drafts).flatMap((e) => storedOf(e, draftLayers)), ...(kept.get(viewId) ?? [])];
   if (JSON.stringify(stored) === JSON.stringify(joineryViewDrafts(spec, view))) return;
   updateJoinery(withViewDrafts(spec, view, stored));
 }
@@ -61,7 +69,13 @@ export function writeBackJoineryDrafts(typeId: string, view: JoineryViewName): v
 export function openJoineryViewDrafts(typeId: string, view: JoineryViewName): () => void {
   const viewId = joineryDraftViewId(typeId, view);
   const spec = joineryEntry(typeId);
-  const loaded = (joineryViewDrafts(spec, view)).flatMap((d) => entityOf(viewId, d));
+  const loaded: DraftEntity[] = [];
+  const unreadable: JoineryViewDraft[] = [];
+  for (const d of joineryViewDrafts(spec, view)) {
+    const entity = entityOf(viewId, d);
+    if (entity) loaded.push(entity); else unreadable.push(d);
+  }
+  kept.set(viewId, unreadable);
   clearDraftHistory();
   useProjectStore.setState((s) => ({ drafts: [...s.drafts.filter((d) => d.viewId !== viewId), ...loaded] }));
   const stop = useProjectStore.subscribe((state, before) => {
@@ -70,6 +84,7 @@ export function openJoineryViewDrafts(typeId: string, view: JoineryViewName): ()
   return () => {
     stop();
     writeBackJoineryDrafts(typeId, view);
+    kept.delete(viewId);
     clearDraftHistory();
     useProjectStore.setState((s) => (s.drafts.some((d) => d.viewId === viewId) ? { drafts: s.drafts.filter((d) => !isJoineryDraftViewId(d.viewId)) } : {}));
   };
