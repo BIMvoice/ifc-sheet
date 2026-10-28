@@ -33,6 +33,7 @@ import { idsPanelRo } from '../catalogues/ids-panel.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
 import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
+import { joineryRo } from '../catalogues/joinery.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { landxmlRo } from '../catalogues/landxml.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
@@ -70,6 +71,7 @@ export const roAL = {
   ...ionUploadRo,
   ...issueChangesRo,
   ...issueRo,
+  ...joineryRo,
   ...keyboardShortcutsRo,
   ...landxmlRo,
   ...listScheduleRo,
