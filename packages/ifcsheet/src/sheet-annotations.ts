@@ -26,7 +26,7 @@ import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
 import { drawAxis, drawCurve, drawHatch, drawLeader, drawLevel, type MarkContext } from './sheet-marks.js';
-import { label, readableAngle, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
+import { label, readableAngle, textInk, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { annotationAtFactor, annotationFactor, viewportPaperUnit } from './viewport-annotation.js';
 import { viewportHiddenLayers } from './view-templates.js';
@@ -86,7 +86,7 @@ export function viewportAnnotations(
       const px = sized.height * mmPerMetre;
       const deg = readableAngle(sized.rotation, frame);
       // One label per line, each a line pitch under the one before, in the text's own frame.
-      sized.text.split('\n').forEach((line, i) => out.texts.push(label(at(sized.p), line, Math.max(px, 1), deg, i * 1.25 * Math.max(px, 1), 'left')));
+      sized.text.split('\n').forEach((line, i) => out.texts.push(label(at(sized.p), line, Math.max(px, 1), deg, i * 1.25 * Math.max(px, 1), 'left', textInk(look.text, look.text.color ?? colour))));
       if (sized.frame || sized.leader) a.onSkipped?.('text', view);
     } else if (sized.type === 'leader') drawLeader(sized, mark);
     else if (sized.type === 'level') drawLevel(sized, mark);
@@ -111,7 +111,7 @@ export function viewportAnnotations(
       // Above the line in the text's own frame (screen-up for a level line, screen-left for an upright one); centred breaks the line under it.
       const shift = dim.placement === 'centered' ? px * 0.35 : dim.placement === 'below' ? dim.textGap + px * 0.8 : -dim.textGap;
       const textAt = sized.type === 'dimension' ? sized.textAt : undefined;
-      out.texts.push(label(at(textAt ?? layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center'));
+      out.texts.push(label(at(textAt ?? layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center', textInk(look.text, look.text.color ?? dim.color ?? colour)));
       if (textAt) a.onSkipped?.('dimension', view);
     }
   }

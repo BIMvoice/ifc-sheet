@@ -187,6 +187,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
       doc.setFont(...pdfFont(t, Boolean(bold)));
+      doc.setTextColor(t.colour ?? '#000000');
       doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
     }
     // The logo: fitted whole and centred in its box (the app's `xMidYMid meet`); in a strip it reads upward.
@@ -209,6 +210,7 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       }
     }
     doc.setFont('Inter', 'normal');
+    doc.setTextColor('#000000');
     doc.outline.add(null, `${sheet.number} ${sheet.name}`.trim(), { pageNumber: i + 1 });
   });
   return new Uint8Array(doc.output('arraybuffer'));
