@@ -25,6 +25,10 @@ import { drawingPointToMap, type MapAnchor } from './map-coordinates';
 import { liveSymbol, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID } from './live-symbols';
 import { liveSymbolContext, siteNorth, type SiteFrame } from './site-frame';
 import { gridNorthOf, trueNorthOf } from './true-north';
+import { northOfStore } from '@bimvoice/ifcsheet/true-north';
+import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
+import { IfcParser } from '@ifc-lite/parser';
+import { siteFixtureStep } from '@/test/site-fixture';
 import { plotAreaOf, PLOT_BOUNDARY_LAYER, ringArea, setbacks } from './plot';
 import { keyPlanHighlight, viewportExtent } from './key-plan';
 import { footprintRings, offsetRing, outerRings } from './footprint';
@@ -43,7 +47,7 @@ async function fixtureAnchor(): Promise<MapAnchor> {
   return { eff: selection.eff, originViewer: { x: 0, y: 0, z: 0 } };
 }
 
-const frameOf = (over: Partial<SiteFrame>): SiteFrame => ({ trueNorth: null, north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 }, ...over });
+const frameOf = (over: Partial<SiteFrame>): SiteFrame => ({ north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 }, ...over });
 const labels = (kind: 'map' | 'local', a: string, b: string) => (kind === 'map' ? [`E ${a}`, `N ${b}`] : [`X ${a}`, `Y ${b}`]);
 const symbol = (symbolId: string, p: Pt = { x: 0, y: 0 }, scale = 1, rotation = 0): SymbolInstanceShape => ({ type: 'symbol', symbolId, p, scale, rotation });
 
@@ -105,6 +109,26 @@ describe('grid north when the model states no TrueNorth (#135 review)', () => {
     assert.deepEqual(siteNorth(null, null), { north: null, northSource: null });
     // A map conversion that states no X axis is unrotated: grid north is project +Y.
     assert.deepEqual(gridNorthOf(undefined, undefined), { x: 0, y: 1 });
+  });
+});
+
+describe('a viewport\'s north arrow on a model with a map conversion and no TrueNorth', () => {
+  it('points at grid north, on the screen\'s rule and the engine\'s alike', async () => {
+    // The fixture with no TrueNorth: the last attribute of both contexts ('Model' #12, 'Plan' #13) -> $.
+    const step = siteFixtureStep().replace('1.0E-5,#11,#12);', '1.0E-5,#11,$);').replace('1.0E-5,#11,#13);', '1.0E-5,#11,$);');
+    assert.notEqual(step, siteFixtureStep());
+    const bytes = new TextEncoder().encode(step);
+    const store = await new IfcParser().parseColumnar(bytes.buffer as ArrayBuffer, { disableWorkerScan: true });
+    assert.equal(trueNorthOf(store), null);
+    const selection = selectAnchorGeoref({ models: new Map(), legacyDataStore: store, georefMutations: new Map() });
+    assert.ok(selection);
+    const screen = siteNorth(null, { eff: selection.eff });
+    const engine = northOfStore(store);
+    assert.equal(screen.northSource, 'gridNorth');
+    assert.ok(engine && screen.north);
+    assert.ok(Math.abs(engine.x - screen.north.x) < 1e-9 && Math.abs(engine.y - screen.north.y) < 1e-9, 'one rule');
+    // Grid north of a map rotated 12 degrees lies 12 degrees clockwise of project +Y.
+    assert.ok(Math.abs((northDegrees({ axis: 'y' }, engine) ?? NaN) + 12) < 1e-9);
   });
 });
 

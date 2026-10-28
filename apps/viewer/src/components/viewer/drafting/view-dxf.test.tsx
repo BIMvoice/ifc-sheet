@@ -40,7 +40,7 @@ describe('a view\'s DXF (#135 review)', () => {
   });
 
   it('prints a coordinate point\'s label, not a bare cross', () => {
-    const symbols = liveSymbolContext({ trueNorth: null, north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 } }, PLAN, 'down', 200, 'en',
+    const symbols = liveSymbolContext({ north: null, northSource: null, anchor: null, frameOffset: { x: 0, y: 0, z: 0 } }, PLAN, 'down', 200, 'en',
       (kind, a, b) => (kind === 'map' ? [`E ${a}`, `N ${b}`] : [`X ${a}`, `Y ${b}`]));
     const dxf = new TextDecoder('latin1').decode(viewDxf({ view, drawing: null, axis: 'down', drafts: [point], layers: [layer], extraPatterns: [], overlays: [], symbols }));
     // Group code / value pairs; a TEXT entity's string is its group 1.

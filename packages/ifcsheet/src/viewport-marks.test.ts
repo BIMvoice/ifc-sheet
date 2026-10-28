@@ -113,10 +113,9 @@ const view = (over: Record<string, unknown>): ProjectView => ({ id: 'v', name: '
 
 describe('which marks a viewport shows', () => {
   const none = {};
-  it('are off unless asked, and on for a site plan', () => {
+  it('are off unless asked, a site plan included (its own symbols sit in a free spot, drawn by the app)', () => {
     expect(viewportMarkFlags(none, view({ kind: 'plan' }))).toEqual({ northArrow: false, scaleBar: false });
-    expect(viewportMarkFlags(none, view({ kind: 'plan', site: true }))).toEqual({ northArrow: true, scaleBar: true });
-    expect(viewportMarkFlags({ northArrow: false }, view({ kind: 'plan', site: true }))).toEqual({ northArrow: false, scaleBar: true });
+    expect(viewportMarkFlags(none, view({ kind: 'plan', site: true }))).toEqual({ northArrow: false, scaleBar: false });
     expect(viewportMarkFlags({ northArrow: true, scaleBar: true }, view({ kind: 'plan' }))).toEqual({ northArrow: true, scaleBar: true });
   });
 

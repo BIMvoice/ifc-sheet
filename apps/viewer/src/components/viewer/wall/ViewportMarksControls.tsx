@@ -5,8 +5,8 @@
 /**
  * The two switches of a viewport's marks: a north arrow (plans only) and a
  * graphic scale bar. What a switch shows when the viewport has not been
- * touched is the view's default (`viewportMarkFlags`: on for a site plan);
- * the first click stores the choice on the viewport.
+ * touched is off (`viewportMarkFlags`); the first click stores the choice on
+ * the viewport. A site plan has its own symbols in a free spot, so it is not offered.
  */
 
 import { viewportMarkFlags } from '@bimvoice/ifcsheet/viewport-marks';
@@ -18,8 +18,8 @@ export function ViewportMarksControls({ sheet, slot, view }: { sheet: ProjectShe
   const { t } = useTranslation();
   const shown = viewportMarkFlags(slot, view);
   // A flag off because the view cannot carry the mark (no scale, not a plan) is not offered.
-  const canBar = view.kind !== '3d' && slot.keyPlanOf === undefined;
-  const canArrow = view.kind === 'plan' && slot.keyPlanOf === undefined;
+  const canBar = view.kind !== '3d' && slot.keyPlanOf === undefined && !(view.kind === 'plan' && view.site === true);
+  const canArrow = view.kind === 'plan' && slot.keyPlanOf === undefined && !(view.kind === 'plan' && view.site === true);
   if (!canBar && !canArrow) return null;
   return (
     <div className="mt-4 flex flex-col gap-1 text-sm text-white">

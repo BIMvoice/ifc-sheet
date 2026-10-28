@@ -13,6 +13,7 @@
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
+import { placeField, TitleBlockImportError } from '@bimvoice/ifcsheet';
 import { ITEM_KINDS, MAX_TEXT, type TemplateItem, type TitleBlockTemplate } from './title-block-template';
 
 export { MAX_TEXT };
@@ -47,6 +48,24 @@ export function customiseTitleBlock(standard: TitleBlockTemplate): void {
 /** The Romanian layout (`title-block-ro.ts`) becomes the project's own, in place of whatever layout it printed: one undo step. */
 export function applyRomanianTitleBlock(romanian: TitleBlockTemplate): void {
   write({ items: romanian.items.map((i) => ({ ...i })) });
+}
+
+/** An imported layout (#458: a DXF or an SVG, `importTitleBlockDxf`) becomes the project's own: one undo step, every sheet prints it. */
+export function applyImportedTitleBlock(template: TitleBlockTemplate): void {
+  write({ items: template.items.map((i) => ({ ...i })) });
+}
+
+/** Place `{field}` on the project's layout, near the block's top-left where its x and y can be edited at once. False when there is no layout of its own yet, or the name or the layout refuses it. */
+export function placeTemplateField(field: string): boolean {
+  const t = current();
+  if (!t) return false;
+  try {
+    write(placeField(t, field, { x: 5, y: 10 }, { fit: 60 }));
+    return true;
+  } catch (err) {
+    if (err instanceof TitleBlockImportError) return false;
+    throw err;
+  }
 }
 
 /** Back to the standard layout. */

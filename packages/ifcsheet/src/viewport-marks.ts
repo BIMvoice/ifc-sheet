@@ -175,18 +175,18 @@ export interface ViewportMarkFlags {
 
 /**
  * The marks `vp` shows: what it says (`SheetViewport.northArrow` / `scaleBar`,
- * on or off), else the default of its view. Off by default, except on a site
- * plan (the permit drawings that need them: the situation plans). A north arrow
+ * on or off), else off. A site plan's own arrow and bar are drawn by the app in
+ * a free spot clear of the plot (`siteplan/site-symbols.ts`), so a site plan
+ * takes no default here either (issue #430 is the proper avoidance for all). A north arrow
  * is for plans only and a scale bar for a drawing that has a scale (not a 3D
  * view, a drafting view's detail or a key plan, which is the whole plan small);
  * a view that cannot carry a mark never shows it, whatever the viewport says.
  */
 export function viewportMarkFlags(vp: Pick<SheetViewport, 'northArrow' | 'scaleBar' | 'keyPlanOf'>, view: ProjectView | undefined): ViewportMarkFlags {
   if (!view || vp.keyPlanOf !== undefined) return { northArrow: false, scaleBar: false };
-  const site = view.kind === 'plan' && view.site === true;
   return {
-    northArrow: view.kind === 'plan' && (vp.northArrow ?? site),
-    scaleBar: view.kind !== '3d' && (vp.scaleBar ?? site),
+    northArrow: view.kind === 'plan' && (vp.northArrow ?? false),
+    scaleBar: view.kind !== '3d' && (vp.scaleBar ?? false),
   };
 }
 
