@@ -13,6 +13,11 @@ import type { Pt } from './types';
 export const EPS = 1e-9;
 /** Points closer than this (metres) are treated as coincident. */
 export const COINCIDENT = 1e-6;
+/**
+ * How far (metres, the drawing's model units) the spans of a dimension chain may stray from one line and still be one chain: 5 mm,
+ * so that snapped points a millimetre or two off line (walls not perfectly in line) are still the chain they were drawn as.
+ */
+export const CHAIN_TOLERANCE = 0.005;
 export const TAU = Math.PI * 2;
 
 export function pt(x: number, y: number): Pt {
