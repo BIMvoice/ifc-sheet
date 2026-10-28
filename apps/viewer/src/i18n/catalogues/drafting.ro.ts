@@ -209,7 +209,7 @@ export const draftingRo = {
   'drafting.props.noParams': 'Încă niciun parametru personalizat.',
   'drafting.props.override': 'Text înlocuitor',
   'drafting.props.params': 'Parametri personalizați',
-  'drafting.props.pattern': 'Model',
+  'drafting.props.pattern': 'Tipar',
   'drafting.props.radius': 'Rază',
   'drafting.props.removeParam': 'Eliminați {key}',
   'drafting.props.scale': 'Scară',
