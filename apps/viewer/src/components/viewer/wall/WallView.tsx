@@ -23,6 +23,7 @@ import { useViewerStore } from '@/store';
 import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
+import { WallCompare } from './WallCompare';
 import { WallIntro } from './WallIntro';
 import { openDemoModel } from '../ifcsheet/demo-model';
 import { ProjectDrawer } from './ProjectDrawer';
@@ -90,6 +91,7 @@ export function WallView() {
       ) : (
         <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
+      <WallCompare />
       {panel === 'drawer' ? <ProjectDrawer extent={extent} onClose={closeFrontPanel} /> : null}
       {review ? <SubReportReview scheduleId={review} onClose={() => setReview(null)} /> : null}
       {panel === 'missing' ? <MissingPanel /> : panel === 'issue' ? <IssuePanel /> : null}
