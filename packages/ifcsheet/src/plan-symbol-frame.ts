@@ -102,8 +102,10 @@ export function placementFrame(store: IfcDataStore, id: number | null, seen = ne
 
 /**
  * An IfcCartesianTransformationOperator2D / 3D (an IfcMappedItem's MappingTarget): Axis1, Axis2 (and Axis3), LocalOrigin and
- * Scale (the non-uniform forms' Scale2 / Scale3 too). Axes are taken as given, orthonormalised; a second axis that points
- * the other way mirrors, as the schema allows.
+ * Scale (the non-uniform forms' Scale2 / Scale3 too). The axes follow IFC4 IfcBaseAxis: z is Axis3 or (0, 0, 1); x is Axis1
+ * projected onto the plane perpendicular to z (IfcFirstProjAxis), except that a 2D operator with no Axis1 but an Axis2 takes
+ * x = (Axis2.y, -Axis2.x); y is Axis2 projected perpendicular to z and x (IfcSecondProjAxis), or z x x when Axis2 is absent.
+ * A second axis that points the other way mirrors, as the schema allows, and z is never flipped to undo it.
  */
 export function operatorFrame(store: IfcDataStore, id: number | null): Xf | null {
   if (id === null) return IDENTITY;
@@ -118,16 +120,26 @@ export function operatorFrame(store: IfcDataStore, id: number | null): Xf | null
   const nonUniform = type.endsWith('NONUNIFORM');
   const s2 = nonUniform && typeof a[is3d ? 5 : 4] === 'number' ? (a[is3d ? 5 : 4] as number) : scale;
   const s3 = nonUniform && is3d && typeof a[6] === 'number' ? (a[6] as number) : scale;
-  const x = norm(coords(store, ref(a[0])) ?? [1, 0, 0]) ?? [1, 0, 0];
-  let z: [number, number, number] = [0, 0, 1];
-  if (is3d) z = norm(coords(store, ref(a[4])) ?? [0, 0, 1]) ?? [0, 0, 1];
-  const yGiven = coords(store, ref(a[1]));
-  let y = norm(yGiven ?? cross(z, x)) ?? cross(z, x);
-  // Make y perpendicular to x, keeping its side (a mirrored operator keeps its mirror).
-  const d = y[0] * x[0] + y[1] * x[1] + y[2] * x[2];
-  y = norm([y[0] - d * x[0], y[1] - d * x[1], y[2] - d * x[2]]) ?? y;
-  const zz = is3d && !coords(store, ref(a[4])) ? cross(x, y) : z;
-  return [x[0] * scale, y[0] * s2, zz[0] * s3, origin[0], x[1] * scale, y[1] * s2, zz[1] * s3, origin[1], x[2] * scale, y[2] * s2, zz[2] * s3, origin[2]];
+  const axis1 = coords(store, ref(a[0]));
+  const axis2 = coords(store, ref(a[1]));
+  const z: [number, number, number] = (is3d ? norm(coords(store, ref(a[4])) ?? [0, 0, 1]) : null) ?? [0, 0, 1];
+  // IfcBaseAxis, 2D form: with no Axis1, an authored Axis2 fixes the frame and x is its clockwise perpendicular.
+  const fromAxis2 = !is3d && !axis1 && axis2 && Math.hypot(axis2[0], axis2[1]) > 1e-12 ? [axis2[1], -axis2[0], 0] : null;
+  const fill = firstProjAxis(z);
+  const raw = norm(axis1 ?? fromAxis2 ?? fill) ?? fill;
+  // IfcFirstProjAxis: x is the given axis less its component along z.
+  const along = raw[0] * z[0] + raw[1] * z[1] + raw[2] * z[2];
+  const x = norm([raw[0] - along * z[0], raw[1] - along * z[1], raw[2] - along * z[2]]) ?? fill;
+  // IfcSecondProjAxis: y is Axis2 less its components along z and x, keeping its side (a mirrored operator keeps its mirror).
+  const zx = cross(z, x);
+  let y = zx;
+  if (axis2) {
+    const dz = axis2[0] * z[0] + axis2[1] * z[1] + axis2[2] * z[2];
+    const v = [axis2[0] - dz * z[0], axis2[1] - dz * z[1], axis2[2] - dz * z[2]];
+    const dx = v[0] * x[0] + v[1] * x[1] + v[2] * x[2];
+    y = norm([v[0] - dx * x[0], v[1] - dx * x[1], v[2] - dx * x[2]]) ?? zx;
+  }
+  return [x[0] * scale, y[0] * s2, z[0] * s3, origin[0], x[1] * scale, y[1] * s2, z[1] * s3, origin[1], x[2] * scale, y[2] * s2, z[2] * s3, origin[2]];
 }
 
 /** One IFC plane-angle unit in radians: 1 for the SI radian, the conversion factor of a conversion-based unit (the degree). */
