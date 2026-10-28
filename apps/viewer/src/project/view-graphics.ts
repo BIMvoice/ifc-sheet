@@ -17,7 +17,7 @@ import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } from './types';
 import type { MaterialDrawing, MaterialHatch } from './material-drawing';
-import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { shownRooms, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
@@ -118,16 +118,6 @@ export function styledDrawing(
   globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
   return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), shownRooms(scheme, graphics, globalIdOf));
-}
-
-/**
- * The scheme without the rooms the view hides (the Spaces category, or the one room, #33). A room's colour and its hatch are both made
- * from `schemeFills`, so this is the one visibility check for the two: a hidden room keeps neither on the paper.
- */
-function shownRooms(scheme: SchemeResult | null | undefined, graphics: ViewGraphics | undefined, globalIdOf?: (entityId: number) => string | null | undefined): SchemeResult | null | undefined {
-  if (!scheme || !graphics) return scheme;
-  const fills = scheme.fills.filter((f) => elementShown(graphics, globalIdOf?.(f.entityId), 'IfcSpace'));
-  return fills.length === scheme.fills.length ? scheme : { ...scheme, fills };
 }
 
 function styledByGraphics(

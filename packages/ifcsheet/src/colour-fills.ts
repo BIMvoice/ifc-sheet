@@ -16,6 +16,8 @@
 import { compareKeys, schemeEntries, valueKey, valueText, type ColourScheme, type SchemeEntry } from './colour-scheme.js';
 import type { ProjectLevel, ProjectView } from './document.js';
 import { resolveViewGraphics, type ProjectViewTemplate } from './view-templates.js';
+import { elementShown } from './element-graphics.js';
+import type { GlobalId, ViewGraphics } from './view-graphics-types.js';
 import { roomFootprints, type Pt, type SpaceMesh } from './footprint.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 
@@ -40,6 +42,20 @@ export interface SchemeResult {
   elementColours: Map<number, string>;
   /** The values the view shows, with their colours: what the legend lists. */
   entries: SchemeEntry[];
+}
+
+/**
+ * The scheme without the rooms the view hides (the Spaces category, or the one room), and the legend entries of values none of the shown rooms carries. A room's colour and its hatch are both made from
+ * `fills`, so this is the one visibility check for the two: a hidden room keeps neither on the paper. The app's sheets (`styledDrawing`)
+ * and the headless build (`sheetGraphic`) both call it.
+ */
+export function shownRooms(scheme: SchemeResult | null | undefined, graphics: ViewGraphics | undefined, globalIdOf?: (entityId: number) => GlobalId | string | null | undefined): SchemeResult | null | undefined {
+  if (!scheme || !graphics) return scheme;
+  const fills = scheme.fills.filter((f) => elementShown(graphics, globalIdOf?.(f.entityId) as GlobalId | null | undefined, 'IfcSpace'));
+  if (fills.length === scheme.fills.length) return scheme;
+  // The legend lists the values a room still carries: a value whose only rooms are hidden is not on the sheet.
+  const kept = new Set(fills.map((f) => f.key));
+  return { ...scheme, fills, entries: scheme.entries.filter((e) => kept.has(e.key)) };
 }
 
 export interface SchemeSource {

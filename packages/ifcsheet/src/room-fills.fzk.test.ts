@@ -37,8 +37,8 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus with r
   let model: OpenedModel;
   let base: DefaultSet;
   let planId: string;
-  const withScheme = (scheme: ColourScheme | undefined, extra: Partial<DefaultSet['document']> = {}): DefaultSet => ({
-    ...base, document: { ...base.document, ...extra, views: base.document.views.map((v) => (v.id === planId ? { ...v, graphics: scheme ? { colourScheme: scheme } : undefined } : v)) },
+  const withScheme = (scheme: ColourScheme | undefined, extra: Partial<DefaultSet['document']> = {}, graphics: object = {}): DefaultSet => ({
+    ...base, document: { ...base.document, ...extra, views: base.document.views.map((v) => (v.id === planId ? { ...v, graphics: scheme ? { colourScheme: scheme, ...graphics } : undefined } : v)) },
   });
   const planSheet = (sheets: SheetGraphic[]): SheetGraphic => sheets.find((s) => s.viewports.some((v) => v.viewId === planId))!;
   let plain: SheetGraphic;
@@ -104,6 +104,15 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus with r
     expect(off.pens).toEqual(plain.pens);
     expect(pdfContent(await exportPdf([off]))).toBe(pdfContent(await exportPdf([plain])));
     expect(exportDxf(off)).not.toContain('COLOUR-');
+  });
+
+  it('prints no fill, no hatch and no legend for rooms the view hides: the Spaces category switched off takes them all away (#516)', async () => {
+    const hidden = planSheet(await sheetGraphics(withScheme(HATCHED, {}, { categories: { spaces: { visible: false } } }), model));
+    // The shown sheet has the rooms and their legend; with the rooms hidden there is nothing for the scheme to paint or list.
+    expect(hatched.fills.length).toBeGreaterThan(0);
+    expect(hidden.fills).toEqual([]);
+    expect(hidden.texts.filter((t) => ROOMS.includes(t.text))).toEqual([]);
+    expect(exportDxf(hidden)).not.toContain('COLOUR-');
   });
 
   it('is carried by a view template: a view that follows it is filled as if the scheme were its own, and its own scheme wins', async () => {

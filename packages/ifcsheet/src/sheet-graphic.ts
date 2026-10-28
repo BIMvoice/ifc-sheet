@@ -22,7 +22,7 @@
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
-import { activeColourScheme, type SchemeResult } from './colour-fills.js';
+import { activeColourScheme, shownRooms, type SchemeResult } from './colour-fills.js';
 import { parsePat } from './hatch.js';
 import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
@@ -184,7 +184,8 @@ export function sheetGraphic(
     if (box) out.viewports.push({ viewId: vp.viewId, box });
     if (drawing && box && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
-      const scheme = schemes.get(vp.viewId);
+      // The rooms the view hides keep neither colour nor pattern, as in the app's sheets (`shownRooms`).
+      const scheme = shownRooms(schemes.get(vp.viewId), graphics, globalIdOf) ?? undefined;
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box, patterns, pens.materialHatch.hairline));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
@@ -212,7 +213,7 @@ export function sheetGraphic(
   taken.push(titleBlockRect(paper, frameOf(sheet)));
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
-    const entries = schemes.get(vp.viewId)?.entries;
+    const entries = shownRooms(schemes.get(vp.viewId), resolveViewGraphics(view, doc.viewTemplates), globalIdOf)?.entries;
     const scheme = activeColourScheme(view, doc.viewTemplates);
     const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title, patterns, pens.materialHatch.hairline) : null;
     if (!legend) continue;

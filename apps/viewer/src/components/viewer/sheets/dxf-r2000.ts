@@ -168,7 +168,13 @@ export class DxfR2000 {
     // Style normal, pattern type predefined; the definition lines follow, each scaled by `unit` (dashes: positive on, negative off).
     this.out.push('75', '0', '76', '1', '52', '0', '41', '1', '77', '0', '78', String(pattern.families.length));
     for (const f of pattern.families) {
-      this.out.push('53', fmt(sign * f.angleDeg), '43', fmt(f.origin.x * unit), '44', fmt(sign * f.origin.y * unit), '45', fmt(f.deltaX * unit), '46', fmt(sign * f.deltaY * unit), '79', String(f.dashes.length));
+      // DXF writes the line's offset to the next line in the drawing's axes (code 45/46), while a `.pat` file gives it along and across the line:
+      // turn it by the line's angle (as written, so a mirrored frame turns it the other way), or an angled family is spaced wrongly in CAD.
+      const turn = (sign * f.angleDeg * Math.PI) / 180;
+      const dx = f.deltaX * unit;
+      const dy = sign * f.deltaY * unit;
+      this.out.push('53', fmt(sign * f.angleDeg), '43', fmt(f.origin.x * unit), '44', fmt(sign * f.origin.y * unit),
+        '45', fmt(dx * Math.cos(turn) - dy * Math.sin(turn)), '46', fmt(dx * Math.sin(turn) + dy * Math.cos(turn)), '79', String(f.dashes.length));
       for (const d of f.dashes) this.out.push('49', fmt(d * unit));
     }
     this.out.push('98', '0');
