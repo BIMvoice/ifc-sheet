@@ -7,7 +7,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download.js';
 import { CATALOGUE_FILE_SUFFIX } from '@/catalogue/catalogue-file';
 import { useProjectStore } from '@/project/project-store';
-import { PACK_NOT_SET, ROMANIA_PACK_ID, builtInPacks, partsOf, type StandardPack } from '@/standards/standard-pack';
+import { GERMANY_PACK_ID, PACK_NOT_SET, ROMANIA_PACK_ID, builtInPacks, partsOf, type StandardPack } from '@/standards/standard-pack';
 import { parseStandardPack, serializeStandardPack } from '@/standards/standard-pack-file';
 import { installStandard, isApplied, resetStandard } from '@/standards/standard-pack-install';
 import { WALL_PILL } from '../wall-type';
@@ -53,7 +53,7 @@ function Standards() {
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('standards.pack.title')}</h3>
       <p className="m-0 mb-2 text-xs text-sky-100/80">{t('standards.pack.intro')}</p>
       <ul className="m-0 list-none p-0">
-        {packs.map((p) => <PackCard key={p.id} pack={p} description={p.id === ROMANIA_PACK_ID ? t('standards.pack.ro-stas.description') : p.description} />)}
+        {packs.map((p) => <PackCard key={p.id} pack={p} description={p.id === ROMANIA_PACK_ID ? t('standards.pack.ro-stas.description') : p.id === GERMANY_PACK_ID ? t('standards.pack.de-din.description') : p.description} />)}
         {fromFile ? <PackCard key={fromFile.id} pack={fromFile} description={fromFile.description} /> : null}
       </ul>
       {installed ? <p className="m-0 mb-1 text-xs text-sky-100">{t('standards.pack.current', { name: named?.name ?? installed.id })}</p> : null}
