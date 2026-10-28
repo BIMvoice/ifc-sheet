@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/encoding",
+  "private": true,
   "version": "2.3.0",
   "description": "IFC string encoding/decoding and property value parsing for IFC-Lite",
   "type": "module",

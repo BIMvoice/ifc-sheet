@@ -50,6 +50,14 @@ const TYPE_ONLY: ListScheduleDef = {
   groupBy: ['type', 'rating'], sum: ['tarea'],
 };
 
+/** The 13 walls state NetVolume, the 5 doors do not: a total over 18 rows of which 5 are left out. */
+const WALLS_AND_DOORS_VOLUME: ListScheduleDef = {
+  filter: { classes: ['IfcWallStandardCase', 'IfcDoor'] },
+  columns: [TYPE, { id: 'volume', source: 'quantity', psetName: 'BaseQuantities', propertyName: 'NetVolume' }],
+  groupBy: ['type'], sum: ['volume'],
+};
+const NOTE = 'The total of NetVolume (m³) leaves out 5 of 18 rows with no value';
+
 const PROJECT = JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Haus', schedules: [{ id: 'walls', name: 'Walls by type', kind: 'list', createdAt: 1, list: WALLS_BY_TYPE }] });
 
 const capture = () => {
@@ -113,6 +121,26 @@ describe.skipIf(missing !== null)('ifcsheet list, on AC20-FZK-Haus', () => {
     expect(ro.startsWith('﻿Type;Număr;NetSideArea (m²)\r\n')).toBe(true);
     expect(ro).toMatch(/\r\nTotal;13;190\.4655\d*\r\n$/);
   });
+
+  it('says which total leaves rows out: in the table, the text, the CSV and the JSON (#432); a complete total says nothing', async () => {
+    const partial = listScheduleTableOn(model, { id: 'v', name: 'Volumes', list: WALLS_AND_DOORS_VOLUME }, 'en');
+    expect(partial.rows.at(-1)![1]).toBe(18);
+    expect(partial.rows.at(-1)![2] as number).toBeCloseTo(54.4811, 4);
+    expect(partial.missing).toEqual([{ column: 'NetVolume (m³)', missing: 5, rows: 18 }]);
+    expect(partial.notes).toEqual([NOTE]);
+    expect(listScheduleCsv(partial, 'en').endsWith(`\r\n${NOTE}\r\n`)).toBe(true);
+    expect(listScheduleTableOn(model, { id: 'v', name: 'Volumes', list: WALLS_AND_DOORS_VOLUME }, 'ro').notes).toEqual(['Totalul NetVolume (m³) nu include 5 din 18 rânduri fără valoare']);
+    const complete = listScheduleTableOn(model, { id: 'walls', name: 'W', list: WALLS_BY_TYPE }, 'en');
+    expect(complete.missing).toEqual([]);
+    expect(complete.notes).toEqual([]);
+    const file = projectFile(JSON.stringify({ format: 'ifclite-project', version: 1, name: 'Haus', schedules: [{ id: 'v', name: 'Volumes', kind: 'list', createdAt: 1, list: WALLS_AND_DOORS_VOLUME }] }));
+    const text = capture();
+    expect(await run(['list', FZK, '--project', file], text.io)).toBe(EXIT.ok);
+    expect(text.out().endsWith(`\n${NOTE}\n`)).toBe(true);
+    const json = capture();
+    expect(await run(['list', FZK, '--project', file, '--json'], json.io)).toBe(EXIT.ok);
+    expect(JSON.parse(json.out())).toMatchObject({ missing: [{ column: 'NetVolume (m³)', missing: 5, rows: 18 }], notes: [NOTE] });
+  }, 120_000);
 
   it('guards a cell that would run as a formula with the one escaper', () => {
     const table = listScheduleTableOn(model, { id: 'x', name: 'X', list: { filter: { classes: ['IfcWallStandardCase'] }, columns: [{ id: 'g', source: 'attribute', propertyName: 'GlobalId' }] } }, 'en');

@@ -14,7 +14,9 @@ import type { ListScheduleTable } from './list-schedule.js';
 import { textWidthEm, truncateToWidth } from './text-width.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import type { ScheduleLayout } from './schedule-prim.js';
-import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock } from './paged-table.js';
+import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem, wrapNote } from './paged-table.js';
+
+const GAP = 4;
 
 export interface ListSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */
@@ -54,5 +56,10 @@ export function layoutListSchedule(table: ListScheduleTable, labels: ListSheetLa
       rule: bold.has(r) || r === cells.length - 1 ? PEN.frame : PEN.grid,
     })),
   };
-  return layoutPagedTable(labels.title, 4, [{ kind: 'table', block }], paging);
+  // The lines under a table whose total leaves rows out (#432), as the CSV and the text of `ifcsheet list` carry them.
+  const notes = table.notes.flatMap((note) => wrapNote(note, 110));
+  const items: TableItem[] = [{ kind: 'table', block }];
+  if (notes.length) items.push({ kind: 'gap', h: GAP });
+  for (const text of notes) items.push({ kind: 'text', h: GAP, dy: GAP, size: 2, text });
+  return layoutPagedTable(labels.title, 4, items, { ...paging, tail: notes.length ? 1 : 0 });
 }

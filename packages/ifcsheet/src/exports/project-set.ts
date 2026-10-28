@@ -31,7 +31,7 @@ export { DEFAULT_VIEW_SCALE, annotationAtFactor, annotationFactor, viewportPaper
 // A schedule on paper, and where it sits on a sheet
 export type { ScheduleLayout, SchedulePrim } from '../schedule-prim.js';
 export {
-  PAD, PEN, ROW, TEXT, layoutPagedTable, pageTitle, textWidth,
+  PAD, PEN, ROW, TEXT, layoutPagedTable, pageTitle, textWidth, wrapNote,
   type PagedOptions, type TableBlock, type TableItem,
 } from '../paged-table.js';
 export { layoutListSchedule, type ListSheetLabels } from '../list-schedule-layout.js';

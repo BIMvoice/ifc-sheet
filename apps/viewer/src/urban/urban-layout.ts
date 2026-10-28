@@ -13,7 +13,8 @@
  */
 
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem, wrapNote } from '@bimvoice/ifcsheet';
+export { wrapNote };
 import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
 import type { UrbanIndicators } from './indicators';
@@ -60,8 +61,6 @@ export function signedLevel(locale: SheetLocale, v: number): string {
 const GAP = 4;
 /** Level, elevation, built, useful, in Ad for CUT; the two-column tables span the same width. */
 const STOREY_COLUMNS = [56, 20, 28, 28, 14] as const;
-/** About the characters a 2 mm note line holds across the table. */
-const NOTE_CHARS = 120;
 const WIDTH = STOREY_COLUMNS.reduce((a, b) => a + b, 0);
 const PAIR_COLUMNS = [WIDTH - 30, 30] as const;
 
@@ -109,18 +108,6 @@ export function layoutUrban(r: UrbanIndicators, labels: UrbanLabels, paging: Pag
   // Each note is a 2 mm line under a GAP; the last leaves 1 mm.
   for (const text of notes) items.push({ kind: 'text', h: GAP, dy: GAP, size: 2, text });
   return layoutPagedTable(labels.title, 4, items, { ...paging, tail: notes.length ? 1 : 0 });
-}
-
-/** A note broken at spaces into lines of about `chars` characters (2 mm text). */
-export function wrapNote(note: string, chars = NOTE_CHARS): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of note.split(' ')) {
-    if (line && line.length + 1 + word.length > chars) { lines.push(line); line = word; }
-    else line = line ? `${line} ${word}` : word;
-  }
-  if (line) lines.push(line);
-  return lines;
 }
 
 /**
