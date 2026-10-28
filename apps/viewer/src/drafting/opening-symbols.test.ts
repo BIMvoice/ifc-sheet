@@ -5,8 +5,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { MeshData } from '@ifc-lite/geometry';
-import type { DoorOperation } from '@bimvoice/ifcsheet';
-import { minAreaRect, openingSymbols } from './opening-symbols';
+import { parseDoorOperation, type DoorOperation } from '@bimvoice/ifcsheet';
+import { doorSymbol, minAreaRect, openingSymbols } from './opening-symbols';
 
 /** A box mesh (corners only), world = origin + positions. */
 function box(ifcType: string, min: [number, number, number], max: [number, number, number], origin?: [number, number, number]): MeshData {
@@ -149,6 +149,38 @@ describe('openingSymbols with a stated operation', () => {
   it('draws the pair a DOUBLE_DOOR states even in a narrow opening', () => {
     const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => ({ motion: 'swing', hinge: null, towards: null, leaves: 2, doubleActing: false }));
     assert.equal(door.heavy?.length, 2);
+  });
+
+  // Review of #505: DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* drew both leaves to one side. IFC4.3: "one panel swings in one direction and the
+  // other panel swings in the opposite direction". The hand names the leaf that opens to +Y.
+  it('swings the two leaves of DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* to opposite sides, the named one to the placement\'s +Y', () => {
+    const leaves = (value: string) => {
+      const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => parseDoorOperation(value));
+      return (door.heavy ?? []).map((leaf) => {
+        if (leaf.type !== 'polyline') throw new Error('no leaf');
+        return { hingeX: leaf.pts[0].x, tipY: leaf.pts[1].y - leaf.pts[0].y };
+      }).sort((a, b) => a.hingeX - b.hingeX);
+    };
+    // IFC +Y is the drawing's -y here; the placement's -X jamb is at x = 4.55.
+    const oppositeLeft = leaves('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT');
+    assert.equal(oppositeLeft.length, 2);
+    assert.ok(oppositeLeft[0].tipY < 0 && oppositeLeft[1].tipY > 0, 'LEFT: the left leaf opens to +Y, the right one to -Y');
+    const oppositeRight = leaves('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT');
+    assert.ok(oppositeRight[0].tipY > 0 && oppositeRight[1].tipY < 0, 'RIGHT: the right leaf opens to +Y, the left one to -Y');
+    const same = leaves('DOUBLE_DOOR_SINGLE_SWING');
+    assert.ok(same.every((leaf) => leaf.tipY < 0), 'DOUBLE_DOOR_SINGLE_SWING still swings both leaves one way');
+  });
+});
+
+// Review of #522: the overhead bar stayed on the +n face whatever the leaf-side flip, while a sliding leaf moved with it.
+describe('doorSymbol for an overhead door', () => {
+  const rect = { c: { x: 0, y: 0 }, u: { x: 1, y: 0 }, n: { x: 0, y: 1 }, width: 0.9, depth: 0.2 };
+  const overhead: DoorOperation = { motion: 'overhead', hinge: null, towards: null, leaves: 1, doubleActing: false };
+  const barYs = (flips: number) => doorSymbol(rect, flips, overhead).heavy.flatMap((s) => (s.type === 'polyline' ? s.pts.map((p) => p.y) : []));
+
+  it('puts the bar on the face the leaf-side flip names: flips 0 and 2 on opposite sides', () => {
+    assert.ok(barYs(0).every((y) => y >= 0.1 - 1e-9), 'flips 0: on the +n face');
+    assert.ok(barYs(2).every((y) => y <= -0.1 + 1e-9), 'flips 2: on the -n face');
   });
 });
 

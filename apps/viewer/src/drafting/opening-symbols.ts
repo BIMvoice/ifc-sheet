@@ -126,6 +126,8 @@ function arrowShapes(a: Pt, b: Pt): DraftShape[] {
  * other jamb, bit 2 swings it to the other side. Two leaves, one per jamb, when `op.leaves` says so, else when wider than `DOUBLE_LEAF_WIDTH`.
  * `op`, the operation the model states (IFC4.3 IfcDoorTypeOperationEnum, `door-operation.ts`), changes what a leaf draws:
  * - SINGLE_SWING_* / DOUBLE_DOOR_SINGLE_SWING: the above;
+ * - DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* (`op.oppositeLeaf`): the leaf on the jamb `flips` bit 1 names swings to the leaf side, the other to
+ *   the opposite side;
  * - DOUBLE_SWING_* / DOUBLE_DOOR_DOUBLE_SWING (double-acting): the same, and the swing to the other side as a dashed arc about the same hinge;
  * - SLIDING_TO_* / DOUBLE_DOOR_SLIDING: each leaf a heavy bar along the wall face, with an arrow along the wall towards the jamb it slides to;
  * - FOLDING_TO_* / DOUBLE_DOOR_FOLDING: each leaf two halves folded in a zig-zag from the jamb it stacks on;
@@ -145,7 +147,8 @@ export function doorSymbol(r: OpeningRect, flips = 0, op?: DoorOperation): { thi
     return { thin, heavy, dashed };
   }
   if (op?.motion === 'overhead') {
-    const face = r.depth / 2, outer = face + t;
+    // On the leaf side's wall face, as a sliding leaf is: `flips` bit 2 moves it to the other face.
+    const face = sn * r.depth / 2, outer = face + sn * t;
     const parts = op.leaves === 2 ? [[-r.width / 2, 0], [0, r.width / 2]] : [[-r.width / 2, r.width / 2]];
     for (const [from, to] of parts) heavy.push({ type: 'polyline', closed: true, pts: [at(r, from, face), at(r, to, face), at(r, to, outer), at(r, from, outer)] });
     dashed.push({ type: 'line', a: at(r, -r.width / 2, 0), b: at(r, r.width / 2, 0) });
@@ -153,29 +156,31 @@ export function doorSymbol(r: OpeningRect, flips = 0, op?: DoorOperation): { thi
   }
   const leaves = (op ? op.leaves : r.width > DOUBLE_LEAF_WIDTH ? 2 : 1) === 2 ? [sh, -sh] : [sh];
   const w = r.width / leaves.length;
-  for (const side of leaves) {
+  for (const [i, side] of leaves.entries()) {
+    // The side this leaf swings or lies to: the second leaf of a pair that swings opposite ways goes to the other side.
+    const ln = op?.oppositeLeaf && i === 1 ? -sn : sn;
     if (op?.motion === 'sliding') {
       // The leaf along the wall face on the leaf side, spanning the width it covers, and the way it slides: towards its jamb.
       const from = side * (r.width / 2 - w), to = side * r.width / 2;
-      const face = sn * r.depth / 2, outer = face + sn * t;
+      const face = ln * r.depth / 2, outer = face + ln * t;
       heavy.push({ type: 'polyline', closed: true, pts: [at(r, from, face), at(r, to, face), at(r, to, outer), at(r, from, outer)] });
-      const mid = (from + to) / 2, lane = outer + sn * 0.08;
+      const mid = (from + to) / 2, lane = outer + ln * 0.08;
       thin.push(...arrowShapes(at(r, mid - side * w / 4, lane), at(r, mid + side * w / 4, lane)));
       continue;
     }
     if (op?.motion === 'folding') {
       // Two halves from the jamb, folded out to the leaf side at 60° and back to the wall line: the zig-zag of a folded leaf.
       const half = w / 2;
-      const foot = at(r, side * r.width / 2, sn * r.depth / 2);
+      const foot = at(r, side * r.width / 2, ln * r.depth / 2);
       const inward = { x: -r.u.x * side, y: -r.u.y * side };
-      const out = { x: r.n.x * sn, y: r.n.y * sn };
+      const out = { x: r.n.x * ln, y: r.n.y * ln };
       const fold = { x: foot.x + inward.x * half * Math.cos(Math.PI / 3) + out.x * half * Math.sin(Math.PI / 3), y: foot.y + inward.y * half * Math.cos(Math.PI / 3) + out.y * half * Math.sin(Math.PI / 3) };
       const end = { x: foot.x + inward.x * half * 2 * Math.cos(Math.PI / 3), y: foot.y + inward.y * half * 2 * Math.cos(Math.PI / 3) };
       heavy.push({ type: 'polyline', closed: false, pts: [foot, fold, end] });
       continue;
     }
-    const hinge = at(r, side * r.width / 2, sn * r.depth / 2);
-    const leaf = { x: r.n.x * sn, y: r.n.y * sn };
+    const hinge = at(r, side * r.width / 2, ln * r.depth / 2);
+    const leaf = { x: r.n.x * ln, y: r.n.y * ln };
     const jamb = { x: -r.u.x * side, y: -r.u.y * side };
     const tip = { x: hinge.x + leaf.x * w, y: hinge.y + leaf.y * w };
     heavy.push({ type: 'polyline', closed: true, pts: [hinge, tip, { x: tip.x + jamb.x * t, y: tip.y + jamb.y * t }, { x: hinge.x + jamb.x * t, y: hinge.y + jamb.y * t }] });
@@ -183,7 +188,7 @@ export function doorSymbol(r: OpeningRect, flips = 0, op?: DoorOperation): { thi
     if (op?.doubleActing) {
       // Swings to the other side too: the same hinge on the other wall face, the other quarter turn, dashed.
       const back = { x: -leaf.x, y: -leaf.y };
-      dashed.push(swingArc(at(r, side * r.width / 2, -sn * r.depth / 2), jamb, back, w));
+      dashed.push(swingArc(at(r, side * r.width / 2, -ln * r.depth / 2), jamb, back, w));
     }
   }
   return { thin, heavy, dashed };

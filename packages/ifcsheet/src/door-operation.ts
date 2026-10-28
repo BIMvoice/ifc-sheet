@@ -35,6 +35,11 @@ export interface DoorOperation {
   leaves: 1 | 2;
   /** Swings both ways. */
   doubleActing: boolean;
+  /**
+   * Of a pair whose leaves swing opposite ways (DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_*), the leaf, seen along +Y, that swings to -Y; the other
+   * swings to +Y. Absent for every other operation.
+   */
+  oppositeLeaf?: 'left' | 'right';
 }
 
 /**
@@ -49,7 +54,10 @@ export interface DoorOperation {
  * - DOUBLE_DOOR_FOLDING: two folding leaves, one stacking on each jamb;
  * - REVOLVING / REVOLVING_VERTICAL: leaves turning about a vertical axis in the middle of the opening;
  * - LIFTING_HORIZONTAL / LIFTING_VERTICAL_* / DOUBLE_DOOR_LIFTING_VERTICAL / ROLLINGUP: a panel that lifts or rolls up overhead: it swings nowhere, so no arc.
- * - SWING_FIXED_* : a swing leaf beside a fixed panel, drawn as SINGLE_SWING_*; DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_*: a pair of leaves.
+ * - SWING_FIXED_* : a swing leaf beside a fixed panel, drawn as SINGLE_SWING_*;
+ * - DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT / RIGHT: a pair of leaves, "one panel swings in one direction and the other panel swings in the
+ *   opposite direction". The hand is read as the leaf that opens to +Y, as SINGLE_SWING_* names the side of a leaf opening to +Y, so the
+ *   other leaf swings to -Y (`oppositeLeaf`). That reading of the hand is inferred, not quoted from the enum's page.
  * Left and right are read in the view the swing values name: along the placement's +Y. (The enum's own page could not be fetched
  * when the sliding and folding values were added, so that reading for them follows the swing values, not a quoted definition.)
  */
@@ -66,9 +74,9 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
     // A swing leaf beside a fixed panel: the hand names the leaf's hinge, as SINGLE_SWING_* does and as this repo's writer emits it (joinery-ifc.ts `doorOperation`).
     case 'SWING_FIXED_LEFT': return swing('left', 1, false);
     case 'SWING_FIXED_RIGHT': return swing('right', 1, false);
-    // Two leaves, each swinging one way (drawn as a pair, like DOUBLE_DOOR_SINGLE_SWING).
-    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT':
-    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT':
+    // Two leaves swinging opposite ways: the named leaf opens to +Y, the other to -Y.
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT': return { ...swing(null, 2, false), oppositeLeaf: 'right' };
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT': return { ...swing(null, 2, false), oppositeLeaf: 'left' };
     case 'DOUBLE_DOOR_SINGLE_SWING': return swing(null, 2, false);
     case 'DOUBLE_DOOR_DOUBLE_SWING': return swing(null, 2, true);
     case 'SLIDING_TO_LEFT': return moving('sliding', 'left');
@@ -111,7 +119,8 @@ export function doorOperationOf(live: Live, expressId: number, typeId: number | 
 export interface Dir2 { x: number; y: number }
 
 /**
- * The plan symbol flips (bit 1: hinge, or the side a sliding / folding leaf goes to, on the +u jamb, bit 2: leaf to the -n side) that put the hinge and the swing
+ * The plan symbol flips (bit 1: hinge, or the side a sliding / folding leaf goes to, or the jamb of the leaf of an opposite-swinging pair that
+ * opens to +Y, on the +u jamb, bit 2: leaf to the -n side) that put the hinge and the swing
  * where `op` says, given the placement's local X and Y axes and the opening's width axis `u` and normal `n`, all in the
  * drawing's frame. null when the placement's X does not run along the opening's width (the symbol is left as it was).
  * Because the axes are the placement's own, a mirrored one flips the result.
@@ -124,7 +133,7 @@ export function doorSwingFlips(op: DoorOperation, localX: Dir2, localY: Dir2, u:
   const across = dot(localY, n) / len(localY);
   if (Math.abs(along) < 0.7 || Math.abs(across) < 0.7) return null;
   // LEFT: the hinge on local -X.
-  const side = op.hinge ?? op.towards;
+  const side = op.hinge ?? op.towards ?? (op.oppositeLeaf ? (op.oppositeLeaf === 'left' ? 'right' : 'left') : null);
   const hingeOnU = side === null ? false : (side === 'left') === (along < 0);
   return (hingeOnU ? 1 : 0) | (across < 0 ? 2 : 0);
 }
