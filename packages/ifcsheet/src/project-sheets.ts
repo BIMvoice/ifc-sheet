@@ -63,6 +63,18 @@ export function projectSheetOptions(
       });
     }
   }
+  // A view's drafts print over the drawing cut from the model (`sheet-graphic.ts`): a drafting or 3D view has none, and the drafts
+  // drawn on a sheet itself are on no view, so neither prints. Said here, where the sheets are known, rather than left off unsaid.
+  const viewOf = new Map(set.views.map((v) => [v.id, v]));
+  const drafted = new Set(set.drafts.map((d) => d.viewId));
+  for (const sheet of set.sheets) {
+    const where = `${sheet.number} ${sheet.name}`.trim();
+    if (drafted.has(sheet.id)) leaveOut(where, 'the drafts drawn on the sheet itself');
+    for (const vp of sheet.viewports ?? []) {
+      const view = viewOf.get(vp.viewId);
+      if (view && (view.kind === 'drafting' || view.kind === '3d') && vp.keyPlanOf === undefined && drafted.has(view.id)) leaveOut(where, `the drafts on the ${view.kind} view "${view.name}"`);
+    }
+  }
   return {
     annotations: {
       drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, patterns: set.hatchPatterns, locale: format,
