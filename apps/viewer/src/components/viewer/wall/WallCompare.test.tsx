@@ -111,4 +111,25 @@ describe('compare two sheets on the Wall (#498)', () => {
     assert.equal(paneSheet(ui, 1), ids()[1]);
     assert.equal(useWallCompare.getState().pair?.[1], ids()[1]);
   });
+
+  it('keeps Tab inside the dialog: from the last stop to the first, Shift+Tab from the first to the last, and gives focus back on close', () => {
+    const ui = wall();
+    const opener = pickButton(ui, 'A-103');
+    click(pickButton(ui, 'A-101'));
+    act(() => opener.focus());
+    act(() => { opener.click(); });
+    const d = dialog(ui)!;
+    const stops = [...d.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')];
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    const tab = (shiftKey: boolean) => act(() => { window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })); });
+    act(() => last.focus());
+    tab(false);
+    assert.equal(document.activeElement, first, 'Tab from the last stop lands on the first');
+    tab(true);
+    assert.equal(document.activeElement, last, 'Shift+Tab from the first stop lands on the last');
+    act(() => { window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+    assert.equal(dialog(ui), null);
+    assert.equal(document.activeElement, opener, 'focus returns to the opener');
+  });
 });

@@ -19,6 +19,7 @@ import { cancelPick, closeCompare, setCompareSide, setPanTogether, swapCompare, 
 import { WallSheet } from './WallSheet';
 
 const button = 'flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs text-sky-100 hover:bg-sky-300/15 focus-visible:ring-2 focus-visible:ring-sky-400';
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const label = (s: ProjectSheet) => `${s.number} ${s.name}`;
 
 export function WallCompare() {
@@ -61,6 +62,7 @@ function ComparePanes({ left, right }: { left: ProjectSheet; right: ProjectSheet
   const panes = useRef<[HTMLElement | null, HTMLElement | null]>([null, null]);
   const last = useRef<[{ x: number; y: number }, { x: number; y: number }]>([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
 
   // The control that opened it gets focus back when it closes.
   useEffect(() => {
@@ -68,14 +70,36 @@ function ComparePanes({ left, right }: { left: ProjectSheet; right: ProjectSheet
     closeRef.current?.focus();
     return () => opener?.focus();
   }, []);
+  // Keys belong to the dialog: Esc closes, Tab and Shift+Tab cycle inside it (the same trap as the print preview).
   useEffect(() => {
+    const pull = (e: FocusEvent) => {
+      if (dialog.current && e.target instanceof Node && !dialog.current.contains(e.target)) closeRef.current?.focus();
+    };
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const stops = [...(dialog.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        if (!first || !last) return;
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
       closeCompare();
     };
+    document.addEventListener('focusin', pull);
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('focusin', pull);
+      window.removeEventListener('keydown', onKey, true);
+    };
   }, []);
 
   // A pane panned moves the other by the same amount (not to the same offset: the sheets may be panned apart, or differ in size).
@@ -125,7 +149,7 @@ function ComparePanes({ left, right }: { left: ProjectSheet; right: ProjectSheet
   );
 
   return (
-    <dialog open aria-modal="true" aria-label={t('wall.compare.title')} data-owns-keys data-wall-compare className="absolute inset-0 z-30 m-0 flex h-full w-full max-w-none flex-col gap-3 border-0 bg-[#061a36] p-4 text-sky-50">
+    <dialog ref={dialog} open aria-modal="true" aria-label={t('wall.compare.title')} data-owns-keys data-wall-compare className="absolute inset-0 z-30 m-0 flex h-full w-full max-w-none flex-col gap-3 border-0 bg-[#061a36] p-4 text-sky-50">
       <div className="flex flex-wrap items-center gap-3">
         {select(0, left)}
         <button type="button" className={button} aria-label={t('wall.compare.swap')} title={t('wall.compare.swap')} onClick={swapCompare}><ArrowLeftRight className="size-4" /></button>
