@@ -120,9 +120,9 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
     // Capture phase: the command line claims its keys before the viewer's global shortcuts
     // (which skip a prevented event) — typing "DIM" must not toggle panels.
     window.addEventListener('keydown', onKey, true);
-    // Ctrl held = ortho. Tracked apart from `onKey`, which skips text fields and running BIM tools;
+    // Ctrl or Shift held = ortho, for as long as it is (the F8 toggle is untouched). Tracked apart from `onKey`, which skips text fields and running BIM tools;
     // a window that loses focus never sees the key come up, so blur releases it.
-    const onCtrl = (e: KeyboardEvent) => setOrthoHeld(e.ctrlKey);
+    const onCtrl = (e: KeyboardEvent) => setOrthoHeld(e.ctrlKey || e.shiftKey);
     const release = () => setOrthoHeld(false);
     window.addEventListener('keydown', onCtrl, true);
     window.addEventListener('keyup', onCtrl, true);

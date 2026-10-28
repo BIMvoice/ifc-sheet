@@ -26,11 +26,12 @@ export function listTableCells(table: ListScheduleTable, locale: SheetLocale): s
   return table.rows.map((row) => row.map((v, c) => (v === null ? MISSING_QUANTITY : typeof v === 'number' ? listFigure(locale, v, table.kinds[c]) : String(v))));
 }
 
-/** A table as aligned text: the heading, a rule, the rows (the totals row last). Figures are written as the sheet writes them (`listTableCells`): the language with the project's "Units and numbers". */
+/** A table as aligned text: the heading, a rule, the rows (the totals row last, then a line for each total that leaves rows out). Figures are written as the sheet writes them (`listTableCells`): the language with the project's "Units and numbers". */
 export function listTableText(table: ListScheduleTable, locale: SheetLocale = 'en'): string {
   const cells = [table.header, ...listTableCells(table, locale)];
   const widths = table.header.map((_, c) => Math.max(...cells.map((r) => [...(r[c] ?? '')].length)));
   const line = (r: string[]) => r.map((c, i) => (table.numeric.includes(i) ? c.padStart(widths[i]) : c.padEnd(widths[i]))).join('  ').trimEnd();
-  return `${table.name}\n${[line(cells[0]), ...cells.slice(1).map(line)].join('\n')}\n`;
+  const notes = table.notes.map((n) => `\n${n}`).join('');
+  return `${table.name}\n${[line(cells[0]), ...cells.slice(1).map(line)].join('\n')}\n${notes ? `${notes.slice(1)}\n` : ''}`;
 }
 
