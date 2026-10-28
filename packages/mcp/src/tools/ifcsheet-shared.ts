@@ -10,7 +10,7 @@
  */
 
 import { newHistory } from './ifcsheet-history.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { paperLabel, paperOf, type ModelExtent, type ProjectDocument, type ProjectSheet, type ProjectView } from '@bimvoice/ifcsheet';
 import type { ToolContext } from '../context.js';
@@ -130,18 +130,34 @@ export async function outputPath(raw: unknown, ctx: ToolContext, want?: { extens
   return path;
 }
 
+/**
+ * Refuses an input larger than the server's limit (`config.maxModelBytes`: the 25 MB the hosted endpoint gives `ifc_base64`, unset on a local
+ * server) before anything is parsed. `what` names the input in the message. One rule for a model, a project and a template, inline or in a file.
+ */
+export function assertWithinLimit(ctx: ToolContext, bytes: number, what: string): void {
+  const cap = ctx.config.maxModelBytes;
+  if (cap !== undefined && bytes > cap) {
+    throw invalid(`${what} is larger than the ${cap.toLocaleString()} byte limit of this server (it is ${bytes.toLocaleString()} bytes); it was not read.`, { limit_bytes: cap, size_bytes: bytes });
+  }
+}
+
 /** The text of a file on the server, or of an inline argument: exactly one of `${key}_path` and `${key}_json`. */
 export async function pathOrInline(input: Record<string, unknown>, ctx: ToolContext, key: string, what: string): Promise<{ source: string; text: string }> {
   const path = input[`${key}_path`];
   const inline = input[`${key}_json`];
   if ((path === undefined) === (inline === undefined)) throw invalid(`Give exactly one of ${key}_path (a ${what} file on the server) or ${key}_json (its text).`);
-  if (typeof inline === 'string') return { source: `${key}_json`, text: inline };
+  if (typeof inline === 'string') {
+    assertWithinLimit(ctx, Buffer.byteLength(inline, 'utf8'), `${key}_json`);
+    return { source: `${key}_json`, text: inline };
+  }
   if (inline !== undefined) throw invalid(`${key}_json must be a string: the text of the ${what} file.`);
   if (typeof path !== 'string') throw invalid(`${key}_path must be a string.`);
   const source = await resolveSafePath(path, ctx, 'read');
   try {
+    assertWithinLimit(ctx, (await stat(source)).size, `'${source}'`);
     return { source, text: await readFile(source, 'utf8') };
   } catch (err) {
+    if (err instanceof ToolExecutionError) throw err;
     throw invalid(`Cannot read '${source}': ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (err as Error).message}`);
   }
 }
