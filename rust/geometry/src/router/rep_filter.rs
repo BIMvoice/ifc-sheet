@@ -45,6 +45,23 @@ pub(crate) fn is_direct_body_representation(rep_type: &str) -> bool {
     rep_type != "MappedRepresentation" && is_body_representation(rep_type)
 }
 
+/// Whether `element` is a Bonsai drawing: an `IfcAnnotation` whose
+/// `ObjectType` (attribute 4, from `IfcObject`) is `DRAWING`. Bonsai makes
+/// every drawing (plan, section, elevation, schedule, sheet reference) an
+/// `IfcAnnotation` with `ObjectType = "DRAWING"` and an `EPset_Drawing`
+/// property set, and gives it the camera's extent as a box body; it is the
+/// drawing's frame, never part of the building. Bonsai's own source selects
+/// drawings by exactly this test: `src/bonsai/bonsai/bim/module/drawing/operator.py`
+/// (`e.ObjectType == "DRAWING"` over `by_type("IfcAnnotation")`) and
+/// `prop.py` (`get_pset(element, "EPset_Drawing")`). Other `IfcAnnotation`s
+/// (grid lines, texts, markup) are untouched.
+pub(crate) fn is_drawing_camera_annotation(element: &DecodedEntity) -> bool {
+    element.ifc_type == IfcType::IfcAnnotation
+        && element
+            .get_string(4)
+            .is_some_and(|t| t.trim().eq_ignore_ascii_case("DRAWING"))
+}
+
 /// The representations of `element` (its `IfcProductDefinitionShape`
 /// `Representations`, decoded) that the element meshing paths mesh, in order:
 /// each `IfcShapeRepresentation` whose effective type is body geometry, or an
@@ -56,6 +73,9 @@ pub fn meshed_representations<'a>(
     element: &'a DecodedEntity,
     representations: &'a [DecodedEntity],
 ) -> impl Iterator<Item = &'a DecodedEntity> + 'a {
+    // A Bonsai drawing meshes nothing: this is the one filter every meshing
+    // path (and RTC detection, and the opening filter) selects through.
+    let drawing_camera = is_drawing_camera_annotation(element);
     let is_shape = |rep: &&DecodedEntity| rep.ifc_type == IfcType::IfcShapeRepresentation;
     // A structural curve member's edge geometry lives on an
     // `IfcTopologyRepresentation`, not an `IfcShapeRepresentation` — a
@@ -75,7 +95,7 @@ pub fn meshed_representations<'a>(
         effective_element_rep_type(element, rep).is_some_and(is_direct_body_representation)
     });
     representations.iter().filter(is_meshable_rep).filter(move |rep| {
-        effective_element_rep_type(element, rep).is_none_or(|rep_type| {
+        !drawing_camera && effective_element_rep_type(element, rep).is_none_or(|rep_type| {
             !(rep_type == "MappedRepresentation" && has_direct_geometry)
                 && (is_body_representation(rep_type)
                     || super::annotation::accepts(element, rep_type)
