@@ -86,12 +86,12 @@ describe('the room and area schedule of AC20-FZK-Haus (#42)', () => {
     const s = schedule();
     const en = roomScheduleCells(s, LABELS).map((r) => r.cells.join('|'));
     assert.equal(en[0], '|Erdgeschoss||');
-    assert.ok(en.includes('4|Schlafzimmer|21.41|19.00'));
-    assert.ok(en.includes('|Total Erdgeschoss|98.83|'));
-    assert.equal(en[en.length - 1], '|Total building (Au)|173.34|');
+    assert.ok(en.includes('4|Schlafzimmer|21.41 m²|19.00'));
+    assert.ok(en.includes('|Total Erdgeschoss|98.83 m²|'));
+    assert.equal(en[en.length - 1], '|Total building (Au)|173.34 m²|');
     const ro = roomScheduleCells(s, { ...LABELS, locale: 'ro' }).map((r) => r.cells.join('|'));
-    assert.ok(ro.includes('4|Schlafzimmer|21,41|19,00'));
-    assert.equal(ro[ro.length - 1], '|Total building (Au)|173,34|');
+    assert.ok(ro.includes('4|Schlafzimmer|21,41 m²|19,00'));
+    assert.equal(ro[ro.length - 1], '|Total building (Au)|173,34 m²|');
     // The command line's text and CSV are the same rows.
     assert.ok(roomScheduleText(s, 'ro').includes('Total Dachgeschoss'));
     assert.equal(roomScheduleCsv(s).split('\n').length, roomScheduleLines(s, ROOM_SCHEDULE_EN).length + 1);
@@ -169,7 +169,7 @@ describe('the room and area schedule of AC20-FZK-Haus (#42)', () => {
     const model = [...useViewerStore.getState().models.values()][0];
     assert.equal(roomSchedule(...(([r]) => [r.levels, r.rooms] as const)([readRooms(model.ifcDataStore!, model.geometryResult?.meshes ?? [])])).total, s.total);
     // Marked on paper: a `*` after each area taken from the geometry.
-    assert.ok(roomScheduleCells(s, LABELS).filter((r) => r.cells[0] !== '' ).every((r) => r.cells[2].endsWith(' *')));
+    assert.ok(roomScheduleCells(s, LABELS).filter((r) => r.cells[0] !== '' ).every((r) => r.cells[2].endsWith(' m² *')));
   });
 
   it('is paged to the paper: a page holds the rows that fit, each with the header, and every row is on a page', async (t) => {

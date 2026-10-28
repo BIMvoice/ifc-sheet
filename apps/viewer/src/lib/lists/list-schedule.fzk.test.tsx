@@ -39,7 +39,7 @@ import { runListFederated } from './run-list';
 
 const FZK = resolve(import.meta.dirname, '../../test/__fixtures__/AC20-FZK-Haus.ifc');
 const AREA_SET = 'BaseQuantities';
-const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No' };
+const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No', missing: 'The total of {column} leaves out {missing} of {rows} rows with no value' };
 
 const TYPE = { id: 'type', source: 'attribute', propertyName: 'Type' } as const;
 const AREA = { id: 'area', source: 'quantity', psetName: AREA_SET, propertyName: 'NetSideArea' } as const;
