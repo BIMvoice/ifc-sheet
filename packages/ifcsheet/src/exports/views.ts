@@ -15,6 +15,8 @@ export type {
   ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
   ElementGraphics, ElementLineStyle, GlobalId, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
 } from '../document.js';
+// Detail level per view (#444): coarse / medium / fine, the scale's default, and the one function that simplifies a drawing by it
+export { COARSE_FROM_SCALE, DETAIL_LEVELS, FINE_UP_TO_SCALE, atDetailLevel, defaultDetailLevel, resolveDetailLevel, type DetailLevel } from '../detail-level.js';
 // A view template's class and material mapping (#31)
 export {
   CLASSIFICATION_BY, classificationOf, classifiedTypes, mappingsFor, matchKey, parseClassificationRows, readClassificationMapping, readClassificationMappings, readClassificationRule, classificationRuleOf, systemLabel, withRule,
