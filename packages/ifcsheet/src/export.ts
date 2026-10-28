@@ -27,6 +27,7 @@
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
 import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
+import { FILL_HATCH } from './sheet-colours.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
 const PEN = { frame: 0.5, mark: 0.18 } as const;
@@ -100,6 +101,11 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
       doc.setFillColor(fill.colour);
       doc.path(ops).fillEvenOdd();
+      // A value's hatch (#493) goes over its colour and under every line.
+      if (fill.hatch) {
+        doc.setDrawColor(FILL_HATCH.ink);
+        stroke(fill.hatch.strokes, fill.hatch.width);
+      }
     }
     // The drawings by pen, in the app's paint order: the cut faces' fills, then the hidden, seen and cut lines.
     for (const pen of sheet.pens) {
@@ -162,7 +168,12 @@ function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
 function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
   const byColour = new Map<string, Polyline[]>();
   for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
-  return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+  const layers = [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+  // A value's hatch (#493): R12 has no pattern either, so its strokes are lines on a layer named for the pattern (`COLOUR-HATCH-PARQUET`).
+  const byPattern = new Map<string, Polyline[]>();
+  for (const fill of sheet.fills) if (fill.hatch) byPattern.set(fill.hatch.pattern, [...(byPattern.get(fill.hatch.pattern) ?? []), ...fill.hatch.strokes]);
+  const hatches = [...byPattern].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([pattern, polylines]) => ({ name: `COLOUR-HATCH-${pattern.replace(/[^A-Za-z0-9_-]/g, '_').toUpperCase()}`, color: FILL_HATCH.ink, polylines, closed: false }));
+  return [...layers, ...hatches];
 }
 
 /**

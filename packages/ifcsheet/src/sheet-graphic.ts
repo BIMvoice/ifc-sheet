@@ -22,7 +22,8 @@
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
-import type { SchemeResult } from './colour-fills.js';
+import { activeColourScheme, shownRooms, type SchemeResult } from './colour-fills.js';
+import { parsePat } from './hatch.js';
 import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
@@ -185,6 +186,8 @@ export function sheetGraphic(
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
+  const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
     const made = drawings.get(vp.viewId);
@@ -202,8 +205,9 @@ export function sheetGraphic(
       if (vp.keyPlanOf === undefined) {
         for (const u of printedUnderlays(doc.underlays, vp.viewId, sheet.id)) out.underlays.push({ viewId: vp.viewId, src: u.href, widthPx: u.widthPx, heightPx: u.heightPx, matrix: underlayMatrix(u, at), opacity: u.opacity, clip: box });
       }
-      const scheme = schemes.get(vp.viewId);
-      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box));
+      // The rooms the view hides keep neither colour nor pattern, as in the app's sheets (`shownRooms`).
+      const scheme = shownRooms(schemes.get(vp.viewId), graphics, globalIdOf) ?? undefined;
+      if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box, patterns, pens.materialHatch.hairline));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
@@ -230,9 +234,9 @@ export function sheetGraphic(
   taken.push(titleBlockRect(paper, frameOf(sheet)));
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
-    const entries = schemes.get(vp.viewId)?.entries;
-    const scheme = view?.graphics?.colourScheme;
-    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title) : null;
+    const entries = shownRooms(schemes.get(vp.viewId), resolveViewGraphics(view, doc.viewTemplates), globalIdOf)?.entries;
+    const scheme = activeColourScheme(view, doc.viewTemplates);
+    const legend = entries && scheme ? schemeLegend(entries, scheme.property, drawingAreaIn(paper, frameOf(sheet)), taken, scheme.title, patterns, pens.materialHatch.hairline) : null;
     if (!legend) continue;
     taken.push(legend.box);
     out.fills.push(...legend.fills);

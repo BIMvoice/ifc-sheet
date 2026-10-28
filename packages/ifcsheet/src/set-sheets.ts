@@ -10,7 +10,7 @@
 import type { DefaultSet } from './default-set.js';
 import type { ProjectView } from './document.js';
 import type { OpenedModel } from './model.js';
-import { resolveScheme, planHeights, type SchemeResult } from './colour-fills.js';
+import { activeColourScheme, resolveScheme, planHeights, type SchemeResult } from './colour-fills.js';
 import { propertyValueReader } from './colour-scheme-read.js';
 import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
 import { readStoreFacts } from './title-block-records.js';
@@ -65,7 +65,7 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   // The views coloured by a property (#92): what each paints, from the same rules the app uses (`colour-fills.ts`).
   const schemes = new Map<string, SchemeResult>();
   for (const view of doc.views) {
-    const scheme = view.graphics?.colourScheme;
+    const scheme = activeColourScheme(view, doc.viewTemplates);
     const drawing = drawings.get(view.id);
     const valueOf = scheme && model.dataStore ? propertyValueReader({ dataStore: model.dataStore, view: null }, scheme.property) : null;
     if (!scheme || !drawing || !valueOf) continue;

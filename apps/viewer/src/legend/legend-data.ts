@@ -21,7 +21,7 @@ export type LegendEntry =
   | { category: 'hatches'; name: string; scale: number }
   | { category: 'symbols'; name: string; symbol: DraftSymbol }
   | { category: 'annotations'; name: string; type: AnnotationType }
-  | { category: 'colours'; name: string; colour: string };
+  | { category: 'colours'; name: string; colour: string; hatch?: string };
 
 export interface LegendGroup {
   category: LegendCategory;
@@ -43,7 +43,7 @@ export interface LegendSource {
   /** The project's own symbols (the built-in ones are found by id). */
   symbols: readonly DraftSymbol[];
   /** The values the colour schemes of the views in scope paint, with their colours (`view-colour-scheme.ts`). */
-  colours?: readonly { name: string; colour: string }[];
+  colours?: readonly { name: string; colour: string; hatch?: string }[];
 }
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
@@ -103,7 +103,7 @@ function entriesOf(category: LegendCategory, source: LegendSource, hidden: Reado
       }).sort(byName);
     }
     case 'colours':
-      return (source.colours ?? []).map((c): LegendEntry => ({ category, name: c.name, colour: c.colour }));
+      return (source.colours ?? []).map((c): LegendEntry => ({ category, name: c.name, colour: c.colour, ...(c.hatch ? { hatch: c.hatch } : {}) }));
     case 'annotations': {
       const ids = new Set(source.drafts.map((d) => d.params.atype).filter((v): v is string => typeof v === 'string'));
       return source.annotationTypes.filter((a) => ids.has(a.id)).sort(byName).map((type): LegendEntry => ({ category, name: type.name, type }));

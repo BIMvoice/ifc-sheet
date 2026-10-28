@@ -12,7 +12,7 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
-import { resolveScheme, planHeights, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { activeColourScheme, resolveScheme, planHeights, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import type { ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { labelElementOf } from '@/labels/label-element';
 import { readStored } from '@/labels/label-resolve';
@@ -22,8 +22,8 @@ import { partHostRef } from './part-host';
 import { useProjectStore } from './project-store';
 import type { ProjectView } from './types';
 
-/** The scheme of a view, or `undefined`. */
-export const colourSchemeOf = (view: Pick<ProjectView, 'graphics'> | undefined): ColourScheme | undefined => view?.graphics?.colourScheme;
+/** The scheme a view is drawn with (its own, else its template's; none while its switch is off, #493), or `undefined`: the engine's, so the headless sheets agree. */
+export const colourSchemeOf = (view: Pick<ProjectView, 'graphics' | 'templateId'> | undefined): ColourScheme | undefined => activeColourScheme(view, useProjectStore.getState().viewTemplates);
 
 /** What a renderer id says at `property`: its own value, else (an IfcBuildingElementPart) its host's. */
 export function propertyReader(property: string): ((renderId: number) => unknown) | null {
