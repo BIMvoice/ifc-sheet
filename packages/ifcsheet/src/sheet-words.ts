@@ -20,7 +20,7 @@ import type { AreaSummary } from './urban-area-summary.js';
 
 export const SHEET_WORDS_EN = {
   'roomSched.note.source': 'Area: the model\'s NetFloorArea, else GrossFloorArea (Qto_SpaceBaseQuantities, else any quantity set). The building total is Au on the urban indicators sheet: the same rooms, the same areas.',
-  'roomSched.note.geometry': '* The model states no area for this room: the footprint of its geometry is used ({count} rooms).',
+  'roomSched.note.geometry': '* Estimated area: the model states no NetFloorArea or GrossFloorArea for this room, so the footprint of its geometry is used ({count} rooms).',
   'roomSched.note.none': '{count} rooms have no area (the model states none and they have no geometry); they are listed and not in the totals.',
   'roomSched.note.leftOut': 'Left out: {external} external (balconies, terraces), {gfa} area-scheme (GFA), {parents} split into rooms of their own.',
   'roomSum.note.perimeter': 'Perimeter: the outline of the footprint of the room\'s geometry, the one its area falls back on; – where the room has no geometry. The model\'s own Perimeter quantity is not read.',
@@ -46,7 +46,7 @@ export type SheetWordKey = keyof typeof SHEET_WORDS_EN;
 
 export const SHEET_WORDS_RO: Record<SheetWordKey, string> = {
   'roomSched.note.source': 'Aria: NetFloorArea din model, în lipsa ei GrossFloorArea (Qto_SpaceBaseQuantities, altfel orice set de cantități). Totalul clădirii este Au din foaia de indicatori urbanistici: aceleași încăperi, aceleași arii.',
-  'roomSched.note.geometry': '* Modelul nu dă aria acestei încăperi: se ia aria amprentei geometriei ei ({count} încăperi).',
+  'roomSched.note.geometry': '* Arie estimată: modelul nu dă NetFloorArea sau GrossFloorArea pentru această încăpere, deci se ia aria amprentei geometriei ei ({count} încăperi).',
   'roomSched.note.none': '{count} încăperi nu au arie (modelul nu o dă și nu au geometrie); sunt listate și nu intră în totaluri.',
   'roomSched.note.leftOut': 'Excluse: {external} exterioare (balcoane, terase), {gfa} din schema de arii (GFA), {parents} împărțite în încăperi proprii.',
   'roomSum.note.perimeter': 'Perimetru: conturul amprentei geometriei încăperii, aceeași de la care se ia și aria când modelul nu o dă; – unde încăperea nu are geometrie. Cantitatea Perimeter din model nu este citită.',
