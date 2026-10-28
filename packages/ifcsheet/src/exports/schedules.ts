@@ -44,7 +44,7 @@ export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
   type OccurrenceFacts, type PropertyFact, type PropertyOp, type PropertyTest,
 } from '../schedule-filter.js';
-export { MAX_MODEL_ROWS, isModelRowId, modelRowId, modelRowLabel, modelRowText, modelRowsOf, readModelRows, type ModelRow } from '../joinery-model-rows.js';
+export { MAX_MODEL_ROWS, isModelRowId, modelRowId, modelRowLabel, modelRowNumber, modelRowText, modelRowsOf, readModelRows, type ModelRow } from '../joinery-model-rows.js';
 export {
   MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
   type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,

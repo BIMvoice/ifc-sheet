@@ -143,12 +143,12 @@ const DOCUMENT_FIELD_DEFS = [
   norwayPermitField,
   // Which permit project: the full one or the simplified one for a rural house (#364); absent: the full one.
   pacModeField,
-  // Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was.
-  optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
   // The project's own line types (#496); absent: only the built-in ones.
   listField('lineTypes', (raw) => at(raw, 'lineTypes', readLineType), { presentOnly: true }),
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
+  // Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was.
+  optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];

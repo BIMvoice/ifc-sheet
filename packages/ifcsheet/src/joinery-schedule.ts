@@ -24,7 +24,7 @@ import { filterPropertyNames, predefinedTypeText, propertyValueText, type Proper
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ModelRow } from './joinery-model-rows.js';
 import { createHeadlessListProvider } from './list-provider.js';
-import { readModelRowValues } from './joinery-model-values.js';
+import { readModelRowCells } from './joinery-model-values.js';
 import type { ListDataProvider } from '@ifc-lite/lists';
 import type { ScheduleTextRow } from './schedule-text.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
@@ -57,6 +57,8 @@ export interface ScheduleOccurrence {
   measuredHeight?: boolean;
   /** The text of the model rows the schedules chose (`ModelRow`), by row id: the element's property or quantity, else its type's. A row the element and its type say nothing for has no entry. */
   modelValues?: Record<string, string>;
+  /** The rows of `modelValues` whose value is a number, as the number (`modelRowNumber`): the text is what the sheet prints, the number what a spreadsheet keeps. */
+  modelNumbers?: Record<string, number>;
 }
 
 export interface ScheduleEntry {
@@ -366,8 +368,13 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
     // The model rows the schedules chose, read for this model's occurrences in one pass.
     if (modelRows.length > 0) {
       const mine = [...byKey.values()].flatMap((e) => e.occurrences.filter((o) => o.modelId === modelId));
-      const values = readModelRowValues({ modelId, dataStore, provider: model.listProvider ?? (() => createHeadlessListProvider(dataStore)) }, mine.map((o) => o.expressId), modelRows);
-      for (const o of mine) { const v = values.get(o.expressId); if (v) o.modelValues = v; }
+      const values = readModelRowCells({ modelId, dataStore, provider: model.listProvider ?? (() => createHeadlessListProvider(dataStore)) }, mine.map((o) => o.expressId), modelRows);
+      for (const o of mine) {
+        const v = values.get(o.expressId);
+        if (!v) continue;
+        o.modelValues = v.texts;
+        if (Object.keys(v.numbers).length > 0) o.modelNumbers = v.numbers;
+      }
     }
   }
   // Catalogue types not placed yet still belong in the schedule (with no count).

@@ -21,6 +21,7 @@ import { WALL_FIELD, WALL_PILL } from './wall-type';
 import { CardSection } from './CardSection';
 import { useViewerStore } from '@/store';
 import { scheduleData, type ScheduleKind } from '@/joinery/schedule-data';
+import { scheduleDataOf } from '@/joinery/schedule-split';
 import { joineryModelFacts } from '@/joinery/joinery-model-facts';
 import { AddColumnPicker } from '../lists/ListScheduleColumns';
 import { contentSummary } from './card-section-summary';
@@ -56,7 +57,8 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
   const models = useViewerStore((s) => s.models);
   const joinery = isJoinerySchedule(schedule);
   // What the schedule's elements and types carry in the models, for the picker (#446); mutationVersion / models: what the read depends on.
-  const found = useMemo(() => (joinery ? joineryModelFacts(scheduleData(schedule.kind as ScheduleKind)) : null), [joinery, schedule.kind, mutationVersion, models]);
+  // Cut by the schedule's own filter (`scheduleDataOf`), so a sub-report or a split schedule offers what ITS elements carry, not the building's.
+  const found = useMemo(() => (joinery ? joineryModelFacts(scheduleDataOf(schedule, () => scheduleData(schedule.kind as ScheduleKind), schedules)) : null), [joinery, schedule, schedules, mutationVersion, models]);
   if (!joinery) return null;
   const owner = textOwner(schedules, schedule);
   if (!owner) return null;

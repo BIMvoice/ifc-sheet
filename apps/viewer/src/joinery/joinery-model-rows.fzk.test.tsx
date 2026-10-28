@@ -22,7 +22,7 @@ import { openSection } from '@/test/open-section.js';
 import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
 import { ScheduleContentCard } from '@/components/viewer/wall/ScheduleContentCard';
 import { pickCell } from '@/joinery/list-cell-pick';
-import { addSchedule, scheduleById } from '@/joinery/schedules';
+import { addSchedule, addSubReport, scheduleById } from '@/joinery/schedules';
 import { loadUrbanModel } from '@/test/urban-fixture';
 import { useViewerStore } from '@/store';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from '@/project/project-store';
@@ -95,6 +95,26 @@ describe('the sheet\'s picker offers the model\'s properties and quantities (#44
     assert.ok([...picker.options].find((o) => o.value === option.value)!.disabled, 'a row the schedule has is not offered twice');
   });
 
+  it('offers a sub-report only what ITS elements carry: a property only a window of the other type states is not listed', () => {
+    step = original.replace("#23032= IFCPROPERTYSINGLEVALUE('ThermalTransmittance'", "#23032= IFCPROPERTYSINGLEVALUE('OnlyOnOtherType'");
+    return load().then(() => {
+      const whole = windowSchedule();
+      const part = addSubReport(whole, 'W1 only', { types: [W1] })!;
+      assert.ok(part);
+      const offered = (id: string) => {
+        const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
+        openSection(view, 'Content');
+        const names = [...view.querySelectorAll<HTMLOptionElement>('select option')].map((o) => o.value);
+        cleanup();
+        return names;
+      };
+      const property = JSON.stringify(['property', 'Pset_WindowCommon', 'OnlyOnOtherType']);
+      assert.ok(offered(whole).includes(property), 'the whole schedule carries it (a W2 window states it)');
+      assert.ok(!offered(part).includes(property), 'the W1 part does not');
+      assert.ok(offered(part).includes(JSON.stringify(['property', 'Pset_WindowCommon', 'ThermalTransmittance'])), 'what its windows do carry is still offered');
+    });
+  });
+
   it('takes the row off and puts it back like a built-in one', () => {
     const id = windowSchedule();
     addModelRow(id, { source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' });
@@ -163,8 +183,23 @@ describe('a model row on the sheet (#446)', () => {
       const table = joineryExport(scheduleDataOf(scheduleById(id)!), joineryLabels(LABELS)).tables[0];
       const col = table.header.indexOf('ThermalTransmittance');
       assert.ok(col >= 0);
-      assert.deepEqual(table.rows.map((r) => [r[0], r[col]]), [['W1', '1.4'], ['W2', 'varies']]);
+      assert.deepEqual(table.rows.map((r) => [r[0], r[col]]), [['W1', 1.4], ['W2', 'varies']]);
     });
+  });
+
+  it('exports a number as a number, not as text, in the workbook and the CSV', () => {
+    const id = windowSchedule();
+    addModelRow(id, { source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' });
+    addModelRow(id, { source: 'quantity', psetName: 'BaseQuantities', propertyName: 'Area' });
+    const table = joineryExport(scheduleDataOf(scheduleById(id)!), joineryLabels(LABELS)).tables[0];
+    for (const head of ['ThermalTransmittance', 'Area']) {
+      const col = table.header.indexOf(head);
+      assert.ok(col >= 0, head);
+      assert.ok(table.rows.every((r) => typeof r[col] === 'number'), `${head} cells are numbers`);
+      assert.ok(table.numeric?.includes(col), `${head} is a numeric column`);
+    }
+    const area = table.header.indexOf('Area');
+    assert.deepEqual(table.rows.map((r) => r[area]), [0.785082789239, 2.4]);
   });
 });
 
@@ -207,6 +242,6 @@ describe('the project keeps the row and the engine prints it (#446)', () => {
     assert.deepEqual(table.header, app.header);
     assert.deepEqual(table.rows.map((r) => r.slice(0, 7)), app.rows.map((r) => r.slice(0, 7)));
     const u = table.header.indexOf('ThermalTransmittance'), area = table.header.indexOf('Area');
-    assert.deepEqual(table.rows.map((r) => [r[0], r[u], r[area]]), [['W1', '1.5', '0.7851'], ['W2', 'varies', '2.4']]);
+    assert.deepEqual(table.rows.map((r) => [r[0], r[u], r[area]]), [['W1', '1.5', 0.785082789239], ['W2', 'varies', 2.4]]);
   });
 });

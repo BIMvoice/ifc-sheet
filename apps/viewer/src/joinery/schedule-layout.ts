@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
+import { isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -149,7 +149,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   };
   // The properties and quantities the schedule lists (#446): a type's cell holds the value its elements share, else the word for "varies".
   for (const row of data.content?.properties ?? []) {
-    model[row.id] = () => [{ label: modelRowLabel(row, data.content?.properties ?? []), value: (e) => modelRowText(e, row.id, labels.varies), raw: (e) => { const t = modelRowText(e, row.id, labels.varies); return [t === '—' ? null : t]; } }];
+    model[row.id] = () => [{ label: modelRowLabel(row, data.content?.properties ?? []), value: (e) => modelRowText(e, row.id, labels.varies), raw: (e) => { const n = modelRowNumber(e, row.id); if (n !== null) return [n]; const t = modelRowText(e, row.id, labels.varies); return [t === '—' ? null : t]; }, ...(data.entries.some((e) => modelRowNumber(e, row.id) !== null) ? { num: true } : {}) }];
   }
   const ids = shownRows(data.content, { windows: data.entries.some((e) => e.kind === 'window'), textIds: typed.map((r) => r.id) });
   // The user's own rows: each type's text by the type's key, so a column that moves takes its text with it.
