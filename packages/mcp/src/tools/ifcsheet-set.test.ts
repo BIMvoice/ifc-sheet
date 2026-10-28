@@ -388,6 +388,10 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [] }), /must be arrays/);
     await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [{ id: 'v', name: 'V', kind: 'moon' }], sheets: [] }), /views\[0\]/);
     await refused('ifcsheet_load_project', load({ format: 'ifclite-project', version: 1, views: [], sheets: [{ id: 's', number: 'A-1', name: 'S', viewports: [{ viewId: 'ghost', x: 1, y: 1, scale: 100 }] }] }), /shows a view the project does not have/);
+    // An underlay the engine would draw must be whole: the CLI's reader refuses the same file (#457).
+    const withUnderlay = (u: unknown) => load({ format: 'ifclite-project', version: 1, views: [], sheets: [], underlays: [u] });
+    await refused('ifcsheet_load_project', withUnderlay({ id: 'u', viewId: 'v', href: 'data:image/png;base64,AAAA', widthPx: 10, heightPx: 10, mPerPx: 0.01 }), /underlays\/0\/at must be a point/);
+    await refused('ifcsheet_load_project', withUnderlay({ id: 'u', viewId: 'v', href: 'data:image/png;base64,AAAA', widthPx: 10, heightPx: 10, at: { x: 0, y: 0 } }), /underlays\/0\/mPerPx must be a valid number/);
     await refused('ifcsheet_load_project', { model_id: 'sheetmodel-999', project_json: '{}' }, /No drawing-set model/);
     // apply_template with a missing handle
     await refused('ifcsheet_apply_template', { model_id: 'sheetmodel-999', template_json: '{}' }, /No drawing-set model/);

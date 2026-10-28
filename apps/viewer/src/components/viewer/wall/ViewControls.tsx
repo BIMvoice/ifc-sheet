@@ -36,7 +36,7 @@ export function CutHeightControl({ view }: { view: Extract<ProjectView, { kind: 
           step={CUT_HEIGHT_RANGE.step}
           value={Math.min(RULER.max, Math.max(RULER.min, view.cutHeight))}
           onChange={(e) => setCutHeight(view.id, Number(e.target.value))}
-          className="absolute inset-y-0 -left-3 z-10 m-0 w-6 cursor-ns-resize opacity-0 [direction:rtl] [writing-mode:vertical-lr]"
+          className="absolute inset-y-0 -left-3 z-10 m-0 h-full w-6 cursor-ns-resize opacity-0 [direction:rtl] [writing-mode:vertical-lr]"
         />
         <div className="absolute inset-y-0 left-0 w-px bg-sky-300/40" />
         {ticks.map((m) => (

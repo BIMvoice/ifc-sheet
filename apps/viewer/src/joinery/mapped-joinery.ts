@@ -110,7 +110,9 @@ export function drawnJoinery(modelId: string, expressId: number): DrawnJoinery |
   let out: DrawnJoinery | null = null;
   const own = joineryOfElement(modelId, expressId);
   if (own) {
-    out = { spec: own.spec, flips: own.flips, source: 'model' };
+    // The drawing's own flips (by GlobalId) turn it from the way the model states it; the model keeps its own.
+    const guid = elementFacts(modelId, expressId, () => null)?.globalId;
+    out = { spec: own.spec, flips: own.flips ^ (guid ? p.symbolFlips?.[guid] ?? 0 : 0), source: 'model' };
   } else {
     const held = m;
     const facts = elementFacts(modelId, expressId, (live, id) => (held.types ??= typeIndex(live)).get(id) ?? null);
