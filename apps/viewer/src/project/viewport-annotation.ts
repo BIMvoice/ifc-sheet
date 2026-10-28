@@ -13,7 +13,7 @@
  */
 
 import { findSymbol } from '@/drafting/symbols';
-import type { AnnotationShape } from '@/drafting/types';
+import { isGeometry, type AnnotationShape, type DraftEntity } from '@/drafting/types';
 
 /** The view scale a viewport shows it at, when the view carries none. */
 export const DEFAULT_VIEW_SCALE = 100;
@@ -33,4 +33,16 @@ export function annotationAtFactor(shape: AnnotationShape, factor: number): Anno
   if (shape.type === 'symbol') return findSymbol(shape.symbolId)?.unit === 'paper' ? { ...shape, scale: shape.scale * factor } : shape;
   const sized = { ...shape, height: shape.height * factor };
   return sized.type === 'axis' ? { ...sized, size: sized.size * factor } : sized;
+}
+
+/**
+ * `drafts` with the annotation of `viewId` re-expressed for a view drawn at
+ * `to` instead of `from`: the stored metres change so the paper size does not.
+ * Changing a view's scale must not make its text grow (#488).
+ */
+export function draftsAtViewScale(drafts: readonly DraftEntity[], viewId: string, from: number | undefined, to: number | undefined): DraftEntity[] {
+  if (to === undefined || !(to > 0)) return drafts as DraftEntity[];
+  const factor = annotationFactor(to, from);
+  if (factor === 1 || !drafts.some((d) => d.viewId === viewId)) return drafts as DraftEntity[];
+  return drafts.map((d) => (d.viewId !== viewId || isGeometry(d.shape) ? d : { ...d, shape: annotationAtFactor(d.shape, factor) }));
 }
