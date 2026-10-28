@@ -4,7 +4,7 @@
 
 /** Schedules built from the Lists engine (#78) as project edits: create one and hang it on a sheet, change its definition. */
 
-import type { ListScheduleColumn, ListScheduleDef } from '@bimvoice/ifcsheet';
+import { clearListOverride, listColumnKey, setListOverride, type ListScheduleColumn, type ListScheduleDef } from '@bimvoice/ifcsheet';
 import { hangSchedule } from '@/project/drawing-set-actions';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { addSchedule, scheduleById, updateSchedule } from './schedules';
@@ -21,10 +21,57 @@ export function addListScheduleToSet(name: string, list: ListScheduleDef): strin
   return sheet;
 }
 
-/** Replace the definition of the list schedule `id` (and rename it when `name` is given). */
+/**
+ * Replace the definition of the list schedule `id` (and rename it when `name` is given). The cell overrides (#446) stay with the schedule
+ * when `list` carries none of its own, as the builder's does not: editing the columns or the filter never throws away what was typed.
+ */
 export function setListSchedule(id: string, list: ListScheduleDef, name?: string): void {
-  if (scheduleById(id)?.kind !== 'list') return;
-  updateSchedule(id, { list, ...(name ? { name } : {}) });
+  const held = scheduleById(id);
+  if (held?.kind !== 'list') return;
+  const overrides = list.overrides ?? held.list?.overrides;
+  updateSchedule(id, { list: { ...list, ...(overrides ? { overrides } : {}) }, ...(name ? { name } : {}) });
+}
+
+/** Add a column to the list schedule `id` on the sheet, the same choice the builder offers; a property already there is not added twice. One undo step. */
+export function addListColumn(id: string, column: ListScheduleColumn): void {
+  const list = scheduleById(id)?.list;
+  if (!list || list.columns.some((c) => c.id === column.id || listColumnKey(c) === listColumnKey(column))) return;
+  runAsOneUndoStep(() => setListSchedule(id, { ...list, columns: [...list.columns, column] }));
+}
+
+/** Take a column off the list schedule `id`, and out of its grouping and sums. Its cell overrides stay saved, so the column added again shows them. One undo step. */
+export function removeListColumn(id: string, columnId: string): void {
+  const list = scheduleById(id)?.list;
+  if (!list?.columns.some((c) => c.id === columnId)) return;
+  const groupBy = (list.groupBy ?? []).filter((g) => g !== columnId), sum = (list.sum ?? []).filter((g) => g !== columnId);
+  const { groupBy: _g, sum: _s, ...rest } = list;
+  runAsOneUndoStep(() => setListSchedule(id, { ...rest, columns: list.columns.filter((c) => c.id !== columnId), ...(groupBy.length ? { groupBy } : {}), ...(groupBy.length && sum.length ? { sum } : {}) }));
+}
+
+/** The cell of the element `guid` in the column `columnId` of the list schedule `id` prints `value` (`about`: what the element is called). One undo step. */
+export function setListCellOverride(id: string, guid: string, columnId: string, value: string, about: string): void {
+  const list = scheduleById(id)?.list, column = list?.columns.find((c) => c.id === columnId);
+  if (!list || !column) return;
+  runAsOneUndoStep(() => updateSchedule(id, { list: { ...list, overrides: setListOverride(list.overrides, guid, listColumnKey(column), value, about) } }));
+}
+
+/** The cell prints the model's value again ("Reset to model value"). One undo step. */
+export function resetListCellOverride(id: string, guid: string, columnId: string): void {
+  const list = scheduleById(id)?.list, column = list?.columns.find((c) => c.id === columnId);
+  if (!list || !column) return;
+  const overrides = clearListOverride(list.overrides, guid, listColumnKey(column));
+  const { overrides: _old, ...rest } = list;
+  runAsOneUndoStep(() => updateSchedule(id, { list: overrides.length ? { ...rest, overrides } : rest }));
+}
+
+/** Drop every override of the elements `guids` (the ones no longer in the model) from the list schedule `id`. One undo step. */
+export function dropListOverridesOf(id: string, guids: readonly string[]): void {
+  const list = scheduleById(id)?.list;
+  if (!list?.overrides) return;
+  const gone = new Set(guids);
+  const overrides = list.overrides.filter((o) => !gone.has(o.guid));
+  const { overrides: _old, ...rest } = list;
+  runAsOneUndoStep(() => updateSchedule(id, { list: overrides.length ? { ...rest, overrides } : rest }));
 }
 
 /** The column without its `hidden` mark. */

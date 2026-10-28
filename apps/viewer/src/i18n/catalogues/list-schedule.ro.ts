@@ -49,4 +49,13 @@ export const listScheduleRo = {
   'listSched.card.summaryGrouped': '{columns} coloane, grupate după {groups}',
   'listSched.card.hint': 'Rândurile vin din motorul de liste, așa cum le calculează panoul Liste. O coloană ascunsă nu se tipărește; grupează și însumează în continuare.',
   'listSched.card.edit': 'Editați definiția',
+  'listSched.cell.hint': 'Faceți clic pe o celulă a tabelului din planșă ca să introduceți altă valoare peste cea din model.',
+  'listSched.cell.gone': 'Celula aleasă nu mai este în tabel. Alegeți alta.',
+  'listSched.cell.grouped': 'Un tabel grupat are un rând pe grup, nu pe element: celulele lui nu pot fi suprascrise.',
+  'listSched.cell.title': '{column}: {element}',
+  'listSched.cell.model': 'Valoarea din model: {value}',
+  'listSched.cell.value': 'Valoarea de pe planșă',
+  'listSched.cell.overridden': 'Suprascrisă peste valoarea din model. Marcată pe planșă doar aici; tipărirea nu poartă marcaj.',
+  'listSched.cell.reset': 'Revino la valoarea din model',
+  'listSched.cell.done': 'Gata',
 } as const satisfies Record<string, TranslationValue>;

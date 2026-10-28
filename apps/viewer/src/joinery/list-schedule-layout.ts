@@ -48,11 +48,13 @@ export function layoutListSchedule(table: ListScheduleTable, labels: ListSheetLa
   const columns = columnWidths(table.header, cells, bold);
   const numeric = new Set(table.numeric);
   const block: TableBlock = {
-    columns, header: table.header.map((h, c) => fit(h, columns[c], true)), numeric: (c) => numeric.has(c), skipEmpty: true,
+    columns, header: table.header.map((h, c) => fit(h, columns[c], true)), numeric: (c) => numeric.has(c), skipEmpty: true, columnIds: table.columnIds,
     rows: cells.map((row, r) => ({
       cells: row.map((text, c) => fit(text, columns[c], bold.has(r))),
       bold: bold.has(r),
       rule: bold.has(r) || r === cells.length - 1 ? PEN.frame : PEN.grid,
+      // A row that is an element can be picked on the sheet (#446); the totals row and a group's row cannot.
+      ...(table.guids && r < table.guids.length && !bold.has(r) ? { pick: { guid: table.guids[r], marked: table.overridden?.[r] ?? [] } } : {}),
     })),
   };
   // The lines under a table whose total leaves rows out (#432), as the CSV and the text of `ifcsheet list` carry them.
