@@ -7,7 +7,7 @@
  * `ifcsheet build` prints with too (#479), given the app's symbol library to say which symbols are drawn in paper millimetres.
  */
 
-import { annotationAtFactor as sizedAtFactor } from '@bimvoice/ifcsheet';
+import { annotationAtFactor as sizedAtFactor, annotationFactor } from '@bimvoice/ifcsheet';
 import { findSymbol } from '@/drafting/symbols';
 import { isGeometry, type AnnotationShape, type DraftEntity } from '@/drafting/types';
 
