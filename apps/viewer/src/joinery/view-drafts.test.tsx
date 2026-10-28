@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { defaultWindowSpec, type JoinerySpec } from '@ifc-lite/create';
+import { defaultWindowSpec, type JoineryViewDraft, type JoinerySpec } from '@ifc-lite/create';
 import type { MeshData } from '@ifc-lite/geometry';
 import { joineryViewDraftPrims, readJoineryList } from '@bimvoice/ifcsheet/project';
 import { layoutSchedule, type ScheduleLabels, type SchedulePrim } from './schedule-layout';
@@ -154,6 +154,28 @@ describe('drawing on a type\'s front view', () => {
     close();
   });
 
+  it('a stored draft the drafting reader refuses stays on the type when the view is opened and closed, and is logged', () => {
+    const broken = { id: 'odd', shape: { type: 'line', a: { x: 0, y: 0 } } } as unknown as JoineryViewDraft;
+    useProjectStore.setState({ joineryTypes: [{ ...specOf(W1, 'W1'), view: { drafts: { front: [broken] } } }, specOf(W2, 'W2')] });
+    const warned: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => { warned.push(args); };
+    try {
+      const close = openJoineryViewDrafts(W1, 'front');
+      assert.equal(draftsOfView(joineryDraftViewId(W1, 'front')).length, 0, 'it cannot be edited, so it is not in the working copy');
+      editDrafts({ add: [newDraft(joineryDraftViewId(W1, 'front'), 'opening', OPENING)] });
+      close();
+    } finally {
+      console.warn = warn;
+    }
+    assert.ok(warned.some((a) => String(a[0]).includes('odd')), 'the draft left out is logged');
+    assert.deepEqual(typeOf(W1).view?.drafts?.front?.map((d) => d.id).sort(), [typeOf(W1).view!.drafts!.front!.find((d) => d.id !== 'odd')!.id, 'odd'].sort(), 'the new line and the one that cannot be edited');
+    // Opening and closing without drawing changes nothing.
+    const before = JSON.stringify(typeOf(W1).view);
+    openJoineryViewDrafts(W1, 'front')();
+    assert.equal(JSON.stringify(typeOf(W1).view), before);
+  });
+
   it('keeps its place on the type\'s view when a model update moves the window', async () => {
     drawOpening();
     const at = await views({ x: 5, z: 7 });
@@ -179,6 +201,7 @@ describe('entering a view with a double-click', () => {
     assert.deepEqual(l.regions!.filter((r) => r.type === W1).map((r) => r.view), ['front', 'plan', 'section']);
     const front = l.regions!.find((r) => r.type === W2 && r.view === 'front')!;
     const lines = l.prims.filter((p): p is Extract<SchedulePrim, { kind: 'path' }> => p.kind === 'path' && p.view === 'front' && !!p.pick && p.pick.type === W2);
+    assert.ok(lines.length > 0, 'the type\'s front lines are laid out, so the box check below has something to check');
     for (const p of lines) for (const q of p.pts) assert.ok(q.x >= front.box.x && q.x <= front.box.x + front.box.w && q.y >= front.box.y && q.y <= front.box.y + front.box.h);
   });
 });
