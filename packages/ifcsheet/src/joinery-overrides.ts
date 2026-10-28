@@ -13,9 +13,12 @@
  * A cell is found by either, so an override typed while the type had no IfcTypeObject still finds it once the model gains one.
  *
  * The size in an `untyped:` key is measured when the IFC states none (#485), and a measurement moves: re-tessellation and the rounding to the
- * millimetre turn 1200 into 1201. So a saved `untyped:` key also finds the group whose MEASURED sides are within `MEASURED_TOLERANCE_MM` of
- * its own and whose stated sides are equal (`keyDistance`); the nearest wins. A side that moved further is a real change of the model, and
- * the override is reported as orphaned. The key is never the typed size: the size is a cell that can be typed over like any other.
+ * millimetre turn 1200 into 1201. So a saved `untyped:` key also reaches the groups whose MEASURED sides are within `MEASURED_TOLERANCE_MM`
+ * of its own and whose stated sides are equal (`keyDistance`). Two live groups can be within reach of one saved key (1200 and 1203), so each
+ * saved cell belongs to ONE group, the nearest of all the live groups (`ownersOf`), and a group reads, sets and resets only the cells that
+ * belong to it: typing on one group never shows on, overwrites or deletes the cell of its neighbour. A side that moved further is a real
+ * change of the model, and the override is reported as orphaned. The key is never the typed size: the size is a cell that can be typed over
+ * like any other.
  *
  * The overrides are part of the project (`joineryOverrides`). The data of a schedule carries them (`ScheduleData.overrides`, put there by
  * `scheduleOf`), and `joineryCellText` is the one step that says what a cell prints, so the sheet, the CSV, the XLSX and a headless read of
@@ -112,6 +115,43 @@ function keyDistance(type: string, e: TypeFacts): number {
 
 const isOf = (o: JoineryCellOverride, e: TypeFacts): boolean => keyDistance(o.type, e) !== Infinity;
 
+/** A key saved before sizes were measured (`untyped:<kind>:?`): it named every group of its kind, so it belongs to each group it reaches. */
+const isUnsizedKey = (type: string): boolean => /^untyped:[a-z]+:\?$/.test(type);
+const sameGroup = (a: TypeFacts, b: TypeFacts): boolean => a.key === b.key;
+/** `groups` with `entry` in its own group's place, or added: the entry asked about is always live, with the facts it states. */
+const liveWith = (groups: readonly TypeFacts[], entry: TypeFacts): readonly TypeFacts[] =>
+  (groups.some((g) => sameGroup(g, entry)) ? groups.map((g) => (sameGroup(g, entry) ? entry : g)) : [...groups, entry]);
+
+/**
+ * The live groups the saved cell `o` belongs to: the one group of `groups` nearest to its key (`keyDistance`), a tie going to the group whose
+ * IfcTypeObject GlobalId is the key, then to the group whose own key it is, then to the first by GlobalId and key so the choice never depends
+ * on the order of the groups. None when no group is within reach (the cell is orphaned). An `untyped:<kind>:?` key belongs to every group it reaches.
+ */
+function ownersOf(o: JoineryCellOverride, groups: readonly TypeFacts[]): TypeFacts[] {
+  if (isUnsizedKey(o.type)) return groups.filter((g) => isOf(o, g));
+  let best: TypeFacts | undefined, bestDistance = Infinity;
+  for (const g of groups) {
+    const d = keyDistance(o.type, g);
+    if (d === Infinity) continue;
+    if (!best || d < bestDistance || (d === bestDistance && beats(o.type, g, best))) { best = g; bestDistance = d; }
+  }
+  return best ? [best] : [];
+}
+
+/** Of two groups as near to the saved key `type`, `a` wins over `b`: its GlobalId is the key, else its key is, else it sorts first. */
+function beats(type: string, a: TypeFacts, b: TypeFacts): boolean {
+  const rank = (g: TypeFacts): number => (g.typeGlobalId === type ? 0 : g.key === type ? 1 : 2);
+  if (rank(a) !== rank(b)) return rank(a) < rank(b);
+  const ga = a.typeGlobalId ?? '', gb = b.typeGlobalId ?? '';
+  return ga !== gb ? ga < gb : a.key < b.key;
+}
+
+/** The saved cells of `row` that belong to `entry` among the live `groups`. */
+const cellsOf = (overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, groups: readonly TypeFacts[]): JoineryCellOverride[] => {
+  const live = liveWith(groups, entry);
+  return (overrides ?? []).filter((o) => o.row === row && ownersOf(o, live).some((g) => sameGroup(g, entry)));
+};
+
 /** The overrides as saved, read back: a damaged one or one of a row that cannot be typed over is dropped, a repeat of the same cell keeps the last, and none is `undefined`. */
 export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -128,25 +168,45 @@ export function readJoineryOverrides(raw: unknown): JoineryCellOverride[] | unde
   return byCell.size ? [...byCell.values()] : undefined;
 }
 
-/** The override of the type's cell in `row`, if any; one saved under the IfcTypeObject's GlobalId wins over one saved under the entry key, which wins over the nearest measured size. */
-export function joineryOverrideOf(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string): JoineryCellOverride | undefined {
-  const mine = (overrides ?? []).filter((o) => o.row === row && isOf(o, entry));
+/**
+ * The override of the type's cell in `row`, if any. `groups`: every live group of the schedule's kind (the whole schedule, not one part of a
+ * split), so a saved cell nearer to another group is that group's (`ownersOf`). Of the cells that belong to `entry`, one saved under the
+ * IfcTypeObject's GlobalId wins over one saved under the entry key, which wins over the nearest measured size.
+ */
+export function joineryOverrideOf(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, groups: readonly TypeFacts[]): JoineryCellOverride | undefined {
+  const mine = cellsOf(overrides, entry, row, groups);
   return mine.find((o) => o.type === entry.typeGlobalId) ?? mine.reduce<JoineryCellOverride | undefined>((best, o) => (!best || keyDistance(o.type, entry) < keyDistance(best.type, entry) ? o : best), undefined);
 }
 
-/** What the cell of `entry` in `row` prints: the typed text, else `model`. The one rule the sheet, the exports and a headless read share. */
-export const joineryCellText = (overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, model: string): string => joineryOverrideOf(overrides, entry, row)?.value ?? model;
+/** What the cell of `entry` in `row` prints: the typed text, else `model` (`groups` as for `joineryOverrideOf`). The one rule the sheet, the exports and a headless read share. */
+export const joineryCellText = (overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, model: string, groups: readonly TypeFacts[]): string =>
+  joineryOverrideOf(overrides, entry, row, groups)?.value ?? model;
 
-/** `overrides` with the cell set; `about` names the type. An override under the other identity of the same type is replaced. A project full of overrides takes no new cell. */
-export function setJoineryOverride(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, value: string, about: string): JoineryCellOverride[] {
+/**
+ * `overrides` with the cell set; `about` names the type; `groups` as for `joineryOverrideOf`. An override of the same type under its other
+ * identity is replaced; a cell that belongs to another group is kept. A project full of overrides takes no new cell.
+ */
+export function setJoineryOverride(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, value: string, about: string, groups: readonly TypeFacts[]): JoineryCellOverride[] {
   if (!isOverridableRow(row)) return [...(overrides ?? [])];
-  const rest = clearJoineryOverride(overrides, entry, row);
+  const rest = clearJoineryOverride(overrides, entry, row, groups);
   if (rest.length >= MAX_JOINERY_OVERRIDES) return rest;
   return [...rest, { type: typeIdentityOf(entry), row, value: cleanText(value, MAX_VALUE), about: cleanText(about, MAX_ABOUT) }];
 }
 
-/** `overrides` without the type's cell in `row`: "Reset to model value". */
-export const clearJoineryOverride = (overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string): JoineryCellOverride[] => (overrides ?? []).filter((o) => !(o.row === row && isOf(o, entry)));
+/**
+ * `overrides` without the type's cell in `row`: "Reset to model value" (`groups` as for `joineryOverrideOf`). Only the cells that belong to
+ * `entry` go; a cell that belongs to another group stays. An `untyped:<kind>:?` cell that other groups still read is kept for them, saved
+ * under each one's own key.
+ */
+export function clearJoineryOverride(overrides: readonly JoineryCellOverride[] | undefined, entry: TypeFacts, row: string, groups: readonly TypeFacts[]): JoineryCellOverride[] {
+  const live = liveWith(groups, entry);
+  return (overrides ?? []).flatMap((o) => {
+    if (o.row !== row) return [o];
+    const owners = ownersOf(o, live);
+    if (!owners.some((g) => sameGroup(g, entry))) return [o];
+    return owners.filter((g) => !sameGroup(g, entry) && joineryOverrideOf(overrides, g, row, live) === o).map((g) => ({ ...o, type: typeIdentityOf(g) }));
+  });
+}
 
 /** `overrides` without those of the types in `types` (the identities `orphanedJoineryOverrides` lists). */
 export const dropJoineryOverrides = (overrides: readonly JoineryCellOverride[] | undefined, types: readonly string[]): JoineryCellOverride[] => (overrides ?? []).filter((o) => !types.includes(o.type));

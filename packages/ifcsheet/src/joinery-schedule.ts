@@ -96,6 +96,8 @@ export interface ScheduleData {
   content?: ScheduleContent;
   /** The cells typed over the model's text (#446), by type and row: the project's, attached by `scheduleOf` so every reader prints the same text. */
   overrides?: JoineryCellOverride[];
+  /** Every group of the schedule's kind, before a sub-report's cut, attached by `scheduleOf` with `overrides`: a saved cell belongs to the nearest of them (#485, `joineryOverrideOf`). */
+  groups?: readonly ScheduleEntry[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */

@@ -104,7 +104,7 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
     assert.deepEqual(scheduleData('window').entries.map((e) => [e.key, e.mark, e.total]), [[W1, 'W1', 2], [W2, 'W2', 9]]);
 
     setRowShown(id, 'u', false);
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     const { sheet, layout } = await drawn(id);
     const cells = cellTexts(layout);
     assert.ok(!has(cells, U_LABEL), 'the column is off the table');
@@ -143,13 +143,13 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
   it('applies to the type\'s cell in every joinery schedule, and is one undo step each', async () => {
     const first = windowSchedule('Windows');
     const second = windowSchedule('Windows, again');
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     for (const id of [first, second]) assert.equal(cellTexts((await drawn(id)).layout).filter((t) => t === 'EI 30').length, 1, `on ${id}`);
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 60', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 60', 'W2 Window', scheduleData('window').entries);
     assert.deepEqual(useProjectStore.getState().joineryOverrides!.map((o) => o.value), ['EI 60'], 'a second edit of the cell replaces the first');
     undo();
     assert.deepEqual(useProjectStore.getState().joineryOverrides!.map((o) => o.value), ['EI 30'], 'one undo takes back one edit');
-    resetJoineryCellOverride(entryOf(W2), 'fire');
+    resetJoineryCellOverride(entryOf(W2), 'fire', scheduleData('window').entries);
     assert.equal(useProjectStore.getState().joineryOverrides, undefined, 'reset leaves no override');
     assert.ok(!has(cellTexts((await drawn(first)).layout), 'EI 30'));
     undo();
@@ -158,7 +158,7 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
 
   it('keeps the typed text when the column is taken off and put back', async () => {
     const id = windowSchedule();
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     setRowShown(id, 'fire', false);
     assert.ok(!has(cellTexts((await drawn(id)).layout), 'EI 30'), 'a column that is off prints nothing');
     setRowShown(id, 'fire', true);
@@ -168,7 +168,7 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
   it('is written to the CSV the schedule exports, in the column that is left', () => {
     const id = windowSchedule();
     setRowShown(id, 'u', false);
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     const table = joineryExport(scheduleDataOf(useProjectStore.getState().schedules!.find((s) => s.id === id)!), joineryLabels(LABELS)).tables[0];
     assert.ok(!table.header.includes(U_LABEL));
     const col = table.header.indexOf(FIRE_LABEL);
@@ -179,7 +179,7 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
 describe('a typed name reaches the workbook\'s Elements sheet too (#446)', () => {
   it('prints the type\'s typed name on each of its elements, as the Types sheet does', () => {
     const id = windowSchedule();
-    setJoineryCellOverride(entryOf(W2), 'name', 'Fenster 2', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'name', 'Fenster 2', 'W2 Window', scheduleData('window').entries);
     const tables = joineryExport(scheduleDataOf(useProjectStore.getState().schedules!.find((s) => s.id === id)!), joineryLabels(LABELS)).tables;
     const types = tables[0], elements = tables[1];
     const typed = types.rows.find((r) => r[0] === 'W2')!;
@@ -194,7 +194,7 @@ describe('the project keeps them, and the engine prints the same (#446)', () => 
   it('survives a save and a reopen: the app\'s reader, the engine\'s, and the drawing after the project is loaded again', async () => {
     const id = windowSchedule();
     setRowShown(id, 'u', false);
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     const saved = serializeProject(projectDocument());
     const expected = [{ type: W2, row: 'fire', value: 'EI 30', about: 'W2 Window' }];
     assert.deepEqual(parseProjectFile(saved).joineryOverrides, expected);
@@ -212,7 +212,7 @@ describe('the project keeps them, and the engine prints the same (#446)', () => 
   it('is the table the engine reads from the saved project: the same rows as the app\'s', async () => {
     const id = windowSchedule();
     setRowShown(id, 'u', false);
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     const saved = serializeProject(projectDocument());
     const app = joineryExport(scheduleDataOf(useProjectStore.getState().schedules!.find((s) => s.id === id)!), joineryLabels(LABELS)).tables[0];
 
@@ -224,8 +224,8 @@ describe('the project keeps them, and the engine prints the same (#446)', () => 
     const table = joineryExport(headless as never, joineryLabels(LABELS)).tables[0];
     assert.deepEqual(table.header, app.header);
     assert.deepEqual(table.rows.map((r) => r.slice(0, 5)), app.rows.map((r) => r.slice(0, 5)));
-    assert.equal(joineryCellText(headless.overrides, headless.entries.find((e) => e.key === W2)!, 'fire', '—'), 'EI 30');
-    assert.equal(joineryCellText(headless.overrides, headless.entries.find((e) => e.key === W1)!, 'fire', '—'), '—');
+    assert.equal(joineryCellText(headless.overrides, headless.entries.find((e) => e.key === W2)!, 'fire', '—', scheduleData('window').entries), 'EI 30');
+    assert.equal(joineryCellText(headless.overrides, headless.entries.find((e) => e.key === W1)!, 'fire', '—', scheduleData('window').entries), '—');
   });
 });
 
@@ -246,7 +246,7 @@ describe('the identity of a type (#446)', () => {
     assert.equal(typed.typeGlobalId, '0KzM3XjQrPipQpI0RMGVb1', 'the GlobalId of #67450 in the IFC text');
     assert.equal(typeIdentityOf(typed), '0KzM3XjQrPipQpI0RMGVb1');
     const id = windowSchedule();
-    setJoineryCellOverride(typed, 'fire', 'EI 90', 'W9 Attic round window');
+    setJoineryCellOverride(typed, 'fire', 'EI 90', 'W9 Attic round window', scheduleData('window').entries);
     assert.deepEqual(useProjectStore.getState().joineryOverrides, [{ type: '0KzM3XjQrPipQpI0RMGVb1', row: 'fire', value: 'EI 90', about: 'W9 Attic round window' }]);
     assert.equal(cellTexts((await drawn(id)).layout).filter((t) => t === 'EI 90').length, 1);
     // The ground-floor windows have no type of the project's: their identity is the entry key.
@@ -267,9 +267,9 @@ describe('a model update (#446)', () => {
 
   it('reports the type that is gone and keeps the value of the type that is left', async () => {
     const id = windowSchedule();
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
-    setJoineryCellOverride(entryOf(W1), 'fire', 'EI 90', 'W1 Window');
-    setJoineryCellOverride(entryOf(W1), 'name', 'Attic light', 'W1 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
+    setJoineryCellOverride(entryOf(W1), 'fire', 'EI 90', 'W1 Window', scheduleData('window').entries);
+    setJoineryCellOverride(entryOf(W1), 'name', 'Attic light', 'W1 Window', scheduleData('window').entries);
     assert.equal(currentFindings().filter((f) => f.kind === 'orphanedJoineryOverride').length, 0, 'both types are in the model');
 
     const updated = withoutAtticWindows(step);
@@ -295,7 +295,7 @@ describe('a model update (#446)', () => {
 
   it('reports nothing while no model is loaded: every type is unknown then, and none of them is gone', () => {
     windowSchedule();
-    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), 'fire', 'EI 30', 'W2 Window', scheduleData('window').entries);
     useViewerStore.setState({ models: new Map(), mutationViews: new Map(), ifcDataStore: null });
     assert.equal(currentFindings().filter((f) => f.kind === 'orphanedJoineryOverride').length, 0);
   });

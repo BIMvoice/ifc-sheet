@@ -25,7 +25,7 @@ import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
+import { isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type TypeFacts } from '@bimvoice/ifcsheet';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
@@ -156,7 +156,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
   const own = new Map(typed.map((row) => [textRowId(row.id), row]));
   return ids.flatMap((id): TableRowSpec[] => {
     const row = own.get(id);
-    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : (model[id]?.() ?? []).map((spec) => withTypedCell(spec, spec.id ?? id, data.overrides));
+    return row ? [{ label: row.label, value: (e) => textCellText(row, e.key), text: true, raw: (e) => [textCellText(row, e.key) || null] }] : (model[id]?.() ?? []).map((spec) => withTypedCell(spec, spec.id ?? id, data.overrides, groupsOf(data)));
   });
 }
 
@@ -164,14 +164,17 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
  * The row with the cells the user typed over the model's text (#446, `data.overrides`): the cell prints the typed text, in the sheet and in the
  * CSV and the XLSX alike (`joineryCellText`, the engine's). Every row can be typed over, the measured ones too (#485): a count or a size typed over reads as figures in the CSV and the XLSX when it is a number.
  */
-function withTypedCell(spec: TableRowSpec, id: string, overrides: readonly JoineryCellOverride[] | undefined): TableRowSpec {
+function withTypedCell(spec: TableRowSpec, id: string, overrides: readonly JoineryCellOverride[] | undefined, groups: readonly TypeFacts[]): TableRowSpec {
   if (!isOverridableRow(id) || !overrides?.length) return { ...spec, id };
   return {
     ...spec, id,
-    value: (e) => joineryCellText(overrides, e, id, spec.value(e)),
-    ...(spec.raw ? { raw: (e: ScheduleEntry) => { const o = joineryOverrideOf(overrides, e, id); return o ? typedCells(o.value, spec) : spec.raw!(e); } } : {}),
+    value: (e) => joineryCellText(overrides, e, id, spec.value(e), groups),
+    ...(spec.raw ? { raw: (e: ScheduleEntry) => { const o = joineryOverrideOf(overrides, e, id, groups); return o ? typedCells(o.value, spec) : spec.raw!(e); } } : {}),
   };
 }
+
+/** Every live group of the schedule's kind, a saved cell belonging to the nearest (#485): the whole schedule's groups that `scheduleOf` attaches, which a part of a split does not list alone. */
+const groupsOf = (data: ScheduleData): readonly TypeFacts[] => data.groups ?? data.entries;
 
 /** A typed cell in the CSV and the XLSX: figures where the row holds figures and the text reads as them (`1200 × 1500` in two columns), else the text in the first column. */
 function typedCells(value: string, spec: TableRowSpec): ExportCell[] {
@@ -296,7 +299,7 @@ export function layoutSchedule(data: ScheduleData, labels: ScheduleLabels, optio
       tableRows.forEach((row, i) => {
         const value = row.value(e);
         // A cell the model states about the type can be picked on the sheet to type another text over it (#446).
-        if (row.id && isOverridableRow(row.id)) cells.push({ x, y: yRows + i * ROW, w: cw, h: ROW, guid: typeIdentityOf(e), column: row.id, ...(joineryOverrideOf(data.overrides, e, row.id) ? { overridden: true as const } : {}) });
+        if (row.id && isOverridableRow(row.id)) cells.push({ x, y: yRows + i * ROW, w: cw, h: ROW, guid: typeIdentityOf(e), column: row.id, ...(joineryOverrideOf(data.overrides, e, row.id, groupsOf(data)) ? { overridden: true as const } : {}) });
         if (row.text) {
           // Typed text: shrunk to fit its card down to the smallest caption height, cut with an ellipsis only beyond that; never wider than the card.
           if (value) { const fitted = fitText({ size: TEXT, fit: cw - 3 }, value); prims.push({ kind: 'text', x: cx, y: yRows + i * ROW + 4.2, text: fitted.text, size: fitted.size, anchor: 'middle' }); }
@@ -342,7 +345,7 @@ export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): 
       {
         name: labels.elements, workbookOnly: true, numeric: [3, 4],
         header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
-        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, joineryCellText(data.overrides, e, 'name', e.name), mm(e.width), mm(e.height), o.level, o.globalId])),
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, joineryCellText(data.overrides, e, 'name', e.name, groupsOf(data)), mm(e.width), mm(e.height), o.level, o.globalId])),
       },
     ],
   };

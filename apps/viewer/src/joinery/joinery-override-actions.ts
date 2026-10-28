@@ -16,14 +16,17 @@ const write = (overrides: ReturnType<typeof clearJoineryOverride>): void => {
   useProjectStore.setState({ joineryOverrides: overrides.length ? overrides : undefined, dirty: true });
 };
 
-/** The type's cell in `row` prints `value` in every joinery schedule (`about`: what the type is called). One undo step. */
-export function setJoineryCellOverride(type: TypeFacts, row: string, value: string, about: string): void {
-  runAsOneUndoStep(() => write(setJoineryOverride(useProjectStore.getState().joineryOverrides, type, row, value, about)));
+/**
+ * The type's cell in `row` prints `value` in every joinery schedule (`about`: what the type is called; `groups`: every live group of the
+ * schedule's kind, so the cell of a neighbouring group is left alone, #485). One undo step.
+ */
+export function setJoineryCellOverride(type: TypeFacts, row: string, value: string, about: string, groups: readonly TypeFacts[]): void {
+  runAsOneUndoStep(() => write(setJoineryOverride(useProjectStore.getState().joineryOverrides, type, row, value, about, groups)));
 }
 
-/** The cell prints the model's text again ("Reset to model value"). One undo step. */
-export function resetJoineryCellOverride(type: TypeFacts, row: string): void {
-  runAsOneUndoStep(() => write(clearJoineryOverride(useProjectStore.getState().joineryOverrides, type, row)));
+/** The cell prints the model's text again ("Reset to model value"; `groups` as for `setJoineryCellOverride`). One undo step. */
+export function resetJoineryCellOverride(type: TypeFacts, row: string, groups: readonly TypeFacts[]): void {
+  runAsOneUndoStep(() => write(clearJoineryOverride(useProjectStore.getState().joineryOverrides, type, row, groups)));
 }
 
 /** Drop every override of the types `types` (identities, the ones no longer in the model). One undo step. */
