@@ -18,7 +18,7 @@
 
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
-import { clipPolyline } from './clip.js';
+import { clipPolyline, pointInBox } from './clip.js';
 import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
 import { formatDimension, layerShows, lookOf, type LayerGroup, type StyleBook } from './draft-look.js';
 import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
@@ -47,7 +47,7 @@ export interface SheetAnnotations {
 export type { SheetStroke };
 
 /**
- * The drafts on `vp`'s view, on the paper. `at` maps a drawing point to the paper; `box` clips the lines (the viewport's room),
+ * The drafts on `vp`'s view, on the paper. `at` maps a drawing point to the paper; `box` clips the lines and drops a text whose anchor is outside it, as the app's sheet clips a viewport's drafts (the viewport's room),
  * none when the layout gave the view none. A key plan prints no drafts, as on the sheet.
  */
 export function viewportAnnotations(
@@ -55,7 +55,7 @@ export function viewportAnnotations(
   a: SheetAnnotations,
 ): { strokes: SheetStroke[]; texts: SheetText[] } {
   const { view, vp, at, frame, box } = input;
-  const out = { strokes: [] as SheetStroke[], texts: [] as SheetText[] };
+  const out: { strokes: SheetStroke[]; texts: SheetText[] } = { strokes: [], texts: [] };
   if (vp.keyPlanOf !== undefined) return out;
   const hidden = viewportHiddenLayers(view, vp);
   const layerOf = new Map(a.layers.map((l) => [l.id, l]));
@@ -111,5 +111,6 @@ export function viewportAnnotations(
       if (textAt) a.onSkipped?.('dimension', view);
     }
   }
+  if (box) out.texts = out.texts.filter((t) => pointInBox(t.at, box));
   return out;
 }
