@@ -86,9 +86,9 @@ describe('a window the IFC gives no size, in the schedule (#485)', () => {
   it('has its size, total and level count typed over from the sheet, and reset; a saved project and the engine print the same', async () => {
     const data = await rowsOf();
     const e = data.entries[0];
-    let o = setJoineryOverride(undefined, e, 'size', '1250 × 1550', 'W1');
-    o = setJoineryOverride(o, e, 'total', '5', 'W1');
-    o = setJoineryOverride(o, e, levelRowId('Level 0'), '5', 'W1');
+    let o = setJoineryOverride(undefined, e, 'size', '1250 × 1550', 'W1', data.entries);
+    o = setJoineryOverride(o, e, 'total', '5', 'W1', data.entries);
+    o = setJoineryOverride(o, e, levelRowId('Level 0'), '5', 'W1', data.entries);
     const typed = scheduleOf([SCHEDULE], SCHEDULE, data, o);
     const layout = layoutSchedule(typed, LABELS);
     const texts = textsOf(layout).map((t) => t.text);
@@ -110,7 +110,7 @@ describe('a window the IFC gives no size, in the schedule (#485)', () => {
     assert.deepEqual(joineryExport(headless, joineryLabels(LABELS)).tables[0], csv);
 
     // Reset to the model's value: the measured size is back.
-    const reset = clearJoineryOverride(clearJoineryOverride(clearJoineryOverride(o, e, 'size'), e, 'total'), e, levelRowId('Level 0'));
+    const reset = clearJoineryOverride(clearJoineryOverride(clearJoineryOverride(o, e, 'size', data.entries), e, 'total', data.entries), e, levelRowId('Level 0'), data.entries);
     assert.deepEqual(sheetTexts(scheduleOf([SCHEDULE], SCHEDULE, data, reset)), sheetTexts(data));
   });
 
@@ -132,5 +132,23 @@ describe('a window the IFC gives no size, in the schedule (#485)', () => {
     assert.ok(Math.abs(mm(h.e.width) - 1200) <= 1, String(mm(h.e.width)));
     assert.deepEqual([h.e.measuredWidth, h.e.measuredHeight], [true, false]);
     assert.ok(h.texts.includes(`≈ ${mm(h.e.width)} × 1800`), h.texts.join('|'));
+  });
+});
+
+describe('a part of a split schedule, two measured groups 3 mm apart (#485)', () => {
+  it('prints and marks only its own group\'s typed cell, not the cell of the neighbour listed in the other part', async () => {
+    const [e] = (await rowsOf()).entries;
+    const a = { ...e, key: 'untyped:window:1200×1500', mark: 'W1', measuredWidth: true, measuredHeight: true };
+    const b = { ...e, key: 'untyped:window:1203×1500', mark: 'W2', measuredWidth: true, measuredHeight: true };
+    const whole = { entries: [a, b], levels: ['Level 0'] };
+    const part = { ...SCHEDULE, id: 'p', sub: { parent: 's', filter: { types: [b.key] } } };
+    const typed = scheduleOf([SCHEDULE, part], part, whole, [{ type: a.key, row: 'name', value: 'W-A', about: 'W1' }]);
+    assert.deepEqual(typed.entries.map((x) => x.key), [b.key]);
+    const layout = layoutSchedule(typed, LABELS);
+    assert.ok(!textsOf(layout).some((t) => t.text === 'W-A'), textsOf(layout).map((t) => t.text).join('|'));
+    assert.deepEqual((layout.cells ?? []).filter((c) => c.overridden), []);
+    // The other part, which lists the group the cell was typed on, prints it.
+    const other = { ...SCHEDULE, id: 'q', sub: { parent: 's', filter: { types: [a.key] } } };
+    assert.ok(textsOf(layoutSchedule(scheduleOf([SCHEDULE, other], other, whole, typed.overrides), LABELS)).some((t) => t.text === 'W-A'));
   });
 });
