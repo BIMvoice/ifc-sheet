@@ -44,12 +44,24 @@
 #     of compiling it;
 #   - turbo's local cache (.turbo/cache), keyed on pnpm-lock.yaml and the
 #     commit, written only by the Typecheck job on a push to main and read by
-#     every job that runs turbo. Before it is saved it is cut down to the tasks
-#     that run produced, and the @ifc-lite/wasm task is dropped so a turbo hit
-#     can never put an older wasm build over this run's artifact. GITHUB_SHA is
-#     a build input of apps/viewer only (apps/viewer/turbo.json). As a root
-#     `build` input it made every task hash unique per run, so this cache never
-#     hit and each job repeated the ~85 s package build.
+#     every job that runs turbo (Lint and Script tests did not read it and
+#     rebuilt every package, about 75 s each). Before it is saved it is cut
+#     down to the tasks that run produced, and the @ifc-lite/wasm task is
+#     dropped so a turbo hit can never put an older wasm build over this run's
+#     artifact. GITHUB_SHA is a build input of apps/viewer only
+#     (apps/viewer/turbo.json). As a root `build` input it made every task hash
+#     unique per run, so this cache never hit and each job repeated the ~85 s
+#     package build.
+#
+# What runs where. A pull request runs the jobs its changes select (above); a
+# merge-queue entry and a push to main run every job with the full package set.
+# So everything a pull request may skip still runs before the code reaches
+# main: in the merge queue once it is on, and until then in the push-to-main
+# run. With the queue on, the push-to-main run repeats what the queue already
+# tested on the same tree; it stays for now because it is also the only run
+# that saves the turbo cache and Rust's cargo cache under main, where pull
+# requests can read them (a cache saved in the queue's temporary branch is not
+# visible to them). Dropping it needs a cache-only job on main first.
 #
 # No secrets are used, so Dependabot and fork pull requests run the same checks.
 # Nothing here is continue-on-error: a failing test is a red check.
@@ -317,6 +329,16 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm lint
 
@@ -409,7 +431,13 @@ jobs:
       TEST_SHARD: ${{ matrix.shard }}
       TEST_SHARDS: 8
       # Test files already run in separate processes; the runner has 4 CPUs.
-      TEST_CONCURRENCY: 2
+      # Most of a file's time is starting its process and loading modules, not
+      # its tests: going from 1 to 2 made the eight shards 1.69 times faster
+      # (9344 s to 5535 s of test step) while the same 674 top-level tests in
+      # shard 0 took no longer. 3, not 4: each test process also runs its
+      # module-hook thread, and the timing-bound tests are the first to fail
+      # when the CPUs are short.
+      TEST_CONCURRENCY: 3
     steps:
       - uses: actions/checkout@v7
 
@@ -601,6 +629,16 @@ jobs:
         with:
           name: wasm-pkg
           path: packages/wasm/pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       # Some of the tests import packages/*/dist and the wasm runtime.
       - run: pnpm turbo run build --filter='./packages/*'
 
