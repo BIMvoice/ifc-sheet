@@ -1,5 +1,6 @@
 {
   "name": "@ifc-lite/source-dropbox",
+  "private": true,
   "version": "0.3.0",
   "description": "Dropbox file-source provider for ifc-lite",
   "type": "module",

@@ -56,6 +56,18 @@ export interface TableBlock {
   skipEmpty?: boolean;
 }
 
+/** A note broken at spaces into lines of about `chars` characters (2 mm text); about 120 fill a line across the table. */
+export function wrapNote(note: string, chars = 120): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of note.split(' ')) {
+    if (line && line.length + 1 + word.length > chars) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export type TableItem =
   | { kind: 'table'; block: TableBlock }
   | { kind: 'gap'; h: number }

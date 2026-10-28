@@ -141,9 +141,9 @@ export function useListScheduleRun(schedule: ProjectSchedule | undefined): ListR
 }
 
 /** The words a list table says that the Lists engine does not, in the interface's language. */
-export function useListWords(): { count: string; total: string; yes: string; no: string } {
+export function useListWords(): { count: string; total: string; yes: string; no: string; missing: string } {
   const { t } = useTranslation();
-  return useMemo(() => ({ count: t('listSched.count'), total: t('listSched.total'), yes: t('listSched.yes'), no: t('listSched.no') }), [t]);
+  return useMemo(() => ({ count: t('listSched.count'), total: t('listSched.total'), yes: t('listSched.yes'), no: t('listSched.no'), missing: t('listSched.missing') }), [t]);
 }
 
 /** The table of a run, as the sheet, the CSV and the XLSX hold it. */
