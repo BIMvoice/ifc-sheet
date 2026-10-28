@@ -39,10 +39,28 @@ const LEVEL_PREFIX = 'levels:';
 export const levelRowId = (level: string): string => `${LEVEL_PREFIX}${level}`;
 export const isOverridableRow = (row: string): boolean => (OVERRIDABLE_ROWS as readonly string[]).includes(row) || (row.startsWith(LEVEL_PREFIX) && row.length > LEVEL_PREFIX.length) || isModelRowId(row);
 
+/**
+ * One typed number. A separator followed by exactly three digits, after one to three digits that do not start with 0, is a thousands separator
+ * (`1,250` and `1.250` are 1250, as are `1 250` and `1,250,000` read as a million); any other single `,` or `.` is the decimal mark (`1,25` and
+ * `1.5` are 1.25 and 1.5, `0,250` is 0.25). Both marks in one number: the last is the decimal mark. Not a number: NaN.
+ */
+function typedNumber(text: string): number {
+  const p = text.trim().replace(/\s/g, '');
+  if (!/^-?\d[\d.,]*$/.test(p)) return NaN;
+  const marks = p.match(/[.,]/g) ?? [];
+  if (marks.length === 0) return Number(p);
+  const grouped = (s: string): boolean => /^-?[1-9]\d{0,2}([.,]\d{3})*$/.test(s);
+  const last = Math.max(p.lastIndexOf(','), p.lastIndexOf('.'));
+  const whole = p.slice(0, last), fraction = p.slice(last + 1);
+  if (new Set(marks).size > 1) return grouped(whole) && /^\d+$/.test(fraction) ? Number(`${whole.replace(/[.,]/g, '')}.${fraction}`) : NaN;
+  if (marks.length > 1) return grouped(p) ? Number(p.replace(/[.,]/g, '')) : NaN;
+  if (fraction.length === 3 && grouped(p)) return Number(p.replace(/[.,]/g, ''));
+  return /^\d+$/.test(fraction) ? Number(`${whole}.${fraction}`) : NaN;
+}
+
 /** The numbers a typed cell holds, for the CSV and the XLSX: `1200 × 1500` is two, `3` one; text that is not a number is none. */
 export function overrideNumbers(value: string): number[] {
-  const parts = value.split(/[×x*]/).map((p) => p.trim().replace(',', '.'));
-  const nums = parts.map((p) => (/^-?\d+(\.\d+)?$/.test(p) ? Number(p) : NaN));
+  const nums = value.split(/[×x*]/).map(typedNumber);
   return nums.length > 0 && nums.every((n) => Number.isFinite(n)) ? nums : [];
 }
 
@@ -107,8 +125,12 @@ export const dropJoineryOverrides = (overrides: readonly JoineryCellOverride[] |
 /** The overrides whose type none of `entries` (every type the model and the catalogue list now) names, each type once: what "What is missing" lists. */
 export function orphanedJoineryOverrides(overrides: readonly JoineryCellOverride[] | undefined, entries: readonly TypeFacts[]): { type: string; about: string; count: number }[] {
   const out = new Map<string, { type: string; about: string; count: number }>();
+  // A group of doors or windows with no stated size is keyed by its measured size (`untyped:<kind>:<w>×<h>`), which is 0 before the geometry has loaded
+  // and in a run without geometry: a typed cell of such a group is not missing then, it is not matched yet, so it is neither reported nor offered for deletion.
+  const sizeUnread = entries.some((e) => /^untyped:[a-z]+:(\?|0×\d+|\d+×0)$/.test(e.key));
   for (const o of overrides ?? []) {
     if (entries.some((e) => isOf(o, e))) continue;
+    if (sizeUnread && o.type.startsWith('untyped:')) continue;
     const found = out.get(o.type);
     if (found) { found.count++; if (!found.about) found.about = o.about; } else out.set(o.type, { type: o.type, about: o.about, count: 1 });
   }

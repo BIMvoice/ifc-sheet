@@ -14,7 +14,7 @@ import { openModel } from './headless.js';
 import { joineryScheduleData } from './joinery-schedule.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { meshesByExpressId, measureElementSize } from './element-size.js';
-import { clearJoineryOverride, joineryCellText, levelRowId, overrideNumbers, readJoineryOverrides, setJoineryOverride } from './joinery-overrides.js';
+import { clearJoineryOverride, joineryCellText, levelRowId, orphanedJoineryOverrides, overrideNumbers, readJoineryOverrides, setJoineryOverride } from './joinery-overrides.js';
 import { readProjectFile } from './project-read.js';
 import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION } from './project-version.js';
 
@@ -126,5 +126,31 @@ describe('every cell of the joinery schedule can be typed over (#485)', () => {
     // A row that is no row of the schedule is refused.
     expect(setJoineryOverride(undefined, entry, 'bogus', '1', '')).toEqual([]);
     expect(setJoineryOverride(undefined, entry, 'levels:', '1', '')).toEqual([]);
+  });
+});
+
+describe('a typed number keeps its thousands and its decimals (#485)', () => {
+  it('reads 1,250 and 1.250 as 1250, 1,25 and 1.5 as decimals, and a mixed number by its last mark', () => {
+    expect(overrideNumbers('1,250 × 1,550')).toEqual([1250, 1550]);
+    expect(overrideNumbers('1.250')).toEqual([1250]);
+    expect(overrideNumbers('1,25')).toEqual([1.25]);
+    expect(overrideNumbers('1.5')).toEqual([1.5]);
+    expect(overrideNumbers('0,250')).toEqual([0.25]);
+    expect(overrideNumbers('1.250,5')).toEqual([1250.5]);
+    expect(overrideNumbers('1,250.5')).toEqual([1250.5]);
+    expect(overrideNumbers('1,250,000')).toEqual([1250000]);
+    expect(overrideNumbers('1,2,5')).toEqual([]);
+  });
+});
+
+describe('a cell typed on a group keyed by its measured size (#485)', () => {
+  it('is not reported missing while the size is unread (no geometry), and is once the sizes are read and differ', async () => {
+    const model = await openModel(new TextEncoder().encode(bonsaiIfc([{}])), { geometry: false });
+    const withoutGeometry = joineryScheduleData([{ modelId: 'm', dataStore: model.dataStore, view: null }], project, 'window').entries;
+    expect(withoutGeometry[0].key).toMatch(/^untyped:window:(\?|0×0)$/);
+    const typed = [{ type: 'untyped:window:1200×1500', row: 'name', value: 'Fenster', about: 'W' }];
+    expect(orphanedJoineryOverrides(typed, withoutGeometry)).toEqual([]);
+    const read = [{ ...withoutGeometry[0], key: 'untyped:window:900×900' }];
+    expect(orphanedJoineryOverrides(typed, read)).toHaveLength(1);
   });
 });
