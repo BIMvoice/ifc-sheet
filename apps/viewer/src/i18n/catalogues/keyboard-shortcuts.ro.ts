@@ -77,7 +77,7 @@ export const keyboardShortcutsRo = {
   'commands.drafting.redo': 'Reface acțiunea anulată',
   'commands.drafting.snap': 'Pornește sau oprește fixarea pe puncte',
   'commands.drafting.ortho': 'Pornește sau oprește modul ortogonal (sau țineți apăsat Ctrl)',
-  'commands.drafting.cancel': 'Anulează comanda',
+  'commands.drafting.cancel': 'Anulează comanda sau încheie instrumentul curent. Nu părăsește niciodată desenul: folosiți Înapoi la planșă. Într-un card de instrument, un câmp de listă sau numeric lasă Esc să încheie instrumentul; un câmp de text își păstrează propriul Esc.',
   'commands.drafting.erase': 'Șterge selecția',
   'commands.drafting.confirm': 'Confirmă sau repetă ultima comandă',
   'commands.help.shortcuts': 'Arată comenzile rapide de la tastatură',
