@@ -40,7 +40,7 @@ import { prepareListProviders } from './prepare-providers';
 
 const FZK = resolve(import.meta.dirname, '../../test/__fixtures__/AC20-FZK-Haus.ifc');
 const BIN = resolve(import.meta.dirname, '../../../../../packages/ifcsheet/dist/bin.js');
-const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No' };
+const WORDS = { count: 'Count', total: 'Total', yes: 'Yes', no: 'No', missing: 'The total of {column} leaves out {missing} of {rows} rows with no value' };
 const DOOR_2 = '0pGAjlJMP3ifYPATVF5xAR';
 const DOOR_1 = '1Oms875aH3Wg$9l65H2ZGw';
 
