@@ -34,7 +34,8 @@ export type PackPart = (typeof PACK_PARTS)[number];
 export const PACK_NOT_SET = ['lengthUnit', 'decimals', 'viewTemplates'] as const;
 export type PackNotSet = (typeof PACK_NOT_SET)[number];
 
-export const STANDARD_PACK_VERSION = 1;
+/** Raised when a built-in pack gains or changes parts: a project that installed an older version is offered the update (2: `ro-stas` gained numbering and hatches). */
+export const STANDARD_PACK_VERSION = 2;
 
 export interface StandardPack {
   /** Stable; what the project remembers it by. */

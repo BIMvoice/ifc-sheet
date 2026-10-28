@@ -97,7 +97,7 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     // Numbering: the pack states the scheme (no standard prescribes one, so it is the default's values), and no sheet is renumbered.
     assert.deepEqual(s.sheetNumbering, DEFAULT_SCHEME);
     assert.equal(JSON.stringify(s.sheets.map((x) => x.number)), sheetsBefore);
-    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 1, previous: { graphicStandard: null, titleBlockTemplate: null, unitsAndNumbers: null, sheetNumbering: null, materials: [] } });
+    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 2, previous: { graphicStandard: null, titleBlockTemplate: null, unitsAndNumbers: null, sheetNumbering: null, materials: [] } });
     assert.equal(isApplied(pack()), true);
   });
 

@@ -32,7 +32,7 @@ import { modelLevels } from '@/project/model-levels';
 import { useViewDrawings } from '@/project/view-drawings';
 import type { StyledDrawing } from '@/project/view-graphics';
 import type { ProjectSheet } from '@/project/types';
-import { germanyPack, romaniaPack, type StandardPack } from './standard-pack';
+import { germanyPack, romaniaPack, STANDARD_PACK_VERSION, type StandardPack } from './standard-pack';
 import { installStandard, isApplied, resetStandard } from './standard-pack-install';
 
 const skip = planModelMissing(FZK_HAUS);
@@ -162,5 +162,20 @@ describe('the German pack differs from the Romanian one (#365)', { skip }, () =>
     assert.deepEqual(state().sheetNumbering, DEFAULT_SCHEME);
     assert.equal(state().installedStandard?.id, 'de-din');
     assert.notDeepEqual(de().materials!.map((r) => r.name), ro().materials!.map((r) => r.name));
+  });
+});
+
+describe('a project that installed an older pack version is offered the update (#365)', () => {
+  it('the Romanian pack installed at version 1 reads as not installed, and installing it again records the current version', () => {
+    useProjectStore.setState({ materials: [], sheetNumbering: undefined, installedStandard: undefined, dirty: false });
+    installStandard(ro());
+    assert.equal(isApplied(ro()), true);
+    assert.equal(state().installedStandard?.version, STANDARD_PACK_VERSION);
+    const installed = state().installedStandard!;
+    useProjectStore.setState({ installedStandard: { ...installed, version: STANDARD_PACK_VERSION - 1 } });
+    assert.equal(isApplied(ro()), false, 'the values match, the version is older: the update is offered');
+    installStandard(ro());
+    assert.equal(state().installedStandard?.version, STANDARD_PACK_VERSION);
+    assert.equal(isApplied(ro()), true);
   });
 });
