@@ -17,6 +17,7 @@ import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
 import { renderIdGlobalId } from './element-guid';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { typedElevationSymbol } from '@/joinery/elevation-placement';
+import { doorOperationOfRenderId } from '@/joinery/door-operation-read';
 import { openingConvention } from '@/joinery/opening-convention';
 
 /**
@@ -39,7 +40,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId)
+  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId)
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }
