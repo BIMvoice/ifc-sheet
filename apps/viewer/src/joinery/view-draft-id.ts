@@ -9,7 +9,6 @@
  */
 
 import type { JoineryViewName } from '@bimvoice/ifcsheet/project';
-import type { ProjectDocument } from '@bimvoice/ifcsheet';
 
 const PREFIX = 'joinery:';
 
@@ -26,7 +25,7 @@ export function parseJoineryDraftViewId(viewId: string): { typeId: string; view:
 }
 
 /** The document without the working copy of an open joinery view: the type holds the shapes, so neither the project file nor a package carries the copy. */
-export function withoutJoineryDraftViews(doc: ProjectDocument): ProjectDocument {
+export function withoutJoineryDraftViews<D extends { drafts?: readonly { viewId: string }[] }>(doc: D): D {
   return doc.drafts?.some((d) => isJoineryDraftViewId(d.viewId)) ? { ...doc, drafts: doc.drafts.filter((d) => !isJoineryDraftViewId(d.viewId)) } : doc;
 }
 
