@@ -29,11 +29,11 @@ const KEYS_AT_REGISTRY = [
   'urbanSettings', 'includeFarElements',
 ];
 
-/** Every field's key, in file order, when the list was made a registry (#144): what `serializeProject` writes, which a registry must not change. */
+/** Every field's key, in file order, of the hard-coded list the registry replaced, with the fields main appended to it since (language, underlays) in the places main lists them (#144): what `serializeProject` writes, which a registry must not change. */
 const KEYS_BEFORE_REGISTERED = [
   ...KEYS_AT_REGISTRY,
-  'handoverPattern', 'viewTemplates', 'boqArticles', 'unitsAndNumbers', 'classificationMappings', 'installedStandard', 'pacIntervention',
-  'norwayPermit', 'pacMode',
+  'handoverPattern', 'viewTemplates', 'boqArticles', 'unitsAndNumbers', 'classificationMappings', 'installedStandard', 'language', 'pacIntervention',
+  'norwayPermit', 'pacMode', 'underlays',
 ];
 
 const base = { name: 'p', models: [], views: [], sheets: [], drafts: [], draftLayers: [] } as unknown as ProjectDocument;
