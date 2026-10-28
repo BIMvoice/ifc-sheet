@@ -59,31 +59,6 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
 }
 
-/** The points of every line entity on `layer` of a DXF text, rounded to a micron (a vertex is group codes 10 and 20). */
-function layerPoints(dxf: string, layer: string): string[] {
-  const lines = dxf.split(/\r?\n/).map((l) => l.trim());
-  const out = new Set<string>();
-  const entities = lines.indexOf('ENTITIES');
-  let on = false;
-  let header = false;
-  let text = false;
-  let x: number | null = null;
-  for (let i = entities + 1; i + 1 < lines.length; i += 2) {
-    const code = lines[i];
-    const value = lines[i + 1];
-    if (code === '0') { on = false; x = null; text = value === 'TEXT'; }
-    // A POLYLINE's and a HATCH's own 10/20 is a zero placeholder, not a point.
-    if (code === '0') header = value === 'POLYLINE' || value === 'HATCH';
-    if (code === '8') on = value === layer;
-    if (!on) continue;
-    if (header || text) continue; // the engine's DXF is linework only; the figures' places are compared in the layout
-    // A vertex is groups 10 and 20; a LINE's far end is 11 and 21.
-    if (code === '10' || code === '11') x = Number(value);
-    if ((code === '20' || code === '21') && x !== null) out.add(`${x.toFixed(3)},${Number(value).toFixed(3)}`);
-  }
-  return [...out].sort();
-}
-
 describe('a viewport\'s north arrow and scale bar: the screen and the layout agree', () => {
   beforeEach(() => resetProject());
   afterEach(() => { cleanup(); useViewerStore.setState({ ifcDataStore: null } as never); });
