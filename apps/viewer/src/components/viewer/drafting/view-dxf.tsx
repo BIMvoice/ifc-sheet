@@ -18,6 +18,7 @@ import { createRoot } from 'react-dom/client';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
+import type { CustomLineType } from '@/drafting/line-types';
 import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import type { ProjectView } from '@/project/types';
@@ -26,10 +27,10 @@ import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from '../sheets/OverlayPaths';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { svgToDxf } from '../sheets/sheet-dxf';
-import { cadKindOf, layerTags, penTags } from '../sheets/dxf-tags';
+import { cadKindOf, layerTags, lineTags, penTags } from '../sheets/dxf-tags';
 import { shapePath } from './DraftOverlay';
 import { AnnotationGraphics } from './AnnotationGraphics';
-import { layerPen, layerShows, lookOf } from '@/drafting/styles';
+import { entityPen, layerShows, lookOf, overrideKey } from '@/drafting/styles';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
 import type { LiveSymbolContext } from '@/siteplan/live-symbols';
@@ -52,6 +53,12 @@ interface ViewDxfInput {
   symbols?: LiveSymbolContext | null;
 }
 
+/** A drafted line with its layer's pen and what it overrides; its colour is the element's own when it overrides it (`entityPen`). */
+function DraftLine({ layer, params, d, color, lineTypes }: { layer: DraftLayer | undefined; params: DraftEntity['params']; d: string; color: string; lineTypes: readonly CustomLineType[] }) {
+  const pen = entityPen(layer, params, lineTypes);
+  return <path {...lineTags(layer, pen.own)} d={d} stroke={params[overrideKey('color')] ? pen.color : color} strokeWidth={pen.width} fill="none" />;
+}
+
 /** The off-screen SVG `viewDxf` walks; exported for tests (the DXF walker needs a browser's path geometry). */
 export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, overlays, symbols }: ViewDxfInput) {
   const s = useProjectStore.getState();
@@ -70,7 +77,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
         const color = colour.get(e.layerId);
         if (color === null) return null;
         return isGeometry(e.shape)
-          ? <path key={e.id} {...layerTags(layerById.get(e.layerId))} d={shapePath(e.shape, MM, axis)} stroke={color ?? '#000'} strokeWidth={layerPen(layerById.get(e.layerId)).width} fill="none" />
+          ? <DraftLine key={e.id} layer={layerById.get(e.layerId)} params={e.params} d={shapePath(e.shape, MM, axis)} color={color ?? '#000'} lineTypes={s.lineTypes ?? []} />
           : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))}><AnnotationGraphics shape={e.shape} color={color ?? '#000'} selected={false} transform={MM} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} /></g>;
       })}
     </svg>
