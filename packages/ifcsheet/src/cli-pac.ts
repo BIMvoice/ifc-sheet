@@ -4,7 +4,7 @@
 
 /**
  * `ifcsheet build --pac` (#364): the permit project (PAC, Legea 169/2026 Anexa 2) as one submission PDF. The sheets are
- * the PAC set template's, in the words of `--locale` (Romanian by default), and the PDF opens with the opis page
+ * the PAC set template's, in the words of the run's language (`resolveLanguage`: the project's, else `--locale`, else Romanian), and the PDF opens with the opis page
  * (`pac-submission.ts`). Everything else in `build` (the PDF writer, the DXF, the handover) is unchanged.
  */
 

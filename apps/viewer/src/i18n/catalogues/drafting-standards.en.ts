@@ -69,6 +69,8 @@ export const draftingStandardsEn = {
   'standards.el.reset': 'Reset to style',
   'standards.el.overridden': 'Overridden on this element',
   'standards.el.editText': 'Edit text',
+  'standards.el.resetTag': 'Reset to model value',
+  'standards.el.tagOverridden': 'Text written over the model value',
   'standards.el.height': 'Height (mm)',
   'standards.viewport.layers': 'Layers in this viewport',
 } as const satisfies Record<string, TranslationValue>;
