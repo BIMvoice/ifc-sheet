@@ -38,7 +38,7 @@ const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'libra
 const IN_SCOPE_KEYS = new Set<string>([
   // The joinery schedule's controls (#475): their prefix also holds the 4D schedule's keys, which the face does not reach.
   'schedule.count', 'schedule.empty', 'schedule.folder', 'schedule.kind', 'schedule.new', 'schedule.newName', 'schedule.number', 'schedule.numberHint', 'schedule.numbered', 'schedule.scale', 'schedule.zoomIn', 'schedule.zoomOut', 'typeQty.sheet', 'typeQty.empty', 'typeQty.noQtoNote',
-  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.text.bold', 'standards.text.italic',
+  'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.el.resetTag', 'standards.el.tagOverridden', 'standards.text.bold', 'standards.text.italic',
   'standards.dim.placement.above', 'standards.dim.placement.centered', 'standards.dim.placement.below',
   'standards.dim.arrow', 'standards.dim.arrow.tick', 'standards.dim.arrow.arrow', 'standards.dim.arrow.dot', 'standards.dim.arrow.none',
   'drafting.snap', 'drafting.sectionDepth', 'viewerShell.file.ifcxOverlayRequiresIfcx',
