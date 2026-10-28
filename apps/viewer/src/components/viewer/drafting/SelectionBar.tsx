@@ -11,7 +11,7 @@
  * what the element does not override.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
@@ -132,7 +132,8 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
   const { t } = useTranslation();
   const [text, setText] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { (ref.current ?? areaRef.current)?.focus(); (ref.current ?? areaRef.current)?.select(); }, []);
   const commit = () => {
     if (text !== value && isElementTag(entity)) {
       // An element tag keeps its link and takes the written text over the model's (#445).
@@ -140,16 +141,32 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
     } else if (text !== value) editDrafts({ update: new Map([[entity.id, withText(entity.shape as AnnotationShape, text)]]) });
     onDone();
   };
+  const shared = {
+    'aria-label': t('standards.el.editText'),
+    className: 'absolute z-30 min-w-48 -translate-x-1/2 rounded-md border-2 border-primary bg-white px-2 text-sm text-zinc-900 shadow-lg outline-none',
+    style: { left: at.x, top: at.y + 4 },
+    value: text,
+    onPointerDown: (e: ReactPointerEvent) => e.stopPropagation(),
+    onBlur: commit,
+  };
+  // A label of several lines (a room's number, name and area) opens as it is written: Enter commits, Shift+Enter breaks a line (#542).
+  if (value.includes('\n')) {
+    return (
+      <textarea
+        {...shared} ref={areaRef} rows={Math.min(value.split('\n').length + 1, 6)} className={`${shared.className} py-1`}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') onDone();
+        }}
+      />
+    );
+  }
   return (
     <input
-      ref={ref}
-      aria-label={t('standards.el.editText')}
-      className="absolute z-30 h-8 min-w-48 -translate-x-1/2 rounded-md border-2 border-primary bg-white px-2 text-sm text-zinc-900 shadow-lg outline-none"
-      style={{ left: at.x, top: at.y + 4 }}
-      value={text}
+      {...shared} ref={ref} className={`${shared.className} h-8`}
       onChange={(e) => setText(e.target.value)}
-      onPointerDown={(e) => e.stopPropagation()}
-      onBlur={commit}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Enter') commit();
