@@ -127,7 +127,7 @@ export function projectSheetOptions(
   const tableFace = tablesFace(set.textStyles);
   return {
     annotations: {
-      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, locale: format,
+      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, locale: format,
       onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
     schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },

@@ -17,7 +17,7 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline, pointInBox } from './clip.js';
 import { arrowMark, linearLayout } from './dimension-layout.js';
-import { formatDimension, layerPen, layerShows, lookOf, readableDeg, type LayerGroup, type StyleBook } from './draft-look.js';
+import { entityPen, formatDimension, layerPrints, layerShows, lookOf, readableDeg, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import type { AnnotationShape, DraftEntity, DraftLayer, Pt } from './draft-types.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
@@ -30,6 +30,8 @@ export interface SheetAnnotations {
   drafts: readonly DraftEntity[];
   layers: readonly DraftLayer[];
   groups: readonly LayerGroup[];
+  /** The project's own line types, which a layer or a drafted line may name (absent: only the built-in ones). */
+  lineTypes?: readonly CustomLineType[];
   book: StyleBook;
   locale: SheetLocale;
   /** A draft of a kind not printed yet, once per draft. */
@@ -85,12 +87,14 @@ export function viewportAnnotations(
     if (e.viewId !== vp.viewId) continue;
     const layer = layerOf.get(e.layerId);
     if (layer && !layerShows(layer, a.groups, { view: hidden })) continue;
+    // A layer switched off for printing is on the screen only (the app's sheet marks it `data-print-ignore`).
+    if (!layerPrints(layer)) continue;
     const colour = layer?.color ?? '#000';
     const shape = e.shape;
     if (shape.type === 'line' || shape.type === 'polyline') {
       const pts = shape.type === 'line' ? [shape.a, shape.b] : shape.closed ? [...shape.pts, shape.pts[0]] : shape.pts;
-      const pen = layerPen(layer);
-      out.strokes.push({ colour, width: pen.width, ...(pen.dash.length ? { dash: pen.dash } : {}), runs: clip(pts.map(at)) });
+      const pen = entityPen(layer, e.params, a.lineTypes);
+      out.strokes.push({ colour: pen.color, width: pen.width, ...(pen.dash.length ? { dash: pen.dash } : {}), runs: clip(pts.map(at)) });
       continue;
     }
     if (shape.type === 'circle' || shape.type === 'arc') {
