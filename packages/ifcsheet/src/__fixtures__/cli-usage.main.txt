@@ -1,7 +1,7 @@
 ifcsheet: drawing sets from IFC models
 
 Usage:
-  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--locale <ro|en>] [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--include-far-elements]
+  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]
   ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
@@ -18,6 +18,8 @@ Commands:
           rules the app applies, a rule the model cannot meet skipped and said.
           With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
           one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
+          The sheets and views (and with --pac the opis) are in the language the project records, else --locale
+          (ro or en), else English (Romanian with --pac).
           A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
           larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
   check   The model-readiness report: what the IFC lacks (storeys, rooms, materials,
@@ -66,7 +68,7 @@ Options:
                    (a survey point, an origin cube). By default they are left out of the framing only and named by check.
   --json           Print the check as JSON: { file, ready, findings: [{ kind, missing, effect, params }] } (with --project, also project).
   --csv            Print the rooms schedule or the list as CSV (plain numbers).
-  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en).
+  --locale <l>     The language of the rooms schedule: ro writes "12,50" and the Romanian headings (default en). On build, the language the sheets and views are named in when the project records none.
   -h, --help       Show this help.
   -v, --version    Show the version.
 

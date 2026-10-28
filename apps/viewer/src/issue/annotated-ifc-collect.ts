@@ -19,6 +19,7 @@ import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import type { ProjectLevel, ProjectView } from '@/project/types';
+import { tagOverrideOf } from '@/drafting/tag-override';
 import { viewerToIfcAxes } from '@ifc-lite/geometry/world-frame';
 
 export interface AnnotationSource {
@@ -70,9 +71,9 @@ export function collectAnnotations(src: AnnotationSource, offset: { x: number; y
       if (!shapes) { out.hatches += 1; continue; }
       curves.push(...shapes.curves);
       texts.push(...shapes.texts);
-      // An element tag that shows the element's mark (not its name or class): the mark the drawing has, with the views it is on.
+      // An element tag that shows the element's mark (not its name, class or a text written over it, which is not the element's): the mark the drawing has, with the views it is on.
       const guid = d.params.tagOf;
-      if (typeof guid === 'string' && d.shape.type === 'leader' && (d.params.tagField === undefined || d.params.tagField === 'mark') && d.shape.text && d.shape.text !== '?') {
+      if (typeof guid === 'string' && d.shape.type === 'leader' && (d.params.tagField === undefined || d.params.tagField === 'mark') && tagOverrideOf(d) === null && d.shape.text && d.shape.text !== '?') {
         const seen = marks.get(guid) ?? { mark: d.shape.text, views: new Set<string>() };
         seen.views.add(view.name);
         marks.set(guid, seen);
