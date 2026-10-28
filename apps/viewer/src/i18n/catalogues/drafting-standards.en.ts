@@ -58,6 +58,9 @@ export const draftingStandardsEn = {
   'standards.text.font.sans': 'Sans serif',
   'standards.text.font.serif': 'Serif',
   'standards.text.font.mono': 'Monospace',
+  'standards.tables.name': 'Tables',
+  'standards.tables.make': 'Add a Tables style',
+  'standards.tables.fontsNote': 'Schedules, reports and the drawing register follow this style (font and italic). Only the three faces the PDF can write are offered: sans serif (Inter), serif (Times) and monospace (Courier). Sizes stay as they are.',
   'standards.text.bold': 'Bold',
   'standards.text.italic': 'Italic',
   'standards.text.color': 'Colour',
@@ -84,6 +87,8 @@ export const draftingStandardsEn = {
   'standards.el.reset': 'Reset to style',
   'standards.el.overridden': 'Overridden on this element',
   'standards.el.editText': 'Edit text',
+  'standards.el.resetTag': 'Reset to model value',
+  'standards.el.tagOverridden': 'Text written over the model value',
   'standards.el.height': 'Height (mm)',
   'standards.viewport.layers': 'Layers in this viewport',
 } as const satisfies Record<string, TranslationValue>;

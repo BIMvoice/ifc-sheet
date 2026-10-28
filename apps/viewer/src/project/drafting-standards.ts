@@ -15,7 +15,7 @@
  */
 
 import {
-  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD,
+  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD, TABLES_STYLE_ID,
   type DimStyle, type LayerGroup, type StyleBook, type TextStyle,
 } from '@/drafting/styles';
 import type { CustomLineType } from '@/drafting/line-types';
@@ -198,6 +198,16 @@ export function addTextStyle(from: TextStyle, name: string): string {
   const s = useProjectStore.getState();
   commit({ textStyles: [...book(s).textStyles, { ...from, id, name }] });
   return id;
+}
+
+/** Make the project's "Tables" text style (#500) from Standard, if it has none; returns its id. Schedules, reports and the register follow it. */
+export function addTablesStyle(name: string): string {
+  const s = useProjectStore.getState();
+  const styles = book(s).textStyles;
+  if (styles.some((t) => t.id === TABLES_STYLE_ID)) return TABLES_STYLE_ID;
+  const base = styles.find((t) => t.id === STANDARD) ?? DEFAULT_TEXT_STYLE;
+  commit({ textStyles: [...styles, { ...base, id: TABLES_STYLE_ID, name }] });
+  return TABLES_STYLE_ID;
 }
 
 export function updateTextStyle(id: string, patch: Partial<Omit<TextStyle, 'id'>>): void {
