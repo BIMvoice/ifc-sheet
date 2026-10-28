@@ -13,6 +13,7 @@
 
 import { freshProjectId } from '@/project/view-defaults';
 import { dimensionLayout } from './annotation';
+import { anchorParams } from './dimension-anchor';
 import { continueDimension, type DimensionShape } from './dimension-chain';
 import type { DraftEntity, Pt } from './types';
 import { COINCIDENT, add, dist, dot, scale, sub } from './vec';
@@ -61,6 +62,19 @@ function onLineOf(like: DimensionShape, a: Pt, b: Pt): DimensionShape | null {
   return { type: 'dimension', variant: like.variant, a, b, at: add(mid, scale(f.n, dot(sub(f.a, mid), f.n))), height: like.height };
 }
 
+/** The anchor param an end carries, when it holds one. */
+const anchorText = (d: DraftEntity, end: 'anchorA' | 'anchorB'): string | undefined => (typeof d.params[end] === 'string' ? (d.params[end] as string) : undefined);
+
+/**
+ * `params` as the dimension from `a`'s start to `b`'s end has them (#468): each end keeps the anchor of the dimension whose end
+ * it is, and an end that is a new point has none (undefined). A point that stays where it was keeps following the model; a moved
+ * one is not attached to what it was.
+ */
+function withAnchors(params: DraftEntity['params'], a: string | undefined, b: string | undefined): DraftEntity['params'] {
+  const { anchorA: _a, anchorB: _b, ...rest } = params;
+  return { ...rest, ...anchorParams(a, b) };
+}
+
 const replace = (drafts: readonly DraftEntity[], edit: (d: DraftEntity) => DraftEntity | DraftEntity[]): DraftEntity[] => drafts.flatMap(edit);
 
 /** Where along dimension `d`'s line the point `p` falls: 0 at its start, 1 at its end. */
@@ -82,18 +96,18 @@ export function addChainPoint(drafts: readonly DraftEntity[], id: string, p: Pt)
   if (inside) {
     const first = onLineOf(inside.shape, inside.shape.a, p), second = onLineOf(inside.shape, p, inside.shape.b);
     if (!first || !second) return null;
-    const fresh: DraftEntity = { ...inside, id: freshProjectId('draft'), shape: second, params: withoutBreak(inside.params) };
-    return replace(drafts, (d) => (d.id === inside.id ? [{ ...d, shape: first }, fresh] : d));
+    const fresh: DraftEntity = { ...inside, id: freshProjectId('draft'), shape: second, params: withAnchors(withoutBreak(inside.params), undefined, anchorText(inside, 'anchorB')) };
+    return replace(drafts, (d) => (d.id === inside.id ? [{ ...d, shape: first, params: withAnchors(d.params, anchorText(d, 'anchorA'), undefined) }, fresh] : d));
   }
   const last = chain.at(-1) as Dim;
   const t = along(last.shape, p);
   if (t !== null && t >= 1) {
     const next = continueDimension(last.shape, p);
-    return next ? [...drafts, { ...last, id: freshProjectId('draft'), shape: next, params: withoutBreak(last.params) }] : null;
+    return next ? [...drafts, { ...last, id: freshProjectId('draft'), shape: next, params: withAnchors(withoutBreak(last.params), anchorText(last, 'anchorB'), undefined) }] : null;
   }
   const head = chain[0], before = onLineOf(head.shape, p, head.shape.a);
   if (!before) return null;
-  return replace(drafts, (d) => (d.id === head.id ? [{ ...head, id: freshProjectId('draft'), shape: before, params: withoutBreak(head.params) }, d] : d));
+  return replace(drafts, (d) => (d.id === head.id ? [{ ...head, id: freshProjectId('draft'), shape: before, params: withAnchors(withoutBreak(head.params), undefined, anchorText(head, 'anchorA')) }, d] : d));
 }
 
 function withoutBreak(params: DraftEntity['params']): DraftEntity['params'] {
@@ -124,7 +138,7 @@ export function removeChainPoint(drafts: readonly DraftEntity[], id: string, p: 
   const left = chain[i - 1], right = chain[i];
   const joined = onLineOf(left.shape, left.shape.a, right.shape.b);
   if (!joined) return null;
-  return drafts.filter((d) => d.id !== right.id).map((d) => (d.id === left.id ? { ...d, shape: joined } : d));
+  return drafts.filter((d) => d.id !== right.id).map((d) => (d.id === left.id ? { ...d, shape: joined, params: withAnchors(d.params, anchorText(left, 'anchorA'), anchorText(right, 'anchorB')) } : d));
 }
 
 /**
