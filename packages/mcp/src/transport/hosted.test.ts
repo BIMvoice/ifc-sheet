@@ -10,7 +10,8 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { hostedModelCache } from '../tools/hosted-model-cache.js';
 import { PROTOCOL_VERSION } from '../protocol/index.js';
 import { handleHostedMcp, MAX_BATCH, type HostedOptions } from './hosted.js';
 
@@ -31,6 +32,9 @@ const call = async (name: string, args: Record<string, unknown>, options?: Hoste
 };
 
 describe('hosted MCP endpoint (#165)', () => {
+  // A parsed model kept by an earlier test would make the wall-time test below finish before its deadline.
+  beforeEach(() => { hostedModelCache.cache.clear(); });
+
   it('answers 404 unless IFCSHEET_HOSTED_MCP=1', async () => {
     for (const env of [{}, { IFCSHEET_HOSTED_MCP: '0' }, { IFCSHEET_HOSTED_MCP: 'true' }]) {
       expect((await post(INIT, { env })).status).toBe(404);
@@ -71,7 +75,7 @@ describe('hosted MCP endpoint (#165)', () => {
   });
 
   it('refuses a request body over the cap with 413 and a JSON-RPC error', async () => {
-    const res = await post(rpc(2, 'tools/call', { name: 'ifcsheet_open_model', arguments: { ifc_base64: 'A'.repeat(200_000) } }), { ...ON, maxModelBytes: 1024 });
+    const res = await post(rpc(2, 'tools/call', { name: 'ifcsheet_open_model', arguments: { ifc_base64: 'A'.repeat(2_000_000) } }), { ...ON, maxModelBytes: 1024 });
     expect(res.status).toBe(413);
     expect(((await res.json()) as any).error.message).toContain('larger than the limit');
   });

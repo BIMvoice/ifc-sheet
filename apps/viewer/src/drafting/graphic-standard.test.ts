@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_GRAPHIC_STANDARD, graphicStandardOf, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, ROMANIAN_PRACTICE, knownGraphicStandard, standardValues, stylesUnder,
+  DEFAULT_GRAPHIC_STANDARD, graphicStandardOf, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, GERMAN_PRACTICE, ROMANIAN_PRACTICE, knownGraphicStandard, standardValues, stylesUnder,
 } from './graphic-standard';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD, type DimStyle, type TextStyle } from './styles';
 
@@ -34,6 +34,28 @@ describe('the Romanian-practice standard draws only from the ISO series', () => 
 
   it('the default is not held to the series: it is what IfcSheet drew before', () => {
     assert.ok(standardValues(DEFAULT_GRAPHIC_STANDARD).some((v) => !(v.kind === 'width' ? ISO_128_LINE_WIDTHS : ISO_3098_HEIGHTS).includes(v.value)));
+  });
+});
+
+describe('the German-practice standard draws only from the ISO series', () => {
+  for (const [role, set, kind] of [['line width', ISO_128_LINE_WIDTHS, 'width'], ['text height', ISO_3098_HEIGHTS, 'height']] as const) {
+    it(`every ${role} is in the series`, () => {
+      const values = standardValues(GERMAN_PRACTICE).filter((v) => v.kind === kind);
+      assert.ok(values.length >= (kind === 'width' ? 20 : 8), 'the standard is iterated, not skipped');
+      assert.deepEqual(values.filter((v) => !set.includes(v.value)).map((v) => `${v.role}=${v.value}`), []);
+    });
+  }
+
+  it('is registered, is its own id and its label does not claim a DIN text was checked', () => {
+    assert.equal(graphicStandardOf('de-practice'), GERMAN_PRACTICE);
+    assert.deepEqual(knownGraphicStandard('de-practice'), { id: 'de-practice' });
+    assert.doesNotMatch(GERMAN_PRACTICE.name, /DIN/);
+  });
+
+  it('is not the Romanian one: the cut pen and every style id are the German pack\'s own', () => {
+    assert.equal(GERMAN_PRACTICE.pens.cut, 0.5);
+    assert.notEqual(GERMAN_PRACTICE.pens.cut, ROMANIAN_PRACTICE.pens.cut);
+    for (const t of [...GERMAN_PRACTICE.textStyles, ...GERMAN_PRACTICE.dimStyles]) assert.match(t.id, /^de-/);
   });
 });
 

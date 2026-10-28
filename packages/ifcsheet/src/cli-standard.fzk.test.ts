@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** `ifcsheet build --standard ro` (#365): the Romanian pack's pens and title block, on AC20-FZK-Haus. */
+/** `ifcsheet build --standard ro` (#365): the Romanian and German packs' pens and title block, on AC20-FZK-Haus. */
 
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -66,6 +66,16 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     expect(ro.layers).not.toContain('VIEW-CUT-050');
   }, 120_000);
 
+  it('de: the German title block captions are printed, and the Romanian ones are not', async () => {
+    const de = await build('--standard', 'de');
+    expect(de.err).toBe('');
+    expect(de.code).toBe(EXIT.ok);
+    for (const caption of ['Bauvorhaben', 'Bauherr', 'Entwurfsverfasser', 'Planinhalt', 'Maßstab']) expect(de.texts, caption).toContain(caption);
+    expect(de.texts).not.toContain('Proiectant general');
+    expect(de.layers).toContain('VIEW-CUT-050');
+    expect(de.layers).not.toContain('VIEW-CUT-070');
+  }, 120_000);
+
   it('without --standard the build is what it was: the standard title block and the cut line at 0.5', async () => {
     const plain = await build();
     expect(plain.code).toBe(EXIT.ok);
@@ -80,7 +90,7 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     const code = await run(['build', FZK, '--out', join(dir, 'set.pdf'), '--standard', 'din'], c.io);
     expect(code).toBe(EXIT.usage);
     expect(c.err()).toContain('unknown standard "din"');
-    expect(c.err()).toContain('Known standards: ro');
+    expect(c.err()).toContain('Known standards: ro, de');
     expect(existsSync(join(dir, 'set.pdf'))).toBe(false);
   });
 
