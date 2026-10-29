@@ -90,9 +90,10 @@ export interface RoomScheduleData {
 export function roomScheduleLabelsOf(
   say: SheetSay, words: RoomScheduleWords, locale: SheetLocale, title: string, data: RoomScheduleData | null, summary: AreaSummary | null = null,
 ): RoomScheduleLabels {
-  const notes = [say('roomSched.note.source'), say('roomSum.note.perimeter')];
+  // The legend of the `*` comes first, directly under the table it marks.
+  const notes = data && data.schedule.fromGeometry > 0 ? [say('roomSched.note.geometry', { count: data.schedule.fromGeometry })] : [];
+  notes.push(say('roomSched.note.source'), say('roomSum.note.perimeter'));
   if (data) {
-    if (data.schedule.fromGeometry > 0) notes.push(say('roomSched.note.geometry', { count: data.schedule.fromGeometry }));
     if (data.schedule.withoutArea > 0) notes.push(say('roomSched.note.none', { count: data.schedule.withoutArea }));
     notes.push(say('roomSched.note.leftOut', data.leftOut));
   }
