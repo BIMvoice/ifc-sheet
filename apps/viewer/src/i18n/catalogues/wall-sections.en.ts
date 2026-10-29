@@ -16,6 +16,7 @@ export const wallSectionsEn = {
   'wall.section.sub.all': 'Keeps everything',
   'wall.section.content.default': 'As the model lists them',
   'wall.section.content.hidden': { one: '{count} row hidden', other: '{count} rows hidden' },
+  'wall.section.content.properties': { one: '{count} row from the model', other: '{count} rows from the model' },
   'wall.section.content.reordered': 'rows reordered',
   'wall.section.content.sorted': 'sorted by {by}',
   'wall.section.content.sortedReverse': 'sorted by {by}, reversed',

@@ -168,7 +168,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json, --include-far-elements and --locale only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -198,7 +198,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json, --include-far-elements and --locale only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -208,7 +208,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json, --include-far-elements and --locale only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -229,7 +229,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json, --include-far-elements and --locale only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -237,7 +237,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard, --json and --locale only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -257,7 +257,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard, --json and --locale only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -277,7 +277,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard, --json and --locale only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -589,7 +589,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+  "stderr": "ifcsheet classify takes one model, --project, --system, --csv or --json and --locale only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -598,7 +598,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+  "stderr": "ifcsheet classify takes one model, --project, --system, --csv or --json and --locale only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -634,9 +634,9 @@
    "--locale",
    "ro"
   ],
-  "code": 2,
+  "code": 1,
   "stdout": "",
-  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+  "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
  },
  {
   "argv": [
@@ -649,7 +649,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+  "stderr": "ifcsheet classify takes one model, --project, --system, --csv or --json and --locale only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -662,7 +662,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet classify takes one model, --project, --system and --csv or --json only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json]\n"
+  "stderr": "ifcsheet classify takes one model, --project, --system, --csv or --json and --locale only: ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]\n"
  },
  {
   "argv": [
@@ -696,7 +696,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro, de).\n"
+  "stderr": "ifcsheet check has no --standard; it is an option of build and materials (known: ro, de).\n"
  },
  {
   "argv": [
@@ -707,7 +707,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro, de).\n"
+  "stderr": "ifcsheet list has no --standard; it is an option of build and materials (known: ro, de).\n"
  },
  {
   "argv": [

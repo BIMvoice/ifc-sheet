@@ -21,6 +21,9 @@ export const DRAFTING_KEY_COMMANDS = [
   { id: 'drafting.redo', labelKey: 'commands.drafting.redo', category: 'drafting', when: 'drafting', keys: [{ key: 'z', mod: true, shift: true }, { key: 'y', mod: true }] },
   { id: 'drafting.snap', labelKey: 'commands.drafting.snap', category: 'drafting', when: 'drafting', keys: [{ key: 'f3' }] },
   { id: 'drafting.ortho', labelKey: 'commands.drafting.ortho', category: 'drafting', when: 'drafting', keys: [{ key: 'f8' }] },
+  { id: 'drafting.copy', labelKey: 'commands.drafting.copy', category: 'drafting', when: 'drafting', keys: [{ key: 'c', mod: true }] },
+  { id: 'drafting.paste', labelKey: 'commands.drafting.paste', category: 'drafting', when: 'drafting', keys: [{ key: 'v', mod: true }] },
+  { id: 'drafting.duplicate', labelKey: 'commands.drafting.duplicate', category: 'drafting', when: 'drafting', keys: [{ key: 'd', mod: true }] },
   { id: 'drafting.cancel', labelKey: 'commands.drafting.cancel', category: 'drafting', when: 'drafting', keys: [{ key: 'escape' }] },
   { id: 'drafting.erase', labelKey: 'commands.drafting.erase', category: 'drafting', when: 'drafting', keys: [{ key: 'delete' }, { key: 'backspace' }] },
   { id: 'drafting.confirm', labelKey: 'commands.drafting.confirm', category: 'drafting', when: 'drafting', keys: [{ key: 'enter' }, { key: ' ' }] },
@@ -33,4 +36,4 @@ export type DraftingKeyId = (typeof DRAFTING_KEY_COMMANDS)[number]['id'];
  * held, as the drafting view always has (Shift+Enter still confirms, and Ctrl
  * held for ortho does not stop F3 or Escape).
  */
-export const DRAFTING_EXACT_MODIFIERS: ReadonlySet<DraftingKeyId> = new Set(['drafting.undo', 'drafting.redo']);
+export const DRAFTING_EXACT_MODIFIERS: ReadonlySet<DraftingKeyId> = new Set(['drafting.undo', 'drafting.redo', 'drafting.copy', 'drafting.paste', 'drafting.duplicate']);

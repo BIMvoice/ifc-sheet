@@ -230,7 +230,7 @@ file when `annotated_ifc` is true.
 | `ifcsheet_undo` | `document_id` | the set as it was before its last edit (add_view, place_view, set_title_block, add_schedule, renumber); `changed`, `undo_steps`, `redo_steps` |
 | `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
 | `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
-| `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
+| `ifcsheet_check_readiness` | `model_id`; optional `project_path` or `project_json`, `ids` (`byggesaksbim`) | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check`; with `ids: "byggesaksbim"` or a project that opted in, also the ByggesaksBIM (Norway) findings. The opt-in of an earlier `ifcsheet_load_project` is not remembered: pass `project_path`/`project_json` or `ids` on this call. A model that is not IFC4 gets one `byggesaksbimSchema` finding; a check that cannot run is a tool error |
 | `ifcsheet_rooms` | `model_id` or `document_id`, optional `project_path`/`project_json`, `locale` | the room and area schedule of `ifcsheet rooms`: levels, rooms (number, name, `area` m² or null, `perimeter`, `source`), totals, plus `text` and `csv`; the project's "Units and numbers" formats `text` only |
 | `ifcsheet_materials` | `model_id` or `document_id`, optional `project_path`/`project_json` | the materials and how each draws, as `ifcsheet materials --json`, plus `text` |
 | `ifcsheet_boq` | `model_id` or `document_id`, `project_path` or `project_json`, optional `detail`, `locale` | the bill of quantities of `ifcsheet boq`: per article `total` (null when no element has the quantity, never 0), `matched`, `counted`, the `missing` elements, `refused`, `byType`; plus `text` and `csv` |
@@ -311,6 +311,8 @@ ifcsheet_open_model      {"file_path": "/work/AC20-FZK-Haus.ifc"}
                          -> model_id "sheetmodel-1", storeys Erdgeschoss (0) and Dachgeschoss (2.7)
 ifcsheet_check_readiness {"model_id": "sheetmodel-1"}
                          -> ready false; noMaterials: 4 of 82 elements have no material
+ifcsheet_check_readiness {"model_id": "sheetmodel-1", "ids": "byggesaksbim"}
+                         -> also byggesaksbimH1, H4 and H5 (Norway; a project that opted in needs no ids)
 ifcsheet_generate_set    {"model_id": "sheetmodel-1"}
                          -> document_id "sheetset-1": A-101, A-201, A-202, A-301; 9 views
 ifcsheet_set_title_block {"document_id": "sheetset-1", "fields": {"phase": "DTAC", "projectNumber": "42/2026"}, "dry_run": true}

@@ -11,6 +11,8 @@
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { materialGraphics, materialNamesOfStore, readMaterials, resolvedMaterial, sortedMaterialNames, type ProjectMaterial, type ResolvedMaterial } from './materials.js';
 import { readProjectFile } from './project-read.js';
+import { cliSayFor } from './cli-words.js';
+import type { NameLanguage } from './names.js';
 
 /** The material rows of a saved project's text. Throws what `readProjectFile` throws when it is not a project file or is newer than this build reads. */
 export function readProjectMaterials(text: string): ProjectMaterial[] {
@@ -24,14 +26,15 @@ export function materialReport(store: IfcDataStore, table: readonly ProjectMater
 }
 
 /** The report as plain text, a line per material. */
-export function materialReportText(rows: readonly ResolvedMaterial[]): string {
-  if (rows.length === 0) return 'No materials in the model.\n';
+export function materialReportText(rows: readonly ResolvedMaterial[], language: NameLanguage = 'en'): string {
+  const say = cliSayFor(language);
+  if (rows.length === 0) return `${say('materials.none')}\n`;
   const width = Math.max(...rows.map((r) => r.name.length));
   const lines = rows.map((r) => {
     const parts = [
-      r.membrane ? 'membrane (heavy dashed line)' : `hatch ${r.hatch ?? 'none'}${r.hatch ? ` x${r.hatchScale}, ${r.hatchPen} pen` : ''}`,
-      `fill ${r.fill}`,
-      r.auto ? 'guessed from the name' : 'from the project',
+      r.membrane ? say('materials.membrane') : r.hatch ? say('materials.hatch', { hatch: r.hatch, scale: r.hatchScale, pen: r.hatchPen }) : say('materials.hatchNone'),
+      say('materials.fill', { fill: r.fill }),
+      r.auto ? say('materials.guessed') : say('materials.fromProject'),
     ];
     return `${r.name.padEnd(width)}  ${parts.join('; ')}`;
   });

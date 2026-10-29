@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { checkCatalogue } from '../catalogue-problems';
 import { untranslatedFaceKeys } from '../face-keys';
 import { en, type TranslationKey } from '../en';
+import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import type { TranslationValue } from '../types';
 import ro from './ro';
 
@@ -38,6 +39,8 @@ const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'libra
 const IN_SCOPE_KEYS = new Set<string>([
   // The joinery schedule's controls (#475): their prefix also holds the 4D schedule's keys, which the face does not reach.
   'schedule.count', 'schedule.empty', 'schedule.folder', 'schedule.kind', 'schedule.new', 'schedule.newName', 'schedule.number', 'schedule.numberHint', 'schedule.numbered', 'schedule.scale', 'schedule.zoomIn', 'schedule.zoomOut', 'typeQty.sheet', 'typeQty.empty', 'typeQty.noQtoNote',
+  // The drafting standards dialog's layers, text styles and dimension styles (#513): every key of its English file. Not the dialog's other tabs (`standards.tab.types`, `.symbols`, `.library`, `.cad`).
+  ...Object.keys(draftingStandardsEn),
   'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.el.resetTag', 'standards.el.tagOverridden', 'standards.text.bold', 'standards.text.italic',
   'standards.dim.placement.above', 'standards.dim.placement.centered', 'standards.dim.placement.below',
   'standards.dim.arrow', 'standards.dim.arrow.tick', 'standards.dim.arrow.arrow', 'standards.dim.arrow.dot', 'standards.dim.arrow.none',
@@ -180,6 +183,7 @@ describe('Romanian catalogue (#53)', () => {
     const misread = keys.filter((k) => /pattern|reshaped/i.test(Object.values(forms(en[k])).join(' ')) && /model/i.test(Object.values(forms(catalogue[k])).join(' ')));
     assert.deepEqual(misread, []);
     assert.equal(catalogue['wall.hatch.pattern'], 'Tipar');
+    assert.equal(catalogue['drafting.props.pattern'], 'Tipar');
     assert.match(String(catalogue['whatchanged.usage']), /^WHATCHANGED nu primește argumente, sau primește CLEAR ori ACCEPT; „\{arg\}”/);
   });
 

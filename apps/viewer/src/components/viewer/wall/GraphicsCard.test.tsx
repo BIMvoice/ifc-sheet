@@ -69,6 +69,18 @@ const choose = (select: HTMLSelectElement, value: string): void => {
 };
 
 describe('the Graphics section of a drawing\'s card', () => {
+  it('sets this drawing\'s own detail level, over the template\'s, and puts it back (#541)', () => {
+    const [plan] = plans();
+    const ui = mountCard(plan.id);
+    const detail = [...ui.querySelectorAll<HTMLSelectElement>('select')].find((x) => [...x.options].some((o) => o.value === 'coarse'))!;
+    assert.ok(detail);
+    assert.equal(detail.value, '');
+    choose(detail, 'coarse');
+    assert.equal(state().views.find((v) => v.id === plan.id)!.graphics?.detailLevel, 'coarse');
+    choose(detail, '');
+    assert.equal(state().views.find((v) => v.id === plan.id)!.graphics?.detailLevel, undefined);
+  });
+
   it('says which template the drawing follows when closed, and lists the categories with the template\'s look when open', () => {
     const [plan] = plans();
     const ui = render(<Card viewId={plan.id} />);

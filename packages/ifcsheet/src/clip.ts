@@ -85,3 +85,6 @@ export function clipPolygon(loop: readonly Point2D[], box: Rect): Point2D[] {
   }
   return out;
 }
+
+/** Whether `p` is in `box` (its edge counts). A text cannot be cut like a line: one whose anchor is outside the box is not on the sheet. */
+export const pointInBox = (p: Point2D, box: Rect): boolean => p.x >= box.x - 1e-6 && p.x <= box.x + box.w + 1e-6 && p.y >= box.y - 1e-6 && p.y <= box.y + box.h + 1e-6;

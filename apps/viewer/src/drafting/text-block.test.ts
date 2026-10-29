@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { entityBounds, setAnnotationScreenUp, textBox } from './annotation.js';
-import { readDraft } from './draft-file.js';
+import { readDraft } from '@bimvoice/ifcsheet';
 import type { DraftEntity } from './types.js';
 import { asTextFrame, LINE_PITCH, textBlock } from './text-block.js';
 import { tableWidthEm } from './text-width.js';

@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { escapeCsvCell } from '@ifc-lite/export';
 import {
   PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion, describeTemplateNote, generateDefaultSet, levelsFromStoreys, parseSetTemplate, readBoqArticles, readClassificationMappings, readListScheduleDef,
+  readProjectSet, readSchedule,
   type ProjectDocument, type SetTemplate, type TemplateNoteKey,
 } from '@bimvoice/ifcsheet';
 import { readUnderlays } from '@bimvoice/ifcsheet/underlay-read';
@@ -25,7 +26,7 @@ import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { ToolContext } from '../context.js';
 import { annotatedCopy } from './ifcsheet-annotated.js';
 import { drawSet } from './ifcsheet-draw.js';
-import { SCHEDULES_KEY, VIEW_KINDS, projectFileBody } from './ifcsheet-project-file.js';
+import { SCHEDULES_KEY, projectFileBody } from './ifcsheet-project-file.js';
 import { DOCUMENT_ID, DRY_RUN, dryPrefix, findSheet, invalid, optBoolean, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
 import { addSheetSet, getSheetModel, getSheetSet, type SetSchedule } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
@@ -41,6 +42,9 @@ async function write(path: string, ctx: ToolContext, data: Uint8Array | string, 
   await writeFile(file, data);
   return { file, bytes: typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength };
 }
+
+/** The sentence that says what a loaded project holds that was not printed; empty when nothing was left out. */
+const notedIn = (notes: readonly string[]): string => (notes.length ? ` Not printed: ${notes.join(' ')}` : '');
 
 // ---- ifcsheet_apply_template ----
 
@@ -116,7 +120,7 @@ export const ifcsheetExportDxf: Tool = {
       const written = await write(join(directory, dxfName(sheet.number, used)), ctx, exportDxf(sheet));
       files.push({ sheet: sheet.number, ...written });
     }
-    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.`, { document_id: entry.id, directory, files });
+    return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.${notedIn(drawn.notes)}`, { document_id: entry.id, directory, files, notes: drawn.notes });
   },
 };
 
@@ -191,8 +195,8 @@ export const ifcsheetIssueSet: Tool = {
       zip = { ...written, files: built.files.map((f) => f.name) };
     }
     return okResult(
-      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.`,
-      { document_id: entry.id, directory, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
+      `Issued ${drawn.sheets.length} sheets to ${directory}: ${files.length} files${handover ? ' (with handover.zip)' : ''}.${notedIn(drawn.notes)}`,
+      { document_id: entry.id, directory, notes: drawn.notes, pages: drawn.sheets.length, sheets: drawn.sheets.map((s) => s.number), files, ...(zip ? { handover: zip } : {}), ...(annotated ? { annotated_ifc: annotated.report(files.find((f) => f.kind === 'annotated_ifc')!) } : {}) },
     );
   },
 };
@@ -231,20 +235,21 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
   if (version === null) throw invalid('Not a project file: its "version" must be a whole number from 1.');
   if (version > PROJECT_FILE_VERSION) throw invalid(`The project file is version ${version}; this build reads up to ${PROJECT_FILE_VERSION}. Update @ifc-lite/mcp.`);
   if (!Array.isArray(raw.views) || !Array.isArray(raw.sheets)) throw invalid('Not a project file: "views" and "sheets" must be arrays.');
-  const ids = new Set<string>();
-  for (const [i, v] of raw.views.entries()) {
-    if (!isObject(v) || typeof v.id !== 'string' || typeof v.name !== 'string' || !(VIEW_KINDS as readonly string[]).includes(v.kind as string)) throw invalid(`views[${i}] must have a string id and name and a kind of ${VIEW_KINDS.join(', ')}.`);
-    ids.add(v.id);
+  // The views, sheets and drafts are read by the reader the app and `ifcsheet build` use (#479), so a file one refuses the others refuse too.
+  let set;
+  try {
+    set = readProjectSet(raw);
+  } catch (err) {
+    throw invalid((err as Error).message);
   }
-  const sheetIds = new Set<string>();
-  for (const [i, s] of raw.sheets.entries()) {
-    if (!isObject(s) || typeof s.id !== 'string' || typeof s.number !== 'string' || typeof s.name !== 'string') throw invalid(`sheets[${i}] must have a string id, number and name.`);
-    for (const [j, vp] of (Array.isArray(s.viewports) ? s.viewports : []).entries()) {
-      if (!isObject(vp) || typeof vp.viewId !== 'string' || !ids.has(vp.viewId)) throw invalid(`sheets[${i}].viewports[${j}] shows a view the project does not have.`);
-      if (typeof vp.scale !== 'number' || !(vp.scale > 0) || typeof vp.x !== 'number' || typeof vp.y !== 'number') throw invalid(`sheets[${i}].viewports[${j}] needs numeric x, y and a scale above 0.`);
+  // A viewport shows a view of the file, or a schedule the app placed (a schedule of the file's "schedules").
+  const targets = new Set([...set.views.map((v) => v.id), ...(Array.isArray(raw.schedules) ? raw.schedules : []).flatMap((s) => readSchedule(s)?.id ?? [])]);
+  for (const [i, s] of set.sheets.entries()) {
+    for (const [j, vp] of (s.viewports ?? []).entries()) {
+      if (!targets.has(vp.viewId)) throw invalid(`sheets[${i}].viewports[${j}] shows a view the project does not have.`);
     }
-    sheetIds.add(s.id);
   }
+  const sheetIds = new Set(set.sheets.map((s) => s.id));
   const { [SCHEDULES_KEY]: savedSchedules, underlays: _raw, ...rest } = raw;
   const dropped: string[] = [];
   const schedules: SetSchedule[] = [];
@@ -262,14 +267,14 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
   // The same reader as the command-line build: an underlay missing its point or scale is refused with its path, not drawn.
   let underlays: ReturnType<typeof readUnderlays>;
   try { underlays = readUnderlays(raw); } catch (e) { throw invalid(e instanceof Error ? e.message : String(e)); }
-  const document = { ...rest, ...(underlays.length > 0 ? { underlays } : {}), name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: raw.views, sheets: raw.sheets } as unknown as ProjectDocument;
+  const document = { ...rest, ...(underlays.length > 0 ? { underlays } : {}), name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: set.views, sheets: set.sheets } as unknown as ProjectDocument;
   return { document, schedules, dropped };
 }
 
 export const ifcsheetLoadProject: Tool = {
   name: 'ifcsheet_load_project',
   description:
-    'Load a saved project file (.ifclite-project.json, written by ifcsheet_save_project or by the app) as a drawing set on an opened model, to continue editing, export or issue it. Give model_id (the model the project is for) and project_path (a file on the server) or project_json (its text). The views, sheets, title block and numbering are used as stored; the plans are cut on the model\'s storeys. A file with the wrong format, a newer version, or a sheet showing a view the file does not have is refused with the reason. Returns a new document_id, the sheets and the views not placed.',
+    'Load a saved project file (.ifclite-project.json, written by ifcsheet_save_project or by the app) as a drawing set on an opened model, to continue editing, export or issue it. Give model_id (the model the project is for) and project_path (a file on the server) or project_json (its text). The views, sheets, title block and numbering are used as stored; the plans are cut on the model\'s storeys. The drafts the app drew on the views (dimensions, texts, lines) and the list schedules it placed on sheets are printed by the exports as `ifcsheet build --project` prints them. A file with the wrong format, a newer version, or a sheet showing a view the file does not have is refused with the reason. Returns a new document_id, the sheets and the views not placed.',
   scope: 'read',
   inputSchema: {
     type: 'object',
