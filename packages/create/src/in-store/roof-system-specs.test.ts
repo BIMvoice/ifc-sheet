@@ -9,15 +9,17 @@
  * and one relationship can carry several roofs.
  */
 
-import { describe, expect, it } from 'vitest';
-import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EntityExtractor, IfcParser, type IfcDataStore } from '@ifc-lite/parser';
+import { MutablePropertyView } from '@ifc-lite/mutations';
 import { readRoofSystem } from './roof-system-store.js';
 import { readRoofSystems } from './roof-system-specs.js';
+import { AnchorEntityReader } from './resolve-anchor.js';
 
 const spec = (name: string) => `{"name":"${name}","outline":[[0,0],[4,0],[4,3]],"eaveHeight":3,"rules":[]}`;
 const guid = (n: number) => `0${String(n).padStart(21, '0')}`;
 
-function fixture(): string {
+function fixture(extra: string[] = []): string {
   const lines = [
     "#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'P',$,$,$,$,$,$);",
     // #10: one Spec. #11: two relationships, the later one wins. #12: an unparseable Spec.
@@ -41,12 +43,13 @@ function fixture(): string {
     `#150=IFCPROPERTYSINGLEVALUE('Spec',$,IFCTEXT('${spec('shared')}'),$);`,
     "#151=IFCPROPERTYSET('" + guid(151) + "',$,'Pset_IfcLiteRoofSystem',$,(#150));",
     `#152=IFCRELDEFINESBYPROPERTIES('${guid(152)}',$,$,$,(#15,#16),#151);`,
+    ...extra,
   ];
   return `ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n${lines.join('\n')}\nENDSEC;\nEND-ISO-10303-21;\n`;
 }
 
-async function load(): Promise<IfcDataStore> {
-  const bytes = new TextEncoder().encode(fixture());
+async function load(extra: string[] = []): Promise<IfcDataStore> {
+  const bytes = new TextEncoder().encode(fixture(extra));
   return new IfcParser().parseColumnar(bytes.buffer as ArrayBuffer, { disableWorkerScan: true });
 }
 
@@ -66,5 +69,93 @@ describe('readRoofSystems (#154)', () => {
     const store = await load();
     expect([...readRoofSystems(store, [11, 14]).keys()]).toEqual([11]);
     expect(readRoofSystems(store, []).size).toBe(0);
+  });
+});
+
+/** Relationships that name no roof: the project, under the roof system's own set, so only RelatedObjects tells them apart. */
+const UNRELATED = Array.from({ length: 20 }, (_, k) => 200 + k);
+const unrelated = UNRELATED.map((id) => `#${id}=IFCRELDEFINESBYPROPERTIES('${guid(id)}',$,$,$,(#1),#101);`);
+
+describe('readRoofSystems skips the relationships that name no roof (#154)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('does not parse a relationship that names none of the roofs asked for, and answers the same', async () => {
+    const store = await load(unrelated);
+    const parsed: number[] = [];
+    const extract = EntityExtractor.prototype.extractEntity;
+    vi.spyOn(EntityExtractor.prototype, 'extractEntity').mockImplementation(function (this: EntityExtractor, ref) {
+      parsed.push(ref.expressId);
+      return extract.call(this, ref);
+    });
+    const specs = readRoofSystems(store, ROOFS);
+    expect(parsed.filter((id) => UNRELATED.includes(id))).toEqual([]);
+    // #132 names roofs #13 and #10, so it is still read; #102 names #10.
+    expect(parsed).toEqual(expect.arrayContaining([102, 112, 115, 122, 132, 152]));
+    vi.restoreAllMocks();
+    for (const id of ROOFS) expect(specs.get(id) ?? null, `roof #${id}`).toEqual(readRoofSystem(store, id));
+    expect([...specs.keys()].sort()).toEqual([10, 11, 15, 16]);
+  });
+
+  it('still reads a roof named only as a quoted or encoded reference, a bare integer, a real or an exponent', async () => {
+    // refId takes '#14' as a reference (also spelt with encoded digits, `\X\31` is "1"); the parser reads 14, 14., 1.4E1
+    // and 140E-1 as the number 14. None is valid IFC, and every one was read before.
+    for (const related of ["('#14')", "('#\\X\\31\\X\\34')", '(14)', '(14.)', '(1.4E1)', '(140E-1)']) {
+      const store = await load([...unrelated, `#160=IFCRELDEFINESBYPROPERTIES('${guid(160)}',$,$,$,${related},#101);`]);
+      expect(readRoofSystems(store, [14]).get(14)?.name, related).toBe('ten');
+    }
+  });
+
+  it('reads a relationship the session created over a source one', async () => {
+    const store = await load(unrelated);
+    const view = new MutablePropertyView(null, 'm1');
+    view.restoreNewEntity({ expressId: UNRELATED[2], type: 'IfcRelDefinesByProperties', attributes: [guid(901), null, null, null, [14], 101] });
+    const specs = readRoofSystems(store, ROOFS, view);
+    for (const id of ROOFS) expect(specs.get(id) ?? null, `roof #${id}`).toEqual(readRoofSystem(store, id, view));
+    expect(specs.get(14)?.name).toBe('ten');
+  });
+
+  it('reads what the mutation view says: a created relationship, a relationship edited to name a roof, a deleted one', async () => {
+    const store = await load(unrelated);
+    const view = new MutablePropertyView(null, 'm1');
+    view.setExpressIdWatermark(1000);
+    // Roof #14 gets the "ten" set through a relationship the session created.
+    const created = view.createEntity('IfcRelDefinesByProperties', [guid(900), null, null, null, [14], 101]);
+    // Roof #12's set is swapped for "ten" by editing an unrelated relationship to name it.
+    view.setPositionalAttribute(UNRELATED[0], 4, [12]);
+    view.deleteEntity(122);
+    // Roof #13 by a named edit of another unrelated relationship.
+    view.setAttribute(UNRELATED[1], 'RelatedObjects', '(#13)');
+    const specs = readRoofSystems(store, ROOFS, view);
+    for (const id of ROOFS) expect(specs.get(id) ?? null, `roof #${id}`).toEqual(readRoofSystem(store, id, view));
+    expect(created.expressId).toBeGreaterThan(1000);
+    expect(specs.get(14)?.name).toBe('ten');
+    expect(specs.get(12)?.name).toBe('ten');
+  });
+});
+
+describe('AnchorEntityReader.mayReferTo (#154)', () => {
+  const ids = new Set([14]);
+
+  it('rules out only a source entity the view leaves alone whose text names none of the ids', async () => {
+    const store = await load(unrelated);
+    const reader = new AnchorEntityReader(store, new MutablePropertyView(null, 'm1'));
+    expect(reader.mayReferTo(UNRELATED[0], ids)).toBe(false);
+    expect(reader.mayReferTo(102, new Set([10]))).toBe(true);
+    // Not in the source at all: left to `entity`.
+    expect(reader.mayReferTo(5000, ids)).toBe(true);
+  });
+
+  it('answers true for every edit the view can make to the entity', async () => {
+    const store = await load(unrelated);
+    const edits: Array<[string, (view: MutablePropertyView, id: number) => void]> = [
+      ['positional', (view, id) => view.setPositionalAttribute(id, 5, '#14')],
+      ['named', (view, id) => view.setAttribute(id, 'RelatingPropertyDefinition', '#14')],
+      ['retyped', (view, id) => view.setEntityType(id, 'IfcRelDefinesByType')],
+    ];
+    for (const [name, edit] of edits) {
+      const view = new MutablePropertyView(null, 'm1');
+      edit(view, UNRELATED[3]);
+      expect(new AnchorEntityReader(store, view).mayReferTo(UNRELATED[3], ids), name).toBe(true);
+    }
   });
 });

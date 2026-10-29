@@ -3545,3 +3545,21 @@ code: it times native parse and geometry and never calls into
 repetitions, on the code before the welding change, with the string welding and
 with this one. The lesson: an adjacency key that is per index and a string is
 paid on every mesh of every regeneration; weld by number, and per vertex.
+
+## Skip property relationships by their bytes before parsing them (IfcSheet #154)
+
+A floor plan's roofs read every roof's spec in one pass over the model's
+`IfcRelDefinesByProperties` (`readRoofSystems`). On the 56 MB Skolebygg sample
+that pass parsed all 44,477 relationships to find the few that name one of its
+39 roofs, about 78 ms in one task while the Wall draws its first plan.
+`AnchorEntityReader.mayReferTo` now scans a source relationship's STEP bytes for
+a digit run equal to a wanted id and parses only those that may name one;
+created or edited entities, encoded strings and exponents are always parsed.
+82% of the relationships are skipped and the pass takes about 32 ms. Lessons:
+
+- When a walk over every relationship of a type looks for a few elements, the
+  parse is the cost, not the walk; a byte scan that can only answer "maybe"
+  keeps the result exact.
+- Mutation-test each "answer maybe" rule: two first-draft rules (a `.` and a
+  long digit run) were redundant, since a whole-number real reads as its
+  integer part, and only the encoded string and the exponent needed one.
