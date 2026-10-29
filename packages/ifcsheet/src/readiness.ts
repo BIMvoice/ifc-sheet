@@ -9,16 +9,18 @@
  * a thin draft set is explained, not puzzling. A pure function of counts
  * (`ModelFacts`); `readiness-read.ts` counts them from parsed models.
  *
- * Also its own entry, `@bimvoice/ifcsheet/readiness`: it imports nothing, so the
- * app's translation catalogue can spread the English text without loading the
+ * Also its own entry, `@bimvoice/ifcsheet/readiness`: it imports only the pure
+ * number formatter, so the app's translation catalogues can spread the English and Romanian text without loading the
  * parser. The web app translates by the catalogue keys; the command line and the
- * MCP tool say it in English with {@link describeReadiness}.
+ * MCP tool say it with {@link describeReadiness}, in English or Romanian.
  */
 
+import type { NameLanguage } from './names.js';
+import { sheetNumber } from './sheet-number.js';
 import type { BoqMissing } from './boq-compute.js';
 import { subReportParams, type SubReportCheck } from './sub-report-check.js';
 import type { EstimatedAreas } from './room-estimates.js';
-import { BYGGESAKSBIM_EN, type ByggesaksbimKind } from './byggesaksbim/byggesaksbim-text.js';
+import { BYGGESAKSBIM_EN, BYGGESAKSBIM_RO, type ByggesaksbimKind } from './byggesaksbim/byggesaksbim-text.js';
 import type { TitleBlockMisfit } from './title-block-print.js';
 
 /** What the loaded models hold, counted once. "Elements" are the products that have geometry, rooms (IfcSpace) apart. */
@@ -182,8 +184,47 @@ export const READINESS_EN = {
   ...BYGGESAKSBIM_EN,
 } as const;
 
-/** A finding in English: what is missing, and what is weaker for it. */
-export function describeReadiness(f: ReadinessFinding): { missing: string; effect: string } {
-  const say = (text: string) => text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in f.params ? String(f.params[name]) : whole));
-  return { missing: say(READINESS_EN[f.key]), effect: say(READINESS_EN[f.effectKey]) };
+/** The same findings in Romanian (terms: `apps/viewer/src/i18n/ro-glossary.md`); the app's Romanian catalogue spreads this, so it is the one copy, and `ifcsheet check --locale ro` prints it. */
+export const READINESS_RO: Record<keyof typeof READINESS_EN, string> = {
+  'ready.noStoreys': 'Modelul nu are niveluri de clădire.',
+  'ready.noStoreys.effect': 'Setul pornește fără planuri de nivel (se face unul pe nivel), iar secțiunile nu primesc cote de nivel.',
+  'ready.noSpaces': 'Modelul nu are încăperi (IfcSpace).',
+  'ready.noSpaces.effect': 'TAGALL nu are încăperi de etichetat, deci etichetele de încăperi și verificarea încăperilor fără etichetă nu au pe ce lucra.',
+  'ready.noStorey': 'Elemente fără nivel: {count} din {total}.',
+  'ready.noStorey.effect': 'Tabelul de tâmplărie arată o liniuță în coloana Nivel pentru ele, iar câmpul Nivel al unei etichete rămâne gol.',
+  'ready.noMaterials': 'Elemente fără material: {count} din {total}.',
+  'ready.noMaterials.effect': 'Extrasul de materiale le lasă deoparte, iar câmpul Material al unei etichete rămâne gol.',
+  'ready.noQuantities': 'Elemente fără set de cantități (Qto): {count} din {total}.',
+  'ready.noQuantities.effect': 'Extrasul de materiale nu are volum sau arie pentru ele.',
+  'ready.duplicateGlobalIds': 'GlobalId-uri duplicate: {count}; entități care le partajează: {entities}.',
+  'ready.duplicateGlobalIds.effect': 'O etichetă își găsește elementul după GlobalId, deci poate arăta spre un element greșit dintre cele care îl partajează.',
+  'ready.subReportDuplicates': 'În „{schedule}”, mai multe părți conțin același tip sau element ({parts}). Tipuri: {types}, elemente: {count}: {list}.',
+  'ready.subReportDuplicates.effect': 'Sunt numărate de două ori când părțile se adună și desenate pe două planșe.',
+  'ready.subReportGaps': 'În „{schedule}”, unele elemente nu sunt în nicio parte. Tipuri: {types}, elemente: {count}: {list}.',
+  'ready.farElements': '{count} elemente se află la până la {distance} de clădire: {list}.',
+  'ready.farElements.effect': 'Vederile sunt încadrate fără ele, astfel încât scara și formatul hârtiei se potrivesc clădirii. Ele rămân în model, în tabele și în cantități și sunt desenate acolo unde cad în cadru. Setarea proiectului „Include elementele îndepărtate la încadrare” le încadrează din nou.',
+  'ready.boqMissingQuantity': '{count} elemente nu au o cantitate pe care o ia un articol din antemăsurătoare: {list}.',
+  'ready.boqMissingQuantity.effect': 'Antemăsurătoarea le lasă în afara totalurilor acelor articole. Nu sunt numărate ca zero: cantitățile articolelor sunt mai mici cu cât dețin aceste elemente.',
+  'ready.estimatedAreas': 'Au include {count} încăperi a căror arie nu este dată de model; sunt măsurate din geometrie (≈ {area} m², {share} % din Au) și pot fi greșite sub plafoane înclinate: {list}.',
+  'ready.estimatedAreas.effect': 'Tabelul de încăperi și arii și foaia de indicatori urbanistici le numără și le marchează. Dați NetFloorArea (Qto_SpaceBaseQuantities) acestor încăperi și Au devine exactă.',
+  'ready.ruralLevels': 'Modelul are {count} niveluri deasupra terenului; PAC simplificat (Anexa 3) acoperă cel mult parter + mansardă.',
+  'ready.ruralLevels.effect': 'Modelul depășește ce acoperă PAC simplificat. Setul se face oricum.',
+  'ready.ruralArea': 'Suprafața construită desfășurată a modelului (Sd) este {area} m²; PAC simplificat (Anexa 3) acoperă cel mult {max} m².',
+  'ready.ruralArea.effect': 'Modelul depășește ce acoperă PAC simplificat. Setul se face oricum, pe o hârtie mai mare unde desenul o cere.',
+  'ready.ruralAreaAtLeast': 'Suprafața construită desfășurată a modelului (Sd) este de cel puțin {area} m² (unele elemente nu au dat contur); PAC simplificat (Anexa 3) acoperă cel mult {max} m².',
+  'ready.ruralAreaAtLeast.effect': 'Modelul depășește ce acoperă PAC simplificat. Setul se face oricum, pe o hârtie mai mare unde desenul o cere.',
+  'ready.titleBlockFit': 'Cartuș: {field} nu încape în căsuța sa pe {sheet}; scurtați valoarea sau folosiți o abreviere.',
+  'ready.titleBlockFit.effect': 'Valoarea tipărită este tăiată cu puncte de suspensie, deci o parte lipsește de pe planșă.',
+  'ready.subReportGaps.effect': 'Părțile nu se adună la tabelul întreg: acele uși și ferestre nu sunt pe nicio planșă.',
+  // The ByggesaksBIM (Norway) check, which a project opts into (`byggesaksbim/`).
+  ...BYGGESAKSBIM_RO,
+};
+
+/** A finding in `language` (English unless asked): what is missing, and what is weaker for it. */
+export function describeReadiness(f: ReadinessFinding, language: NameLanguage = 'en'): { missing: string; effect: string } {
+  const words: Record<keyof typeof READINESS_EN, string> = language === 'ro' ? READINESS_RO : READINESS_EN;
+  // English keeps the figures as the engine holds them; Romanian writes a fractional one with the sheet's comma (the one formatter).
+  const written = (value: number | string): string => (language === 'ro' && typeof value === 'number' && !Number.isInteger(value) ? sheetNumber('ro', value, 1, { trim: true }) : String(value));
+  const say = (text: string) => text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in f.params ? written(f.params[name]) : whole));
+  return { missing: say(words[f.key]), effect: say(words[f.effectKey]) };
 }

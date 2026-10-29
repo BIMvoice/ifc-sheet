@@ -16,6 +16,10 @@ import { packForCommandLine } from './standard-pack.js';
 import type { ProjectMaterial, ResolvedMaterial } from './materials.js';
 import type { OpenedModel } from './model.js';
 import type { CliIo } from './cli.js';
+import type { NameLanguage } from './names.js';
+import { commandLanguage } from './cli-language.js';
+import type { ProjectFacts } from './project-read.js';
+import { readProjectFile } from './project-read.js';
 
 export { readProjectMaterials };
 
@@ -24,6 +28,8 @@ export interface MaterialsArgs {
   rest: readonly string[];
   json: boolean;
   project: string | undefined;
+  /** `--locale` as given; the project's language, when it records one, comes first. */
+  locale?: string | undefined;
   /** `--standard <id>`: the standard's hatch rows laid over the table. */
   standard?: string | undefined;
   /** True when an option `materials` does not take (--out, --dxf, --name, --include-far-elements) was given. */
@@ -40,9 +46,9 @@ export interface MaterialsOutput {
 }
 
 /** The materials of an opened model and how each draws, with the project's table applied. */
-export function materialsOutput(file: string, projectFile: string | undefined, model: Pick<OpenedModel, 'dataStore'>, table: readonly ProjectMaterial[], standardId?: string): MaterialsOutput {
+export function materialsOutput(file: string, projectFile: string | undefined, model: Pick<OpenedModel, 'dataStore'>, table: readonly ProjectMaterial[], standardId?: string, language: NameLanguage = 'en'): MaterialsOutput {
   const rows = materialReport(model.dataStore, table);
-  return { rows, json: { file, ...(projectFile !== undefined ? { project: projectFile } : {}), ...(standardId !== undefined ? { standard: standardId } : {}), materials: rows }, text: materialReportText(rows) };
+  return { rows, json: { file, ...(projectFile !== undefined ? { project: projectFile } : {}), ...(standardId !== undefined ? { standard: standardId } : {}), materials: rows }, text: materialReportText(rows, language) };
 }
 
 // Exit codes as in `EXIT` of cli.ts (0 ok, 1 failed, 2 usage); not imported, to keep cli.ts and this file free of a cycle at run time.
@@ -51,7 +57,7 @@ const FAILED = 1;
 const USAGE = 2;
 
 /** `ifcsheet materials`: the model's materials and how each draws, with the project's table applied. */
-async function materials(file: string, json: boolean, projectFile: string | undefined, standardId: string | undefined, io: CliIo): Promise<number> {
+async function materials(file: string, json: boolean, projectFile: string | undefined, standardId: string | undefined, locale: string | undefined, io: CliIo): Promise<number> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(file));
@@ -60,9 +66,12 @@ async function materials(file: string, json: boolean, projectFile: string | unde
     return FAILED;
   }
   let table: ReturnType<typeof readProjectMaterials> = [];
+  let facts: ProjectFacts | undefined;
   if (projectFile !== undefined) {
     try {
-      table = readProjectMaterials(await readFile(projectFile, 'utf8'));
+      const text = await readFile(projectFile, 'utf8');
+      table = readProjectMaterials(text);
+      facts = readProjectFile(text);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       io.stderr(`ifcsheet: ${code === 'ENOENT' ? `cannot read ${projectFile}: no such file` : `${projectFile} cannot be used as a project: ${(error as Error).message}`}\n`);
@@ -74,8 +83,9 @@ async function materials(file: string, json: boolean, projectFile: string | unde
     return USAGE;
   }
   table = [...materialsUnder(standardId, table)];
+  const language = commandLanguage({ ...(facts ? { project: facts } : {}), ...(locale !== undefined ? { locale } : {}) }, io);
   const opened = await openModel(bytes, { geometry: false });
-  const out = materialsOutput(file, projectFile, opened, table, standardId);
+  const out = materialsOutput(file, projectFile, opened, table, standardId, language);
   io.stdout(json ? `${JSON.stringify(out.json, null, 2)}\n` : out.text);
   return OK;
 }
@@ -83,11 +93,11 @@ async function materials(file: string, json: boolean, projectFile: string | unde
 /** `ifcsheet materials`: refuses a wrong command line (2), else runs; 1 when the file cannot be read or the run fails. */
 export async function materialsCommand(args: MaterialsArgs, io: CliIo): Promise<number> {
   if (args.rest.length !== 1 || args.foreignOption) {
-    io.stderr('ifcsheet materials takes one model, --project, --standard and --json only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]\n');
+    io.stderr('ifcsheet materials takes one model, --project, --standard, --json and --locale only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json] [--locale <ro|en>]\n');
     return USAGE;
   }
   try {
-    return await materials(args.rest[0], args.json, args.project, args.standard, io);
+    return await materials(args.rest[0], args.json, args.project, args.standard, args.locale, io);
   } catch (error) {
     io.stderr(`ifcsheet: materials of ${basename(args.rest[0])} failed: ${(error as Error).message}\n`);
     return FAILED;

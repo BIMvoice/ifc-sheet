@@ -331,6 +331,7 @@
   "Pt: type (type-only)",
   "QuantitySource: type (type-only)",
   "READINESS_EN: value",
+  "READINESS_RO: value",
   "REVISION_ID_PARAM: value",
   "ROMANIAN_PRACTICE: value",
   "ROMANIA_PACK_ID: value",
