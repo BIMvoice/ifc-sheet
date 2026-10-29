@@ -59,6 +59,8 @@ export function readRoofSystems(
   if (wanted.size === 0) return new Map();
   const reader = new AnchorEntityReader(store, view);
   for (const relId of reader.ids('IFCRELDEFINESBYPROPERTIES')) {
+    // Most of a model's property relationships name no roof: skip them before parsing them (#154).
+    if (!reader.mayReferTo(relId, wanted)) continue;
     const rel = reader.entity(relId);
     const related = rel && Array.isArray(rel.attributes[4]) ? rel.attributes[4] : null;
     const roofs = related?.map(refId).filter((id): id is number => id !== null && wanted.has(id)) ?? [];
