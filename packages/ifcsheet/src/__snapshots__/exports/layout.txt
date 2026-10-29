@@ -1,0 +1,150 @@
+Arrangement: type (type-only)
+BUILT_IN_TEMPLATES: value
+BoundingBox3D: type (type-only)
+CUSTOM_MM: value
+CUT_OVERHANG_M: value
+DEFAULT_FRAME: value
+DEFAULT_PLAN_CUT_HEIGHT_M: value
+DEFAULT_SCHEME: value
+DEPTH_MARGIN_M: value
+ELEVATION_CLEARANCE_M: value
+ELEVATION_DIRECTIONS: value
+ELONGATED_MM: value
+ELONGATED_PAPERS: value
+Extent3: type (type-only)
+FILING_MARGIN_MM: value
+FRAME_MARGIN_MM: value
+FRAMING_RULE: value
+FarElement: type (type-only)
+Footprint: type (type-only)
+FrameProblem: type (type-only)
+FramedElement: type (type-only)
+Framing: type (type-only)
+FramingOptions: type (type-only)
+ISO_PAPERS: value
+LEVEL_MATCH_TOLERANCE_M: value
+MARGIN_MM: value
+ModelExtent: type (type-only)
+NEXT_FLOOR_CLEARANCE_M: value
+NUMBER_GROUPS: value
+OverrideMode: type (type-only)
+PAPER_MM: value
+PER_SHEET: value
+PROJECT_FILE_FORMAT: value
+PROJECT_FILE_VERSION: value
+Point3: type (type-only)
+Point3D: type (type-only)
+ProposalInput: type (type-only)
+Reason: type (type-only)
+Rect: type (type-only)
+RenumberRow: type (type-only)
+RoomFootprint: type (type-only)
+SAME_CUT_M: value
+SCHEME_PRESETS: value
+SEQUENTIAL_SCHEME: value
+SET_PAPER: value
+SET_PAPERS: value
+SET_SCALES: value
+SHEET_NOTE_SIZE: value
+SHEET_SCALES: value
+SMALLEST_ROOM_M2: value
+SectionProposal: type (type-only)
+SetGroup: type (type-only)
+SetInput: type (type-only)
+SheetLayout: type (type-only)
+SheetNoteLine: type (type-only)
+SheetRelayout: type (type-only)
+StoreyInput: type (type-only)
+TARGET_SCALE: value
+TITLE_BLOCK_MM: value
+WorldPoint: type (type-only)
+allTemplates: value
+boundsFromIndex: value
+boxGap: value
+buildDrawingSet: value
+choosePaper: value
+createEntityBoundsLookup: value
+customPlaneCenter: value
+declaredVersion: value
+defaultPlanCutHeight: value
+defaultViews: value
+detailedScaleThatFits: value
+drawingArea: value
+drawingAreaIn: value
+elevationDepth: value
+elevationName: value
+elevationPlaneOffset: value
+farElementLabel: value
+findTemplate: value
+fitViewportBox: value
+fitsScale: value
+fittingScale: value
+formatNumber: value
+frameElements: value
+frameEntities: value
+frameOf: value
+frameProblem: value
+frameRect: value
+freshProjectId: value
+getEntityBounds: value
+groundPlan: value
+groupOfView: value
+groupsThatDoNotFit: value
+indexMeshesByEntity: value
+isCustom: value
+isElongated: value
+isRescaledNote: value
+isSetSheet: value
+isValidCoord: value
+levelFloorY: value
+levelsFromStoreys: value
+mmPerMetre: value
+nextNumber: value
+numberAt: value
+numberGroupOf: value
+numberSheets: value
+overrun: value
+paperFromLabel: value
+paperLabel: value
+paperMm: value
+paperOf: value
+paperSigns: value
+placeViewports: value
+placer: value
+planDepthBelowCut: value
+planRenumber: value
+planViewFor: value
+proposalDepth: value
+proposeSections: value
+readFrame: value
+readNumberingScheme: value
+readPaper: value
+readSeriesTemplates: value
+readTemplate: value
+registerNumberIn: value
+registerSlot: value
+relaySheet: value
+renumbered: value
+rescaledNote: value
+resolvePlanLevel: value
+resolveStoreyOriginMeters: value
+sameElevation: value
+scaleOn: value
+sectionPlaneThrough: value
+sheetGroup: value
+sheetIsAsLaid: value
+sheetNoteLines: value
+sheetScaleReason: value
+sheetSeries: value
+steppedUpNote: value
+storeyFloorY: value
+syncDefaultViews: value
+templateFields: value
+templateFromSheet: value
+titleBlockRect: value
+typedBeforeSchemes: value
+unionEntityBounds: value
+uniqueViewName: value
+viewCentre: value
+viewExtent: value
+withViewHung: value

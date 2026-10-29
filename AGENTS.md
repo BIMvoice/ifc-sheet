@@ -192,7 +192,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - At most 5 open agent PRs. Do not open a new one while 5 are open: get one merged first.
 - One open PR per area (joinery, drafting, engine/CLI, i18n, standards, permits, CI). A second change in the same area waits for the first to merge, then branches from `main`.
 - Update a PR with `main` only when it is next to merge. Every push requeues a full CI run, and a PR updated early conflicts again before its turn.
-- The files almost every conflict came from: `project/fields/index.ts`, `index-exports.snapshot.json`, the CLI fixtures `cli-usage.main.txt` and `cli-argv.main.json`, `ro-coverage-baseline.json`, the i18n barrels and `locales/ro.test.ts`, the command `registry.ts`, `STEP_FIELDS` in `draft-store.ts`, `playwright.config.ts`. Touch them only through their extension points (below), and regenerate generated files with their update command, never by hand.
+- The files almost every conflict came from: `project/fields/index.ts`, the export snapshot (now one file per area, `__snapshots__/exports/<area>.txt`), the CLI fixtures `cli-usage.main.txt` and `cli-argv.main.json`, `ro-coverage-baseline.json`, the i18n barrels and `locales/ro.test.ts`, the command `registry.ts`, `STEP_FIELDS` in `draft-store.ts`, `playwright.config.ts`. Touch them only through their extension points (below), and regenerate generated files with their update command, never by hand.
 - A merge that git reports as clean can still duplicate code: a clean merge put the Germany pack into `standard-pack.ts` twice. After merging `main`, grep the touched files for duplicate exports, keys and ids.
 
 **Git**
@@ -203,7 +203,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 
 **One code path for the app and the engine**
 - Logic that the app, the CLI and MCP all need lives once in `packages/ifcsheet` and the app calls it, with a parity test. Examples: `viewStyler` (`view-style.ts`), `classificationOf` (`classification.ts`).
-- A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits `index-exports.snapshot.json`.
+- A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits the per-sub-barrel snapshot `packages/ifcsheet/src/__snapshots__/exports/<area>.txt` (one name per line, so PRs adding to different areas do not collide).
 
 **Translations** (`apps/viewer/src/i18n/`)
 - New strings go in a NEW catalogue pair `catalogues/<feature>.en.ts` and `<feature>.ro.ts`, registered in the sub-barrel for its first letter: `barrels/en-a-e.ts`, `en-f-l.ts`, `en-m-r.ts`, `en-s-z.ts`; `barrels/ro-a-l.ts`, `ro-m-z.ts`.

@@ -1,0 +1,109 @@
+AnnotationShape: type (type-only)
+ArrowMark: type (type-only)
+AxisEnds: type (type-only)
+AxisShape: type (type-only)
+CustomLineType: type (type-only)
+DEFAULT_TEXT_STYLE: value
+DEFAULT_VIEW_SCALE: value
+DIM_OVERRIDES: value
+DISCIPLINE_IDS: value
+DimensionLayout: type (type-only)
+DraftEntity: type (type-only)
+DraftLayer: type (type-only)
+DraftParamValue: type (type-only)
+DraftShape: type (type-only)
+EntityShape: type (type-only)
+Json: type (type-only)
+LayerGroup: type (type-only)
+LayerVisibilityScope: type (type-only)
+LayoutOptions: type (type-only)
+LevelRef: type (type-only)
+LineType: type (type-only)
+ListSheetLabels: type (type-only)
+PAD: value
+PEN: value
+PEN_OVERRIDES: value
+PHASES: value
+PagedOptions: type (type-only)
+PhaseMapping: type (type-only)
+PhaseSource: type (type-only)
+ProjectSet: type (type-only)
+ProjectSetFacts: type (type-only)
+Pt: type (type-only)
+ROW: value
+ScheduleCell: type (type-only)
+ScheduleLayout: type (type-only)
+SchedulePrim: type (type-only)
+SnapHit: type (type-only)
+SnapMode: type (type-only)
+StyleBook: type (type-only)
+SymbolInstanceShape: type (type-only)
+TABLES_STYLE_ID: value
+TEXT: value
+TEXT_FRAMES: value
+TEXT_OVERRIDES: value
+TableBlock: type (type-only)
+TableItem: type (type-only)
+TextFrame: type (type-only)
+annotationAtFactor: value
+annotationFactor: value
+arrowMark: value
+asTextFrame: value
+dashFor: value
+dashOf: value
+dimStyleOf: value
+entityPen: value
+fail: value
+formatDimension: value
+formatLength: value
+holdsSet: value
+isDisciplineId: value
+isGeometry: value
+isNumber: value
+isObject: value
+isString: value
+layerLocked: value
+layerPen: value
+layerPrints: value
+layerShows: value
+layoutListSchedule: value
+layoutOnSheet: value
+layoutPagedTable: value
+layoutTableOnSheet: value
+linearLayout: value
+listAt: value
+lookOf: value
+naturalDecimals: value
+overrideKey: value
+pageTitle: value
+projectSetOf: value
+readDimStyles: value
+readDraft: value
+readDraftLayer: value
+readGraphicStandard: value
+readGraphics: value
+readLayerGroups: value
+readLevel: value
+readPhaseSource: value
+readProjectSet: value
+readShape: value
+readSheet: value
+readStandards: value
+readTextStyles: value
+readView: value
+readViewTemplate: value
+readViewTemplates: value
+readableDeg: value
+registerHolders: value
+resolveDim: value
+resolveText: value
+scheduleBox: value
+scheduleHomeBox: value
+sheetDrawingArea: value
+tablesFace: value
+textStyleOf: value
+textWidth: value
+unitFactor: value
+unitVector: value
+viewportPaperUnit: value
+wrapNote: value
