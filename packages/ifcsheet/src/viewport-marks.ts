@@ -177,7 +177,8 @@ export interface ViewportMarkFlags {
  * The marks `vp` shows: what it says (`SheetViewport.northArrow` / `scaleBar`,
  * on or off), else off. A site plan's own arrow and bar are drawn by the app in
  * a free spot clear of the plot (`siteplan/site-symbols.ts`), so a site plan
- * takes no default here either (issue #430 is the proper avoidance for all). A north arrow
+ * takes no default here either (issue #430 is the proper avoidance for all); the headless build
+ * draws a site plan's marks when the viewport asks for them, in `siteMarkArea`. A north arrow
  * is for plans only and a scale bar for a drawing that has a scale (not a 3D
  * view, a drafting view's detail or a key plan, which is the whole plan small);
  * a view that cannot carry a mark never shows it, whatever the viewport says.
@@ -197,6 +198,44 @@ export function markArea(box: Rect, drawingArea: Rect): Rect | null {
   const x1 = Math.min(box.x + box.w, drawingArea.x + drawingArea.w);
   const y1 = Math.min(box.y + box.h, drawingArea.y + drawingArea.h);
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+/** What a north arrow needs of its box (its square and the margin on each side), mm. */
+export const ARROW_NEED_MM = { w: 2 * (ARROW_HALF_MM + MARK_MARGIN_MM), h: 2 * (ARROW_HALF_MM + MARK_MARGIN_MM) };
+/** What a scale bar needs of its box: the shortest bar and its margins, and the height of the bar with its figures. */
+export const BAR_NEED_MM = { w: 2 * BAR_MIN_MM + 2 * MARK_MARGIN_MM, h: BAR_H_MM + TICK_MM + LABEL_GAP_MM + LABEL_MM + 2 * MARK_MARGIN_MM };
+
+/** Whether a mark that needs `need` fits in `r`. */
+export function markFits(r: Rect | null, need: { w: number; h: number }): r is Rect {
+  return r !== null && r.w >= need.w && r.h >= need.h;
+}
+
+const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * The room a site plan's mark sits in: inside its drawing box where the mark fits there (`markArea`), else in a strip right beside
+ * the box (right, left, above, below), as deep as the mark needs and along the box's side, inside the drawing area and clear of
+ * everything in `taken` (the sheet's other viewports, their titles, the title block). A small plot at a large scale so still gets its
+ * arrow and bar next to it, never at the far side of the sheet or over another drawing. `null` when there is no such room.
+ * The app places a site plan's marks in a free spot of its own (`siteplan/site-symbols.ts`), which needs the plot; the headless
+ * build has only the box.
+ */
+export function siteMarkArea(box: Rect, drawingArea: Rect, need: { w: number; h: number }, taken: readonly Rect[] = []): Rect | null {
+  const inside = markArea(box, drawingArea);
+  if (markFits(inside, need)) return inside;
+  const h = Math.max(box.h, need.h);
+  const w = Math.max(box.w, need.w);
+  const beside: Rect[] = [
+    { x: box.x + box.w, y: box.y, w: need.w, h },
+    { x: box.x - need.w, y: box.y, w: need.w, h },
+    { x: box.x, y: box.y - need.h, w, h: need.h },
+    { x: box.x, y: box.y + box.h, w, h: need.h },
+  ];
+  for (const strip of beside) {
+    const area = markArea(strip, drawingArea);
+    if (markFits(area, need) && !taken.some((t) => overlaps(area, t))) return area;
+  }
+  return null;
 }
 
 /**

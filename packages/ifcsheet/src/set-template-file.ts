@@ -81,7 +81,9 @@ function readLayout(v: unknown, path: string): SheetLayoutRule {
 function readSlot(v: unknown, path: string): SlotRule {
   const o = objectAt(v, path);
   const scale = scaleAt(o.scale, `${path}/scale`);
-  return { view: readViewRule(o.view, `${path}/view`), ...(scale === undefined ? {} : { scale }) };
+  const flag = (key: 'northArrow' | 'scaleBar'): boolean | undefined => (o[key] === undefined ? undefined : typeof o[key] === 'boolean' ? o[key] : fail(`${path}/${key}`, 'must be true or false'));
+  const [northArrow, scaleBar] = [flag('northArrow'), flag('scaleBar')];
+  return { view: readViewRule(o.view, `${path}/view`), ...(scale === undefined ? {} : { scale }), ...(northArrow === undefined ? {} : { northArrow }), ...(scaleBar === undefined ? {} : { scaleBar }) };
 }
 
 function readSheetRule(v: unknown, path: string): SheetRule {

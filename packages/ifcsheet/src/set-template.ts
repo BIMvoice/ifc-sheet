@@ -46,6 +46,12 @@ export type ViewRule =
 export interface SlotRule {
   view: ViewRule;
   scale?: number;
+  /**
+   * The north arrow and the graphic scale bar the viewport takes (`SheetViewport.northArrow` / `scaleBar`, drawn by
+   * `viewport-marks.ts`). Absent: off, as for any viewport (a site plan too: its marks are drawn when the viewport asks for them).
+   */
+  northArrow?: boolean;
+  scaleBar?: boolean;
 }
 
 /** The paper a sheet is made on. `templateId` is kept only for a built-in sheet template, which every project has. */
@@ -191,7 +197,7 @@ export function captureSetTemplate(input: CaptureInput): SetTemplate {
       const view = views.find((v) => v.id === vp.viewId);
       const rule = view ? ruleOf(view, views) : null;
       if (!view || !rule) continue;
-      slots.push({ view: rule, scale: vp.scale });
+      slots.push({ view: rule, scale: vp.scale, ...(vp.northArrow === undefined ? {} : { northArrow: vp.northArrow }), ...(vp.scaleBar === undefined ? {} : { scaleBar: vp.scaleBar }) });
       hung.set(series, [...(hung.get(series) ?? []), view]);
     }
     if (slots.length > 0) sheetRules.push({ name: sheet.name, series, layout: layoutOf(sheet), slots });
