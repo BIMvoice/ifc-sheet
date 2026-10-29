@@ -15,6 +15,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { graphicStandardOf, markStyleOf, type MarkStyle } from '@bimvoice/ifcsheet';
 import type { CustomSectionPlane } from '@/store/section-types';
 import { useProjectStore } from '@/project/project-store';
 import { viewPlaneConfig } from '@/project/view-plane-config';
@@ -74,23 +75,40 @@ function symbolTextHeight(parts: readonly DraftEntity[], fallback: number): numb
 
 const samePt = (p: Pt, q: Pt): boolean => Math.abs(p.x - q.x) < EPS && Math.abs(p.y - q.y) < EPS;
 
+/** The same numbers and strings throughout, numbers within EPS: for the shapes of a head (circle, flag, triangle). */
+function sameValue(s: unknown, t: unknown): boolean {
+  if (typeof s === 'number' && typeof t === 'number') return Math.abs(s - t) < EPS;
+  if (Array.isArray(s) && Array.isArray(t)) return s.length === t.length && s.every((x, i) => sameValue(x, t[i]));
+  if (s && t && typeof s === 'object' && typeof t === 'object') {
+    const ks = Object.keys(s);
+    return ks.length === Object.keys(t).length && ks.every((k) => k in t && sameValue((s as Record<string, unknown>)[k], (t as Record<string, unknown>)[k]));
+  }
+  return s === t;
+}
+
 function sameShape(s: EntityShape, t: EntityShape): boolean {
   if (s.type === 'line' && t.type === 'line') return samePt(s.a, t.a) && samePt(s.b, t.b);
   if (s.type === 'text' && t.type === 'text') return samePt(s.p, t.p) && s.text === t.text && Math.abs(s.height - t.height) < EPS;
-  return false;
+  return s.type === t.type && s.type !== 'line' && s.type !== 'text' && sameValue(s, t);
 }
 
 /**
- * The symbol's parts redrawn whole at `placement`: after one end of the cut
- * line was dragged the stems, arrows and names are brought back to it. The
- * parts keep their ids, layers and parameters. `null` when they already match.
+ * The symbol's parts redrawn whole at `placement`, in `style`: after one end of the cut line was dragged, or the
+ * project's mark style changed, the poles, heads and names are brought back to it. A part keeps its id, layer and
+ * parameters when the new symbol has a part of its kind at its place; a head with more parts than before gets new ones
+ * (ids derived from the first part), and one with fewer drops the rest. `null` when they already match.
  */
-export function redrawSymbol(parts: readonly DraftEntity[], placement: SymbolPlacement, mark: string, screenUp: 1 | -1 = -1): DraftEntity[] | null {
+export function redrawSymbol(parts: readonly DraftEntity[], placement: SymbolPlacement, mark: string, screenUp: 1 | -1 = -1, style: MarkStyle = 'arrow'): DraftEntity[] | null {
   // The letter's box grows up on the screen of the plan the symbol is on, whichever view the session is in (#297).
-  const shapes = withAnnotationScreenUp(screenUp, () => sectionSymbolShapes(placement.a, placement.b, placement.side, mark, symbolTextHeight(parts, 0.25)));
-  if (shapes.length !== parts.length) return null;
-  if (parts.every((p, i) => sameShape(p.shape, shapes[i]))) return null;
-  return parts.map((p, i) => ({ ...p, shape: shapes[i] }));
+  const shapes = withAnnotationScreenUp(screenUp, () => sectionSymbolShapes(placement.a, placement.b, placement.side, mark, symbolTextHeight(parts, 0.25), style));
+  if (shapes.length === 0) return null;
+  if (shapes.length === parts.length && parts.every((p, i) => sameShape(p.shape, shapes[i]))) return null;
+  const first = parts[0];
+  return shapes.map((shape, i) => {
+    const same = parts[i]?.shape.type === shape.type ? parts[i] : undefined;
+    const kin = same ?? parts.find((p) => p.shape.type === shape.type) ?? first;
+    return { ...kin, id: same ? same.id : `${first.id}~m${i}`, shape };
+  });
 }
 
 const v3 = (t: readonly number[]): Vec3 => ({ x: t[0], y: t[1], z: t[2] });
@@ -142,6 +160,8 @@ export function grippable(selected: readonly DraftEntity[], all: readonly DraftE
 }
 
 export interface SectionLinkState {
+  /** How the symbols are headed (the project's graphic standard); absent: the arrow. */
+  markStyle?: MarkStyle;
   views: readonly ProjectView[];
   drafts: readonly DraftEntity[];
   levels: readonly ProjectLevel[];
@@ -169,6 +189,7 @@ const planScreenUp = (plan: SectionPlaneConfig): 1 | -1 => (plan.axis === 'y' ? 
 export function reconcileSectionLinks(previous: SectionLinkState, next: SectionLinkState): SectionLinkPatch | null {
   let views: ProjectView[] | null = null;
   let drafts: DraftEntity[] | null = null;
+  const style = next.markStyle ?? 'arrow';
   for (const view of next.views) {
     if (view.kind !== 'section' || !view.plane.custom) continue;
     const parts = symbolParts(drafts ?? next.drafts, view.id);
@@ -181,8 +202,8 @@ export function reconcileSectionLinks(previous: SectionLinkState, next: SectionL
     const symbolMoved = symbolParts(previous.drafts, view.id).some((p, i) => p !== parts[i]);
     const mark = sectionMarkOf(view.name);
     if (planeMoved && !symbolMoved) {
-      const redrawn = redrawSymbol(parts, placementForPlane(plan, placement, view.plane.custom), mark, planScreenUp(plan));
-      if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], redrawn);
+      const redrawn = redrawSymbol(parts, placementForPlane(plan, placement, view.plane.custom), mark, planScreenUp(plan), style);
+      if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], parts, redrawn);
       continue;
     }
     const plane = planeFromPlacement(plan, placement, view.plane.custom);
@@ -190,16 +211,23 @@ export function reconcileSectionLinks(previous: SectionLinkState, next: SectionL
       const moved: SectionProjectView = { ...view, plane: { ...view.plane, offset: plane.distance, custom: plane } };
       views = (views ?? [...next.views]).map((v) => (v.id === view.id ? moved : v));
     }
-    const redrawn = redrawSymbol(parts, placement, mark, planScreenUp(plan));
-    if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], redrawn);
+    const redrawn = redrawSymbol(parts, placement, mark, planScreenUp(plan), style);
+    if (redrawn) drafts = replaceParts(drafts ?? [...next.drafts], parts, redrawn);
   }
   if (!views && !drafts) return null;
   return { ...(views ? { views } : {}), ...(drafts ? { drafts } : {}) };
 }
 
-function replaceParts(drafts: DraftEntity[], parts: readonly DraftEntity[]): DraftEntity[] {
-  const byId = new Map(parts.map((p) => [p.id, p]));
-  return drafts.map((d) => byId.get(d.id) ?? d);
+/** `old` (one symbol's parts) replaced by `parts` where the first of them stood; a part with the same id is replaced in place. */
+function replaceParts(drafts: DraftEntity[], old: readonly DraftEntity[], parts: readonly DraftEntity[]): DraftEntity[] {
+  const gone = new Set(old.map((p) => p.id));
+  const out: DraftEntity[] = [];
+  let placed = false;
+  for (const d of drafts) {
+    if (!gone.has(d.id)) { out.push(d); continue; }
+    if (!placed) { out.push(...parts); placed = true; }
+  }
+  return placed ? out : [...out, ...parts];
 }
 
 let installed: (() => void) | null = null;
@@ -213,8 +241,8 @@ export function installSectionLink(): () => void {
   if (installed) return installed;
   let applying = false;
   const unsubscribe = useProjectStore.subscribe((state, previous) => {
-    if (applying || (state.views === previous.views && state.drafts === previous.drafts && state.levels === previous.levels)) return;
-    const patch = reconcileSectionLinks(previous, state);
+    if (applying || (state.views === previous.views && state.drafts === previous.drafts && state.levels === previous.levels && state.graphicStandard === previous.graphicStandard)) return;
+    const patch = reconcileSectionLinks({ ...previous, markStyle: markStyleOf(graphicStandardOf(previous.graphicStandard)) }, { ...state, markStyle: markStyleOf(graphicStandardOf(state.graphicStandard)) });
     if (!patch) return;
     applying = true;
     try {

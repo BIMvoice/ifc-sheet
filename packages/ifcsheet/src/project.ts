@@ -9,6 +9,10 @@
 
 export { readJoineryList, readJoinerySpec } from './joinery-spec-read.js';
 export {
+  JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
+  type JoineryViewLineLike, type JoineryViewName,
+} from './joinery-view-detail.js';
+export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';

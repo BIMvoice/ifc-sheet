@@ -9,7 +9,6 @@ import type { TranslationValue } from '../types';
  */
 export const norwayEn = {
   'norway.title': 'Norway (byggesak)',
-  'norway.switch': 'Norge (byggesak)',
   'norway.intro': 'The drawings of a Norwegian building application, SAK10 § 5-4: "tegninger og målsatt situasjonsplan". Each item says where it comes from. Items marked unverified are not stated by the official pages read.',
   'norway.set.name': 'Norway (byggesak)',
   'norway.set.plans': 'Floor plans (plantegninger)',

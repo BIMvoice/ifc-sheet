@@ -21,16 +21,24 @@ export interface PaperCrop {
   h: number;
 }
 
-/** The sheet SVG as a standalone document sized in millimetres (selection marks removed); with `crop`, only that window of the paper. */
-export function sheetSvgText(svg: SVGSVGElement, sheet: ProjectSheet, crop?: PaperCrop): string {
-  const { w, h } = crop ?? paperOf(sheet);
+/** What an SVG export leaves out: the editing aids (selection marks, invisible pick paths) a view draws for the mouse. */
+const EDITING_AIDS = '[data-export-ignore="true"], [data-print-ignore="true"]';
+
+/** A view's SVG as a standalone document `w` x `h` millimetres, without the editing aids (`data-export-ignore`). */
+export function svgDocumentText(svg: SVGSVGElement, w: number, h: number, viewBox?: PaperCrop): string {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('width', `${w}mm`);
   clone.setAttribute('height', `${h}mm`);
-  if (crop) clone.setAttribute('viewBox', `${crop.x} ${crop.y} ${crop.w} ${crop.h}`);
+  if (viewBox) clone.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
   clone.removeAttribute('class');
-  for (const el of Array.from(clone.querySelectorAll('[data-export-ignore="true"], [data-print-ignore="true"]'))) el.remove();
+  for (const el of Array.from(clone.querySelectorAll(EDITING_AIDS))) el.remove();
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`;
+}
+
+/** The sheet SVG as a standalone document sized in millimetres (selection marks removed); with `crop`, only that window of the paper. */
+export function sheetSvgText(svg: SVGSVGElement, sheet: ProjectSheet, crop?: PaperCrop): string {
+  const { w, h } = crop ?? paperOf(sheet);
+  return svgDocumentText(svg, w, h, crop);
 }
 
 function stem(sheet: ProjectSheet): string {

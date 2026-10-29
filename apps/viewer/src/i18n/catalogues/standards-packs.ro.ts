@@ -27,9 +27,4 @@ export const standardsPacksRo = {
   'standards.pack.fromFile': 'Instalează din fișier...',
   'standards.pack.fromFile.label': 'Fișier cu pachet de standard',
   'standards.pack.refused': 'Nu s-a instalat: {reason}',
-  // The Tables text style (#512) lives in the drafting standards dialog; these
-  // move to `drafting-standards.ro.ts` once that catalogue lands.
-  'standards.tables.name': 'Tabele',
-  'standards.tables.make': 'Adaugă un stil Tabele',
-  'standards.tables.fontsNote': 'Tabelele, rapoartele și registrul de planșe urmează acest stil (font și cursiv). Sunt oferite doar cele trei fonturi pe care PDF-ul le poate scrie: fără serife (Inter), cu serife (Times) și monospațiat (Courier). Dimensiunile rămân cum sunt.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

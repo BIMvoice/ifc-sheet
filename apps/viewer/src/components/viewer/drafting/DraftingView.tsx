@@ -24,8 +24,6 @@ import { openStandards } from '@/project/standards-dialog-store';
 
 import { useTranslation } from '@/i18n';
 
-import { cn } from '@/lib/utils';
-
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
 
@@ -54,6 +52,8 @@ import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView,
   currentLayerId,
+  baseDraftSettings,
+  patchDraftSettings,
   pressEscape,
   runningCommand,
   setCurrentLayer,
@@ -64,6 +64,7 @@ import {
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
 
@@ -79,6 +80,7 @@ import { submitTypedLine } from './typed-line';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
+import { ModifyBar } from './ModifyBar';
 
 import { gripsOf } from '@/drafting/grips';
 
@@ -114,6 +116,7 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
@@ -160,6 +163,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const orthoToggled = useDraftingSession((s) => s.ortho);
   const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
@@ -202,7 +206,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
-  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withoutHiddenElements(drawing, graphics, renderIdGlobalId), detail) : null), [drawing, graphics, models, detail]);
+  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(drawing, graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view.kind, detail]);
   const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
@@ -295,6 +299,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         <span className="flex-1" />
         <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
         <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
           className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"
@@ -344,7 +349,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           />
         ) : null}
         <UnderlayLayer viewId={view.id} transform={viewTransform} axis={axis} />
-        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
+        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} schemeUnit={(view.scale ?? 100) / 1000} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
@@ -378,22 +383,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
+        {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn('h-6 rounded-sm px-2 font-medium', active ? 'bg-primary/15 text-primary' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900')}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }

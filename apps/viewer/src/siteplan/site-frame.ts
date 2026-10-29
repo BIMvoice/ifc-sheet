@@ -23,7 +23,8 @@ import type { SectionAxisName, Vec3 } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
-import { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from './true-north';
+import { siteNorth as engineSiteNorth } from '@bimvoice/ifcsheet/true-north';
+import { northArrowRotation, trueNorthOf, type PlanDirection } from './true-north';
 import { drawingPointToLocal, drawingPointToMap, type MapAnchor } from './map-coordinates';
 import type { LiveSymbolContext } from './live-symbols';
 import { useSheetLocale } from '@/project/units-and-numbers';
@@ -41,9 +42,9 @@ const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 
 /** The model's TrueNorth, else grid north of its map conversion, else none (project north). */
 export function siteNorth(trueNorth: PlanDirection | null, anchor: Pick<MapAnchor, 'eff'> | null | undefined): Pick<SiteFrame, 'north' | 'northSource'> {
-  if (trueNorth) return { north: trueNorth, northSource: 'trueNorth' };
-  const grid = anchor ? gridNorthOf(anchor.eff.mapConversion.xAxisAbscissa, anchor.eff.mapConversion.xAxisOrdinate) : null;
-  return grid ? { north: grid, northSource: 'gridNorth' } : { north: null, northSource: null };
+  // The engine's rule, fed the anchor's effective (possibly edited) map conversion.
+  const { xAxisAbscissa, xAxisOrdinate } = anchor?.eff.mapConversion ?? {};
+  return engineSiteNorth(trueNorth, anchor ? { abscissa: xAxisAbscissa, ordinate: xAxisOrdinate } : null);
 }
 
 /** The frame of the anchor (or first) model. Recomputed on load and georeference edits only. */

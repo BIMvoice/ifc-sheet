@@ -11,6 +11,7 @@
 import { normalisedPanels, panelRect, type JoinerySpec } from '@ifc-lite/create';
 import type { ElementView, ElementViews, ViewLine } from './element-views';
 import { openingMarks, type OpeningConvention } from './symbols';
+import { joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
 import type { SchedulePrim } from './schedule-layout';
 
 type ViewName = 'front' | 'plan' | 'section';
@@ -24,9 +25,14 @@ export const sectionRoom = (v: ElementViews, k: number): number => v.depth * k +
 /** Paper millimetres a card needs under the front view's dimension line for the plan. */
 export const planRoom = (v: ElementViews, k: number): number => v.depth * k + 10;
 
-function linesOf(view: ElementView, name: ViewName, at: (x: number, y: number) => { x: number; y: number }): SchedulePrim[] {
-  return view.lines.map((l) => ({
+/**
+ * A view's lines as primitives, after the type's detail level and hidden lines (`joineryViewLines`, the engine's). Each line that can
+ * be hidden carries its id and the type's, so the schedule tab can pick it.
+ */
+function linesOf(view: ElementView, name: ViewName, at: (x: number, y: number) => { x: number; y: number }, spec: JoinerySpec | null): SchedulePrim[] {
+  return joineryViewLines(name, view.lines, spec).map((l): SchedulePrim => ({
     kind: 'path', pts: [at(l.a.x, l.a.y), at(l.b.x, l.b.y)], w: penOf(l), dashed: l.kind === 'hidden', view: name,
+    ...(spec?.id && l.kind !== 'hatch' ? { pick: { type: spec.id, line: joineryViewLineId(name, l.a, l.b) } } : {}),
   }));
 }
 
@@ -46,9 +52,9 @@ export function viewPrims(
   const planMid = base + 10 + (v.depth * k) / 2;
   const sectionMid = fx + (v.width * k) / 2 + 8 + (v.depth * k) / 2;
   const out: SchedulePrim[] = [
-    ...linesOf(v.front, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k })),
-    ...linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k })),
-    ...linesOf(v.section, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k })),
+    ...linesOf(v.front, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), spec),
+    ...linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec),
+    ...linesOf(v.section, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k }), spec),
   ];
   // The opening symbol stays on the real front view: the model has the frame, not the hinge side.
   if (spec) {

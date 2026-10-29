@@ -4,12 +4,12 @@
 
 import { norwayCoverage } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { permitPackOf, setNorwayPermit, useProjectStore } from '@/project/project-store';
+import { permitPackOf, useProjectStore } from '@/project/project-store';
 import type { DrawerSection } from './types';
 
 /**
- * The Norwegian building application (byggesak, SAK10 § 5-4) as an opt-in mode: the switch is a project field, and with it on the
- * drawer lists the drawings with where each comes from and whether the research read it in the official text (#372).
+ * The Norwegian building application (byggesak, SAK10 § 5-4) while it is the project's permit pack (chosen in
+ * the permit pack section): the drawer lists the drawings with where each comes from and whether the research read it in the official text (#372).
  */
 function Norway() {
   const { t } = useTranslation();
@@ -20,10 +20,6 @@ function Norway() {
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" aria-label={t('norway.title')}>
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('norway.title')}</h3>
-      <label className="flex items-center gap-2 text-xs text-white">
-        <input type="checkbox" data-norway-switch checked={on} onChange={(e) => setNorwayPermit(e.target.checked)} />
-        <span className="font-medium">{t('norway.switch')}</span>
-      </label>
       {on ? (
         <>
           <p className="m-0 mt-2 text-xs text-sky-100/80">{t('norway.intro')}</p>
@@ -46,4 +42,4 @@ function Norway() {
 }
 
 /** The Norwegian permit mode (#372). */
-export const norwaySection: DrawerSection = { id: 'norway', slot: 'body', order: 165, component: Norway };
+export const norwaySection: DrawerSection = { id: 'norway', slot: 'body', order: 165, component: Norway, useVisible: () => useProjectStore((s) => permitPackOf(s)) === 'norway' };

@@ -80,6 +80,8 @@ export const ROMANIA_PACK_ID = 'ro-stas';
  * "România: STAS / ISO 128". Only values the app already encodes for Romanian practice:
  *  - pens: the Romanian graphic standard (`ROMANIAN_PRACTICE`): ISO 128 line widths, the hatch weights, the sheet's own
  *    pens, ISO 3098 lettering and its text and dimension styles;
+ *  - marks: section and elevation marks take the circle head with a direction triangle (#447), a drawing-office convention:
+ *    no Romanian text consulted states a section-head form;
  *  - title block: the Romanian layout (`romanianTitleBlock`, #54), drawn with those pens and heights, captions in the
  *    language of `t`;
  *  - units: a comma as the decimal separator. Area is m² and volume m³ in every project already.
