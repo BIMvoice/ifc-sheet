@@ -100,10 +100,18 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Revision cloud (REVCLOUD) | Nor de revizie | |
 | Grid axis / bubble | Axă / bulă | |
 | Offset / Trim / Extend / Fillet / Mirror | Decalare / Tăiere / Prelungire / Racordare / Oglindire | Commands stay OFFSET, TRIM, EXTEND, FILLET, MIRROR |
+| Split (SPLIT tool) | Divizare / divizează | One verb for the SPLIT command everywhere (`splitTool.*`, `commands.*`); "Taie" / "Tăiere" is TRIM only |
 | Erase / Move / Copy / Rotate | Ștergere / Mutare / Copiere / Rotire | Commands stay ERASE, MOVE, COPY, ROTATE |
 | Ceiling plan (reflected) | Plan de plafoane (reflectat) | CEILTAG |
 | Info (the dialog behind Keyboard) | Informații | Tabs: Despre, Noutăți, Comenzi rapide, Învățare |
 | Sheet template | Șablon de planșă | The built-in ones: Planuri, Detalii, Fațade în format lung, Tabele; the paper follows in parentheses |
+| Phase: existing / proposed / to demolish / temporary | Existent / Propus / De demolat / Provizoriu | `phase.*`, the renovation status of an element |
+| Roof edge: eave / gable / overhang | Streașină / Fronton / Debord | `roof.edge.*`; the pitch is "Pantă" |
+| Hollow section profiles: lip / web / flange | Buză / Inimă / Talpă | `profileSection.*`: L is "Cornier", a hollow circle "Țeavă rotundă"; the wall of a hollow section is "Grosimea peretelui" |
+| Model tag | Etichetă de model | Organisation only, never written to the IFC |
+| Share (the collaboration session) / invite link | Partajare / link de invitație | Roles: Vizualizare, Comentariu, Editare |
+| Panel group (Author, Check, Coordinate, Quantify, Site, Automate) | Autor, Verificare, Coordonare, Cantități, Amplasament, Automatizare | `shellChrome.panelGroups.*` |
+| Validation verdict: pass / fail / not checked | Admis / Respins / Neverificat | Manual validation checklists; an IDS result is "Reușite / Eșuate" |
 
 ## Not translated yet
 

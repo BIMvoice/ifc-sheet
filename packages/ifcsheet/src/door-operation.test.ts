@@ -35,19 +35,52 @@ const ifc2x3 = HEAD('IFC2X3') + SPATIAL + `#22=IFCDOOR('00000000000000000000T0',
 #32=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000010',$,$,$,(#22),#6);
 ENDSEC;\nEND-ISO-10303-21;\n`;
 
+/** One door per value of the operations drawn besides the single swing, then a door typed by a sliding type (IFC4.3 IfcDoorTypeOperationEnum). */
+const MOVING = ['DOUBLE_SWING_RIGHT', 'DOUBLE_DOOR_DOUBLE_SWING', 'SLIDING_TO_LEFT', 'SLIDING_TO_RIGHT', 'DOUBLE_DOOR_SLIDING', 'FOLDING_TO_LEFT', 'FOLDING_TO_RIGHT', 'DOUBLE_DOOR_FOLDING', 'REVOLVING'];
+const ifc4Moving = HEAD('IFC4') + SPATIAL + MOVING.map((v, i) => `#${40 + i}=IFCDOOR('0000000000000000000${String(i).padStart(3, '0')}',$,'${v}',$,$,$,$,'M',2.1,0.9,.DOOR.,.${v}.,$);`).join('\n') + `
+#60=IFCDOOR('00000000000000000000N0',$,'Typed',$,$,$,$,'N',2.1,0.9,.DOOR.,.NOTDEFINED.,$);
+#61=IFCDOORTYPE('00000000000000000000Y1',$,'Sliding type',$,$,$,$,$,$,.DOOR.,.SLIDING_TO_RIGHT.,.F.,$);
+#62=IFCRELDEFINESBYTYPE('0000000000000000000012',$,$,$,(#60),#61);
+ENDSEC;\nEND-ISO-10303-21;\n`;
+
 const open = (text: string) => openModel(new TextEncoder().encode(text), { geometry: false });
 
 describe('parseDoorOperation', () => {
-  it('reads the swing values and nothing else', () => {
-    expect(parseDoorOperation('.SINGLE_SWING_LEFT.')).toEqual({ hinge: 'left', leaves: 1, doubleActing: false });
-    expect(parseDoorOperation('SINGLE_SWING_RIGHT')).toEqual({ hinge: 'right', leaves: 1, doubleActing: false });
-    expect(parseDoorOperation('DOUBLE_SWING_LEFT')).toEqual({ hinge: 'left', leaves: 1, doubleActing: true });
-    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
-    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual({ hinge: 'left', leaves: 1, doubleActing: false });
-    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual({ hinge: 'right', leaves: 1, doubleActing: false });
-    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
-    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual({ hinge: null, leaves: 2, doubleActing: false });
-    for (const v of ['NOTDEFINED', 'SLIDING_TO_LEFT', 'FOLDING_TO_RIGHT', 'REVOLVING', 'USERDEFINED', null, undefined]) expect(parseDoorOperation(v)).toBeNull();
+  const swing = (hinge: 'left' | 'right' | null, leaves: 1 | 2, doubleActing: boolean) => ({ motion: 'swing', hinge, towards: null, leaves, doubleActing });
+  it('reads the swing values', () => {
+    expect(parseDoorOperation('.SINGLE_SWING_LEFT.')).toEqual(swing('left', 1, false));
+    expect(parseDoorOperation('SINGLE_SWING_RIGHT')).toEqual(swing('right', 1, false));
+    expect(parseDoorOperation('DOUBLE_SWING_LEFT')).toEqual(swing('left', 1, true));
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).toEqual(swing(null, 2, false));
+    expect(parseDoorOperation('DOUBLE_DOOR_DOUBLE_SWING')).toEqual(swing(null, 2, true));
+    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual(swing('left', 1, false));
+    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual(swing('right', 1, false));
+    // A pair swinging opposite ways: the named leaf opens to +Y, the other to -Y (review of #505).
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'right' });
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'left' });
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).not.toHaveProperty('oppositeLeaf');
+  });
+
+  it('reads the sliding, folding and revolving values (#486)', () => {
+    const moving = (motion: 'sliding' | 'folding', towards: 'left' | 'right' | null) => ({ motion, hinge: null, towards, leaves: towards ? 1 : 2, doubleActing: false });
+    expect(parseDoorOperation('.SLIDING_TO_LEFT.')).toEqual(moving('sliding', 'left'));
+    expect(parseDoorOperation('SLIDING_TO_RIGHT')).toEqual(moving('sliding', 'right'));
+    expect(parseDoorOperation('DOUBLE_DOOR_SLIDING')).toEqual(moving('sliding', null));
+    expect(parseDoorOperation('FOLDING_TO_LEFT')).toEqual(moving('folding', 'left'));
+    expect(parseDoorOperation('FOLDING_TO_RIGHT')).toEqual(moving('folding', 'right'));
+    expect(parseDoorOperation('DOUBLE_DOOR_FOLDING')).toEqual(moving('folding', null));
+    expect(parseDoorOperation('REVOLVING')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+    expect(parseDoorOperation('REVOLVING_VERTICAL')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+  });
+
+  it('reads the lifting and rolling-up values as an overhead door, which swings nowhere (#486)', () => {
+    const overhead = (leaves: 1 | 2) => ({ motion: 'overhead', hinge: null, towards: null, leaves, doubleActing: false });
+    for (const v of ['LIFTING_HORIZONTAL', 'LIFTING_VERTICAL_LEFT', 'LIFTING_VERTICAL_RIGHT', 'ROLLINGUP']) expect(parseDoorOperation(v)).toEqual(overhead(1));
+    expect(parseDoorOperation('DOUBLE_DOOR_LIFTING_VERTICAL')).toEqual(overhead(2));
+  });
+
+  it('draws nothing for the values that state no operation', () => {
+    for (const v of ['NOTDEFINED', 'USERDEFINED', null, undefined]) expect(parseDoorOperation(v)).toBeNull();
   });
 });
 
@@ -58,6 +91,18 @@ describe('doorOperationOf on a model', () => {
     const types = typeIndex(live);
     const op = (id: number) => doorOperationOf(live, id, types.get(id) ?? null)?.hinge ?? null;
     expect([op(20), op(21), op(22), op(23), op(24)]).toEqual(['left', 'right', 'right', 'left', null]);
+  });
+
+  it('reads every operation the symbols draw from the file, and a sliding door type\'s value for a door that states none (#486)', async () => {
+    const { dataStore } = await open(ifc4Moving);
+    const live = { dataStore, view: null };
+    const types = typeIndex(live);
+    const at = (id: number) => doorOperationOf(live, id, types.get(id) ?? null);
+    expect(MOVING.map((_, i) => at(40 + i)?.motion)).toEqual(['swing', 'swing', 'sliding', 'sliding', 'sliding', 'folding', 'folding', 'folding', 'revolving']);
+    expect(MOVING.map((_, i) => at(40 + i)?.hinge ?? at(40 + i)?.towards ?? null)).toEqual(['right', null, 'left', 'right', null, 'left', 'right', null, null]);
+    expect(at(40)?.doubleActing).toBe(true);
+    expect(at(41)).toMatchObject({ leaves: 2, doubleActing: true });
+    expect(at(60)).toMatchObject({ motion: 'sliding', towards: 'right' });
   });
 
   it('takes IfcDoorStyle.OperationType in IFC2X3, where the door has none', async () => {
@@ -75,7 +120,7 @@ describe('doorOperationOf on a model', () => {
 
 describe('doorSwingFlips', () => {
   const X = { x: 1, y: 0 }, Y = { x: 0, y: 1 };
-  const left = { hinge: 'left' as const, leaves: 1 as const, doubleActing: false };
+  const left = { motion: 'swing' as const, hinge: 'left' as const, towards: null, leaves: 1 as const, doubleActing: false };
   const right = { ...left, hinge: 'right' as const };
   const neg = (d: { x: number; y: number }) => ({ x: -d.x, y: -d.y });
 
@@ -94,6 +139,20 @@ describe('doorSwingFlips', () => {
     // X reversed, Y kept: det -1. The hinge of a LEFT door lands on the other jamb than for the right-handed placement.
     expect(doorSwingFlips(left, neg(X), Y, X, Y)).toBe(1);
     expect(doorSwingFlips(left, X, neg(Y), X, Y)).toBe(2);
+  });
+
+  it('reads the side a sliding or folding leaf goes to as it reads a hinge (#486)', () => {
+    const slideLeft = { ...left, motion: 'sliding' as const, hinge: null, towards: 'left' as const };
+    expect(doorSwingFlips(slideLeft, X, Y, X, Y)).toBe(0);
+    expect(doorSwingFlips({ ...slideLeft, towards: 'right' }, X, Y, X, Y)).toBe(1);
+    expect(doorSwingFlips(slideLeft, neg(X), Y, X, Y), 'a mirrored placement flips the side').toBe(1);
+  });
+
+  it('puts the leaf of an opposite-swinging pair that opens to +Y on its hand\'s jamb (review of #505)', () => {
+    const oppositeLeft = { ...left, hinge: null, leaves: 2 as const, oppositeLeaf: 'right' as const };
+    expect(doorSwingFlips(oppositeLeft, X, Y, X, Y)).toBe(0);
+    expect(doorSwingFlips({ ...oppositeLeft, oppositeLeaf: 'left' }, X, Y, X, Y)).toBe(1);
+    expect(doorSwingFlips(oppositeLeft, neg(X), Y, X, Y), 'a mirrored placement flips the side').toBe(1);
   });
 
   it('leaves a placement not running along the opening alone', () => {

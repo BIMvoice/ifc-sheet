@@ -57,6 +57,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   joineryMapping: JoineryMapping;
   /** The project's setting "include far-away elements in framing" (`framing.ts`); false when the file does not say so. */
   includeFarElements: boolean;
+  /** The project opts in to the ByggesaksBIM (Norway) readiness check (#372); false when the file does not say so. */
+  byggesaksbim: boolean;
   /** The bill of quantities' articles (#75); empty when the file has none. */
   boqArticles: BoqArticle[];
   /** The office's classification mappings (#89); empty when the file has none. */
@@ -120,6 +122,7 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryTypes: readJoineryList(parsed.joineryTypes),
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
+    byggesaksbim: parsed.byggesaksbim === true,
     boqArticles: readBoqArticles(parsed.boqArticles),
     classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),

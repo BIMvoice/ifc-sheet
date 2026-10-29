@@ -49,14 +49,23 @@ describe('resolveViewGraphics', () => {
     expect(resolveViewGraphics(plan({ templateId: 'vt-plans', graphics: { presetId: null } }), [plans])?.presetId).toBeNull();
   });
 
-  it('keeps what no template carries: the colour scheme and the phases stay the view\'s', () => {
-    const scheme = { property: 'LongName', target: 'rooms' as const };
+  it('keeps what no template carries: the phases stay the view\'s', () => {
     const phases = { show: ['new' as const] };
-    const g = resolveViewGraphics(plan({ templateId: 'vt-plans', graphics: { colourScheme: scheme, phases } }), [plans]);
-    expect(g?.colourScheme).toBe(scheme);
+    const g = resolveViewGraphics(plan({ templateId: 'vt-plans', graphics: { phases } }), [plans]);
     expect(g?.phases).toBe(phases);
-    expect(templateGraphicsOf({ colourScheme: scheme, phases, categories: { doors: { visible: false } } })).toEqual({ categories: { doors: { visible: false } } });
-    expect(untemplatedGraphics({ colourScheme: scheme, phases, categories: { doors: { visible: false } } })).toEqual({ colourScheme: scheme, phases });
+    expect(templateGraphicsOf({ phases, categories: { doors: { visible: false } } })).toEqual({ categories: { doors: { visible: false } } });
+    expect(untemplatedGraphics({ phases, categories: { doors: { visible: false } } })).toEqual({ phases });
+  });
+
+  it('carries the room fills (#493): the template\'s scheme reaches the view, the view\'s own wins whole, and a template made from a view keeps it', () => {
+    const own = { property: 'LongName', target: 'rooms' as const, hatches: { wohnen: 'PARQUET' } };
+    const house = { property: 'Name', target: 'rooms' as const };
+    const withScheme: ProjectViewTemplate = { ...plans, graphics: { ...plans.graphics, colourScheme: house } };
+    expect(resolveViewGraphics(plan({ templateId: 'vt-plans' }), [withScheme])?.colourScheme).toBe(house);
+    expect(resolveViewGraphics(plan({ templateId: 'vt-plans', graphics: { colourScheme: own } }), [withScheme])?.colourScheme).toBe(own);
+    expect(templateGraphicsOf({ colourScheme: own })).toEqual({ colourScheme: own });
+    // Resetting a view's overrides, or applying a template, leaves the view's own scheme in place.
+    expect(untemplatedGraphics({ colourScheme: own })).toEqual({ colourScheme: own });
   });
 
   it('the same inputs resolve to the same object, so a memo keyed on it holds', () => {

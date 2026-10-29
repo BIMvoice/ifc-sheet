@@ -14,6 +14,7 @@ import {
   DOOR_OPERATIONS, WINDOW_OPERATIONS, defaultDoorSpec, defaultWindowSpec,
   type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
+import { readJoineryViewChoice } from './joinery-view-detail.js';
 
 type Raw = Record<string, unknown>;
 const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -75,6 +76,8 @@ export function readJoinerySpec(raw: unknown): JoinerySpec | null {
     },
   };
   if (typeof raw.id === 'string' && raw.id) spec.id = raw.id;
+  const view = readJoineryViewChoice(raw.view);
+  if (view) spec.view = view;
   return spec;
 }
 
