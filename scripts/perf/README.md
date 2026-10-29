@@ -3586,3 +3586,35 @@ largest styling tasks drop to about 75 ms. Lessons:
 - Work keyed on the cut height (which elements a plan passes) is per plan;
   anything that does not read the plane (each element's height range) is per
   model, and a `WeakMap` on the mesh array with a length stamp holds it.
+
+## The app-start task: no top-level-await wrapper on the app build (IfcSheet #154)
+
+On a production build the app-start task (module evaluation, before the model
+is read) was 248 to 268 ms, longer than on the dev server (183 to 187 ms),
+because only the build ran `vite-plugin-top-level-await`. The plugin wraps
+every chunk that has a dynamic `import()` (221 of 347) in one `async` arrow
+function. Chrome compiles a module's top level while the script streams in,
+off the main thread, but a nested function only when it first runs, on the
+main thread, so each wrapped chunk was parsed whole inside the task: the
+5 MB entry chunk about 100 ms, `sandbox`, `store` and a `run` chunk 18 to 25 ms
+each (V8 `--log-function-events`, `parse-function`). The build target is
+`esnext`, so the app build now emits native top-level await; the worker build
+keeps the plugin. `@ifc-lite/flow-nodes`' `xlsx-io.ts` also imported `exceljs`
+statically through the package barrel, which ran all of `exceljs` (923
+functions) at start; it is now loaded on first use.
+
+Lessons:
+- Measure start-up on a production build: the dev server skips build-only
+  plugins, so it under-reported this task and over-reported opening the Wall
+  (103 to 118 ms on dev, 57 to 61 ms in production).
+- A CPU profile shows lazy compilation as `(program)` with no script; the
+  trace's `V8.ParseFunction` has no URL either. `--js-flags=--log-function-events`
+  gives each `parse-function` with script id, offsets and duration.
+- Tried and not kept: parenthesising the wrapper (no change: no eager
+  compile for an async arrow) and the `//# allFunctionsCalledOnLoad` hint on
+  the four largest wrapped chunks (task 117 ms, against 84 to 86 ms without
+  the wrapper, and it compiles every function of those files).
+  `"sideEffects": false` on `@ifc-lite/charts` kept ECharts off the start path
+  but gained little once `exceljs` was gone, and was left out.
+- `scripts/check-tla-chunk-await.mjs` now fails if a chunk the page evaluates
+  at start (`index.html`'s module scripts and their static imports) is wrapped.
