@@ -15,6 +15,8 @@ import { optionalField, type FieldReader } from './define';
  */
 export interface StandardPreviousValues {
   graphicStandard?: string | null;
+  /** The direction of the opening lines in elevation: choosing a graphic standard sets it, so a reset has to put the project's own choice back. */
+  openingLines?: 'handle' | 'hinge' | null;
   titleBlockTemplate?: TitleBlockTemplate | null;
   unitsAndNumbers?: UnitsAndNumbers | null;
   sheetNumbering?: NumberingScheme | null;
@@ -44,6 +46,7 @@ function readPrevious(raw: unknown): StandardPreviousValues {
     else if (r[key] !== undefined) { const v = read(r[key]); if (v !== undefined) out[key] = v; }
   };
   take('graphicStandard', (v) => (typeof v === 'string' ? v : undefined));
+  take('openingLines', (v) => (v === 'handle' || v === 'hinge' ? v : undefined));
   take('titleBlockTemplate', readTitleBlockTemplate);
   take('unitsAndNumbers', readUnitsAndNumbers);
   take('sheetNumbering', readNumberingScheme);

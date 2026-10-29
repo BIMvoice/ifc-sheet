@@ -1,0 +1,118 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * Configuring a door or window type from its overall size (#448): the opening becomes one catalogue entry, the type is mapped to it,
+ * and the entry and the mapping survive a project file round trip and still resolve every element of the type at its own size.
+ */
+
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_JOINERY_MAPPING, fitToElement, readJoineryMapping, resolveMapping, type ElementFacts } from './joinery-mapping.js';
+import { readJoineryList } from './joinery-spec-read.js';
+import {
+  FANLIGHT_SHARE, cleanOpening, configureTypeOpening, openingOfSpec, specFromOpening, typeEntryId, type ProjectJoinery,
+} from './joinery-type-config.js';
+
+const DOUBLE_TILT_TURN = { operations: ['tilt-turn-left', 'tilt-turn-right'] as const, fanlight: false };
+const empty = (): ProjectJoinery => ({ joineryTypes: [], joineryMapping: { ...DEFAULT_JOINERY_MAPPING } });
+const window_ = (typeGlobalId: string | null, width: number, height: number, globalId = 'e1'): ElementFacts =>
+  ({ kind: 'window', globalId, typeGlobalId, names: ['Fenster'], width, height });
+
+describe('a type configured from its overall size', () => {
+  it('a double tilt-turn is two leaves, each with its operation, at the IFC size', () => {
+    const spec = specFromOpening('window', { width: 1.76, height: 1.01 }, { ...DOUBLE_TILT_TURN, operations: [...DOUBLE_TILT_TURN.operations] });
+    expect(spec.width).toBe(1.76);
+    expect(spec.height).toBe(1.01);
+    expect(spec.columns).toEqual([1, 1]);
+    expect(spec.rows).toEqual([1]);
+    expect(spec.panels.map((p) => [p.col, p.row, p.operation])).toEqual([[0, 0, 'tilt-turn-left'], [1, 0, 'tilt-turn-right']]);
+  });
+
+  it('claims no thermal value: the IFC gave none', () => {
+    const spec = specFromOpening('window', { width: 1, height: 1 }, { operations: ['fixed'], fanlight: false });
+    expect(spec.props.thermalTransmittance).toBeUndefined();
+  });
+
+  it('a fanlight is a fixed row over all the leaves, above them', () => {
+    const spec = specFromOpening('door', { width: 1.8, height: 2.5 }, { operations: ['swing-left', 'swing-right'], fanlight: true });
+    expect(spec.rows).toEqual([1 - FANLIGHT_SHARE, FANLIGHT_SHARE]);
+    expect(spec.panels.at(-1)).toEqual({ col: 0, row: 1, colSpan: 2, operation: 'fixed' });
+  });
+
+  it('is made valid: 1 to 3 leaves, only what the kind offers', () => {
+    expect(cleanOpening('window', { operations: ['side-left', 'side-left', 'side-left', 'side-left'], fanlight: false }).operations).toHaveLength(3);
+    expect(cleanOpening('window', { operations: [], fanlight: false }).operations).toEqual(['fixed']);
+    expect(cleanOpening('door', { operations: ['tilt-turn-left'], fanlight: false }).operations).toEqual(['fixed']);
+    expect(cleanOpening('window', { operations: ['swing-left'], fanlight: false }).operations).toEqual(['fixed']);
+  });
+
+  it('is read back from the entry it made', () => {
+    for (const opening of [
+      { operations: ['sliding-left', 'sliding-right', 'fixed'], fanlight: true },
+      { operations: ['top-hung'], fanlight: false },
+    ] as const) {
+      const spec = specFromOpening('window', { width: 2, height: 1.4 }, { operations: [...opening.operations], fanlight: opening.fanlight });
+      expect(openingOfSpec(spec)).toEqual({ operations: [...opening.operations], fanlight: opening.fanlight });
+    }
+  });
+
+  it('is not read back from an entry of another shape', () => {
+    const spec = specFromOpening('window', { width: 2, height: 1.4 }, { operations: ['fixed', 'fixed'], fanlight: false });
+    expect(openingOfSpec({ ...spec, columns: [1, 1, 1, 1] })).toBeNull();
+    expect(openingOfSpec({ ...spec, rows: [1, 1, 1] })).toBeNull();
+  });
+});
+
+describe('configureTypeOpening', () => {
+  const input = { typeGlobalId: 'TYPE-A', kind: 'window' as const, name: 'Zwei Panele', size: { width: 1.76, height: 1.01 }, opening: { operations: [...DOUBLE_TILT_TURN.operations], fanlight: false } };
+
+  it('adds the entry and maps the type to it, leaving the inputs alone', () => {
+    const before = empty();
+    const snapshot = JSON.stringify(before);
+    const out = configureTypeOpening(before, input);
+    expect(JSON.stringify(before)).toBe(snapshot);
+    expect(out.entryId).toBe(typeEntryId('TYPE-A'));
+    expect(out.joineryTypes).toHaveLength(1);
+    expect(out.joineryTypes[0]).toMatchObject({ id: out.entryId, kind: 'window', name: 'Zwei Panele', mark: 'W1' });
+    expect(out.joineryMapping.types).toEqual({ 'TYPE-A': out.entryId });
+  });
+
+  it('every element of the type resolves to it, at its own size; another type of another size does not', () => {
+    const out = configureTypeOpening(empty(), input);
+    for (const [guid, w, h] of [['e1', 1.76, 1.01], ['e2', 1.2, 1.4]] as const) {
+      const match = resolveMapping(out.joineryMapping, out.joineryTypes, window_('TYPE-A', w, h, guid));
+      expect(match?.source).toBe('type');
+      const drawn = fitToElement(match!.entry, { width: w, height: h });
+      expect([drawn.width, drawn.height]).toEqual([w, h]);
+      expect(drawn.panels.map((p) => p.operation)).toEqual(['tilt-turn-left', 'tilt-turn-right']);
+    }
+    expect(resolveMapping(out.joineryMapping, out.joineryTypes, window_('TYPE-B', 0.6, 0.6))).toBeNull();
+  });
+
+  it('configuring again edits the same entry and keeps its mark and what the user changed besides', () => {
+    const first = configureTypeOpening(empty(), input);
+    const edited = first.joineryTypes.map((e) => ({ ...e, mark: 'F1', colors: { ...e.colors, frame: '#123456' } }));
+    const again = configureTypeOpening({ ...first, joineryTypes: edited }, { ...input, opening: { operations: ['fixed', 'bottom-hung', 'fixed'], fanlight: false } });
+    expect(again.joineryTypes).toHaveLength(1);
+    expect(again.joineryTypes[0]).toMatchObject({ mark: 'F1', colors: { frame: '#123456' } });
+    expect(again.joineryTypes[0].panels.map((p) => p.operation)).toEqual(['fixed', 'bottom-hung', 'fixed']);
+  });
+
+  it('a second type takes the next free mark', () => {
+    const first = configureTypeOpening(empty(), input);
+    const second = configureTypeOpening(first, { ...input, typeGlobalId: 'TYPE-B', name: 'Other' });
+    expect(second.joineryTypes.map((e) => e.mark)).toEqual(['W1', 'W2']);
+    expect(second.joineryMapping.types).toEqual({ 'TYPE-A': typeEntryId('TYPE-A'), 'TYPE-B': typeEntryId('TYPE-B') });
+  });
+
+  it('survives the project file: written, read back, it still draws the same leaves', () => {
+    const out = configureTypeOpening(empty(), input);
+    const file = JSON.parse(JSON.stringify({ joineryTypes: out.joineryTypes, joineryMapping: out.joineryMapping })) as Record<string, unknown>;
+    const types = readJoineryList(file.joineryTypes);
+    const mapping = readJoineryMapping(file.joineryMapping);
+    const match = resolveMapping(mapping, types, window_('TYPE-A', 1.76, 1.01));
+    expect(match?.source).toBe('type');
+    expect(openingOfSpec(match!.entry)).toEqual({ operations: ['tilt-turn-left', 'tilt-turn-right'], fanlight: false });
+  });
+});

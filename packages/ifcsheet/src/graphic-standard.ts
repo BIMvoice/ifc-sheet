@@ -62,7 +62,17 @@ export interface GraphicStandard extends PenTable {
   markStyle?: MarkStyle;
   /** The text and dimension style new annotations take under this standard. */
   current: { textStyle: string; dimStyle: string };
+  /**
+   * Where the dashed opening lines of a door or window in elevation point (#448): `towardsHandle`, the apex at the handle and the base on the
+   * hinges (the window makers' sketches, what IfcSheet has always drawn), or `towardsHinge`, the lines meeting at the hinges (DIN 1356, ISO 7519).
+   * It is a national convention. Choosing a standard sets the project's opening-line setting to this (`setGraphicStandard`), which the user can
+   * still change; the packs here keep `towardsHandle` because no source for another direction was checked for them.
+   */
+  openingLines: OpeningLineDirection;
 }
+
+/** See `GraphicStandard.openingLines`. */
+export type OpeningLineDirection = 'towardsHandle' | 'towardsHinge';
 
 /** What IfcSheet drew before standards existed. Choosing it restores exactly that. */
 export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
@@ -80,6 +90,8 @@ export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   dimStyles: [],
   markStyle: 'arrow',
   current: { textStyle: STANDARD_STYLE_ID, dimStyle: STANDARD_STYLE_ID },
+  // What IfcSheet has always drawn.
+  openingLines: 'towardsHandle',
 };
 
 const RO_TEXT_STYLES: readonly TextStyle[] = [
@@ -121,6 +133,8 @@ export const ROMANIAN_PRACTICE: GraphicStandard = {
   // drawing-office form, not a cited rule.
   markStyle: 'circle',
   current: { textStyle: 'ro-text-25', dimStyle: 'ro-dim' },
+  // Unchanged from before the setting existed: no Romanian source for the direction was checked.
+  openingLines: 'towardsHandle',
 };
 
 const DE_TEXT_STYLES: readonly TextStyle[] = [
@@ -155,6 +169,8 @@ export const GERMAN_PRACTICE: GraphicStandard = {
   // practice: the engine's default dimension style (arrow and gaps) under the pack's own text style; DIN 1356-1's dimensioning conventions were not checked.
   dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'de-dim', name: 'Dimensions 2.5', textStyle: 'de-text-25' }],
   current: { textStyle: 'de-text-25', dimStyle: 'de-dim' },
+  // Unchanged from before the setting existed: no German source for the direction was checked.
+  openingLines: 'towardsHandle',
 };
 
 export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE, GERMAN_PRACTICE];
