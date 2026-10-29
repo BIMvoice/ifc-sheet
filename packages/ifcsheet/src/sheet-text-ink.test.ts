@@ -62,7 +62,7 @@ describe('a drafted text on the sheet keeps its text style', () => {
 describe('the PDF writes a text\'s colour', () => {
   it('fills each text with its own colour, black when it has none', async () => {
     const sheet: SheetGraphic = {
-      sheetId: 's', number: 'A-1', name: 'S', paper: { w: 297, h: 210 }, frame: [], fills: [], cut: [], lines: [], pens: [], marks: [], images: [], underlays: [], viewports: [],
+      sheetId: 's', number: 'A-1', name: 'S', paper: { w: 297, h: 210 }, frame: [], fills: [], cut: [], lines: [], pens: [], marks: [], images: [], underlays: [], viewports: [], symbols: { solids: [], strokes: [] },
       texts: [{ at: { x: 10, y: 10 }, text: 'Red', size: 3, colour: '#cc0000' }, { at: { x: 10, y: 20 }, text: 'Black', size: 3 }],
     };
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');

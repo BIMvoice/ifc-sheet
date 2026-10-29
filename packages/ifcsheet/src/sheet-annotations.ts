@@ -75,11 +75,11 @@ export function viewportAnnotations(
     if (!layerPrints(layer)) continue;
     const colour = layer?.color ?? '#000';
     const shape = e.shape;
-    const mark = context(colour, lookOf(a.book, e.params));
     if (isGeometry(shape)) {
-      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), mark);
+      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), { at, clip, out });
       continue;
     }
+    const mark = context(colour, lookOf(a.book, e.params));
     const sized = annotationAtFactor(shape, factor);
     const look = mark.look;
     if (sized.type === 'text') {

@@ -53,7 +53,7 @@ function lines(text: string, at: Point2D, px: number, deg: number, align: SheetT
 const markInk = (c: MarkContext): TextInk => textInk(c.look.text, c.look.text.color ?? c.colour);
 
 /** A drafted line, polyline, circle or arc, in the pen the app draws it with (`entityPen`: its layer's, under the element's own overrides). */
-export function drawCurve(shape: DraftShape, pen: Pick<ReturnType<typeof entityPen>, 'color' | 'width' | 'dash'>, c: MarkContext): void {
+export function drawCurve(shape: DraftShape, pen: Pick<ReturnType<typeof entityPen>, 'color' | 'width' | 'dash'>, c: Pick<MarkContext, 'at' | 'clip' | 'out'>): void {
   const pts = shape.type === 'line' ? [shape.a, shape.b]
     : shape.type === 'polyline' ? (shape.closed ? [...shape.pts, shape.pts[0]] : shape.pts)
     : shape.type === 'circle' ? arcPoints(shape.c, shape.r, 0, Math.PI * 2) : arcPoints(shape.c, shape.r, shape.start, shape.end);
