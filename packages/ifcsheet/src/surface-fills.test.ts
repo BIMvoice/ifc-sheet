@@ -101,7 +101,7 @@ describe('the coloured surfaces and the headless DXF (#499)', () => {
     const sheet = { id: 's1', number: 'A-201', name: 'Elevations', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp', viewId: 'v1', x: 200, y: 150, scale: 50, width: 0, height: 0, center: null }] };
     const doc = { name: 'P', models: [], sheets: [sheet], titleBlock: {}, views: [{ id: 'v1', kind: 'elevation', name: 'South', createdAt: 0 }] };
     const fills = surfaceFills([quad(1, 2, [0.8, 0.2, 0.1, 1])], config);
-    const graphic = sheetGraphic(sheet as never, doc as never, new Map([['v1', drawing]]), undefined, new Map(), undefined, undefined, undefined, undefined, undefined, undefined, new Map([['v1', fills]]));
+    const graphic = sheetGraphic(sheet as never, doc as never, new Map([['v1', drawing]]), undefined, new Map(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Map([['v1', fills]]));
     expect(graphic.fills.some((f) => f.colour === '#cc331a')).toBe(true);
     expect(exportDxf(graphic)).not.toContain('COLOUR-CC331A');
   });
