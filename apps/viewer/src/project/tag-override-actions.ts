@@ -24,6 +24,7 @@ export function resetTagText(id: string): void {
   const d = find(id);
   if (!d) return;
   const field = (TAG_FIELDS as readonly string[]).includes(String(d.params.tagField)) ? (d.params.tagField as TagField) : 'mark';
-  const next = withoutTagOverride(d, elementLabel(String(d.params.tagOf), field));
+  // A parametric label has no tag field: its sync re-reads the text once the override is gone (#542).
+  const next = withoutTagOverride(d, typeof d.params.tagOf === 'string' ? elementLabel(String(d.params.tagOf), field) : null);
   if (next !== d) replaceDraft(next);
 }

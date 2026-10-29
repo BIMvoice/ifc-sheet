@@ -383,6 +383,8 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
+        {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
+        {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
         {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>

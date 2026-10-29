@@ -11,6 +11,7 @@ export {
   DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, GERMAN_PRACTICE, MARK_STYLES, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, markStyleOf, standardValues,
   type GraphicStandard, type MarkStyle,
 } from '../graphic-standard.js';
+export type { OpeningLineDirection } from '../graphic-standard.js';
 export {
   COMMAND_LINE_STANDARDS, COMMAND_LINE_STANDARD_IDS, PACK_NOT_SET, GERMANY_PACK_ID, PACK_PARTS, ROMANIA_PACK_ID, STANDARD_PACK_VERSION, TITLE_BLOCK_CAPTIONS_DE, builtInPacks, germanyPack, packForCommandLine, packPartsOf, romaniaPack,
   type PackNotSet, type PackPart, type StandardPack,

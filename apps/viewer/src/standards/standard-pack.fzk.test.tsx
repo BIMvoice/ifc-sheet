@@ -28,6 +28,7 @@ import { resolve } from '@/i18n/registry';
 import { useViewerStore } from '@/store';
 import { cleanup, render } from '@/test/render.js';
 import { standardsSection } from '@/components/viewer/wall/drawer-sections/standards';
+import { setOpeningConvention } from '@/joinery/opening-convention';
 import { builtInPacks, romaniaPack } from './standard-pack';
 import { parseStandardPack, serializeStandardPack } from './standard-pack-file';
 import { installStandard, isApplied, resetStandard } from './standard-pack-install';
@@ -97,7 +98,7 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     // Numbering: the pack states the scheme (no standard prescribes one, so it is the default's values), and no sheet is renumbered.
     assert.deepEqual(s.sheetNumbering, DEFAULT_SCHEME);
     assert.equal(JSON.stringify(s.sheets.map((x) => x.number)), sheetsBefore);
-    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 2, previous: { graphicStandard: null, titleBlockTemplate: null, unitsAndNumbers: null, sheetNumbering: null, materials: [] } });
+    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 2, previous: { graphicStandard: null, openingLines: null, titleBlockTemplate: null, unitsAndNumbers: null, sheetNumbering: null, materials: [] } });
     assert.equal(isApplied(pack()), true);
   });
 
@@ -140,6 +141,19 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     assert.deepEqual(state().unitsAndNumbers, { lengthUnit: 'cm', separator: 'point', decimals: { length: 1 } });
     assert.equal(resetStandard(), false, 'nothing is installed any more');
     assert.notEqual(mine, '');
+  });
+
+  it('reset puts back the direction of the opening lines the project had, not the one the pack\'s standard names (#448)', () => {
+    setOpeningConvention('hinge');
+    installStandard(pack());
+    assert.equal(state().openingLines, 'handle', 'the pack\'s standard sets the direction');
+    assert.equal(resetStandard(), true);
+    assert.equal(state().openingLines, 'hinge');
+    // A project that never chose one has none stored again after the reset.
+    useProjectStore.setState({ openingLines: undefined });
+    installStandard(pack());
+    assert.equal(resetStandard(), true);
+    assert.equal(state().openingLines, undefined);
   });
 
   it('reset is one undo step too', () => {
