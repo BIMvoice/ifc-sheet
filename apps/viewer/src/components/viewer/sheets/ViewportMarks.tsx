@@ -12,6 +12,7 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { PlanDirection } from '@bimvoice/ifcsheet/true-north';
+import { siteMarks, siteObstacles, type Box, type SiteMarkSource } from '@bimvoice/ifcsheet/site-marks';
 import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks, type ViewportMarkShapes } from '@bimvoice/ifcsheet/viewport-marks';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ProjectView, SheetViewport } from '@/project/types';
@@ -26,8 +27,10 @@ const STROKE_MM = 0.25;
  * block (`drawingAreaIn`); the marks sit in the part of the box inside it.
  */
 export function viewportMarkShapes(input: {
-  vp: SheetViewport; view: ProjectView | undefined; drawing: Pick<Drawing2D, 'config' | 'bounds'> | null;
+  vp: SheetViewport; view: ProjectView | undefined; drawing: Pick<Drawing2D, 'config' | 'bounds' | 'cutPolygons'> | null;
   drawingArea: Rect; north: PlanDirection | null; locale: SheetLocale;
+  /** On a site plan: what its marks keep clear of (`siteObstacles`); they are then placed by the engine's one rule (`siteMarks`, #430), as `sheetGraphic` places them. */
+  site?: Pick<SiteMarkSource, 'drafts' | 'toPaper'> & { labels?: readonly Box[] };
 }): ViewportMarkShapes | null {
   const flags = viewportMarkFlags(input.vp, input.view);
   const b = input.drawing?.bounds ?? null;
@@ -36,10 +39,12 @@ export function viewportMarkShapes(input: {
   const box = markBox(input.vp, drawn);
   const area = box ? markArea(box, input.drawingArea) : null;
   if (!area || !input.drawing || !(flags.northArrow || flags.scaleBar)) return null;
-  return viewportMarks({
-    area, scale: input.vp.scale, bar: flags.scaleBar, locale: input.locale,
-    arrowDegrees: flags.northArrow ? northDegrees(input.drawing.config.plane, input.north) : null,
-  });
+  const arrowDegrees = flags.northArrow ? northDegrees(input.drawing.config.plane, input.north) : null;
+  if (input.site && box) {
+    const obstacles = siteObstacles({ polygons: input.drawing.cutPolygons, viewId: input.vp.viewId, locale: input.locale, ...input.site });
+    return siteMarks({ box, drawingArea: input.drawingArea, scale: input.vp.scale, arrowDegrees, bar: flags.scaleBar, locale: input.locale, obstacles });
+  }
+  return viewportMarks({ area, scale: input.vp.scale, bar: flags.scaleBar, locale: input.locale, arrowDegrees });
 }
 
 const run = (pts: readonly { x: number; y: number }[]): string => pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x} ${p.y}`).join(' ');

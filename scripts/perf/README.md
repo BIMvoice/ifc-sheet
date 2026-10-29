@@ -3563,3 +3563,26 @@ created or edited entities, encoded strings and exponents are always parsed.
 - Mutation-test each "answer maybe" rule: two first-draft rules (a `.` and a
   long digit run) were redundant, since a whole-number real reads as its
   integer part, and only the encoded string and the exponent needed one.
+
+## Door and window footprints without the vertices inside them (IfcSheet #154)
+
+A plan's door and window symbols (`apps/viewer/src/drafting/opening-symbols.ts`)
+take each opening's minimum-area rectangle from the convex hull of every
+projected vertex of its meshes. On the 56 MB Skolebygg sample a storey's plan
+projects about 250,000 vertices for 208 doors and windows (about 1,200 each),
+allocated one object per vertex and sorted per element: 33 to 49 ms of a 110 ms
+styling task. Every plan also re-read the height range of all 3,608 door and
+window meshes of the model (543,000 vertices) to find the ones its cut passes.
+Now the ranges are indexed once per mesh list, and the footprint is projected
+into a typed array and filtered to the points outside the octagon of its eight
+extreme points (Akl-Toussaint) before the unchanged hull runs. The symbols are
+identical (sheets byte-identical); the plan's symbols take 13 to 15 ms and the
+largest styling tasks drop to about 75 ms. Lessons:
+
+- A hull over a mesh's vertices is mostly spent on vertices inside it: an
+  interior-point filter in front of the existing hull keeps the result exact,
+  since the hull drops those points anyway. Keep a margin scaled to the
+  coordinates so rounding never decides which point is dropped.
+- Work keyed on the cut height (which elements a plan passes) is per plan;
+  anything that does not read the plane (each element's height range) is per
+  model, and a `WeakMap` on the mesh array with a length stamp holds it.

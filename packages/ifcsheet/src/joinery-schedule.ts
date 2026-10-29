@@ -29,6 +29,8 @@ import type { ListDataProvider } from '@ifc-lite/lists';
 import type { ScheduleTextRow } from './schedule-text.js';
 import { doorOperationOf } from './door-operation.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
+import { statedOrMeasuredSize } from './element-size.js';
+import type { MeshData } from '@ifc-lite/geometry';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -52,6 +54,11 @@ export interface ScheduleOccurrence {
   modelValues?: Record<string, string>;
   /** The rows of `modelValues` whose value is a number, as the number (`modelRowNumber`): the text is what the sheet prints, the number what a spreadsheet keeps. */
   modelNumbers?: Record<string, number>;
+  /** The element's size was measured from its geometry: the IFC states none (#485). */
+  measured?: boolean;
+  /** Which of the two was measured: only the side the IFC does not state is (#485). */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
 }
 
 export interface ScheduleEntry {
@@ -66,6 +73,11 @@ export interface ScheduleEntry {
   /** Metres. */
   width: number;
   height: number;
+  /** Width and height were measured from the elements' geometry in their own frame, not stated by the IFC (#485): every element of this group lacked OverallWidth / OverallHeight. */
+  measured?: boolean;
+  /** The width / the height alone was measured: every element of the group lacked that side's Overall value. `measured` is true when either is. */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
   /** Count per level name. */
   counts: Record<string, number>;
   total: number;
@@ -84,6 +96,8 @@ export interface ScheduleData {
   content?: ScheduleContent;
   /** The cells typed over the model's text (#446), by type and row: the project's, attached by `scheduleOf` so every reader prints the same text. */
   overrides?: JoineryCellOverride[];
+  /** Every group of the schedule's kind, before a sub-report's cut, attached by `scheduleOf` with `overrides`: a saved cell belongs to the nearest of them (#485, `joineryOverrideOf`). */
+  groups?: readonly ScheduleEntry[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
@@ -98,6 +112,8 @@ export interface ScheduleModel extends Live {
   nameOf?: (id: number) => string;
   /** The Lists engine's provider over the model, for the model rows. Default: the headless one over the store; the app passes its own, which sees the edit overlay. */
   listProvider?: () => ListDataProvider;
+  /** An element's meshes (viewer frame, metres), for measuring the size of a door or window whose IFC states none (#485); without it such an element has no size. */
+  meshesOf?: (expressId: number) => readonly MeshData[] | undefined;
 }
 
 /** What the project contributes to a joinery schedule. */
@@ -327,7 +343,8 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
         count(entry, id);
         continue;
       }
-      const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+      // No OverallWidth / OverallHeight (a non-parametric window): the side the IFC does not state is measured from its body, in its own frame (#485).
+      const { width, height, measuredWidth, measuredHeight } = statedOrMeasuredSize(real(attrs[9]) * unit, real(attrs[8]) * unit, () => model.meshesOf?.(id));
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
       const stated = k === 'door' ? doorOperationOf(live, id, (types ??= typeIndex(live)).get(id) ?? null) : null;
       const operation = stated?.hinge ? (`${stated.doubleActing ? 'double-acting' : 'swing'}-${stated.hinge}` as NonNullable<ScheduleEntry['operations']>[number]) : undefined;
@@ -339,6 +356,7 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
       byKey.set(key, entry);
       if (operation && !entry.operations?.includes(operation)) (entry.operations ??= []).push(operation);
       count(entry, id);
+      if (measuredWidth || measuredHeight) Object.assign(entry.occurrences[entry.occurrences.length - 1], { measured: true, measuredWidth, measuredHeight });
     }
     // The model rows the schedules chose, read for this model's occurrences in one pass.
     if (modelRows.length > 0) {
@@ -362,6 +380,11 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
   markUntyped(entries);
+  for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) {
+    e.measuredWidth = e.occurrences.every((o) => o.measuredWidth);
+    e.measuredHeight = e.occurrences.every((o) => o.measuredHeight);
+    e.measured = e.measuredWidth || e.measuredHeight;
+  }
   const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
   if (entries.some((e) => e.counts['—'])) levels.push('—');
   // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.

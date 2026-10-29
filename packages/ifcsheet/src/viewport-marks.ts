@@ -155,15 +155,36 @@ export function viewportMarks(input: ViewportMarkInput): ViewportMarkShapes {
   const arrowFits = input.arrowDegrees !== null && area.w >= 2 * (ARROW_HALF_MM + m) && area.h >= 2 * (ARROW_HALF_MM + m);
   if (arrowFits && input.arrowDegrees !== null) arrow({ x: area.x + area.w - m - ARROW_HALF_MM, y: area.y + m + ARROW_HALF_MM }, input.arrowDegrees, out);
   if (input.bar) {
-    const halfM = barHalfMetres(scale, Math.min(BAR_TARGET_MM, area.w * 0.5));
-    if (halfM !== null) {
+    const size = barSize(scale, input.locale, Math.min(BAR_TARGET_MM, area.w * 0.5));
+    if (size) {
       const x0 = area.x + m + 2;
       const bottom = area.y + area.h - m;
-      const last = `${sheetNumber(input.locale, 2 * halfM, 2, { trim: true })} m`;
-      const box = barBox(x0, bottom, (2 * halfM * 1000) / scale, last);
-      if (box.y >= area.y) bar(x0, bottom, halfM, scale, input.locale, out);
+      if (bottom - size.h >= area.y) bar(x0, bottom, size.halfM, scale, input.locale, out);
     }
   }
+  return out;
+}
+
+/** The size of the box a scale bar takes at `scale` (its figures included) and the distance its half spans; null when no bar of at most `maxMm` is worth drawing. */
+export function barSize(scale: number, locale: SheetLocale, maxMm = BAR_TARGET_MM): { w: number; h: number; halfM: number } | null {
+  const halfM = barHalfMetres(scale, maxMm);
+  if (halfM === null) return null;
+  const last = `${sheetNumber(locale, 2 * halfM, 2, { trim: true })} m`;
+  const { w, h } = barBox(0, 0, (2 * halfM * 1000) / scale, last);
+  return { w, h, halfM };
+}
+
+/** The north arrow centred on `centre`, turned `degrees` (`northDegrees`). */
+export function arrowMarkAt(centre: { x: number; y: number }, degrees: number): ViewportMarkShapes {
+  const out: ViewportMarkShapes = { strokes: [], solids: [], texts: [] };
+  arrow(centre, degrees, out);
+  return out;
+}
+
+/** The scale bar with its zero tick at `x0` and its bottom edge at `bottom`, `halfM` metres to the half (`barSize`). Its box starts 2 mm left of `x0`. */
+export function barMarkAt(x0: number, bottom: number, halfM: number, scale: number, locale: SheetLocale): ViewportMarkShapes {
+  const out: ViewportMarkShapes = { strokes: [], solids: [], texts: [] };
+  bar(x0, bottom, halfM, scale, locale, out);
   return out;
 }
 
@@ -175,10 +196,9 @@ export interface ViewportMarkFlags {
 
 /**
  * The marks `vp` shows: what it says (`SheetViewport.northArrow` / `scaleBar`,
- * on or off), else off. A site plan's own arrow and bar are drawn by the app in
- * a free spot clear of the plot (`siteplan/site-symbols.ts`), so a site plan
- * takes no default here either (issue #430 is the proper avoidance for all); the headless build
- * draws a site plan's marks when the viewport asks for them, in `siteMarkArea`. A north arrow
+ * on or off), else off, except on a site plan, which carries both unless it says
+ * otherwise (it always has), placed in a free spot clear of the plot by
+ * `siteMarks` (`site-marks.ts`). A north arrow
  * is for plans only and a scale bar for a drawing that has a scale (not a 3D
  * view, a drafting view's detail or a key plan, which is the whole plan small);
  * a view that cannot carry a mark never shows it, whatever the viewport says.
@@ -186,8 +206,8 @@ export interface ViewportMarkFlags {
 export function viewportMarkFlags(vp: Pick<SheetViewport, 'northArrow' | 'scaleBar' | 'keyPlanOf'>, view: ProjectView | undefined): ViewportMarkFlags {
   if (!view || vp.keyPlanOf !== undefined) return { northArrow: false, scaleBar: false };
   return {
-    northArrow: view.kind === 'plan' && (vp.northArrow ?? false),
-    scaleBar: view.kind !== '3d' && (vp.scaleBar ?? false),
+    northArrow: view.kind === 'plan' && (vp.northArrow ?? view.site === true),
+    scaleBar: view.kind !== '3d' && (vp.scaleBar ?? (view.kind === 'plan' && view.site === true)),
   };
 }
 
@@ -217,12 +237,15 @@ const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a
  * the box (right, left, above, below), as deep as the mark needs and along the box's side, inside the drawing area and clear of
  * everything in `taken` (the sheet's other viewports, their titles, the title block). A small plot at a large scale so still gets its
  * arrow and bar next to it, never at the far side of the sheet or over another drawing. `null` when there is no such room.
- * The app places a site plan's marks in a free spot of its own (`siteplan/site-symbols.ts`), which needs the plot; the headless
- * build has only the box.
+ * `siteMarks` uses its `besideMarkArea` when no free spot inside the box is clear of the plot and the building.
  */
 export function siteMarkArea(box: Rect, drawingArea: Rect, need: { w: number; h: number }, taken: readonly Rect[] = []): Rect | null {
   const inside = markArea(box, drawingArea);
-  if (markFits(inside, need)) return inside;
+  return markFits(inside, need) ? inside : besideMarkArea(box, drawingArea, need, taken);
+}
+
+/** `siteMarkArea` without the inside of the box: the first strip right beside it (right, left, above, below) that holds the mark and is clear of `taken`. */
+export function besideMarkArea(box: Rect, drawingArea: Rect, need: { w: number; h: number }, taken: readonly Rect[] = []): Rect | null {
   const h = Math.max(box.h, need.h);
   const w = Math.max(box.w, need.w);
   const beside: Rect[] = [

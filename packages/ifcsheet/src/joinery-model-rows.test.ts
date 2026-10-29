@@ -56,7 +56,7 @@ describe('model rows of a joinery schedule (#446)', () => {
 
   it('lets a cell of a model row be typed over, and keeps it through a save even for a long set and property name', () => {
     const long = modelRowId('property', 'P'.repeat(120), 'N'.repeat(120));
-    const read = readJoineryOverrides([{ type: 'T', row: U.id, value: '1.6', about: 'W2' }, { type: 'T', row: long, value: 'x', about: '' }, { type: 'T', row: 'name', value: 'n', about: '' }, { type: 'T', row: 'size', value: 'n', about: '' }]);
-    expect(read?.map((o) => o.row)).toEqual([U.id, long, 'name']);
+    const read = readJoineryOverrides([{ type: 'T', row: U.id, value: '1.6', about: 'W2' }, { type: 'T', row: long, value: 'x', about: '' }, { type: 'T', row: 'name', value: 'n', about: '' }, { type: 'T', row: 'size', value: 'n', about: '' }, { type: 'T', row: 'nonsense', value: 'n', about: '' }]);
+    expect(read?.map((o) => o.row)).toEqual([U.id, long, 'name', 'size']);
   });
 });

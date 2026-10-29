@@ -19,8 +19,9 @@ export {
 } from '../list-schedule.js';
 export { listFigure, listTableCells, listTableText } from '../list-figures.js';
 export { MAX_LIST_OVERRIDES, clearListOverride, listColumnKey, orphanedOverrides, overrideOf, readListOverrides, setListOverride, withListOverrides, type ListCellOverride } from '../list-overrides.js';
+export { fitFootprint, measureElementSize, meshesByExpressId, placedMeshes, type FootprintFit } from '../element-size.js';
 export {
-  MAX_JOINERY_OVERRIDES, OVERRIDABLE_ROWS, clearJoineryOverride, dropJoineryOverrides, isOverridableRow, joineryCellText, joineryOverrideOf, orphanedJoineryOverrides, readJoineryOverrides, setJoineryOverride, typeIdentityOf,
+  MAX_JOINERY_OVERRIDES, OVERRIDABLE_ROWS, levelRowId, overrideNumbers, clearJoineryOverride, dropJoineryOverrides, isOverridableRow, joineryCellText, joineryOverrideOf, orphanedJoineryOverrides, readJoineryOverrides, setJoineryOverride, typeIdentityOf,
   type JoineryCellOverride, type OverridableRow, type TypeFacts,
 } from '../joinery-overrides.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';

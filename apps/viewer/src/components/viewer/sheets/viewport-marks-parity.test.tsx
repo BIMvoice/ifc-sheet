@@ -18,11 +18,11 @@ import { sheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { northOfStore } from '@bimvoice/ifcsheet/true-north';
 import { cleanup, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { northArrowRotation } from '@/siteplan/true-north';
-import { NORTH_ARROW_ID, SCALE_BAR_ID } from '@/siteplan/live-symbols';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
 import { exportDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';
@@ -46,15 +46,16 @@ const same = (a: number[], b: number[], what: string): void => {
 };
 
 /** The screen and the layout for the same project; `north` is what the project's model states. */
-async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object) {
+async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object, shown: { drawing: Drawing2D; drafts: DraftEntity[] } = { drawing, drafts: [] }) {
   const store = await parseSiteFixture();
   useViewerStore.setState({ ifcDataStore: store } as never);
   const sheet = sheetOf(vp);
-  const ui = render(<SheetPaper sheet={sheet} projectName="House" content={() => ({ view: v, drawing, drafts: [], ...(site ? { site: site as never } : {}) })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />);
+  const ui = render(<SheetPaper sheet={sheet} projectName="House" content={() => ({ view: v, drawing: shown.drawing, drafts: shown.drafts, ...(site ? { site: site as never } : {}) })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />);
   const marks = ui.querySelector('[data-viewport-marks]');
   const units = useProjectStore.getState().unitsAndNumbers;
   const doc = { name: 'House', models: [], views: [v], sheets: [sheet] } as unknown as ProjectDocument;
-  const layout = sheetGraphic(sheet, doc, new Map([['v', drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) });
+  const layout = sheetGraphic(sheet, doc, new Map([['v', shown.drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) },
+    shown.drafts.length ? { annotations: { drafts: shown.drafts, layers: [], groups: [], book: {} as never, locale: sheetFormat('en', units) } } : undefined);
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
   return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
 }
@@ -126,15 +127,43 @@ describe('a site plan viewport: one placement on the screen, in the PDF layout a
     if (ownCtm) Object.defineProperty(proto, 'getScreenCTM', ownCtm); else delete proto.getScreenCTM;
   });
   const SITE_VIEW = { id: 'v', kind: 'plan', name: 'Site plan', site: true, createdAt: 0 } as unknown as ProjectView;
-  // A site plan with a plot, a footprint and a setback in the way of the old free-spot placement.
-  const site = { boundary: [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }], footprint: [[{ x: 10, y: 5 }, { x: 25, y: 5 }, { x: 25, y: 15 }, { x: 10, y: 15 }]], setbacks: [] };
+  // A site plan 30 x 20 m at 1:50 with a plot and a building (cut faces) over its top-right corner, where the corner placement would put the arrow.
+  const BUILDING = [{ x: 14, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 12 }, { x: 14, y: 12 }];
+  const site = { boundary: [{ x: 1, y: 1 }, { x: 29, y: 1 }, { x: 29, y: 19 }, { x: 1, y: 19 }], footprint: [BUILDING], setbacks: [] };
+  const shown = {
+    drawing: { ...drawing, cutPolygons: [{ polygon: { outer: BUILDING, holes: [] }, entityId: 3, ifcType: 'IfcWall', modelIndex: 0, isCut: true }] } as unknown as Drawing2D,
+    drafts: [{ id: 'plot', viewId: 'v', layerId: 'plot-boundary', shape: { type: 'polyline', pts: site.boundary, closed: true }, params: {} }] as DraftEntity[],
+  };
 
-  it('draws a site plan\'s symbols by the free-spot rule, as before, and no corner marks', async () => {
-    const { marks, layout } = await bothSides(viewport({}), SITE_VIEW, site);
-    assert.equal(marks, null, 'no corner marks on a site plan');
+  it('draws the engine\'s shapes for a site plan too: the same marks at the same paper points as the layout, and none of the old live symbols', async () => {
+    const { marks, layout } = await bothSides(viewport({}), SITE_VIEW, site, shown);
+    assert.ok(marks, 'a site plan carries its marks by default');
+    assert.equal(document.querySelectorAll('[data-site-symbol]').length, 0);
+    const paths = [...marks.querySelectorAll('path')];
+    const solids = paths.filter((p) => p.getAttribute('fill') === '#000');
+    const strokes = paths.filter((p) => p.getAttribute('fill') === 'none');
+    assert.ok(layout.symbols.solids.length > 0);
+    assert.equal(solids.length, layout.symbols.solids.length);
+    assert.equal(strokes.length, layout.symbols.strokes.length);
+    solids.forEach((p, i) => same(numbers(p.getAttribute('d') ?? ''), flat(layout.symbols.solids[i]), `solid ${i}`));
+    strokes.forEach((p, i) => same(numbers(p.getAttribute('d') ?? ''), flat(layout.symbols.strokes[i]), `stroke ${i}`));
+    assert.deepEqual([...marks.querySelectorAll('text')].map((t) => t.textContent), ['N', '0', '2.5', '5 m']);
+    // Clear of the building: its paper box is x 420 + (14 - 15) * 20 .. 420 + 15 * 20, y 297 - 200 .. 297 - 200 + 12 * 20.
+    const inBuilding = (q: { x: number; y: number }) => q.x >= 400 && q.x <= 720 && q.y >= 97 && q.y <= 337;
+    assert.ok(![...layout.symbols.strokes, ...layout.symbols.solids].flat().some(inBuilding), 'the layout keeps the marks off the building');
+  });
+
+  it('and the DXF the screen makes carries the same marks as the DXF the engine makes, on the SITE-SYMBOLS layer', async () => {
+    const { screenDxf, engineDxf } = await bothSides(viewport({}), SITE_VIEW, site, shown);
+    const onLayer = (dxf: string) => dxf.split(/\r?\n/).filter((l) => l.trim() === 'SITE-SYMBOLS').length;
+    assert.ok(onLayer(engineDxf) > 0, 'the engine writes the marks');
+    assert.ok(onLayer(screenDxf) > 0, 'the screen writes the marks');
+  });
+
+  it('a viewport that says no gets none, on both', async () => {
+    const { marks, layout } = await bothSides(viewport({ northArrow: false, scaleBar: false }), SITE_VIEW, site, shown);
+    assert.equal(marks, null);
     assert.deepEqual(layout.symbols, { strokes: [], solids: [] });
-    const symbols = document.querySelectorAll('[data-site-symbol]');
-    assert.deepEqual([...symbols].map((g) => g.getAttribute('data-site-symbol')), [NORTH_ARROW_ID, SCALE_BAR_ID]);
   });
 });
 
