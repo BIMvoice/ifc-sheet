@@ -220,6 +220,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 
 **A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
 - Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`. In `<key>.ts`, register it: `export const registeredFields = [myField] as const;` and `declare module './registered' { interface RegisteredFieldKeys { myKey: true } }` (see `germany-permit.ts`). `registered.ts` finds the file; edit no list. Never add to `DOCUMENT_FIELD_DEFS` in `index.ts`: that list is frozen and `fields.test.ts` pins it.
+- A field that a step of the drafting undo stack must put back (a standards pack, a dialog or a command sets it) carries `heldByUndo: true` on its definition (see `germanyLandField`). `FROZEN_STEP_FIELDS` in `drafting/draft-store.ts` is frozen; never add to it.
 - Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
 
 **A new drawer section**
