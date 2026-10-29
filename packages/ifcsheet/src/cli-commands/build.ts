@@ -89,7 +89,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
+  const generated = generateDefaultSet(model, { ...(standard.sheetNumbering ? { scheme: standard.sheetNumbering } : {}), ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
@@ -100,7 +100,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   const document = underlays.length > 0 ? { ...set.document, underlays } : set.document;
   const underlayWarnings = underlayNotes(document, { dxf: Boolean(args.dxf || args.handover) });
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), language });
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);

@@ -15,7 +15,7 @@
  * width. Pure: the screen tab, sheets, SVG and DXF all draw these primitives.
  */
 
-import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
+import { defaultWindowSpec, normalisedPanels, type PanelOperation } from '@ifc-lite/create';
 import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
@@ -26,11 +26,14 @@ import { fitText } from '@/project/title-block-template';
 import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
 import { shownRows, symbolsShown, textCellText, textRowId } from '@bimvoice/ifcsheet';
+import { typeEntryId } from '@bimvoice/ifcsheet/project';
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
-  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
+  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol';
+      /** A line of a type's real view that can be hidden (#449): the catalogue type's id and the line's id. */
+      pick?: { type: string; line: string } }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
 /** A cell of a column table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) and the column (id) it is. */
@@ -120,6 +123,16 @@ interface TableRowSpec {
 const mm = (m: number): number => Math.round(m * 1000);
 
 /**
+ * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) starts with the kind's default
+ * sill, which the model never stated, so it prints none until the user sets a different one in the joinery dialog.
+ */
+const sillOf = (e: ScheduleEntry): number | null => {
+  if (e.kind !== 'window' || !e.spec) return null;
+  if (!e.spec.id?.startsWith(typeEntryId(''))) return e.spec.sillHeight;
+  return Math.abs(e.spec.sillHeight - defaultWindowSpec().sillHeight) < 1e-9 ? null : e.spec.sillHeight;
+};
+
+/**
  * The rows of the table in the order the schedule's content choice puts them (`shownRows`, the engine's: the layout, and every
  * reader of the choice, agree). By default: name, size, operation, sill, the count per level, total, U value, fire rating, then the
  * user's own text rows. The CSV and XLSX read the same list (`joineryExport`), so the file has the rows the sheet prints.
@@ -133,7 +146,7 @@ function rows(data: ScheduleData, labels: ScheduleLabels & { widthMm?: string; h
       heads: [labels.widthMm ?? 'Width (mm)', labels.heightMm ?? 'Height (mm)'], raw: (e) => [mm(e.width), mm(e.height)], num: true,
     }],
     operation: () => [{ label: labels.operation, value: (e) => operationText(e, labels), raw: (e) => [e.spec || e.operations?.length ? operationText(e, labels) : null] }],
-    sill: () => [{ label: labels.sill, value: (e) => (e.kind === 'window' && e.spec ? String(mm(e.spec.sillHeight)) : '—'), raw: (e) => [e.kind === 'window' && e.spec ? mm(e.spec.sillHeight) : null], num: true }],
+    sill: () => [{ label: labels.sill, value: (e) => { const s = sillOf(e); return s === null ? '—' : String(mm(s)); }, raw: (e) => { const s = sillOf(e); return [s === null ? null : mm(s)]; }, num: true }],
     levels: () => data.levels.map((level) => ({ label: level, value: (e: ScheduleEntry) => String(e.counts[level] ?? ''), raw: (e: ScheduleEntry) => [e.counts[level] ?? null], num: true, sum: true })),
     total: () => [{ label: labels.total, value: (e) => String(e.total), strong: true, raw: (e) => [e.total], num: true, sum: true }],
     u: () => [{

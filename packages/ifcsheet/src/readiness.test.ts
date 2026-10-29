@@ -47,7 +47,8 @@ describe('describeReadiness', () => {
       expect(effect, f.kind).not.toMatch(/^ready\.|\{/);
     }
     expect(describeReadiness(all[3]).missing).toBe('4 of 10 elements have no material.');
-    expect(Object.keys(READINESS_EN)).toHaveLength(30);
+    // 30 model checks (the rural scope's and the title block's among them), and 20 of the ByggesaksBIM check (ten findings, each with its effect line).
+    expect(Object.keys(READINESS_EN)).toHaveLength(30 + 20);
   });
 });
 

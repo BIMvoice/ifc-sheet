@@ -11,11 +11,12 @@ import { localeProblem } from '../cli-language.js';
 export const materialsCommand: CliCommand = {
   name: 'materials',
   usageRank: 300,
-  usage: `  ifcsheet materials <model.ifc> [--project <file>] [--json] [--locale <ro|en>]`,
+  usage: `  ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json] [--locale <ro|en>]`,
   helpRank: 300,
   help: `  materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
+          With --standard, that standard's hatch rows (ro, de) are laid over the table first.
           The text is in the language the project records, else --locale (ro or en), else English.`,
   async run(rest, values, io) {
     const badLocale = localeProblem(values.locale);
@@ -23,6 +24,6 @@ export const materialsCommand: CliCommand = {
       io.stderr(badLocale);
       return EXIT.usage;
     }
-    return await materials({ rest, json: values.json === true, project: values.project, ...(values.locale !== undefined ? { locale: values.locale } : {}), foreignOption: Boolean(values.out || values.dxf || values.name || values['include-far-elements']) }, io);
+    return await materials({ rest, json: values.json === true, project: values.project, standard: values.standard, ...(values.locale !== undefined ? { locale: values.locale } : {}), foreignOption: Boolean(values.out || values.dxf || values.name || values['include-far-elements']) }, io);
   },
 };

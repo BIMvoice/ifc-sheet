@@ -15,6 +15,9 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { TranslationKey } from '@/i18n';
 import type { DraftContext } from '@/drafting/commands/types';
 import { withAnnotationFrame } from '@/drafting/annotation';
+import { tagAll } from '@/drafting/commands/tagall';
+import { labelElementByGlobalId } from '@/labels/label-element';
+import type { TagParts } from '@/tagall/types';
 import { draftCommandById } from '@/drafting/commands/registry';
 import { draftsOfView } from '@/drafting/draft-store';
 import { AXIS_NAME } from '@/drafting/frame';
@@ -86,7 +89,7 @@ export function contextForView(view: AnnotatableView, drawing: Drawing2D, say: (
 }
 
 /** Run `command` on `view`, whose drawing is `drawing` (the one the view stores: `drawingShownBy`). */
-export function runCommandOnView(view: AnnotatableView, drawing: Drawing2D, command: AnnotateCommand): CommandResult {
+export function runCommandOnView(view: AnnotatableView, drawing: Drawing2D, command: AnnotateCommand, tagParts?: TagParts): CommandResult {
   const def = draftCommandById(command);
   if (!def?.run) throw new Error(`[annotate-set] ${command} is not a one-action drafting command`);
   const messages: Said[] = [];
@@ -94,7 +97,7 @@ export function runCommandOnView(view: AnnotatableView, drawing: Drawing2D, comm
   const before = draftsOfView(view.id).length;
   const started = performance.now();
   const frame = annotationFrameOf(AXIS_NAME[drawing.config.plane.axis]);
-  withAnnotationFrame(frame.up, frame.right, () => def.run?.(context, ''));
+  withAnnotationFrame(frame.up, frame.right, () => (command === 'tagall' && tagParts ? tagAll(context, labelElementByGlobalId, tagParts) : def.run?.(context, '')));
   const ms = performance.now() - started;
   const added = draftsOfView(view.id).length - before;
   const outcome = outcomeOf(added, messages);

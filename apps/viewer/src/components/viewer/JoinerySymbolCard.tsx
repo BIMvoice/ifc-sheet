@@ -19,6 +19,7 @@ import { useProjectStore } from '@/project/project-store';
 import { drawnJoinery, elementFacts } from '@/joinery/mapped-joinery';
 import { currentMapping, setElementSymbol, setTypeSymbol } from '@/joinery/mapping-actions';
 import { openJoinery } from '@/joinery/dialog-store';
+import { TypeOpeningForm } from './TypeOpeningForm';
 
 const AUTO = '__auto';
 const NONE = '__none';
@@ -88,6 +89,7 @@ export function JoinerySymbolCard({ modelId, expressId }: { modelId: string; exp
         </SelectContent>
       </Select>
       {entries.length === 0 && <p className="mt-1 text-2xs text-muted-foreground">{t('joinerySymbol.libraryEmpty')}</p>}
+      {facts.typeGlobalId ? <TypeOpeningForm key={facts.typeGlobalId} facts={facts} /> : null}
     </section>
   );
 }

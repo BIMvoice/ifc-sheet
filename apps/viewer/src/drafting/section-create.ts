@@ -10,7 +10,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { sectionPlaneThrough } from '@bimvoice/ifcsheet';
+import { graphicStandardOf, markStyleOf, sectionPlaneThrough } from '@bimvoice/ifcsheet';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { styledParams } from '@/project/drafting-standards';
 import { viewPlaneConfig } from '@/project/view-plane-config';
@@ -64,7 +64,7 @@ function makeSectionOnPlan(input: SectionOnPlan): string | null {
   const mark = sectionMarkOf(useProjectStore.getState().views.find((v) => v.id === viewId)?.name ?? name);
   const current = { textStyle: input.styles?.textStyle ?? 'standard', dimStyle: input.styles?.dimStyle ?? 'standard' };
   editDrafts({
-    add: sectionSymbolShapes(input.a, input.b, input.side, mark, input.textHeight).map((shape) => {
+    add: sectionSymbolShapes(input.a, input.b, input.side, mark, input.textHeight, markStyleOf(graphicStandardOf(useProjectStore.getState().graphicStandard))).map((shape) => {
       const params: Record<string, DraftParamValue> = { ...styledParams(input.planViewId, shape, current), sectionOf: viewId };
       return newDraft(input.planViewId, input.layerId, shape, params);
     }),

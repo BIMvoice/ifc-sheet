@@ -22,6 +22,7 @@ import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ViewportMarksControls } from './ViewportMarksControls';
 import type { ModelExtent } from '@/project/drawing-set';
 import { ScheduleContentCard } from './ScheduleContentCard';
 import { ScheduleExportCard } from './ScheduleExportCard';
@@ -105,6 +106,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
               {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} extent={extent} /> : null}
             </>
           )}
+          {view ? <ViewportMarksControls sheet={sheet} slot={slot} view={view} /> : null}
           {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
           {schedule ? <TypeClassificationCard key={`${schedule.id}:class`} schedule={schedule} /> : null}

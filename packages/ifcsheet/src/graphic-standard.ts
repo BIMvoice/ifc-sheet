@@ -38,6 +38,15 @@ export const ISO_3098_HEIGHTS: readonly number[] = [1.8, 2.5, 3.5, 5, 7, 10, 14,
 
 export type { WeightPair };
 
+/**
+ * How a section mark and an elevation mark are headed (#447):
+ *  - "arrow":  the plain view arrow, two barbs closing the stem (what IfcSheet drew before this choice existed);
+ *  - "circle": a circle holding the letter, with a filled triangle on its far side pointing the way the view looks;
+ *  - "flag":   a flag-shaped box holding the letter, its far edge drawn to a point the way the view looks.
+ */
+export const MARK_STYLES = ['arrow', 'circle', 'flag'] as const;
+export type MarkStyle = (typeof MARK_STYLES)[number];
+
 /** A standard's pens (`pens`, `weights`, `materialHatch`) are a pen table of the engine's (`view-style.ts`): the drafting view, the sheets and every export read them through one styler (#34). */
 export interface GraphicStandard extends PenTable {
   id: string;
@@ -49,9 +58,21 @@ export interface GraphicStandard extends PenTable {
   /** Text and dimension styles the standard adds to the project, under ids of its own (never `STANDARD`). */
   textStyles: readonly TextStyle[];
   dimStyles: readonly DimStyle[];
+  /** How section and elevation marks are headed. Absent means "arrow" (read it through {@link markStyleOf}). */
+  markStyle?: MarkStyle;
   /** The text and dimension style new annotations take under this standard. */
   current: { textStyle: string; dimStyle: string };
+  /**
+   * Where the dashed opening lines of a door or window in elevation point (#448): `towardsHandle`, the apex at the handle and the base on the
+   * hinges (the window makers' sketches, what IfcSheet has always drawn), or `towardsHinge`, the lines meeting at the hinges (DIN 1356, ISO 7519).
+   * It is a national convention. Choosing a standard sets the project's opening-line setting to this (`setGraphicStandard`), which the user can
+   * still change; the packs here keep `towardsHandle` because no source for another direction was checked for them.
+   */
+  openingLines: OpeningLineDirection;
 }
+
+/** See `GraphicStandard.openingLines`. */
+export type OpeningLineDirection = 'towardsHandle' | 'towardsHinge';
 
 /** What IfcSheet drew before standards existed. Choosing it restores exactly that. */
 export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
@@ -67,7 +88,10 @@ export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   // The default brings no styles: the project's own Standard styles are what it draws with.
   textStyles: [],
   dimStyles: [],
+  markStyle: 'arrow',
   current: { textStyle: STANDARD_STYLE_ID, dimStyle: STANDARD_STYLE_ID },
+  // What IfcSheet has always drawn.
+  openingLines: 'towardsHandle',
 };
 
 const RO_TEXT_STYLES: readonly TextStyle[] = [
@@ -104,7 +128,13 @@ export const ROMANIAN_PRACTICE: GraphicStandard = {
   textStyles: RO_TEXT_STYLES,
   // practice: oblique stroke terminators, extension line gap 1 and overshoot 2, value 1 above the line.
   dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'ro-dim', name: 'Dimensions 2.5', textStyle: 'ro-text-25', arrow: 'tick', arrowSize: 2.5, extGap: 1, extOver: 2, textGap: 1 }],
+  // convention: no Romanian text consulted states a section-head form (Legea 169/2026 and Ordinul 975/2026 say "secțiuni
+  // principale" without a symbol; STAS was not checked), so the circle head with a direction triangle is the common
+  // drawing-office form, not a cited rule.
+  markStyle: 'circle',
   current: { textStyle: 'ro-text-25', dimStyle: 'ro-dim' },
+  // Unchanged from before the setting existed: no Romanian source for the direction was checked.
+  openingLines: 'towardsHandle',
 };
 
 const DE_TEXT_STYLES: readonly TextStyle[] = [
@@ -139,9 +169,14 @@ export const GERMAN_PRACTICE: GraphicStandard = {
   // practice: the engine's default dimension style (arrow and gaps) under the pack's own text style; DIN 1356-1's dimensioning conventions were not checked.
   dimStyles: [{ ...DEFAULT_DIM_STYLE, id: 'de-dim', name: 'Dimensions 2.5', textStyle: 'de-text-25' }],
   current: { textStyle: 'de-text-25', dimStyle: 'de-dim' },
+  // Unchanged from before the setting existed: no German source for the direction was checked.
+  openingLines: 'towardsHandle',
 };
 
 export const GRAPHIC_STANDARDS: readonly GraphicStandard[] = [DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE, GERMAN_PRACTICE];
+
+/** The mark style of a standard: its own, or the arrow. */
+export const markStyleOf = (s: Pick<GraphicStandard, 'markStyle'>): MarkStyle => s.markStyle ?? 'arrow';
 
 /** The standard a project names; an unknown or absent id is the default. */
 export function graphicStandardOf(id: string | undefined): GraphicStandard {
