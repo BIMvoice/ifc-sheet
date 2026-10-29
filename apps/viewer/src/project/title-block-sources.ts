@@ -10,7 +10,7 @@
  */
 
 export {
-  DEFAULT_SOURCES, effectiveFields, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, readTitleSources, resolveField, resolveTitleBlock,
+  DEFAULT_SOURCES, effectiveFields, fieldsWithoutSource, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, projectNameFromFile, readTitleSources, resolveField, resolveTitleBlock,
   sameSource, sourcesOf, sourceText, withSources,
   type ModelEntity, type TitleBlockFacts as ModelFacts, type OwnerPart, type ResolvedField, type TitleSource, type TitleSources,
 } from '@bimvoice/ifcsheet';
