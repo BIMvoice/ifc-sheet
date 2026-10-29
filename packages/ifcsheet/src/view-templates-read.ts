@@ -8,8 +8,8 @@
  * graphics). A template carries the parts of the graphics a template can (`TemplateGraphics`): the rest of what `readGraphics` reads is ignored.
  */
 
-import { VIEW_TEMPLATE_KINDS, templateGraphicsOf, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
-import { readGraphics } from './view-graphics-file';
+import { VIEW_TEMPLATE_KINDS, templateGraphicsOf, type ProjectViewTemplate } from './view-templates.js';
+import { readGraphics } from './view-graphics-read.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

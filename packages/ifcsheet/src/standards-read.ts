@@ -6,14 +6,12 @@
  * Reading the drafting standards of a project file — text styles, dimension
  * styles, layer groups — tolerantly: a malformed field falls back to the
  * standard style's, an unreadable entry is dropped, and the Standard styles
- * are always there.
+ * are always there. The app's file reader and the engine's (`project-set.ts`) both read them with this.
  */
 
-import {
-  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, STANDARD,
-  type ArrowKind, type DimStyle, type FontKind, type LayerGroup, type LengthUnit, type TextPlacement, type TextStyle,
-} from '@/drafting/styles';
-import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
+import { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID as STANDARD, type ArrowKind, type DimStyle, type DraftLengthUnit as LengthUnit, type FontKind, type TextPlacement, type TextStyle } from './draft-styles.js';
+import { DEFAULT_TEXT_STYLE, type LayerGroup } from './draft-look.js';
+import { DEFAULT_GRAPHIC_STANDARD } from './graphic-standard.js';
 
 type Raw = Record<string, unknown>;
 const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);

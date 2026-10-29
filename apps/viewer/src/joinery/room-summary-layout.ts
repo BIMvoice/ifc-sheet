@@ -11,7 +11,7 @@
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
 import type { AreaSummary } from '@/urban/area-summary';
-import { PEN, type TableBlock, type TableItem } from './paged-table';
+import { PEN, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
 
 export interface RoomSummaryWords {
   /** The heading over the summary. */

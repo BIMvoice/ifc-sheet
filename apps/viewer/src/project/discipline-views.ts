@@ -39,11 +39,8 @@ import type { DisciplineId } from '@bimvoice/ifcsheet';
 
 export type { DisciplineId } from '@bimvoice/ifcsheet';
 
-export const DISCIPLINE_IDS: readonly DisciplineId[] = ['structural', 'foundation', 'roof'];
-
-export function isDisciplineId(value: unknown): value is DisciplineId {
-  return typeof value === 'string' && (DISCIPLINE_IDS as readonly string[]).includes(value);
-}
+// The ids and their check are the engine's, which reads a plan's discipline from a project file (`set-read.ts`).
+export { DISCIPLINE_IDS, isDisciplineId } from '@bimvoice/ifcsheet';
 
 /** What the filter needs to know of one element; the host's, for a part of a wall or slab. */
 export interface ElementFacts {

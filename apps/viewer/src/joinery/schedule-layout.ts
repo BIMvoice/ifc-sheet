@@ -16,45 +16,19 @@
  */
 
 import { defaultWindowSpec, normalisedPanels, type PanelOperation } from '@ifc-lite/create';
-import { PAD } from './paged-table';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
 import type { ElementViews } from './element-views';
 import { planRoom, sectionRoom, viewPrims } from './element-views-layout';
 import { fitText } from '@/project/title-block-template';
-import { pageTitle } from './paged-table';
 import type { ExportCell, ExportTable } from './schedule-export';
-import { isOverridableRow, joineryCellText, modelRowLabel, modelRowNumber, modelRowText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
+import { PAD, pageTitle, isOverridableRow, joineryCellText, modelRowLabel, modelRowNumber, modelRowText, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
 import { typeEntryId } from '@bimvoice/ifcsheet/project';
+
+// What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
+export type { ScheduleCell, ScheduleLayout, SchedulePrim };
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-
-export type SchedulePrim =
-  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
-  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol';
-      /** A line of a type's real view that can be hidden (#449): the catalogue type's id and the line's id. */
-      pick?: { type: string; line: string } }
-  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
-
-/** A cell of a table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) or, in a joinery schedule, the type (`typeIdentityOf`), and the column (a list's column id, a joinery schedule's row id) it is. */
-export interface ScheduleCell { x: number; y: number; w: number; h: number; guid: string; column: string; /** The cell holds a value typed over the model's: the editor marks it, the print does not. */ overridden?: true }
-
-export interface ScheduleLayout {
-  width: number;
-  height: number;
-  prims: SchedulePrim[];
-  /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
-  pages?: number;
-  /** The cells of this page a person can pick (a list schedule's element rows, a joinery schedule's typed rows), by the table's row and column. */
-  cells?: ScheduleCell[];
-  /** A column table's smallest page box (its width; title, header and one row): the box a resize stops at. A joinery schedule has `scheduleMinBox`. */
-  minBox?: { width: number; height: number };
-  /**
-   * Set when the table is wrapped to a viewport's box (joinery schedules on a sheet): the box, paper mm, it is drawn at the top
-   * left of and clipped to, and the smallest box that holds one band whole (a resize stops there).
-   */
-  fit?: { box: { x: number; y: number; w: number; h: number }; min: { width: number; height: number } };
-}
 
 export interface ScheduleLabels {
   /** The language the U value is written in on paper ("1,1" in Romanian); the CSV and XLSX keep the plain number. */

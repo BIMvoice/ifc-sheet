@@ -27,6 +27,23 @@ export interface CategoryGraphics {
 /** The phase of an element (`phases.ts`): IFC Status NEW, EXISTING, DEMOLISH, TEMPORARY. */
 export type PhaseId = 'existing' | 'demolish' | 'new' | 'temporary';
 
+/** The phases in the order a view lists them. */
+export const PHASES = ['existing', 'demolish', 'new', 'temporary'] as const satisfies readonly PhaseId[];
+
+/** A property of the project's own that says the phase, and what each of its values means. */
+export interface PhaseMapping {
+  set: string;
+  property: string;
+  /** Property value (compared without case) → phase. */
+  values: Record<string, PhaseId>;
+}
+
+export interface PhaseSource {
+  mapping?: PhaseMapping;
+  /** The phase of an element that says none. Absent: EXISTING. */
+  unmarked?: PhaseId;
+}
+
 /** How a phase draws: its line (colour, pen, dashed) and the fill of its cut faces. */
 export interface PhaseStyle {
   lineColor: string;

@@ -37,6 +37,8 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
+import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
+import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
@@ -49,9 +51,13 @@ export interface SheetText {
   text: string;
   /** Text height, paper mm. */
   size: number;
-  align?: 'left' | 'center';
+  align?: 'left' | 'center' | 'right';
   /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
   angle?: number;
+  /** Set in bold (a schedule's title, header and totals). */
+  bold?: true;
+  /** A face other than the sheet's Inter, with its italic (the project's "Tables" text style); absent: Inter. */
+  face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
 }
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
@@ -115,6 +121,8 @@ export interface SheetGraphic {
   symbols: { strokes: Polyline[]; solids: Polyline[] };
   /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
   marks: Polyline[];
+  /** What a project drew on the sheet with its own pens (#479): the views' drafts and dimensions, the placed schedules' rules; absent: none. */
+  strokes?: SheetStroke[];
   texts: SheetText[];
   /** The images the sheet carries: the title block's logo. */
   images: SheetImage[];
@@ -192,13 +200,25 @@ export function sheetGraphic(
   language?: string,
   /** The model's true north (`trueNorthOf`) and the language and number setting the scale bar's figures are written in. */
   marks: { north: PlanDirection | null; locale: SheetLocale } = { north: null, locale: 'en' },
+  /** A saved project's drafts and placed schedules (#479); absent: the sheet carries its views only. */
+  project?: { annotations?: SheetAnnotations; schedules?: SheetSchedules },
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  const strokes: SheetStroke[] = [];
   // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
   const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
   for (const vp of vps) {
+    // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
+    const schedule = project?.schedules ? placedListSchedule(sheet, doc.sheets, vp, project.schedules) : null;
+    if (schedule) {
+      const g = scheduleGraphics(schedule, vp, project?.schedules?.face);
+      strokes.push(...g.strokes);
+      out.texts.push(...g.texts);
+      out.viewports.push({ viewId: vp.viewId, box: g.box });
+      continue;
+    }
     const view = doc.views.find((v) => v.id === vp.viewId);
     const made = drawings.get(vp.viewId);
     const k = 1000 / vp.scale;
@@ -237,6 +257,13 @@ export function sheetGraphic(
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
     }
+    // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
+    if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
+      const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box }, project.annotations);
+      strokes.push(...drafted.strokes);
+      out.texts.push(...drafted.texts);
+    }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
     const area = marksBox ? markArea(marksBox, drawingAreaIn(paper, frameOf(sheet))) : null;
@@ -268,5 +295,6 @@ export function sheetGraphic(
   out.texts.push(...block.texts);
   out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
   out.images.push(...block.images);
+  if (strokes.length) out.strokes = strokes;
   return out;
 }
