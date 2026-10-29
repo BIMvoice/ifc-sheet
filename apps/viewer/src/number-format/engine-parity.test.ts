@@ -16,9 +16,9 @@ import {
   ROOM_SCHEDULE_EN, boqLineText, boqSayFor, computeBoq, listTableText, newArticle, roomSchedule, roomScheduleText, sheetFormat,
   type BoqElement, type ListScheduleTable, type RoomRecord,
 } from '@bimvoice/ifcsheet';
-import { layoutBoq } from '@/joinery/boq-layout';
+import { layoutBoq } from '@bimvoice/ifcsheet';
 import { layoutListSchedule } from '@bimvoice/ifcsheet';
-import { roomScheduleCells } from '@/joinery/room-schedule-layout';
+import { roomScheduleCells } from '@bimvoice/ifcsheet';
 import type { SchedulePrim } from '@/joinery/schedule-layout';
 
 /** What the project sets (the Romanian pack's separator) on the English interface, and the unset project. */

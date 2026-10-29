@@ -8,10 +8,11 @@
  * sheet prints, the sheet's written with the project's separators (#88), the file's as numbers.
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ExportCell, ExportTable } from '@/joinery/schedule-export';
-import type { AreaSummary } from '@/urban/area-summary';
-import { PEN, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ExportCell, ExportTable } from './schedule-csv.js';
+import type { AreaSummary } from './urban-area-summary.js';
+import { PEN, type TableBlock, type TableItem } from './paged-table.js';
 
 export interface RoomSummaryWords {
   /** The heading over the summary. */

@@ -27,7 +27,7 @@ import { labelElementByGlobalId } from '@/labels/label-element';
 import { refreshParametricLabels } from '@/labels/label-sync';
 import { planTagAll, modelArea } from '@/tagall/plan';
 import { TAGALL_TYPES } from '@/tagall/types';
-import { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from './room-schedule-layout';
+import { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
 
 const FZK = resolve(import.meta.dirname, '../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 const NET = [['1', 'Flur', 11.185458], ['2', 'Buero', 12.59545], ['3', 'Bad', 12.127619], ['4', 'Schlafzimmer', 21.410325], ['5', 'Wohnen', 25.2088935], ['6', 'Küche', 16.30545], ['7', 'Galerie', 74.5092415823]] as const;

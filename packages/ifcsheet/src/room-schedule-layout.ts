@@ -13,12 +13,12 @@
  * command line prints the same table.
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import { roomScheduleLines, type RoomSchedule, type RoomScheduleLine, type RoomScheduleWords } from '@bimvoice/ifcsheet';
-import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
-import { summaryItems, type RoomSummaryBlock } from './room-summary-layout';
-import { wrapNote } from '@/urban/urban-layout';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import { roomScheduleLines, type RoomSchedule, type RoomScheduleLine, type RoomScheduleWords } from './room-schedule.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem, wrapNote } from './paged-table.js';
+import { summaryItems, type RoomSummaryBlock } from './room-summary-layout.js';
 
 export interface RoomScheduleLabels extends RoomScheduleWords {
   /** The language the figures on paper are written in ("12,50" in Romanian). */

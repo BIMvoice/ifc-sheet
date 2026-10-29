@@ -28,11 +28,12 @@ import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from 
 import { setExtent } from '@/draft-set/body';
 import { clearDraftHistory, commitDrafts, newDraft } from '@/drafting/draft-store';
 import { captureSheets } from '@/issue/capture';
+import { addBoqArticle, updateBoqArticle } from '@/boq/boq-actions';
 import { addListScheduleToSet } from '@/joinery/list-schedule-actions';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { startDrawingSet } from './drawing-set-actions';
+import { addRegisterToSet, addScheduleToSet, startDrawingSet } from './drawing-set-actions';
 import { modelLevels } from './model-levels';
 import { projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
 import { serializeProject } from './project-file';
@@ -155,6 +156,11 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
       newDraft(plan.id, '0', { type: 'text', p: { x: c.x, y: c.y - 2 }, text: 'Hand note', height: 0.25, rotation: 0 }),
     ]);
     const scheduleSheetId = addListScheduleToSet('Walls by type', WALLS_BY_TYPE);
+    // The other kinds the engine prints: the rooms schedule, the bill of quantities and the drawing register, each on a sheet of its own.
+    const roomsSheetId = addScheduleToSet('rooms', 'Room schedule');
+    updateBoqArticle(addBoqArticle('m2'), { code: 'EXAMPLE-001', description: 'EXAMPLE: wall faces', filter: { classes: ['IfcWallStandardCase'] }, quantity: 'NetSideArea' });
+    const boqSheetId = addScheduleToSet('boq', 'Bill of quantities');
+    const registerSheetId = addRegisterToSet('Drawing register');
 
     // What the app's sheets draw, then the project as the app saves it, built by the command line.
     const sheets = useProjectStore.getState().sheets;
@@ -195,5 +201,18 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
     const cells = placedTexts(svgOf(scheduleSheet.id).querySelector(`[data-viewport-id="${scheduleVp.id}"]`)!);
     for (const want of ['Walls by type', 'Type', 'Count', 'Total', '13']) assert.ok(cells.some((t) => t.text === want), `the sheet's schedule prints "${want}": ${cells.map((t) => t.text).join('|')}`);
     at(cells, pdf[sheets.indexOf(scheduleSheet)], 'the schedule');
+
+    // The rooms schedule, the bill of quantities and the register: every text of the table the sheet draws is printed where it draws it,
+    // and the build no longer says it leaves them out.
+    const tableOf = (id: string, what: string, wanted: readonly string[]) => {
+      const sheet = sheets.find((s) => s.id === id)!;
+      const texts = placedTexts(svgOf(sheet.id).querySelector(`[data-viewport-id="${sheet.viewports![0].id}"]`)!);
+      for (const want of wanted) assert.ok(texts.some((t) => t.text === want), `the sheet's ${what} prints "${want}": ${texts.map((t) => t.text).join('|')}`);
+      at(texts, pdf[sheets.indexOf(sheet)], what);
+    };
+    tableOf(roomsSheetId, 'rooms schedule', ['Room schedule', 'Total building (Au)']);
+    tableOf(boqSheetId, 'bill of quantities', ['Bill of quantities', 'EXAMPLE-001']);
+    tableOf(registerSheetId, 'drawing register', ['Drawing register', 'Sheet', 'Title', 'Scale', 'Revision', 'Date', scheduleSheet.number]);
+    assert.doesNotMatch(stderr, /(rooms|boq|register) schedule/, 'the build prints these kinds and does not name them as left out');
   });
 });

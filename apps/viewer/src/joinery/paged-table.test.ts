@@ -15,7 +15,7 @@ import { layoutRoomFinishes, type RoomFinishLabels } from './room-finishes-layou
 import { layoutTypeQuantities, type TypeQuantityLabels } from './type-quantities-layout';
 import { layoutUrban, type UrbanLabels } from '@/urban/urban-layout';
 import { ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
-import { layoutRoomSchedule, type RoomScheduleLabels } from './room-schedule-layout';
+import { layoutRoomSchedule, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
 import type { TakeoffRow } from './material-takeoff';
 import type { RoomFinishes } from './room-finishes';
 import type { Totals, TypeQuantities } from './type-quantities';

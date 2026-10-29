@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the list schedules placed on the
- * sheets, as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
+ * sheets (the lists, the rooms schedule, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -12,18 +12,36 @@
 import { tablesFace } from './draft-look.js';
 import type { ProjectSet } from './project-set.js';
 import type { ClassificationMapping } from './classification.js';
+import type { BoqArticle } from './boq.js';
+import { boqResult } from './cli-boq.js';
+import { boqSayFor } from './boq-words.js';
+import { layoutBoq } from './boq-layout.js';
+import { drawingRegisterRows, registerFitOn, registerPaper } from './drawing-register.js';
 import { listScheduleTableOn } from './list-headless.js';
 import type { OpenedModel } from './model.js';
+import { layoutRegisterPage } from './register-layout.js';
+import { roomScheduleWords } from './room-schedule.js';
+import { layoutRoomSchedule } from './room-schedule-layout.js';
+import { layoutTableOnSheet } from './schedule-place.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
-import { SCHEDULE_CONTINUED, type PlacedTable } from './sheet-schedules.js';
+import { sheetRoomsOf } from './sheet-rooms.js';
+import { SCHEDULE_CONTINUED, type PlacedTable, type SchedulePager } from './sheet-schedules.js';
+import { registerLabelsOf, roomScheduleLabelsOf, sheetSayFor } from './sheet-words.js';
 import type { ProjectSchedule } from './sub-reports.js';
 import type { SheetLocale } from './units-and-numbers.js';
+import type { UrbanSettings } from './urban-indicators.js';
 
 /** What of a project the sheets draw: its set, its schedules and the classification mappings a list may group by. */
 export interface ProjectSheetSource {
   set: ProjectSet;
   schedules: readonly ProjectSchedule[];
   classificationMappings?: readonly ClassificationMapping[];
+  /** The bill of quantities' articles (`boq` schedules sum them). */
+  boqArticles?: readonly BoqArticle[];
+  /** The project's title block values, the register's revision and date read them with the set's issues and revisions. */
+  titleBlock?: Record<string, string>;
+  /** The urban indicators' settings the room schedule's area summary is measured with. */
+  urbanSettings?: UrbanSettings;
 }
 
 /** Something a sheet of the project holds that the engine does not print yet, said once per kind and sheet. */
@@ -50,10 +68,40 @@ export function projectSheetOptions(
   // The sheet each view hangs on, for saying where a draft was left out.
   const sheetOfView = new Map(set.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, `${s.number} ${s.name}`.trim()] as const)));
   const tables = new Map<string, PlacedTable>();
+  const pages = new Map<string, SchedulePager>();
+  const say = sheetSayFor(language);
+  // What the rooms schedule reads of the model: only when a sheet shows one (the footprints are measured for its area summary).
+  let rooms: ReturnType<typeof sheetRoomsOf> | undefined;
+  let boq: ReturnType<typeof boqResult> | undefined;
+  const registerId = project.schedules.find((s) => s.kind === 'register')?.id;
+  const registerRows = (): ReturnType<typeof drawingRegisterRows> => drawingRegisterRows({
+    sheets: set.sheets, titleBlock: project.titleBlock, issues: set.issues, asIndicated: say('sheets.asIndicated'), schedules: project.schedules, revisions: set.revisions, drafts: set.drafts,
+  });
   for (const sheet of set.sheets) {
     for (const vp of sheet.viewports ?? []) {
       const schedule = project.schedules.find((s) => s.id === vp.viewId);
-      if (!schedule || tables.has(schedule.id)) continue;
+      if (!schedule || tables.has(schedule.id) || pages.has(schedule.id)) continue;
+      if (schedule.kind === 'register') {
+        // Shrunk to the register's own sheet's drawing area, then split into pages: a viewport shows its own (the app's `useSheetSchedules`).
+        const rows = registerRows();
+        pages.set(schedule.id, ({ sheets, sheet: on, vp: at }) => layoutRegisterPage(rows, registerLabelsOf(say, schedule.name), registerFitOn(rows.length, (registerId ? registerPaper(sheets, registerId) : null) ?? registerPaper([on], schedule.id)), at.page ?? 0));
+        continue;
+      }
+      if (schedule.kind === 'rooms') {
+        rooms ??= sheetRoomsOf(model, project.urbanSettings);
+        const read = rooms;
+        if (!read.data) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the rooms schedule "${schedule.name}" (the model has no room)`); continue; }
+        const data = read.data;
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutRoomSchedule(data.schedule, roomScheduleLabelsOf(say, roomScheduleWords(language), format, schedule.name, data, read.summary), paging)));
+        continue;
+      }
+      if (schedule.kind === 'boq') {
+        boq ??= boqResult(model.dataStore, project.boqArticles ?? []);
+        const result = boq;
+        const boqSay = boqSayFor(language);
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutBoq(result, { locale: format, title: schedule.name, say: boqSay, detail: schedule.detail === true }, paging)));
+        continue;
+      }
       if (schedule.kind !== 'list' || !schedule.list) {
         leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the ${schedule.kind} schedule "${schedule.name}"`);
         continue;
@@ -82,7 +130,7 @@ export function projectSheetOptions(
       drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, locale: format,
       onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
-    schedules: { tables, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
+    schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
   };
 }
 

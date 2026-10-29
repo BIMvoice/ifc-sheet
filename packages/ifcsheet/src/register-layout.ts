@@ -13,10 +13,10 @@
  * own sheet, the next ones on continuation sheets (`syncRegisterPages`).
  */
 
-import type { RegisterRow } from '@/project/drawing-register';
-import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
-import { PAD } from '@bimvoice/ifcsheet';
-import type { ExportTable } from './schedule-export';
+import type { RegisterRow } from './drawing-register.js';
+import type { ScheduleLayout, SchedulePrim } from './schedule-prim.js';
+import { PAD } from './paged-table.js';
+import type { ExportTable } from './schedule-csv.js';
 
 export interface RegisterLabels {
   title: string;

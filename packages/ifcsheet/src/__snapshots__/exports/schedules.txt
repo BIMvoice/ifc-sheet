@@ -16,6 +16,7 @@ BoqProblemKind: type (type-only)
 BoqQuantity: type (type-only)
 BoqResult: type (type-only)
 BoqSay: type (type-only)
+BoqSheetLabels: type (type-only)
 BoqTable: type (type-only)
 BoqTypeLine: type (type-only)
 BoqUnit: type (type-only)
@@ -23,6 +24,8 @@ BoqWordKey: type (type-only)
 COUNT_QUANTITY: value
 CUSTOM_KEYS: value
 CUSTOM_PSET: value
+ChangeReason: type (type-only)
+ChangedSheet: type (type-only)
 CheckEntry: type (type-only)
 CheckOccurrence: type (type-only)
 CheckPart: type (type-only)
@@ -42,6 +45,9 @@ FootprintFit: type (type-only)
 FootprintMesh: type (type-only)
 GapType: type (type-only)
 INTERIOR: value
+IssueChangeRecord: type (type-only)
+IssuedModel: type (type-only)
+IssuedSheet: type (type-only)
 JoineryCellOverride: type (type-only)
 JoineryMapping: type (type-only)
 LIST_COUNT_ID: value
@@ -79,12 +85,14 @@ OrphanCell: type (type-only)
 OverridableRow: type (type-only)
 PROPERTY_OPS: value
 PartRef: type (type-only)
+ProjectIssue: type (type-only)
 ProjectSchedule: type (type-only)
 PropertyFact: type (type-only)
 PropertyOp: type (type-only)
 PropertyTest: type (type-only)
 READINESS_EN: value
 READINESS_RO: value
+REGISTER_MIN_TEXT_MM: value
 ROOM_AREA_NAMES: value
 ROOM_AREA_QTO: value
 ROOM_SCHEDULE_EN: value
@@ -94,6 +102,10 @@ RURAL_MAX_LEVELS: value
 RURAL_MAX_SD: value
 ReadinessFinding: type (type-only)
 ReadinessKind: type (type-only)
+RegisterFit: type (type-only)
+RegisterInput: type (type-only)
+RegisterLabels: type (type-only)
+RegisterRow: type (type-only)
 ReviewEdit: type (type-only)
 ReviewElement: type (type-only)
 ReviewFilter: type (type-only)
@@ -102,11 +114,18 @@ ReviewType: type (type-only)
 RoomArea: type (type-only)
 RoomRecord: type (type-only)
 RoomSchedule: type (type-only)
+RoomScheduleData: type (type-only)
+RoomScheduleLabels: type (type-only)
 RoomScheduleLevel: type (type-only)
 RoomScheduleLine: type (type-only)
 RoomScheduleWords: type (type-only)
+RoomSummaryBlock: type (type-only)
+RoomSummaryWords: type (type-only)
 RowId: type (type-only)
 RuralScope: type (type-only)
+SET_ORDER: value
+SHEET_WORDS_EN: value
+SHEET_WORDS_RO: value
 SORTS: value
 ScheduleClassification: type (type-only)
 ScheduleContent: type (type-only)
@@ -119,6 +138,8 @@ ScheduleSort: type (type-only)
 ScheduleSymbols: type (type-only)
 ScheduleTextCell: type (type-only)
 ScheduleTextRow: type (type-only)
+SheetSay: type (type-only)
+SheetWordKey: type (type-only)
 SortBy: type (type-only)
 SpaceRole: type (type-only)
 SplitData: type (type-only)
@@ -159,6 +180,7 @@ describeBoqProblem: value
 describeReadiness: value
 doorOperationOf: value
 doorSwingFlips: value
+drawingRegisterRows: value
 dropJoineryOverrides: value
 elementCount: value
 estimatedAreas: value
@@ -171,6 +193,8 @@ fitFootprint: value
 fitToElement: value
 followedTags: value
 hasSelector: value
+holdsRegister: value
+inSetOrder: value
 isClean: value
 isModelRowId: value
 isOpenFilter: value
@@ -179,6 +203,10 @@ joineryCellText: value
 joineryOverrideOf: value
 keepApart: value
 keepId: value
+layoutBoq: value
+layoutRegister: value
+layoutRegisterPage: value
+layoutRoomSchedule: value
 levelRowId: value
 listColumnKey: value
 listExportTable: value
@@ -200,6 +228,7 @@ modelRowText: value
 modelRowsOf: value
 newArticle: value
 normaliseName: value
+notDrawingIds: value
 occurrenceMarkOf: value
 orderedRows: value
 orphanCells: value
@@ -222,6 +251,7 @@ quantityDimension: value
 readBoqArticle: value
 readBoqArticles: value
 readCustomProps: value
+readIssues: value
 readJoineryMapping: value
 readJoineryOverrides: value
 readKeptApart: value
@@ -229,6 +259,7 @@ readListOverrides: value
 readListScheduleDef: value
 readModelRows: value
 readPropertyTest: value
+readRevisions: value
 readSchedule: value
 readScheduleClassification: value
 readScheduleContent: value
@@ -236,6 +267,15 @@ readScheduleTextRows: value
 readSubReport: value
 readSubReportFilter: value
 readUrbanSettings: value
+registerFit: value
+registerFitOn: value
+registerLabelsOf: value
+registerPaper: value
+registerRow: value
+registerRowCache: value
+registerRowsBuilt: value
+registerSheetFit: value
+registerTable: value
 removeTextRow: value
 renameTextRow: value
 resolveMapping: value
@@ -244,7 +284,9 @@ reviewCounts: value
 reviewTypes: value
 roomArea: value
 roomSchedule: value
+roomScheduleCells: value
 roomScheduleCsv: value
+roomScheduleLabelsOf: value
 roomScheduleLines: value
 roomScheduleRows: value
 roomScheduleTable: value
@@ -256,6 +298,8 @@ scheduleOf: value
 setJoineryOverride: value
 setListOverride: value
 setTextCell: value
+sharedRegisterRows: value
+sheetSayFor: value
 shownRows: value
 spaceRole: value
 subReportCheckOf: value
@@ -263,6 +307,8 @@ subReportChecksOf: value
 subReportData: value
 subReportParams: value
 subReportsOf: value
+summaryItems: value
+summaryTable: value
 symbolsShown: value
 textCellText: value
 textOwner: value
