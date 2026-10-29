@@ -5,7 +5,7 @@
 /**
  * The head shape and the hand-added properties of a window type, on AC20-FZK-Haus (#448): an arched head draws the schedule's elevation
  * outline and the opening lines inside it as arcs, inside the IFC's overall size; a property typed in for the type (a U value, a free
- * name) is a row of the schedule, is saved with the project and is read back by the headless engine.
+ * name) is a model row a schedule lists (`content.properties`, #480), is saved with the project and is read back by the headless engine.
  */
 
 import '@/test/setup-dom.js';
@@ -13,7 +13,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readProjectFile, joineryScheduleData } from '@bimvoice/ifcsheet/project';
-import { thermalOf } from '@bimvoice/ifcsheet';
+import { CUSTOM_PSET, modelRowId, thermalOf, type ModelRow } from '@bimvoice/ifcsheet';
 import type { JoineryHead } from '@ifc-lite/create';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
@@ -53,10 +53,14 @@ function aWindow(): ElementFacts {
 
 const DOUBLE = { operations: ['tilt-turn-left' as const, 'tilt-turn-right' as const], fanlight: false };
 
+/** The schedule's content that lists the row, attached to its data as the app's `scheduleOf` does. */
+const content: { properties: ModelRow[] } = { properties: [{ id: modelRowId('property', CUSTOM_PSET, 'Frame material'), source: 'property', psetName: CUSTOM_PSET, propertyName: 'Frame material' }] };
+const listing = () => ({ ...scheduleData('window', content), content });
+
 function configuredPrims(f: ElementFacts, extra: Parameters<typeof configureElementType>[2]): SchedulePrim[] {
   configureElementType(f, DOUBLE, extra);
   invalidateJoineryReads();
-  const data = scheduleData('window');
+  const data = listing();
   const entry = data.entries.find((e) => e.spec)!;
   return layoutSchedule({ ...data, entries: [entry] }, labels, { scale: SCALE }).prims;
 }
@@ -164,6 +168,7 @@ describe('a property added by hand to a window type', () => {
     { name: 'Frame material', value: 'Oak' },
   ];
 
+
   /** The value texts of the row labelled `label` in the cell. */
   function rowValue(prims: SchedulePrim[], label: string): string | undefined {
     const texts = prims.filter((p): p is Extract<SchedulePrim, { kind: 'text' }> => p.kind === 'text');
@@ -175,10 +180,10 @@ describe('a property added by hand to a window type', () => {
     const f = aWindow();
     configureElementType(f, DOUBLE);
     invalidateJoineryReads();
-    const data0 = scheduleData('window');
+    const data0 = listing();
     const before = layoutSchedule({ ...data0, entries: [data0.entries.find((e) => e.spec)!] }, labels, { scale: SCALE }).prims;
     assert.equal(rowValue(before, 'U'), '—');
-    assert.equal(rowValue(before, 'Frame material'), undefined);
+    assert.equal(rowValue(before, 'Frame material'), '—');
     const after = configuredPrims(f, { custom });
     assert.equal(rowValue(after, 'U'), '1.1', 'the U value of the type');
     assert.equal(rowValue(after, 'Frame material'), 'Oak');
@@ -188,7 +193,7 @@ describe('a property added by hand to a window type', () => {
     const f = aWindow();
     configureElementType(f, DOUBLE, { custom });
     invalidateJoineryReads();
-    const data = scheduleData('window');
+    const data = listing();
     assert.ok(data.entries.length >= 2, 'a configured type and others');
     const prims = layoutSchedule(data, labels, { scale: SCALE }).prims;
     const texts = prims.filter((p): p is Extract<SchedulePrim, { kind: 'text' }> => p.kind === 'text');
@@ -205,7 +210,7 @@ describe('a property added by hand to a window type', () => {
     assert.equal(useProjectStore.getState().joineryTypes?.length ?? 0, 0);
     loadProjectDocument(parseProjectFile(text));
     invalidateJoineryReads();
-    const data = scheduleData('window');
+    const data = listing();
     const entry = data.entries.find((e) => e.spec)!;
     assert.equal(thermalOf(entry.spec), 1.1);
     assert.deepEqual(entry.spec!.custom, custom);

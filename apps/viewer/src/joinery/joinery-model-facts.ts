@@ -8,6 +8,7 @@
  * format). Only the schedule's own elements are read, so the picker lists what a cell could show, not every property of the building.
  */
 
+import { CUSTOM_PSET, customPropNames } from '@bimvoice/ifcsheet';
 import { discoverModelRows, mergeFound } from '@bimvoice/ifcsheet/project';
 import { prepareListProviders } from '@/lib/lists/prepare-providers';
 import { useViewerStore } from '@/store';
@@ -20,5 +21,8 @@ export function joineryModelFacts(data: ScheduleData): ModelFacts {
   for (const e of data.entries) for (const o of e.occurrences) byModel.set(o.modelId, [...(byModel.get(o.modelId) ?? []), o.expressId]);
   const { pairs } = prepareListProviders(useViewerStore.getState(), {});
   const found = mergeFound(pairs.flatMap((pair) => (byModel.has(pair.modelId) ? [discoverModelRows(pair.provider, byModel.get(pair.modelId)!)] : [])));
-  return { classes: new Map(), storeys: [], properties: found.properties, quantities: found.quantities, attributes: [] };
+  // A property typed in for a type (#448) is offered like the model's, under its own set: no model states it, the type does.
+  const typed = customPropNames(data.entries.map((e) => e.spec));
+  const properties = typed.length ? new Map([...found.properties, [CUSTOM_PSET, typed]]) : found.properties;
+  return { classes: new Map(), storeys: [], properties, quantities: found.quantities, attributes: [] };
 }
