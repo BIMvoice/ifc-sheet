@@ -8,6 +8,7 @@ import type { AnnotationType } from '@/catalogue/types';
 import { newDraft } from '@/drafting/draft-store';
 import type { DraftEntity } from '@/drafting/types';
 import { settleLabels } from './label-sync.js';
+import { tagOverrideOf, withoutTagOverride, withTagOverride } from '@/drafting/tag-override';
 import { wall } from './label-fixture.js';
 import type { LabelElement } from './label-resolve.js';
 
@@ -57,5 +58,32 @@ describe('settleLabels', () => {
     const el = wall({ quantitySets: () => [] });
     assert.equal(text(settleLabels([label()], [type({ missing: 'empty' })], byGuid(el), 'en')[0]), 'W-01\n');
     assert.equal(text(settleLabels([label()], [type({ missing: 'field' })], byGuid(el), 'en')[0]), 'W-01\nQto_WallBaseQuantities.Length');
+  });
+});
+
+describe('a label whose text is written over the model\'s (#542)', () => {
+  const settled = () => settleLabels([label()], [type()], byGuid(wall()), 'en');
+  it('takes the written text, and the next sync does not take it back', () => {
+    const [d] = settled();
+    const over = withTagOverride(d, 'Room 7\nbedroom');
+    assert.notEqual(over, d, 'a label of TAGALL is an overridable text');
+    assert.equal(tagOverrideOf(over), 'Room 7\nbedroom');
+    const after = settleLabels([over], [type()], byGuid(wall()), 'en');
+    assert.equal(text(after[0]), 'Room 7\nbedroom');
+    assert.equal(after[0].params.labelOf, 'G1', 'it keeps its element');
+  });
+  it('still follows its type\'s frame, and gives the model\'s text back when reset', () => {
+    const over = withTagOverride(settled()[0], 'Mine');
+    const framed = settleLabels([over], [type({ frame: 'box' })], byGuid(wall()), 'en');
+    assert.ok(framed[0].shape.type === 'text' && framed[0].shape.frame === 'box');
+    const reset = settleLabels([withoutTagOverride(framed[0], null)], [type({ frame: 'box' })], byGuid(wall()), 'en');
+    assert.equal(text(reset[0]), 'W-01\n4.29 m');
+    assert.equal(tagOverrideOf(reset[0]), null);
+  });
+  it('a plain text and a blank text are no override', () => {
+    const plain = newDraft('v', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'Note', height: 0.25, rotation: 0 });
+    assert.equal(withTagOverride(plain, 'x'), plain);
+    const [d] = settled();
+    assert.equal(withTagOverride(d, '  '), d);
   });
 });

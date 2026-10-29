@@ -70,6 +70,7 @@ const graphics: Required<ViewGraphics> = {
   presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
   phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
   colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
+  colouredSurfaces: true,
   // Single elements by GlobalId, including ones the model has not got (kept, #32 #33), and a hidden line.
   hiddenElements: ['2O2Fr$t4X7Zf8NOew3FLOH', '0000000000000000000000'],
   elements: {
@@ -78,6 +79,8 @@ const graphics: Required<ViewGraphics> = {
     },
   },
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
+  // A plan's switch for the model's own plan symbols (#489): only `false` is a setting, on is the default.
+  usePlanSymbols: false,
   // A template's class and material mapping, kept on a view that was detached from it (#31).
   styleRules: [{ id: 'sr-w', by: 'class', match: ['IfcWall'], style: { lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2 } }],
   detailLevel: 'coarse',

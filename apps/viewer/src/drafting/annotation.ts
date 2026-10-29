@@ -17,39 +17,16 @@ import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
 import { figureUp, leaderOf } from './figure-layout';
 import { leaderTextRight } from './leader-segments';
 import { leaderStart } from '@/labels/label-leader';
-import { decimalsOf, lengthUnitOf, sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { formatLength, linearLayout, unitVector as unit, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
 import { textBlock, type TextFrame } from './text-block';
-import { naturalDecimals, unitFactor } from './styles';
+// A linear dimension's layout and the length format are the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` prints the same figure (#479).
+export { formatLength, type DimensionLayout, type LayoutOptions };
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
-
-export interface DimensionLayout {
-  /** Extension and dimension lines. */
-  lines: { a: Pt; b: Pt }[];
-  /** Arrow / tick tips with the direction they point. */
-  ticks: { at: Pt; dir: Pt }[];
-  textAt: Pt;
-  /** Text direction in drawing space (radians). */
-  textAngle: number;
-  label: string;
-}
-
-const EXT_GAP = 0.1;
-const EXT_OVER = 0.15;
-
-export function formatLength(locale: SheetLocale, m: number): string {
-  // Metres with two decimals unless the project names its length unit (#88): then that unit, with the places such a unit is drawn to.
-  const unit = lengthUnitOf(locale, 'm');
-  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', naturalDecimals(unit)), { group: false });
-}
 
 /** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
 export function formatLevel(locale: SheetLocale, m: number): string {
   return sheetLevel(locale, m, { minus: '−' });
-}
-
-function unit(v: Pt): Pt {
-  const l = Math.hypot(v.x, v.y);
-  return l > 1e-12 ? { x: v.x / l, y: v.y / l } : { x: 1, y: 0 };
 }
 
 /**
@@ -61,48 +38,6 @@ function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a:
   const along = { x: Math.cos(layout.textAngle), y: Math.sin(layout.textAngle) };
   const l = leaderOf(add(line.a, scale(sub(line.b, line.a), 0.5)), textAt, height, figureUp(along, screenUp, screenRight), along, textBlock(layout.label, height).outer.x1);
   return l ? [l] : [];
-}
-
-/** Drawing-unit sizes and the number format a dimension style gives its layout. */
-export interface LayoutOptions {
-  extGap?: number;
-  extOver?: number;
-  format?: (metres: number) => string;
-  /**
-   * The language of the default `format`. Left out by the callers that read
-   * only the lines and the text position of a layout; whatever draws the
-   * label passes `format` itself.
-   */
-  locale?: SheetLocale;
-}
-
-/** A linear / aligned dimension: extension lines from the points to the dimension line through `at`. */
-function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text: string | undefined, o: LayoutOptions): DimensionLayout {
-  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
-  let dir: Pt;
-  if (variant === 'aligned') {
-    dir = unit(sub(b, a));
-  } else {
-    // Linear: horizontal or vertical, whichever way the line was pulled.
-    const mid = scale(add(a, b), 0.5);
-    dir = Math.abs(at.y - mid.y) >= Math.abs(at.x - mid.x) ? { x: 1, y: 0 } : { x: 0, y: 1 };
-  }
-  const n = { x: -dir.y, y: dir.x };
-  const offA = (at.x - a.x) * n.x + (at.y - a.y) * n.y;
-  const offB = (at.x - b.x) * n.x + (at.y - b.y) * n.y;
-  const pa = add(a, scale(n, offA));
-  const pb = add(b, scale(n, offB));
-  const extA = { a: add(a, scale(n, Math.sign(offA) * Math.min(gap, Math.abs(offA)))), b: add(pa, scale(n, Math.sign(offA) * over)) };
-  const extB = { a: add(b, scale(n, Math.sign(offB) * Math.min(gap, Math.abs(offB)))), b: add(pb, scale(n, Math.sign(offB) * over)) };
-  const value = Math.abs((b.x - a.x) * dir.x + (b.y - a.y) * dir.y);
-  const along = unit(sub(pb, pa));
-  return {
-    lines: [extA, extB, { a: pa, b: pb }],
-    ticks: [{ at: pa, dir: scale(along, -1) }, { at: pb, dir: along }],
-    textAt: scale(add(pa, pb), 0.5),
-    textAngle: Math.atan2(along.y, along.x),
-    label: text ?? format(value),
-  };
 }
 
 export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {

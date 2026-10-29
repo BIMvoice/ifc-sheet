@@ -12,6 +12,7 @@ import '@/test/setup-dom.js';
 import { before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { sheetFormat, sheetNumber } from '@bimvoice/ifcsheet/names';
+import { DEFAULT_SCHEME } from '@/project/numbering';
 import { clearDraftHistory, redoDrafts, undoDrafts } from '@/drafting/draft-store';
 import { DEFAULT_GRAPHIC_STANDARD, ROMANIAN_PRACTICE, graphicStandardOf } from '@/drafting/graphic-standard';
 import { setExtent } from '@/draft-set/body';
@@ -27,6 +28,7 @@ import { resolve } from '@/i18n/registry';
 import { useViewerStore } from '@/store';
 import { cleanup, render } from '@/test/render.js';
 import { standardsSection } from '@/components/viewer/wall/drawer-sections/standards';
+import { setOpeningConvention } from '@/joinery/opening-convention';
 import { builtInPacks, romaniaPack } from './standard-pack';
 import { parseStandardPack, serializeStandardPack } from './standard-pack-file';
 import { installStandard, isApplied, resetStandard } from './standard-pack-install';
@@ -40,7 +42,7 @@ const state = () => useProjectStore.getState();
 const sorted = (_key: string, v: unknown): unknown => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v);
 const parts = () => JSON.stringify({
   graphicStandard: state().graphicStandard, textStyles: state().textStyles, dimStyles: state().dimStyles, titleBlockTemplate: state().titleBlockTemplate,
-  unitsAndNumbers: state().unitsAndNumbers, sheetNumbering: state().sheetNumbering, installedStandard: state().installedStandard,
+  unitsAndNumbers: state().unitsAndNumbers, sheetNumbering: state().sheetNumbering, materials: state().materials, installedStandard: state().installedStandard,
 }, sorted);
 
 describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planModelMissing(FZK_HAUS) }, () => {
@@ -93,10 +95,10 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     assert.deepEqual(s.unitsAndNumbers, { separator: 'comma' });
     assert.equal(sheetNumber(sheetFormat('en', s.unitsAndNumbers), 1234.5, 2), '1.234,50');
     assert.equal(sheetNumber(sheetFormat('en', undefined), 1234.5, 2), '1,234.50');
-    // Numbering: the pack encodes no Romanian scheme, so the project's stays, and no sheet is renumbered.
-    assert.equal(s.sheetNumbering, undefined);
+    // Numbering: the pack states the scheme (no standard prescribes one, so it is the default's values), and no sheet is renumbered.
+    assert.deepEqual(s.sheetNumbering, DEFAULT_SCHEME);
     assert.equal(JSON.stringify(s.sheets.map((x) => x.number)), sheetsBefore);
-    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 1, previous: { graphicStandard: null, titleBlockTemplate: null, unitsAndNumbers: null } });
+    assert.deepEqual(s.installedStandard, { id: 'ro-stas', version: 2, previous: { graphicStandard: null, openingLines: null, titleBlockTemplate: null, unitsAndNumbers: null, sheetNumbering: null, materials: [] } });
     assert.equal(isApplied(pack()), true);
   });
 
@@ -139,6 +141,19 @@ describe('the Romanian standards pack on AC20-FZK-Haus (#365)', { skip: planMode
     assert.deepEqual(state().unitsAndNumbers, { lengthUnit: 'cm', separator: 'point', decimals: { length: 1 } });
     assert.equal(resetStandard(), false, 'nothing is installed any more');
     assert.notEqual(mine, '');
+  });
+
+  it('reset puts back the direction of the opening lines the project had, not the one the pack\'s standard names (#448)', () => {
+    setOpeningConvention('hinge');
+    installStandard(pack());
+    assert.equal(state().openingLines, 'handle', 'the pack\'s standard sets the direction');
+    assert.equal(resetStandard(), true);
+    assert.equal(state().openingLines, 'hinge');
+    // A project that never chose one has none stored again after the reset.
+    useProjectStore.setState({ openingLines: undefined });
+    installStandard(pack());
+    assert.equal(resetStandard(), true);
+    assert.equal(state().openingLines, undefined);
   });
 
   it('reset is one undo step too', () => {

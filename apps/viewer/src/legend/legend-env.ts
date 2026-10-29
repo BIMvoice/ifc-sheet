@@ -20,7 +20,10 @@ import { useProjectStore } from '@/project/project-store';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import type { MeshData } from '@ifc-lite/geometry';
-import { schemeResultOf } from '@/project/view-colour-scheme';
+import { resolveViewGraphics, type ViewGraphics } from '@bimvoice/ifcsheet';
+import { shownRooms, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { colourSchemeOf, schemeResultOf } from '@/project/view-colour-scheme';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { legendGroups, scopeViewIds, scopeViews, type LegendMaterial } from './legend-data';
 import { schemeHeading } from '@/project/scheme-heading';
 import { layoutLegend, type LegendLabels, type LegendLayout } from './legend-layout';
@@ -39,6 +42,8 @@ export interface LegendEnv {
   byView: ReturnType<typeof useViewDrawings.getState>['byView'];
   /** The geometry the drawings were cut from: a colour scheme's rooms are its spaces. */
   meshes?: readonly MeshData[];
+  /** The project's view templates: a view's graphics (what it hides) are its template's, then its own. */
+  viewTemplates?: ReturnType<typeof useProjectStore.getState>['viewTemplates'];
 }
 
 export function layoutOf(legend: LegendConfig, env: LegendEnv, placedOn?: string): LegendLayout {
@@ -54,16 +59,27 @@ export function layoutOf(legend: LegendConfig, env: LegendEnv, placedOn?: string
   const textStyle = (env.textStyles ?? []).find((s) => s.id === legend.textStyle) ?? DEFAULT_TEXT_STYLE;
   // The legend of a view's colours is headed by what the view is coloured by, in the app's language, unless the scheme carries a title of its own.
   const scheme = legend.scope === 'view' && legend.categories.length === 1 && legend.categories[0] === 'colours'
-    ? env.views.find((v) => v.id === legend.scopeId)?.graphics?.colourScheme : undefined;
+    ? colourSchemeOf(env.views.find((v) => v.id === legend.scopeId)) : undefined;
   const config = scheme ? { ...legend, title: schemeHeading(scheme, env.labels.attribute) } : legend;
   return layoutLegend(groups, config, { textStyle, patterns: parsePat(env.patterns).patterns, labels: env.labels });
 }
 
 /** The values the colour schemes of `views` paint, once each (the first view to show a value gives its colour), in the order the views are listed. */
-function coloursOf(views: readonly ProjectView[], env: LegendEnv): { name: string; colour: string }[] {
-  const out = new Map<string, { name: string; colour: string }>();
+function coloursOf(views: readonly ProjectView[], env: LegendEnv): { name: string; colour: string; hatch?: string }[] {
+  return legendColours(views, (view) => schemeResultOf(view, env.byView[view.id]?.drawing, env.meshes), (view) => resolveViewGraphics(view, env.viewTemplates), renderIdGlobalId);
+}
+
+/**
+ * The legend entries of `views`' colour schemes, once each, without the values whose only rooms the view hides: the rule the placed
+ * sheets and the headless build use (`shownRooms`), so a value is on the legend exactly when it is on the paper.
+ */
+export function legendColours(
+  views: readonly ProjectView[], resultOf: (view: ProjectView) => SchemeResult | null | undefined,
+  graphicsOf: (view: ProjectView) => ViewGraphics | undefined, globalIdOf: (entityId: number) => string | null | undefined,
+): { name: string; colour: string; hatch?: string }[] {
+  const out = new Map<string, { name: string; colour: string; hatch?: string }>();
   for (const view of views) {
-    for (const e of schemeResultOf(view, env.byView[view.id]?.drawing, env.meshes)?.entries ?? []) if (!out.has(e.key)) out.set(e.key, { name: e.label, colour: e.colour });
+    for (const e of shownRooms(resultOf(view), graphicsOf(view), globalIdOf)?.entries ?? []) if (!out.has(e.key)) out.set(e.key, { name: e.label, colour: e.colour, ...(e.hatch ? { hatch: e.hatch } : {}) });
   }
   return [...out.values()];
 }
@@ -74,6 +90,6 @@ export function readLegendEnv(labels: LegendLabels): LegendEnv {
   return {
     labels, views: p.views, sheets: p.sheets, drafts: p.drafts, layers: p.draftLayers, table: p.materials, annotationTypes: p.annotationTypes,
     symbols: p.symbols, patterns: p.hatchPatterns ?? '', textStyles: p.textStyles, byView: useViewDrawings.getState().byView,
-    meshes: currentDrawingRuntime().geometryResult?.meshes,
+    meshes: currentDrawingRuntime().geometryResult?.meshes, viewTemplates: p.viewTemplates,
   };
 }

@@ -11,7 +11,7 @@
  * A model whose figures are all declared prints exactly as before.
  */
 
-import type { TableItem } from './paged-table';
+import type { TableItem } from '@bimvoice/ifcsheet';
 import { wrapNote } from '@/urban/urban-layout';
 
 /** The words, in the user's language. */

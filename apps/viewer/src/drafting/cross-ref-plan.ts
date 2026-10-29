@@ -10,6 +10,7 @@
  * swings reach past the wall) and of the marks placed before it. Pure.
  */
 
+import type { MarkStyle } from '@bimvoice/ifcsheet';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { fitExtent } from '@/project/sheets';
 import type { PlanOverlay } from '@/project/plan-overlays';
@@ -37,6 +38,8 @@ export interface PlanCrossRefInput {
    * against is measured with it, so the marks are a function of this input and not of the drafting session's current view.
    */
   screenUp: 1 | -1;
+  /** How section and elevation marks are headed (the project's graphic standard, #447); absent: the arrow. */
+  markStyle?: MarkStyle;
 }
 
 /**
@@ -58,7 +61,7 @@ export function withCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
 function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
   const { drafts, view, views, sheets, groundPlanId, bounds, viewportScale } = input;
   const symbols = overlayObstacleBoxes(input.overlays ?? []);
-  const sections = view?.kind === 'plan' ? sectionReferenceDrafts(drafts, views, sheets, { obstacles: symbols, paperUnit: viewportPaperUnit(viewportScale), factor: annotationFactor(viewportScale, view.scale) }) : [];
+  const sections = view?.kind === 'plan' ? sectionReferenceDrafts(drafts, views, sheets, { obstacles: symbols, paperUnit: viewportPaperUnit(viewportScale), factor: annotationFactor(viewportScale, view.scale), markStyle: input.markStyle }) : [];
   const withSections = sections.length ? [...drafts, ...sections] : [...drafts];
   // An elevation mark stands outside the building's extent, so what lies wholly inside it, a margin in, cannot be in its way.
   const reach = MARK_MARGIN_MM * viewportPaperUnit(viewportScale);
@@ -67,7 +70,7 @@ function placeCrossReferences(input: PlanCrossRefInput): DraftEntity[] {
   const elevations = view && view.id === groundPlanId && bounds
     ? elevationMarkDrafts({
       planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(viewportScale),
-      factor: annotationFactor(viewportScale, view.scale), obstacles: [...obstacleBoxes(withSections), ...symbols.filter(outside)],
+      factor: annotationFactor(viewportScale, view.scale), obstacles: [...obstacleBoxes(withSections), ...symbols.filter(outside)], markStyle: input.markStyle,
     })
     : [];
   return elevations.length ? [...withSections, ...elevations] : withSections;

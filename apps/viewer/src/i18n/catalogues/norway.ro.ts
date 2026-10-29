@@ -7,7 +7,6 @@ import type { TranslationValue } from '../types';
 /** Romanian for `norway.en.ts`. Term choices: `../ro-glossary.md`. */
 export const norwayRo = {
   'norway.title': 'Norvegia (byggesak)',
-  'norway.switch': 'Norge (byggesak)',
   'norway.intro': 'Piesele desenate ale unei cereri de construire din Norvegia, SAK10 § 5-4: „tegninger og målsatt situasjonsplan”. Fiecare punct indică sursa. Punctele marcate neverificate nu rezultă din paginile oficiale citite.',
   'norway.set.name': 'Norvegia (byggesak)',
   'norway.set.plans': 'Planuri de nivel (plantegninger)',

@@ -11,15 +11,15 @@
  * entry fails with the path of the problem rather than half-loading.
  */
 
-import { readDraftLayer } from '@/drafting/draft-file';
+import { readDraftLayer } from '@bimvoice/ifcsheet';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { readBoqArticle, readClassificationMapping, type BoqArticle, type ClassificationMapping, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { readMaterial } from '@bimvoice/ifcsheet/materials';
-import { readViewTemplate } from '@/project/view-templates-file';
-import { readStandards } from '@/project/standards-file';
+import { readViewTemplate } from '@bimvoice/ifcsheet';
+import { readStandards } from '@bimvoice/ifcsheet';
 import { readTemplate } from '@/project/sheet-templates';
 import type { ProjectMaterial, SheetTemplate } from '@/project/types';
 import { upgradeTagAllTypes } from '@/tagall/types';

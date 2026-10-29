@@ -23,6 +23,7 @@ export const viewGraphicsEn = {
   'viewGraphics.byPreset': 'By preset',
   'viewGraphics.none': 'None',
   'viewGraphics.grid': 'Grid',
+  'viewGraphics.planSymbols': 'Use plan symbols from the model',
   'viewGraphics.gridEnds': 'Grid bubbles',
   'viewGraphics.gridEnds.start': 'At the start (the foot on a section)',
   'viewGraphics.gridEnds.end': 'At the end (the head on a section)',

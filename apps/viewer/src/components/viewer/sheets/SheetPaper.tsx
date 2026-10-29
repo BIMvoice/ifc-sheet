@@ -13,7 +13,7 @@
  * viewport box.
  */
 
-import { forwardRef, memo, useId, useMemo } from 'react';
+import { forwardRef, Fragment, memo, useId, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
 import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
@@ -35,6 +35,7 @@ import { useSheetParamLookup } from './useSheetParams';
 import { currentRevisionOf, printsAtCurrentRevision, sheetRevisions } from '@/project/revisions';
 import { RevisionTable } from './RevisionTable';
 import { viewportPens } from './viewport-pens';
+import { dxfIgnore, SchemeHatchDxf } from './SchemeHatchDxf';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
@@ -153,7 +154,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   // Shared with every other component that pens this drawing the same way (`shared-memo.ts`): opening a sheet reuses the Wall's pens (#154).
   const pens = useMemo(
     () => (drawing ? memoOn(pensMemo, drawing, [graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
-      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard, styler)) : []),
+      () => viewportPens(drawing, graphics, viewportTransform(vp, drawing, axis), axis, extraPatterns, cadPenContext(cadLayers), content.styleOf, standard, styler, vp.scale / 1000)) : []),
     [drawing, graphics, vp, axis, extraPatterns, cadLayers, content.styleOf, standard, styler],
   );
   const box = viewportBox(vp, drawing?.bounds ?? null);
@@ -192,7 +193,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
         {underlays.map((u) => <image key={u.id} data-underlay-id={u.id} data-export-ignore-dxf="true" href={u.href} x={0} y={0} width={u.widthPx} height={u.heightPx} preserveAspectRatio="none" opacity={u.opacity} transform={matrixText(underlayMatrix(u, t, axis))} />)}
         {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
-          <path key={i} {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} data-dxf-fill={p.solid ? 'solid' : undefined} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
+          <Fragment key={i}>
+            <path {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} {...dxfIgnore(p)} data-surface={p.surface ? 'true' : undefined} data-dxf-fill={p.solid ? 'solid' : undefined} d={p.d} fill={p.fill ?? 'none'} fillRule={p.surface ? 'nonzero' : 'evenodd'} stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
+            <SchemeHatchDxf pen={p} />
+          </Fragment>
         ))}
         {content.overlays?.length && !keyPlan ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
         {content.site ? <SiteOverlay site={content.site} transform={t} axis={axis} scale={vp.scale} /> : null}

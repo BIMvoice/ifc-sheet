@@ -16,7 +16,7 @@
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { roomScheduleLines, type RoomSchedule, type RoomScheduleLine, type RoomScheduleWords } from '@bimvoice/ifcsheet';
 import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
 import { summaryItems, type RoomSummaryBlock } from './room-summary-layout';
 import { wrapNote } from '@/urban/urban-layout';
 

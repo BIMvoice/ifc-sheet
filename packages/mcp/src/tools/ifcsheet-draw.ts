@@ -13,11 +13,11 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
-  type BoqArticle, type SheetLocale, type UnitsAndNumbers,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readClassificationMappings, readProjectLanguage, readProjectSet, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
-import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
+import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type ProjectSheetSource, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import type { SetSchedule, SheetModelEntry, SheetSetEntry } from './ifcsheet-store.js';
 
@@ -85,14 +85,39 @@ function setTable(sheet: SheetGraphic, area: { x: number; y: number; w: number; 
 
 export interface DrawnSet {
   sheets: SheetGraphic[];
+  /** What the loaded project holds that the engine does not print yet, one sentence each (`ifcsheet build --project` says the same on stderr); empty for a generated set. */
+  notes: string[];
   /** Per schedule: the table and how many of its rows fit the sheet (the rest are in the CSV of the issue). */
   schedules: { schedule: SetSchedule; table: ScheduleTable; drawn: number }[];
 }
 
-/** Every sheet of the set as shapes on its paper, schedules included. */
+/**
+ * What a loaded project file drew on its sheets (#479): its drafts and the schedules the app placed, read again from the document
+ * (a loaded file's other keys are kept on it) by the reader `ifcsheet build --project` uses. Null for a set with neither.
+ */
+function projectOf(document: ProjectDocument): ProjectSheetSource | null {
+  const raw = document as unknown as Record<string, unknown>;
+  if (!Array.isArray(raw.drafts) && !Array.isArray(raw.schedules)) return null;
+  const schedules = (Array.isArray(raw.schedules) ? raw.schedules : []).flatMap((s) => readSchedule(s) ?? []);
+  return { set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings) };
+}
+
+/**
+ * The language a loaded project's drafts and schedules are written in: the project's recorded `language`, else English, as
+ * `ifcsheet build --project` resolves it with no `--locale` (`resolveLanguage`), so the two print the same figures and words.
+ */
+export function drawLanguage(document: ProjectDocument): 'en' | 'ro' {
+  return readProjectLanguage((document as unknown as Record<string, unknown>).language).language ?? 'en';
+}
+
+/** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them, in the project's language (else English). */
 export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Promise<DrawnSet> {
-  const { sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
-  const sheets = await sheetGraphics(entry.set, model.model);
+  const { projectSheetOptions, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
+  const project = projectOf(entry.set.document);
+  const language = drawLanguage(entry.set.document);
+  const notes: string[] = [];
+  const extras = project ? projectSheetOptions(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
+  const sheets = await sheetGraphics(entry.set, model.model, extras);
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
     const sheet = entry.set.document.sheets.find((s) => s.id === schedule.sheetId);
@@ -101,5 +126,5 @@ export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Pro
     const table = await scheduleTable(schedule, model.model, entry.set.document.unitsAndNumbers);
     schedules.push({ schedule, table, drawn: setTable(graphic, drawingArea(sheet), sheet.name, table) });
   }
-  return { sheets, schedules };
+  return { sheets, notes, schedules };
 }

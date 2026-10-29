@@ -48,7 +48,7 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   return useMemo(() => ({
     locale, title,
     mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
-    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'),
+    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'), varies: t('joineryRow.varies'),
     op: (op: PanelOperation) => t(`joinery.op.${op}` as TranslationKey),
   }), [t, locale, title]);
 }
@@ -155,12 +155,14 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const schedules = useProjectStore((s) => s.schedules);
+  // The cells typed over the model's text (#446) are part of the data.
+  const joineryOverrides = useProjectStore((s) => s.joineryOverrides);
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban' || schedule.kind === 'rooms' || schedule.kind === 'boq' || schedule.kind === 'list') return null;
-    return scheduleDataOf(schedule, undefined, schedules ?? []);
+    return scheduleDataOf(schedule, undefined, schedules ?? [], joineryOverrides);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores; schedules: the text rows.
-  }, [schedule?.kind, schedule?.sub, schedules, mutationVersion, models, catalogue, mapping]);
+  }, [schedule?.kind, schedule?.sub, schedules, joineryOverrides, mutationVersion, models, catalogue, mapping]);
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');
@@ -170,6 +172,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
 /** The layouts of the schedules placed on `sheet`, by schedule id. */
 export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayout> {
   const schedules = useProjectStore((s) => s.schedules);
+  const joineryOverrides = useProjectStore((s) => s.joineryOverrides);
   const sheets = useProjectStore((s) => s.sheets);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
@@ -209,11 +212,11 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || (schedule.kind !== 'door' && schedule.kind !== 'window' && schedule.kind !== 'all') || out.some((r) => r.id === schedule.id)) continue;
-      out.push({ id: schedule.id, data: scheduleDataOf(schedule), scale: schedule.scale ?? 50 });
+      out.push({ id: schedule.id, data: scheduleDataOf(schedule, undefined, schedules, joineryOverrides), scale: schedule.scale ?? 50 });
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [heldKey, schedules, mutationVersion, models, catalogue, mapping]);
+  }, [heldKey, schedules, joineryOverrides, mutationVersion, models, catalogue, mapping]);
   const joineryViews = useElementViews(joinery);
   const { layouts, loaded } = useMemo(() => {
     const out = new Map<string, ScheduleLayout>();
@@ -278,13 +281,25 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   return useMemo(() => (tables.size > 0 ? new Map([...layouts, ...tables]) : layouts), [layouts, tables]);
 }
 
-function Prim({ p, face }: { p: SchedulePrim; face: ReturnType<typeof tablesFace> }) {
+/** Picks a line of a type's view to hide (#449): the catalogue type's id and the line's id. */
+export type PickLine = (type: string, line: string) => void;
+
+function Prim({ p, face, onPick }: { p: SchedulePrim; face: ReturnType<typeof tablesFace>; onPick?: PickLine }) {
   if (p.kind === 'line') {
     return <line {...penTags('SCHEDULE', p.w)} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#000" strokeWidth={p.w} />;
   }
   if (p.kind === 'path') {
     const d = p.pts.map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(2)},${q.y.toFixed(2)}`).join('') + (p.closed ? 'Z' : '');
-    return <path {...penTags('SCHEDULE-SYMBOLS', p.w, !!p.dashed)} d={d} fill="none" stroke="#000" strokeWidth={p.w} strokeDasharray={p.dashed ? '1.2 0.8' : undefined} strokeLinejoin="round" />;
+    const path = <path {...penTags('SCHEDULE-SYMBOLS', p.w, !!p.dashed)} d={d} fill="none" stroke="#000" strokeWidth={p.w} strokeDasharray={p.dashed ? '1.2 0.8' : undefined} strokeLinejoin="round" />;
+    const pick = p.pick;
+    if (!onPick || !pick) return path;
+    // A wide invisible stroke to hit; `data-export-ignore` leaves it out of the SVG and the DXF, which read the drawn paths.
+    return (
+      <g>
+        {path}
+        <path data-export-ignore="true" data-pick-line={pick.line} d={d} fill="none" stroke="transparent" strokeWidth={Math.max(1.2, p.w * 4)} style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={() => onPick(pick.type, pick.line)} />
+      </g>
+    );
   }
   return (
     <text
@@ -298,13 +313,13 @@ function Prim({ p, face }: { p: SchedulePrim; face: ReturnType<typeof tablesFace
 }
 
 /** The schedule at (x, y) on the paper (its top-left corner). */
-export const ScheduleGraphic = memo(function ScheduleGraphic({ layout, x = 0, y = 0 }: { layout: ScheduleLayout; x?: number; y?: number }) {
+export const ScheduleGraphic = memo(function ScheduleGraphic({ layout, x = 0, y = 0, onPick }: { layout: ScheduleLayout; x?: number; y?: number; onPick?: PickLine }) {
   // The project's "Tables" text style (#500): one face for every schedule, report and register.
   const textStyles = useProjectStore((s) => s.textStyles);
   const face = useMemo(() => tablesFace(textStyles), [textStyles]);
   return (
     <g transform={x || y ? `translate(${x} ${y})` : undefined}>
-      {layout.prims.map((p, i) => <Prim key={i} p={p} face={face} />)}
+      {layout.prims.map((p, i) => <Prim key={i} p={p} face={face} onPick={onPick} />)}
     </g>
   );
 });

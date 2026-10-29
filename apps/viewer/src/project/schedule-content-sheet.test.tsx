@@ -248,12 +248,13 @@ describe('the card', () => {
     const id = hung();
     const view = render(<ScheduleContentCard schedule={scheduleById(id)!} />);
     openSection(view, 'Content');
+    // The first select adds a column back (#446); the sort and the marks follow it.
     const selects = view.querySelectorAll<HTMLSelectElement>('select');
-    change(selects[0], 'size');
+    change(selects[1], 'size');
     assert.deepEqual(scheduleById(id)!.content, { sort: { by: 'size' } });
     click(box(view, 'Reverse'));
     assert.deepEqual(scheduleById(id)!.content!.sort, { by: 'size', descending: true });
-    change(selects[1], 'sequence');
+    change(selects[2], 'sequence');
     const first = view.querySelector<HTMLInputElement>('input[aria-label="First type no."]')!;
     typeInto(first, '12');
     blur(first);

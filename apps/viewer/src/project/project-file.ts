@@ -14,7 +14,7 @@ import { declaredVersion, migrateProject, PROJECT_FILE_VERSION, PROJECT_MIGRATIO
 import { withoutModelState } from './autosave-snapshots';
 import { markProjectSaved } from './project-saved';
 import { loadProjectDocument, projectDocument } from './project-store';
-import { fail, isObject } from './project-read';
+import { fail, isObject } from '@bimvoice/ifcsheet';
 import { readDocumentFields } from './fields';
 import type { ProjectDocument } from './types';
 

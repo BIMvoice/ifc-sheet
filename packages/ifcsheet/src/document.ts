@@ -315,6 +315,8 @@ export interface ProjectDocument {
   titleBlockParams?: TitleBlockParam[];
   /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`). */
   sheetTemplates?: SheetTemplate[];
+  /** The project's own hatch patterns, as `.pat` text (built-ins are not stored): a colour scheme's hatches may name them (#493). */
+  hatchPatterns?: string;
   /** The project's view templates (#44): named graphics that views follow by `templateId`. */
   viewTemplates?: ProjectViewTemplate[];
   /** The template new sheets of a series start from, by template id. */

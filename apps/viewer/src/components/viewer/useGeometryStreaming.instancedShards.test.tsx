@@ -105,9 +105,11 @@ interface RecordedCall {
 
 function fakeRenderer(calls: RecordedCall[]): Renderer {
   const scene = {
-    addInstancedShard: (_device: unknown, shard: DecodedInstancedShard, modelIndex?: number) => {
+    registerInstancedShard: (shard: DecodedInstancedShard, modelIndex?: number) => {
       calls.push({ modelIndex, entityIds: shard.instances.map((i) => i.entityId) });
     },
+    hasDeferredInstancedUploads: () => false,
+    uploadDeferredInstanced: () => {},
   };
   return {
     getGPUDevice: () => ({}) as unknown,

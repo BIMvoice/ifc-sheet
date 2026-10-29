@@ -21,7 +21,8 @@ import { roomSummaryEn } from '@/i18n/catalogues/room-summary.en';
 import { roomSummaryRo } from '@/i18n/catalogues/room-summary.ro';
 import { embedFonts, missingGlyphs } from '@/issue/pdf-fonts';
 import { roomScheduleLabelsOf } from '@/components/viewer/joinery/room-schedule-hooks';
-import { layoutRoomSchedule } from './room-schedule-layout';
+import { layoutRoomSchedule, roomScheduleCells } from './room-schedule-layout';
+import { PAD, textWidth } from '@bimvoice/ifcsheet';
 
 const ROOMS: RoomRecord[] = [
   { id: 'a', number: '1', name: 'Flur', level: 0, area: 12.5, source: 'quantity', perimeter: 14 },
@@ -61,5 +62,36 @@ describe('the room schedule prints m², never a bare star (#495)', () => {
     const dxf = encodeDxfCp1252('m²');
     assert.equal(dxf.hadUnmappable, false);
     assert.deepEqual([...dxf.bytes], [0x6d, 0xb2]);
+  });
+});
+
+describe('a long room number stays in its column (#543)', () => {
+  const LONG = roomSchedule([{ name: 'Parter', elevation: 0 }], [
+    { id: 'a', number: 'Casa scarii parter', name: 'Casa scarii parter', level: 0, area: 12.5, source: 'quantity', perimeter: 14 },
+    { id: 'b', number: 'Living + hol ap.1', name: 'Living', level: 0, area: 8.25, source: 'quantity', perimeter: 11 },
+    { id: 'c', number: 'Baie ap.1', name: 'Baie', level: 0, area: 4, source: 'quantity', perimeter: 8 },
+  ]);
+  const labels = (() => {
+    const c = catalogue('en');
+    const t = ((key: string, vars?: Record<string, unknown>) => (c[key] ?? key).replace(/\{(\w+)\}/g, (_, k: string) => String(vars?.[k] ?? `{${k}}`))) as never;
+    return roomScheduleLabelsOf(t, 'en', 'Rooms', { schedule: LONG, leftOut: { external: 0, gfa: 0, parents: 0 } } as never);
+  })();
+
+  it('every text sits inside the column its left edge is in, so nothing prints over the next cell', () => {
+    const layout = layoutRoomSchedule(LONG, labels);
+    const xs = [...new Set(layout.prims.flatMap((p) => (p.kind === 'line' && p.x1 === p.x2 ? [p.x1] : [])))].sort((a, b) => a - b);
+    assert.ok(xs.length >= 5, `the column rules: ${xs.join(', ')}`);
+    const cellTexts = new Set(roomScheduleCells(LONG, labels).flatMap((r) => r.cells).concat([labels.number, labels.room]));
+    const rows = layout.prims.filter((p) => p.kind === 'text' && p.anchor === 'start' && cellTexts.has(p.text) && xs.some((x) => Math.abs(x + PAD - p.x) < 1e-6));
+    assert.ok(rows.length > 0);
+    for (const p of rows) {
+      if (p.kind !== 'text') continue;
+      const right = xs.find((x) => x > p.x)!;
+      assert.ok(p.x + textWidth(p.text, p.size) <= right, `"${p.text}" ends at ${(p.x + textWidth(p.text, p.size)).toFixed(1)}, past the rule at ${right}`);
+    }
+  });
+
+  it('a table that already fits keeps its columns', () => {
+    assert.equal(layoutRoomSchedule(SCHEDULE, labels).width, 130);
   });
 });
