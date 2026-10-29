@@ -1,4 +1,5 @@
 ---
+"@bimvoice/ifcsheet": minor
 "@ifc-lite/mcp": minor
 ---
 
