@@ -17,7 +17,8 @@ import { resolve } from 'node:path';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
 import type { FederatedModel } from '@/store/types';
-import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store';
+import { titleBlockOf } from '@bimvoice/ifcsheet';
+import { loadProjectDocument, projectDocument, resetProject, setProjectName, useProjectStore } from './project-store';
 import { parseProjectFile, serializeProject } from './project-file';
 import { modelTitleBlock } from './drawing-set-actions';
 import { seedProjectTitleBlock, setProjectTitleBlockField } from './sheets';
@@ -83,6 +84,18 @@ describe('a model with no IFC project', () => {
     assert.equal(block.address, 'Str. Mare 1');
     assert.equal(block.date, '2026-10-21');
     assert.deepEqual(fieldsWithoutSource(TITLE_BLOCK_FIELDS, resolvedTitleBlock(useProjectStore.getState().titleBlock, undefined)), UNFILLED.filter((f) => f !== 'address'));
+  });
+
+  // #203 review: the handover's {project} read "Haus" (the file) instead of the name the project was given.
+  it('a name the person gave the project beats the file name; the untitled default in either language does not', () => {
+    open('Haus.glb');
+    setProjectName('Casa Mare');
+    assert.equal(effectiveTitleBlock().project, undefined, 'the file name is not offered');
+    assert.equal(titleBlockOf({}, effectiveTitleBlock(), useProjectStore.getState().name).project, 'Casa Mare');
+    for (const untitled of ['Untitled project', 'Proiect fără titlu']) {
+      useProjectStore.setState({ name: untitled });
+      assert.equal(effectiveTitleBlock().project, 'Haus', `"${untitled}" is no name of its own`);
+    }
   });
 
   it('nothing is loaded: nothing is invented', () => {

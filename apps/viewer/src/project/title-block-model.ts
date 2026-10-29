@@ -17,7 +17,7 @@ import { labelElementOf } from '@/labels/label-element';
 import { readField } from '@/labels/label-resolve';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
-import { effectiveFields, MODEL_ENTITIES, readStoreFacts, resolvedTitleBlock as engineResolvedTitleBlock, projectNameFromFile, SILENT_FACTS, type ModelEntity, type TitleBlockFacts as ModelFacts, type ResolvedField, type TitleSources } from '@bimvoice/ifcsheet';
+import { effectiveFields, ENGINE_NAMES_EN, ENGINE_NAMES_RO, MODEL_ENTITIES, readStoreFacts, resolvedTitleBlock as engineResolvedTitleBlock, projectNameFromFile, SILENT_FACTS, type ModelEntity, type TitleBlockFacts as ModelFacts, type ResolvedField, type TitleSources } from '@bimvoice/ifcsheet';
 
 /** The first loaded model that has a project. */
 function projectStore(): { modelId: string; store: IfcDataStore } | null {
@@ -42,8 +42,21 @@ export function lacksProjectData(): boolean {
   return useViewerStore.getState().models.size > 0 && projectStore() === null;
 }
 
-/** A model with no IFC project reads silent, except for its file name. */
+/** The default project name in every language the engine names in: a project still carrying it has not been named. */
+const UNTITLED = new Set([ENGINE_NAMES_EN['names.project.untitled'], ENGINE_NAMES_RO['names.project.untitled']]);
+
+/** Whether the person gave the project a name of their own (not the untitled default). */
+function projectNamed(): boolean {
+  const name = useProjectStore.getState().name.trim();
+  return name !== '' && !UNTITLED.has(name);
+}
+
+/**
+ * A model with no IFC project reads silent, except for its file name, and only while the project has no name of its
+ * own: a name the person gave the project comes before a file's (the title block falls back to it, `titleBlockOf`).
+ */
 function fileFacts(): ModelFacts {
+  if (projectNamed()) return SILENT_FACTS;
   const first = [...useViewerStore.getState().models.values()].find((m) => !m.linked) ?? [...useViewerStore.getState().models.values()][0];
   const name = first ? projectNameFromFile(first.name) : '';
   return name ? { ...SILENT_FACTS, file: () => name } : SILENT_FACTS;
@@ -98,7 +111,9 @@ export function useResolvedTitleBlock(): Record<string, ResolvedField> {
   const custom = useProjectStore((s) => s.titleBlockSources);
   const models = useViewerStore((s) => s.models);
   const edits = useViewerStore((s) => s.mutationVersion);
-  return useMemo(() => resolvedTitleBlock(typed, custom), [typed, custom, models, edits]);
+  // The project's own name decides whether a file name is offered (`fileFacts`).
+  const name = useProjectStore((s) => s.name);
+  return useMemo(() => resolvedTitleBlock(typed, custom), [typed, custom, models, edits, name]);
 }
 
 export function useEffectiveTitleBlock(): Record<string, string> {
