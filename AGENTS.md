@@ -188,6 +188,13 @@ Entity references come from the file, so a recursive walk over a self-referentia
 
 ## Working in parallel: rules learned the hard way
 
+**Keep the queue small** (2026-10-29: about 50 open PRs re-conflicted each other on every merge; most CI time and agent work went into re-merging)
+- At most 5 open agent PRs. Do not open a new one while 5 are open: get one merged first.
+- One open PR per area (joinery, drafting, engine/CLI, i18n, standards, permits, CI). A second change in the same area waits for the first to merge, then branches from `main`.
+- Update a PR with `main` only when it is next to merge. Every push requeues a full CI run, and a PR updated early conflicts again before its turn.
+- The files almost every conflict came from: `project/fields/index.ts`, `index-exports.snapshot.json`, the CLI fixtures `cli-usage.main.txt` and `cli-argv.main.json`, `ro-coverage-baseline.json`, the i18n barrels and `locales/ro.test.ts`, the command `registry.ts`, `STEP_FIELDS` in `draft-store.ts`, `playwright.config.ts`. Touch them only through their extension points (below), and regenerate generated files with their update command, never by hand.
+- A merge that git reports as clean can still duplicate code: a clean merge put the Germany pack into `standard-pack.ts` twice. After merging `main`, grep the touched files for duplicate exports, keys and ids.
+
 **Git**
 - Merge `origin/main` into your PR branch to resolve conflicts. Never rebase a pushed branch, never force-push, never `git stash` (the stash stack is shared across worktrees; use a second worktree).
 - After a merge, diff every conflicted file against BOTH parents (`git diff MERGE_HEAD <file>` and `git diff HEAD <file>`) for silently dropped lines; auto-merged test counts went wrong twice.
@@ -204,7 +211,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`.
 
 **A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
-- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`, then append the import and entry at the END of `DOCUMENT_FIELD_DEFS` in `index.ts`.
+- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`, then add one import line and one entry to `REGISTERED_FIELD_DEFS` in `registered.ts` (#525). Never add to `DOCUMENT_FIELD_DEFS` in `index.ts`: that list is frozen, `fields.test.ts` pins it, and four PRs (#514, #402, #428, #480) broke main or their own CI by appending there.
 - Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
 
 **A new drawer section**
