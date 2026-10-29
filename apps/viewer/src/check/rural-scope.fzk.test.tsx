@@ -44,9 +44,9 @@ describe('the FZK house against the simplified PAC', () => {
     const Section = pacSection.component;
     const ui = render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
     assert.equal(ui.querySelector('[data-pac-scope]'), null, 'the standard PAC has no such limit');
-    act(() => { ui.querySelector<HTMLButtonElement>('[data-pac-mode="rural"]')!.click(); });
+    act(() => setPacMode('rural'));
     assert.equal(ui.querySelector('[data-pac-scope]')?.textContent, AREA);
-    act(() => { ui.querySelector<HTMLButtonElement>('[data-pac-mode="standard"]')!.click(); });
+    act(() => setPacMode('full'));
     assert.equal(ui.querySelector('[data-pac-scope]'), null);
   });
 

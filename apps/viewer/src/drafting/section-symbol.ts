@@ -9,6 +9,7 @@
  * moves and undoes like any other drawing.
  */
 
+import type { MarkStyle } from '@bimvoice/ifcsheet';
 import { registeredTranslations, resolveName } from '@/i18n/registry';
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
@@ -30,21 +31,76 @@ export function sectionNormal(a: Pt, b: Pt, side: Pt): Pt | null {
   return (side.x - a.x) * n.x + (side.y - a.y) * n.y < 0 ? { x: -n.x, y: -n.y } : n;
 }
 
-export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number): (DraftShape | AnnotationShape)[] {
+/** Circle head: the radius, the pole to it, and how far the direction triangle stands past it (text heights). */
+const CIRCLE_R = 1.3;
+const CIRCLE_POLE = 2;
+const TRIANGLE_LEN = 1.1;
+/** Share of the circle's radius the triangle's base spans on each side of the axis. */
+const TRIANGLE_HALF_BASE = 0.55;
+/** Flag head: the pole to it, the padding round the letter, and the point on its far edge (text heights). */
+const FLAG_POLE = 1.5;
+const FLAG_PAD = 0.5;
+const FLAG_POINT = 0.8;
+
+/**
+ * How far past the letter's centre a mark's head reaches along the view direction, for a letter whose box extends
+ * `halfN` along that direction. The reference under the letter ("1 / A-301") starts beyond it.
+ * Zero for the arrow, whose head is not round the letter (convention, #447).
+ */
+export function markHeadReach(style: MarkStyle, height: number, halfN: number): number {
+  if (style === 'circle') return CIRCLE_R * height + TRIANGLE_LEN * height;
+  if (style === 'flag') return halfN + FLAG_PAD * height + FLAG_POINT * height;
+  return 0;
+}
+
+const solidTriangle = (pts: Pt[]): AnnotationShape => ({ type: 'hatch', loops: [pts], pattern: 'SOLID', scale: 1, angle: 0 });
+
+/**
+ * The symbol of a section: the cut line a-b, then a pole at each end toward the side the section looks, ending in a
+ * head. The first two lines are always the cut line and the first pole (`placementOf` reads them), whatever the head.
+ * Heads (`MarkStyle`): "arrow" two barbs; "circle" a circle holding the letter with a filled triangle on its far side;
+ * "flag" a box holding the letter whose far edge comes to a point.
+ */
+export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number, style: MarkStyle = 'arrow'): (DraftShape | AnnotationShape)[] {
   const normal = sectionNormal(a, b, side);
   if (!normal) return [];
   const { x: nx, y: ny } = normal;
-  const stem = STEM * height;
-  const tip = (p: Pt): Pt => ({ x: p.x + nx * stem, y: p.y + ny * stem });
-  // The name sits clear of the arrowhead, its box centred on the stem's line: a text's anchor is a corner of its box.
+  const along = { x: -ny, y: nx };
+  // The name's box centred on the head's centre: a text's anchor is a corner of its box.
   const box = textBox({ x: 0, y: 0 }, name, height, 0);
   const halfW = box[1].x / 2;
   const halfH = box[3].y / 2;
-  const clear = Math.abs(nx) * Math.abs(halfW) + Math.abs(ny) * Math.abs(halfH) + height * 0.4;
-  const label = (p: Pt): AnnotationShape => {
-    const t = tip(p);
-    return { type: 'text', p: { x: t.x + nx * clear - halfW, y: t.y + ny * clear - halfH }, text: name, height, rotation: 0 };
-  };
+  const halfN = Math.abs(nx) * Math.abs(halfW) + Math.abs(ny) * Math.abs(halfH);
+  const halfT = Math.abs(along.x) * Math.abs(halfW) + Math.abs(along.y) * Math.abs(halfH);
+  const at = (p: Pt, n: number, t = 0): Pt => ({ x: p.x + nx * n + along.x * t, y: p.y + ny * n + along.y * t });
+  const letter = (c: Pt): AnnotationShape => ({ type: 'text', p: { x: c.x - halfW, y: c.y - halfH }, text: name, height, rotation: 0 });
+  const poleLength = style === 'circle' ? CIRCLE_POLE * height : style === 'flag' ? FLAG_POLE * height : STEM * height;
+  const out: (DraftShape | AnnotationShape)[] = [{ type: 'line', a, b }, { type: 'line', a, b: at(a, poleLength) }, { type: 'line', a: b, b: at(b, poleLength) }];
+  const ends = [a, b];
+  if (style === 'circle') {
+    const r = CIRCLE_R * height;
+    // The pole ends at the circle; the triangle's base lies on the circle's far side, its point the way the section looks.
+    const heads = ends.map((p) => {
+      const c = at(p, poleLength + r);
+      const w = TRIANGLE_HALF_BASE * r;
+      const foot = Math.sqrt(r * r - w * w);
+      return [{ type: 'circle' as const, c, r }, solidTriangle([at(c, foot, -w), at(c, foot, w), at(c, r + TRIANGLE_LEN * height)]), letter(c)];
+    });
+    return [...out, ...heads.flat()];
+  }
+  if (style === 'flag') {
+    const depth = 2 * halfN + 2 * FLAG_PAD * height;
+    const width = 2 * halfT + 2 * FLAG_PAD * height;
+    const heads = ends.map((p) => {
+      const c = at(p, poleLength + depth / 2);
+      const pts = [at(c, -depth / 2, -width / 2), at(c, -depth / 2, width / 2), at(c, depth / 2, width / 2), at(c, depth / 2 + FLAG_POINT * height), at(c, depth / 2, -width / 2)];
+      return [{ type: 'polyline' as const, pts, closed: true }, letter(c)];
+    });
+    return [...out, ...heads.flat()];
+  }
+  const tip = (p: Pt): Pt => at(p, poleLength);
+  // The name sits clear of the arrowhead, its box centred on the stem's line.
+  const clear = halfN + height * 0.4;
   // Two barbs sweeping back from the tip toward the cut line close the stem into an arrow.
   const barbs = (p: Pt): DraftShape[] => {
     const t = tip(p);
@@ -58,15 +114,7 @@ export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height
       b: { x: t.x + r * (-nx * c - k * -ny * s), y: t.y + r * (-ny * c + k * -nx * s) },
     }));
   };
-  return [
-    { type: 'line', a, b },
-    { type: 'line', a, b: tip(a) },
-    { type: 'line', a: b, b: tip(b) },
-    ...barbs(a),
-    ...barbs(b),
-    label(a),
-    label(b),
-  ];
+  return [...out, ...barbs(a), ...barbs(b), letter(at(tip(a), clear)), letter(at(tip(b), clear))];
 }
 
 /** The parameter that ties a drafted shape to the section view whose symbol it belongs to. */

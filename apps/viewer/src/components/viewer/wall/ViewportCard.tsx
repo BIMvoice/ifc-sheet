@@ -22,11 +22,13 @@ import { useLegendLabels } from '../legend/LegendGraphic';
 import { LegendCard } from './LegendCard';
 import { hasTrueScale } from '@/project/axonometric';
 import { ScaleField } from './ScaleField';
+import { ViewportMarksControls } from './ViewportMarksControls';
 import type { ModelExtent } from '@/project/drawing-set';
 import { ScheduleContentCard } from './ScheduleContentCard';
 import { ScheduleExportCard } from './ScheduleExportCard';
 import { ScheduleFilterSection } from './ScheduleFilterCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
+import { JoineryCellCard } from './JoineryCellCard';
 import { SubReportCard } from './SubReportCard';
 import { TypeClassificationCard } from './TypeClassificationCard';
 import { BoqCard } from '../boq/BoqCard';
@@ -105,6 +107,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
               {hasTrueScale(view) ? <ScaleField sheet={sheet} slot={slot} view={view} bounds={drawingBounds} extent={extent} /> : null}
             </>
           )}
+          {view ? <ViewportMarksControls sheet={sheet} slot={slot} view={view} /> : null}
           {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
           {schedule ? <TypeClassificationCard key={`${schedule.id}:class`} schedule={schedule} /> : null}
@@ -112,6 +115,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <JoineryCellCard key={`${schedule.id}:cell`} schedule={schedule} /> : null}
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}

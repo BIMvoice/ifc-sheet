@@ -20,6 +20,16 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./true-north": {
+      "types": "./dist/true-north.d.ts",
+      "import": "./dist/true-north.js",
+      "default": "./dist/true-north.js"
+    },
+    "./viewport-marks": {
+      "types": "./dist/viewport-marks.d.ts",
+      "import": "./dist/viewport-marks.js",
+      "default": "./dist/viewport-marks.js"
+    },
     "./readiness": {
       "types": "./dist/readiness.d.ts",
       "import": "./dist/readiness.js",
@@ -30,10 +40,20 @@
       "import": "./dist/boq-words.js",
       "default": "./dist/boq-words.js"
     },
+    "./byggesaksbim": {
+      "types": "./dist/byggesaksbim/index.d.ts",
+      "import": "./dist/byggesaksbim/index.js",
+      "default": "./dist/byggesaksbim/index.js"
+    },
     "./pac-words": {
       "types": "./dist/pac-words.d.ts",
       "import": "./dist/pac-words.js",
       "default": "./dist/pac-words.js"
+    },
+    "./plan-symbols": {
+      "types": "./dist/plan-symbols.d.ts",
+      "import": "./dist/plan-symbols.js",
+      "default": "./dist/plan-symbols.js"
     },
     "./underlay": {
       "types": "./dist/underlay.d.ts",
@@ -59,6 +79,16 @@
       "types": "./dist/colour-scheme.d.ts",
       "import": "./dist/colour-scheme.js",
       "default": "./dist/colour-scheme.js"
+    },
+    "./surface-fills": {
+      "types": "./dist/surface-fills.d.ts",
+      "import": "./dist/surface-fills.js",
+      "default": "./dist/surface-fills.js"
+    },
+    "./hatch": {
+      "types": "./dist/hatch.d.ts",
+      "import": "./dist/hatch.js",
+      "default": "./dist/hatch.js"
     },
     "./colour-fills": {
       "types": "./dist/colour-fills.d.ts",
@@ -162,6 +192,7 @@
     "@ifc-lite/drawing-2d": "workspace:^",
     "@ifc-lite/export": "workspace:^",
     "@ifc-lite/geometry": "workspace:^",
+    "@ifc-lite/ids": "workspace:^",
     "@ifc-lite/lists": "workspace:^",
     "@ifc-lite/mutations": "workspace:^",
     "@ifc-lite/parser": "workspace:^",
@@ -175,7 +206,8 @@
     "dxf-parser": "1.1.2",
     "pdfjs-dist": "6.4.299",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "xmllint-wasm": "5.3.0"
   },
   "engines": {
     "node": ">=22.13"

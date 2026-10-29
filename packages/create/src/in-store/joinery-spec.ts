@@ -98,6 +98,19 @@ export interface JoineryCommonProps {
   reference?: string;
 }
 
+/** How much of a type's real front, plan and section a schedule draws: outline only, frame and leaves, or everything modelled. */
+export type JoineryViewDetail = 'outline' | 'frame' | 'all';
+
+/**
+ * The schedule-view choices stored with a type (#449), applied to every schedule that shows it. `hidden` are line ids from the
+ * engine's `joineryViewLineId` (a line's rounded end points in the type's own frame, not an index).
+ */
+export interface JoineryViewChoice {
+  /** Absent: everything modelled. */
+  detail?: JoineryViewDetail;
+  hidden?: string[];
+}
+
 export interface JoinerySpec {
   /** The project catalogue entry this type is (one type object per entry per model). */
   id?: string;
@@ -121,6 +134,8 @@ export interface JoinerySpec {
   threshold: number;
   colors: { frame: string; glass: string; leaf: string };
   props: JoineryCommonProps;
+  /** The detail level and hidden lines of the type's schedule views. */
+  view?: JoineryViewChoice;
 }
 
 export function defaultWindowSpec(name = 'Window'): JoinerySpec {

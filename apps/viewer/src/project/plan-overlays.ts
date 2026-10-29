@@ -84,7 +84,7 @@ export function symbolOverlays(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine',
 ): PlanOverlay[] {
   const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
-  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, detail);
+  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail);
   for (const s of symbols) {
     thin.push(...s.shapes);
     if (s.heavy) heavy.push(...s.heavy);

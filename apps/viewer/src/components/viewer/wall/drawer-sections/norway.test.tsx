@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { NORWAY_ITEMS, generateDefaultSet, norwaySetTemplate, type DefaultSet } from '@bimvoice/ifcsheet';
 import { cleanup, render } from '@/test/render.js';
-import { permitPackOf, projectDocument, resetProject, setNorwayPermit, setPacMode, setPermitPack, useProjectStore } from '@/project/project-store';
+import { permitPackOf, projectDocument, resetProject, setPacMode, setPermitPack, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
@@ -30,24 +30,22 @@ const mount = () => {
   const Section = norwaySection.component;
   return render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
 };
-const toggle = (ui: HTMLElement) => act(() => { (ui.querySelector('[data-norway-switch]') as HTMLInputElement).click(); });
 
 beforeEach(() => resetProject());
 afterEach(() => { cleanup(); act(() => setLocale('en')); });
 
 describe('the Norway mode', () => {
-  it('is off in a new project: the switch only, no checklist', () => {
+  it('is off in a new project: no checklist', () => {
     const ui = mount();
-    assert.equal((ui.querySelector('[data-norway-switch]') as HTMLInputElement).checked, false);
     assert.equal(ui.querySelectorAll('[data-norway-item]').length, 0);
-    assert.match(ui.textContent ?? '', /Norge \(byggesak\)/);
+    assert.equal(permitPackOf(useProjectStore.getState()), 'pacFull');
   });
 
-  it('switches on from the drawer and lists every item with its source and READ / unverified status', () => {
+  it('lists, once the permit pack is Norway, every item with its source and READ / unverified status', () => {
     const { document: doc } = building();
     useProjectStore.setState({ views: doc.views, sheets: doc.sheets });
     const ui = mount();
-    toggle(ui);
+    act(() => setPermitPack('norway'));
     assert.equal(useProjectStore.getState().norwayPermit, true);
     assert.equal(ui.querySelectorAll('[data-norway-item]').length, NORWAY_ITEMS.length);
     const row = (id: string) => ui.querySelector(`[data-norway-item="${id}"]`)!;
@@ -61,20 +59,21 @@ describe('the Norway mode', () => {
     assert.doesNotMatch(row('plans').textContent ?? '', /room/i);
     assert.match(row('eaveRidgeHeights').textContent ?? '', /not in force.*Unverified/);
     assert.match(ui.textContent ?? '', /1:500 is the usual one and is a default here, not a rule/);
-    toggle(ui);
+    act(() => setPermitPack('pacFull'));
     assert.equal(useProjectStore.getState().norwayPermit, undefined);
     assert.equal(ui.querySelectorAll('[data-norway-item]').length, 0);
   });
 
   it('keeps the mode in the project file: saved, reopened, and off saved as absent', () => {
-    setNorwayPermit(true);
+    setPermitPack('norway');
     const saved = serializeProject(projectDocument());
     assert.equal(JSON.parse(saved).norwayPermit, true);
     assert.equal(parseProjectFile(saved).norwayPermit, true);
     resetProject();
     useProjectStore.setState({ norwayPermit: parseProjectFile(saved).norwayPermit });
-    assert.equal(mount().querySelector('[data-norway-switch]') !== null && (mount().querySelector('[data-norway-switch]') as HTMLInputElement).checked, true);
-    setNorwayPermit(false);
+    assert.equal(permitPackOf(useProjectStore.getState()), 'norway');
+    assert.equal(mount().querySelectorAll('[data-norway-item]').length, NORWAY_ITEMS.length);
+    act(() => setPermitPack('pacFull'));
     assert.equal('norwayPermit' in JSON.parse(serializeProject(projectDocument())), false);
     assert.equal(parseProjectFile(saved.replace('"norwayPermit": true', '"norwayPermit": "yes"').replace('"norwayPermit":true', '"norwayPermit":"yes"')).norwayPermit, undefined);
   });
@@ -86,7 +85,7 @@ describe('the Norway mode', () => {
     }
     registerLocale('ro', checkCatalogue(ro).catalogue);
     act(() => setLocale('ro'));
-    setNorwayPermit(true);
+    setPermitPack('norway');
     const ui = mount();
     assert.match(ui.textContent ?? '', /Planurile tuturor nivelurilor/);
     assert.match(ui.textContent ?? '', /Neverificat/);
@@ -95,24 +94,24 @@ describe('the Norway mode', () => {
   it('is one choice with the PAC modes: turning one on turns the other off, in either order', () => {
     setPermitPack('pacRural');
     assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], ['rural', undefined]);
-    setNorwayPermit(true);
+    setPermitPack('norway');
     assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], [undefined, true]);
     setPacMode('rural');
     assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], ['rural', undefined]);
-    setNorwayPermit(true);
+    setPermitPack('norway');
     setPacMode('full');
     assert.deepEqual([useProjectStore.getState().pacMode, useProjectStore.getState().norwayPermit], [undefined, undefined]);
     setPacMode('rural');
-    setNorwayPermit(false);
-    assert.equal(useProjectStore.getState().pacMode, 'rural', 'switching Norway off leaves the rural pack alone');
+    setPermitPack('pacRural');
+    assert.equal(useProjectStore.getState().pacMode, 'rural');
     const saved = JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>;
     assert.deepEqual([saved.pacMode, 'norwayPermit' in saved], ['rural', false]);
   });
 
-  it('switching Norway on in the drawer turns the rural PAC pack off, and the file keeps only Norway', () => {
+  it('choosing Norway turns the rural PAC pack off, and the file keeps only Norway', () => {
     setPacMode('rural');
     const ui = mount();
-    toggle(ui);
+    act(() => setPermitPack('norway'));
     const saved = JSON.parse(serializeProject(projectDocument())) as Record<string, unknown>;
     assert.deepEqual([saved.norwayPermit, 'pacMode' in saved], [true, false]);
     assert.equal(ui.querySelectorAll('[data-norway-item]').length, NORWAY_ITEMS.length);

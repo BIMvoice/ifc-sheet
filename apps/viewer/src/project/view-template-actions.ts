@@ -123,7 +123,7 @@ export function resetViewOverrides(viewId: string): void {
 /** How many categories the view overrides of its template (for the card's "Reset overrides"); 0 without a template. */
 export function overrideCount(view: ProjectView | undefined, templates: readonly ProjectViewTemplate[]): number {
   if (!view || !templateOf(view, templates)) return 0;
-  return Object.keys(view.graphics?.categories ?? {}).length + (view.graphics?.presetId !== undefined ? 1 : 0) + (view.graphics?.grid ? 1 : 0) + (view.graphics?.detailLevel ? 1 : 0);
+  return Object.keys(view.graphics?.categories ?? {}).length + (view.graphics?.presetId !== undefined ? 1 : 0) + (view.graphics?.grid ? 1 : 0) + (view.graphics?.detailLevel ? 1 : 0) + (view.graphics?.colouredSurfaces !== undefined ? 1 : 0);
 }
 
 // ---- Editing graphics ----
@@ -150,6 +150,21 @@ export function setViewCategory(viewId: string, category: string, patch: Partial
     const { categories: _c, ...others } = own;
     const graphics: ViewGraphics = Object.keys(categories).length > 0 ? { ...others, categories } : others;
     setGraphics(viewId, graphics);
+  });
+}
+
+/**
+ * Turn the coloured style of an elevation or section on or off (#499). A view with a template overrides the template's choice (a choice
+ * equal to the template's is no override); a view without one keeps the flag only while it is on.
+ */
+export function setViewColouredSurfaces(viewId: string, on: boolean): void {
+  const view = viewOf(viewId);
+  if (!view) return;
+  runAsOneUndoStep(() => {
+    const { colouredSurfaces: _old, ...others } = view.graphics ?? {};
+    const template = templateOf(view, templatesOf());
+    const given = template ? !!template.graphics.colouredSurfaces : false;
+    setGraphics(viewId, on === given ? others : { ...others, colouredSurfaces: on });
   });
 }
 

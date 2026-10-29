@@ -1,0 +1,40 @@
+ArrowKind: type (type-only)
+COMMAND_LINE_STANDARDS: value
+COMMAND_LINE_STANDARD_IDS: value
+DEFAULT_DIM_STYLE: value
+DEFAULT_GRAPHIC_STANDARD: value
+DimStyle: type (type-only)
+DraftLengthUnit: type (type-only)
+FontKind: type (type-only)
+GERMANY_PACK_ID: value
+GERMAN_PRACTICE: value
+GRAPHIC_STANDARDS: value
+GraphicStandard: type (type-only)
+ISO_128_LINE_WIDTHS: value
+ISO_3098_HEIGHTS: value
+MARK_STYLES: value
+MarkStyle: type (type-only)
+OpeningLineDirection: type (type-only)
+PACK_NOT_SET: value
+PACK_PARTS: value
+PackNotSet: type (type-only)
+PackPart: type (type-only)
+ROMANIAN_PRACTICE: value
+ROMANIA_PACK_ID: value
+STANDARD_PACK_VERSION: value
+STANDARD_STYLE_ID: value
+StandardPack: type (type-only)
+TITLE_BLOCK_CAPTIONS_DE: value
+TextPlacement: type (type-only)
+TextStyle: type (type-only)
+builtInPacks: value
+germanyPack: value
+graphicStandardOf: value
+hasPackMaterials: value
+knownGraphicStandard: value
+markStyleOf: value
+packForCommandLine: value
+packPartsOf: value
+romaniaPack: value
+standardValues: value
+withPackMaterials: value

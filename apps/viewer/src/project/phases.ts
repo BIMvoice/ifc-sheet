@@ -18,10 +18,12 @@
  */
 
 import type { PropertySetLike } from '@/labels/label-resolve';
-import { DASH_MM, PEN_TABLE } from '@bimvoice/ifcsheet';
+import { DASH_MM, PEN_TABLE, PHASES, type PhaseMapping, type PhaseSource } from '@bimvoice/ifcsheet';
 import type { PhaseId, PhaseStyle, ViewGraphics, ViewPhases } from './types';
 
-export const PHASES = ['existing', 'demolish', 'new', 'temporary'] as const satisfies readonly PhaseId[];
+// The phases and the phase source are the engine's, read by its project reader (`view-graphics-read.ts`).
+export { PHASES };
+export type { PhaseMapping, PhaseSource };
 
 /** The phase names of the interface (catalogue keys `phase.<id>`). */
 export const PHASE_LABEL_KEYS: Record<PhaseId, string> = {
@@ -59,19 +61,6 @@ export function phasesFromPreset(preset: keyof typeof PHASE_VIEW_PRESETS, curren
 export const drawnPhase = (phase: PhaseId, phases: Pick<ViewPhases, 'demolishAsExisting'> | undefined): PhaseId =>
   phase === 'demolish' && phases?.demolishAsExisting ? 'existing' : phase;
 
-/** A property of the project's own that says the phase, and what each of its values means. */
-export interface PhaseMapping {
-  set: string;
-  property: string;
-  /** Property value (compared without case) → phase. */
-  values: Record<string, PhaseId>;
-}
-
-export interface PhaseSource {
-  mapping?: PhaseMapping;
-  /** The phase of an element that says none. Absent: EXISTING. */
-  unmarked?: PhaseId;
-}
 
 /** What a phase is read from: the element's and its type's property sets. */
 export interface PhaseReader {

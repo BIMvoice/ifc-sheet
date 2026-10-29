@@ -12,7 +12,7 @@
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
+import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
 import { finishLines, hasSharedFinish, SURFACES, type Finish, type FinishLine, type RoomFinishes } from './room-finishes';
 
 export interface RoomFinishLabels {

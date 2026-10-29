@@ -165,7 +165,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
             <g key={e.id}>
               <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} />
               {/* Editor only: this overlay is never part of the sheet or the PDF. */}
-              {e.shape.type === 'leader' && tagOverrideOf(e) !== null ? <TagOverrideMark shape={e.shape} t={t} axis={axis} /> : null}
+              {(e.shape.type === 'leader' || e.shape.type === 'text') && tagOverrideOf(e) !== null ? <TagOverrideMark at={e.shape.type === 'leader' ? e.shape.pts[e.shape.pts.length - 1] : e.shape.p} t={t} axis={axis} /> : null}
               {isHover || isSelected ? (
                 <path d={entitySkeleton(e.shape).map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke={isSelected ? '#2563eb' : '#60a5fa'} strokeWidth={1} strokeDasharray="4 3" />
               ) : null}
@@ -207,8 +207,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
 });
 
 /** A small amber ring on the text end of a tag whose text is written over the model's (#445); not printed. */
-function TagOverrideMark({ shape, t, axis }: { shape: Extract<DraftEntity['shape'], { type: 'leader' }>; t: ViewTransform; axis: SectionAxisName }) {
-  const p = drawingToScreen(shape.pts[shape.pts.length - 1], t, axis);
+function TagOverrideMark({ at, t, axis }: { at: Pt; t: ViewTransform; axis: SectionAxisName }) {
+  const p = drawingToScreen(at, t, axis);
   const { t: tr } = useTranslation();
   return <circle data-tag-override="true" cx={p.x} cy={p.y} r={4} fill="none" stroke="#f59e0b" strokeWidth={2}><title>{tr('standards.el.tagOverridden')}</title></circle>;
 }

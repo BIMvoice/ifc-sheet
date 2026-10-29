@@ -27,6 +27,23 @@ export interface CategoryGraphics {
 /** The phase of an element (`phases.ts`): IFC Status NEW, EXISTING, DEMOLISH, TEMPORARY. */
 export type PhaseId = 'existing' | 'demolish' | 'new' | 'temporary';
 
+/** The phases in the order a view lists them. */
+export const PHASES = ['existing', 'demolish', 'new', 'temporary'] as const satisfies readonly PhaseId[];
+
+/** A property of the project's own that says the phase, and what each of its values means. */
+export interface PhaseMapping {
+  set: string;
+  property: string;
+  /** Property value (compared without case) → phase. */
+  values: Record<string, PhaseId>;
+}
+
+export interface PhaseSource {
+  mapping?: PhaseMapping;
+  /** The phase of an element that says none. Absent: EXISTING. */
+  unmarked?: PhaseId;
+}
+
 /** How a phase draws: its line (colour, pen, dashed) and the fill of its cut faces. */
 export interface PhaseStyle {
   lineColor: string;
@@ -114,6 +131,13 @@ export interface ViewGraphics {
   categories?: Record<string, CategoryGraphics>;
   /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
   colourScheme?: ColourScheme;
+  /** An elevation or section that fills its visible surfaces with the colours of the model's materials (#499), under the linework. Absent or false: the line and hatch styles alone. A view template carries it. */
+  colouredSurfaces?: boolean;
+  /**
+   * A plan draws the 2D plan symbol of an element or its type (a Plan / FootPrint or Annotation representation, `plan-symbols.ts`) in place
+   * of the element's cut or projection. Absent or `true`: it does; `false` forces the 3D cut. The view's own, never a template's.
+   */
+  usePlanSymbols?: boolean;
   /** Elements hidden in this view, by GlobalId (#33). The 3D view's hide / isolate state is not followed. */
   hiddenElements?: GlobalId[];
   /** Per-element overrides, by GlobalId (#32): the most specific layer, over the category's. */
