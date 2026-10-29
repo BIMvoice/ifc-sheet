@@ -8,21 +8,33 @@
  */
 
 import { useState } from 'react';
-import { cleanOpening, leafOperations, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
-import type { PanelOperation } from '@ifc-lite/create';
+import { cleanCustomProps, MAX_CUSTOM_PROPS } from '@bimvoice/ifcsheet';
+import { cleanHead, cleanOpening, leafOperations, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
+import type { JoineryCustomProp, JoineryHead, JoineryHeadShape, PanelOperation } from '@ifc-lite/create';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { configureElementType, typeOpeningOf } from '@/joinery/type-config-actions';
+import { configureElementType, typeCustomOf, typeHeadOf, typeOpeningOf } from '@/joinery/type-config-actions';
 import type { ElementFacts } from '@/joinery/symbol-mapping';
 
 const DEFAULT_OPENING: TypeOpening = { operations: ['fixed'], fanlight: false };
+const HEADS: readonly JoineryHeadShape[] = ['square', 'round', 'segmental', 'pointed'];
+/** Properties offered by name: the schedule's own U value and fire rating rows read them. */
+const SUGGESTED = [
+  { key: 'thermalTransmittance', label: 'schedule.row.uValue' },
+  { key: 'fireRating', label: 'schedule.row.fire' },
+] as const;
 
 export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
   const { t } = useTranslation();
   const [opening, setOpening] = useState<TypeOpening>(() => typeOpeningOf(facts) ?? DEFAULT_OPENING);
+  const [head, setHead] = useState<JoineryHead>(() => typeHeadOf(facts));
+  // The rise is typed in millimetres; empty is the shape's default.
+  const [rise, setRise] = useState<string>(() => (head.rise === undefined ? '' : String(Math.round(head.rise * 1000))));
+  const [custom, setCustom] = useState<JoineryCustomProp[]>(() => typeCustomOf(facts));
   const allowed = leafOperations(facts.kind);
   const leaves = opening.operations.length;
   const setLeaves = (n: number) => setOpening((o) => ({
@@ -47,7 +59,51 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
         </Select>
       ))}
       <Checkbox label={t('joinery.type.fanlight')} checked={opening.fanlight} onCheckedChange={(fanlight) => setOpening((o) => ({ ...o, fanlight }))} />
-      <Button size="sm" variant="outline" data-type-opening-apply className="w-full" onClick={() => { configureElementType(facts, cleanOpening(facts.kind, opening)); }}>
+      <SegmentedControl
+        size="sm" label={t('joinery.head.title')} value={head.shape}
+        options={HEADS.map((h) => ({ value: h, label: t(`joinery.head.${h}` as TranslationKey) }))}
+        onValueChange={(v) => setHead({ shape: v as JoineryHeadShape })}
+      />
+      {head.shape === 'segmental' || head.shape === 'pointed' ? (
+        <Input
+          type="number" min={1} step={10} data-type-head-rise aria-label={t('joinery.head.rise')} placeholder={t('joinery.head.riseDefault')}
+          className="h-7 text-xs" value={rise} onChange={(e) => setRise(e.target.value)}
+        />
+      ) : null}
+      <p className="pt-1 text-2xs font-semibold uppercase tracking-wide text-foreground">{t('joinery.props.title')}</p>
+      <p className="text-2xs text-muted-foreground">{t('joinery.props.hint')}</p>
+      {custom.map((p, i) => (
+        <div key={i} className="flex items-center gap-1" data-type-prop={i}>
+          <Input
+            className="h-7 flex-1 text-xs" aria-label={t('joinery.props.name')} value={p.name} placeholder={t('joinery.props.name')}
+            onChange={(e) => setCustom((list) => list.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+          />
+          <Input
+            className="h-7 w-20 text-xs" aria-label={t('joinery.props.value')} value={p.value} placeholder={t('joinery.props.value')}
+            onChange={(e) => setCustom((list) => list.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+          />
+          <Button size="sm" variant="ghost" aria-label={t('joinery.props.remove', { name: p.name })} onClick={() => setCustom((list) => list.filter((_, j) => j !== i))}>×</Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-1">
+        {SUGGESTED.filter((s) => !custom.some((p) => p.key === s.key)).map((s) => (
+          <Button key={s.key} size="sm" variant="outline" data-type-prop-suggest={s.key} disabled={custom.length >= MAX_CUSTOM_PROPS}
+            onClick={() => setCustom((list) => [...list, { name: t(s.label), value: '', key: s.key }])}>
+            {t(s.label)}
+          </Button>
+        ))}
+        <Button size="sm" variant="outline" data-type-prop-add disabled={custom.length >= MAX_CUSTOM_PROPS} onClick={() => setCustom((list) => [...list, { name: '', value: '' }])}>
+          {t('joinery.props.add')}
+        </Button>
+      </div>
+      <Button
+        size="sm" variant="outline" data-type-opening-apply className="w-full"
+        onClick={() => {
+          const mm = Number(rise);
+          const shaped = cleanHead({ ...head, rise: rise.trim() !== '' && Number.isFinite(mm) && mm > 0 ? mm / 1000 : undefined }) ?? { shape: 'square' as const };
+          configureElementType(facts, cleanOpening(facts.kind, opening), { head: shaped, custom: cleanCustomProps(custom) });
+        }}
+      >
         {t('joinery.type.apply')}
       </Button>
     </div>
