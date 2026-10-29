@@ -4,8 +4,8 @@
 
 /**
  * The words of the ByggesaksBIM readiness findings, English. It imports nothing, so `readiness.ts` can spread it into
- * `READINESS_EN` (the app's English catalogue spreads that, so this is the one copy). The Romanian is the app's
- * (`apps/viewer/src/i18n/catalogues/byggesaksbim.ro.ts`). Norwegian terms are kept where a Norwegian reader looks for them.
+ * `READINESS_EN` and `READINESS_RO` (the app's catalogues spread those, so this is the one copy, and `ifcsheet check --locale ro`
+ * prints it). Norwegian terms are kept where a Norwegian reader looks for them.
  */
 
 /** One kind per requirement of `byggesaksbim.ids` (NO-H1 to NO-H7), and one for a model that lacks the element the requirement is read from. */
@@ -35,3 +35,29 @@ export const BYGGESAKSBIM_EN = {
   'ready.byggesaksbimError': 'The ByggesaksBIM check could not run: {reason}',
   'ready.byggesaksbimError.effect': 'Nothing was checked, so this is not a pass.',
 } as const;
+
+const EFFECT_RO = 'Obligatoriu (Obligatorisk) în raportul DiBK P13 eByggesak. Verificarea este interpretarea IfcSheet a raportului, nu validatorul DiBK.';
+
+/** The same findings in Romanian (terms: `apps/viewer/src/i18n/ro-glossary.md`). */
+export const BYGGESAKSBIM_RO: Record<keyof typeof BYGGESAKSBIM_EN, string> = {
+  'ready.byggesaksbimH1': 'Numărul de matrikkel (IfcSite.LandTitleNumber) lipsește sau are formatul greșit la {count} din {total} amplasamente: {list}. Format knr-gnr/bnr/fnr/snr, de exemplu 0904-200/2430/0/14.',
+  'ready.byggesaksbimH1.effect': EFFECT_RO,
+  'ready.byggesaksbimH2': 'BYA (suprafața construită, Pset_BuildingCommon.GrossPlannedArea) lipsește la {count} din {total} clădiri: {list}.',
+  'ready.byggesaksbimH2.effect': EFFECT_RO,
+  'ready.byggesaksbimH3': 'Tipul clădirii (Pset_BuildingCommon.OccupancyType, un cod Geonorge precum 111) lipsește la {count} din {total} clădiri: {list}.',
+  'ready.byggesaksbimH3.effect': EFFECT_RO,
+  'ready.byggesaksbimH4': 'BTA (suprafața brută, Pset_BuildingStoreyCommon.GrossPlannedArea) lipsește la {count} din {total} niveluri: {list}.',
+  'ready.byggesaksbimH4.effect': EFFECT_RO,
+  'ready.byggesaksbimH5': 'BRA (suprafața utilă, Pset_BuildingStoreyCommon.NetPlannedArea) lipsește la {count} din {total} niveluri: {list}.',
+  'ready.byggesaksbimH5.effect': EFFECT_RO,
+  'ready.byggesaksbimH6': 'BRA (Pset_ZoneCommon.NetPlannedArea) lipsește la {count} din {total} zone bruksenhet: {list}.',
+  'ready.byggesaksbimH6.effect': EFFECT_RO,
+  'ready.byggesaksbimH7': 'Tipul liftului (IfcTransportElement.PredefinedType) lipsește la {count} din {total} lifturi: {list}.',
+  'ready.byggesaksbimH7.effect': EFFECT_RO,
+  'ready.byggesaksbimNone': 'Modelul nu are niciun {class}, din care se citesc cerințele ByggesaksBIM.',
+  'ready.byggesaksbimNone.effect': EFFECT_RO,
+  'ready.byggesaksbimSchema': 'ByggesaksBIM cere IFC4; acest model este {schema} și nu a fost verificat.',
+  'ready.byggesaksbimSchema.effect': 'Cerințele sunt scrise pentru IFC4 și citesc seturi de proprietăți IFC4, deci un model în altă schemă nu poate fi verificat.',
+  'ready.byggesaksbimError': 'Verificarea ByggesaksBIM nu a putut rula: {reason}',
+  'ready.byggesaksbimError.effect': 'Nu s-a verificat nimic, deci nu înseamnă că totul e în regulă.',
+};

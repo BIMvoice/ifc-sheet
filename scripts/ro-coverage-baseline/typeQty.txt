@@ -1,3 +1,0 @@
-typeQty.empty
-typeQty.noQtoNote
-typeQty.sheet

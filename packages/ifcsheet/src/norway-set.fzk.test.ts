@@ -19,7 +19,7 @@ const missing = !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm
 if (missing) console.warn(`[ifcsheet] skipping the Norway set test: ${missing}`);
 
 const SCALE_NOTE = 'Scale 1:500 is usual; the regulation sets none.';
-const TO_ADD_NOTE = 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng), with a north arrow and a scale bar.';
+const TO_ADD_NOTE = 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng).';
 const NAMES = { name: 'Norway', plans: 'Floor plans', sections: 'Sections', facades: 'Facades', site: 'Site plan (situasjonsplan)', siteNotes: [SCALE_NOTE, TO_ADD_NOTE] };
 
 it('has the committed AC20-FZK-Haus fixture', () => {

@@ -15,7 +15,7 @@
 
 import type { RegisterRow } from '@/project/drawing-register';
 import type { ScheduleLayout, SchedulePrim } from './schedule-layout';
-import { PAD } from './paged-table';
+import { PAD } from '@bimvoice/ifcsheet';
 import type { ExportTable } from './schedule-export';
 
 export interface RegisterLabels {

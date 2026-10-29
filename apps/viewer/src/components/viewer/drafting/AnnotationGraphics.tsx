@@ -16,6 +16,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
+import { arrowMark } from '@bimvoice/ifcsheet';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
 import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
@@ -120,27 +121,15 @@ function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, 
   );
 }
 
-/** An arrow end of the kind the style asks for, at `p` pointing along `dir` (screen). */
+/** An arrow end of the kind the style asks for, at `p` pointing along `dir` (screen): the engine's mark (`arrowMark`), as a path. */
 function arrowPath(kind: DimStyle['arrow'], p: Pt, dir: Pt, size: number): { d: string; fill: boolean } {
-  const ang = Math.atan2(dir.y, dir.x);
-  switch (kind) {
-    case 'arrow': {
-      const back = (da: number) => `${p.x - size * Math.cos(ang + da)} ${p.y - size * Math.sin(ang + da)}`;
-      return { d: `M${p.x} ${p.y}L${back(0.3)}L${back(-0.3)}Z`, fill: true };
-    }
-    case 'dot': {
-      const r = size * 0.3;
-      return { d: `M${p.x - r} ${p.y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`, fill: true };
-    }
-    case 'none':
-      return { d: '', fill: false };
-    default: {
-      // Architectural tick: 45° across the line.
-      const h = size * 0.5;
-      const c = Math.cos(ang + Math.PI / 4) * h, s = Math.sin(ang + Math.PI / 4) * h;
-      return { d: `M${p.x - c} ${p.y - s}L${p.x + c} ${p.y + s}`, fill: false };
-    }
+  const mark = arrowMark(kind, p, dir, size);
+  if (!mark) return { d: '', fill: false };
+  if (mark.kind === 'dot') {
+    const { c, r } = mark;
+    return { d: `M${c.x - r} ${c.y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`, fill: true };
   }
+  return { d: `M${mark.pts.map((q) => `${q.x} ${q.y}`).join('L')}${mark.fill ? 'Z' : ''}`, fill: mark.fill };
 }
 
 function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<AnnotationShape, { type: 'hatch' }>; color: string; t: ViewTransform; axis: SectionAxisName; extraPatterns: readonly HatchPattern[]; k: number }) {

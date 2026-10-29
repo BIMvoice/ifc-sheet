@@ -53,7 +53,6 @@ schedule.animation.tintCompletedDescription
 schedule.animation.tintCompletedLabel
 schedule.animation.title
 schedule.animation.titleDescription
-schedule.count
 schedule.dragTooltip.duration
 schedule.dragTooltip.finish
 schedule.dragTooltip.hint
@@ -61,7 +60,6 @@ schedule.dragTooltip.resizingFinish
 schedule.dragTooltip.resizingStart
 schedule.dragTooltip.shifting
 schedule.dragTooltip.start
-schedule.empty
 schedule.emptyState.extracting
 schedule.emptyState.extractionFailedHint
 schedule.emptyState.extractionFailedTitle
@@ -79,7 +77,6 @@ schedule.emptyState.noScheduledTasksMessage
 schedule.emptyState.noScheduledTasksTitle
 schedule.emptyState.noTasksInScheduleMessage
 schedule.emptyState.noTasksInScheduleTitle
-schedule.folder
 schedule.generateAdvanced.lagDaysLabel
 schedule.generateAdvanced.linkSequencesDescription
 schedule.generateAdvanced.linkSequencesLabel
@@ -140,16 +137,9 @@ schedule.heightStrategy.subgroupNone
 schedule.heightStrategy.subgroupType
 schedule.heightStrategy.title
 schedule.heightStrategy.usesGeometry
-schedule.kind
-schedule.new
-schedule.newName
-schedule.number
-schedule.numberHint
-schedule.numbered
 schedule.panel.cancel
 schedule.panel.importReplaceWarning
 schedule.panel.replace
-schedule.scale
 schedule.taskTree.clearSelectionAriaLabel
 schedule.taskTree.collapseAriaLabel
 schedule.taskTree.columnDuration
@@ -200,5 +190,3 @@ schedule.workPlanSummary.noNestedSchedules
 schedule.workPlanSummary.planTitle
 schedule.workPlanSummary.schedulesList
 schedule.workPlanSummary.ungrouped
-schedule.zoomIn
-schedule.zoomOut

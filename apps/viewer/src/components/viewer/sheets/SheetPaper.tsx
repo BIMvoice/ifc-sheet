@@ -194,7 +194,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
         {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
           <Fragment key={i}>
-            <path {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} {...dxfIgnore(p)} data-dxf-fill={p.solid ? 'solid' : undefined} d={p.d} fill={p.fill ?? 'none'} fillRule="evenodd" stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
+            <path {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} {...dxfIgnore(p)} data-surface={p.surface ? 'true' : undefined} data-dxf-fill={p.solid ? 'solid' : undefined} d={p.d} fill={p.fill ?? 'none'} fillRule={p.surface ? 'nonzero' : 'evenodd'} stroke={p.stroke ?? 'none'} strokeWidth={p.width} strokeDasharray={p.dash} strokeLinejoin="round" />
             <SchemeHatchDxf pen={p} />
           </Fragment>
         ))}

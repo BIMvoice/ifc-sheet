@@ -1,0 +1,25 @@
+ENGINE_NAMES_EN: value
+ENGINE_NAMES_RO: value
+EngineNameKey: type (type-only)
+NAME_LANGUAGES: value
+NAME_LANGUAGES_TEXT: value
+NameLanguage: type (type-only)
+NameParams: type (type-only)
+NameResolver: type (type-only)
+ProjectLanguageRead: type (type-only)
+SheetFormat: type (type-only)
+SheetLocale: type (type-only)
+UnitsAndNumbers: type (type-only)
+englishName: value
+nameLanguageOf: value
+nameOf: value
+nameResolverFor: value
+readProjectLanguage: value
+readUnitsAndNumbers: value
+setNameResolver: value
+sheetFormat: value
+sheetLevel: value
+sheetNumber: value
+unknownLanguageMessage: value
+unknownLocaleMessage: value
+withNameLanguage: value

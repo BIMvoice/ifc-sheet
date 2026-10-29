@@ -30,7 +30,7 @@ import { pieceRects, symbolPieces } from '@/dimall/avoid';
 import { RectIndex } from '@/labels/rect-index';
 import { ringArea, type RoomFootprint } from './footprint';
 import { roomLabelPoint } from './room-point';
-import { AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary } from './types';
+import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types';
 
 export interface TagAllInput {
   /** Every element the view draws, and the doors and windows among them. */
@@ -48,6 +48,8 @@ export interface TagAllInput {
    * keep off them as they keep off the marks placed before.
    */
   obstacles?: readonly Rect[];
+  /** Which kinds to label (#497); absent: doors, windows and rooms. */
+  parts?: TagParts;
   /** A detail's area, drawing metres: only what is seen in it is labelled, and every label stands inside it. */
   crop?: { min: Pt; max: Pt };
 }
@@ -73,18 +75,19 @@ export function modelArea(read: ElementReader, guid: string): number | undefined
 
 export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary: TagAllSummary } {
   const { placement: at, read } = input;
+  const parts = input.parts ?? ALL_TAG_PARTS;
   // On a detail a room is labelled where it shows: inside the crop (its area stays the whole room's).
-  const rooms = input.rooms.flatMap((room) => {
+  const rooms = (parts.rooms ? input.rooms : []).flatMap((room) => {
     const shown = input.crop ? clipLoop(room.ring, input.crop) : room.ring;
     return shown.length >= 3 ? [{ room, shown }] : [];
   });
-  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: rooms.length === 0 };
+  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0 };
   const drafts: DraftEntity[] = [];
   const clear = LABEL_CLEAR_MM * at.paperUnit;
 
   // Doors and windows.
   const marked = labelledBy(input.existing, MARK_TYPE_ID);
-  const openings = input.targets.filter((t) => isOpening(t.className));
+  const openings = input.targets.filter((t) => isOpening(t.className) && (/^ifcdoor/i.test(t.className) ? parts.doors : parts.windows));
   const firstSeen = new Set<string>();
   const todo = openings.filter((t) => !marked.has(t.guid) && !firstSeen.has(t.guid) && !!firstSeen.add(t.guid));
   summary.already += openings.length - todo.length;

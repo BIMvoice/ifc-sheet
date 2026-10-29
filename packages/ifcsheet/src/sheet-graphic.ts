@@ -24,7 +24,8 @@ import { sheetScaleLine } from './sheet-scale.js';
 import { clipPolygon, clipPolyline } from './clip.js';
 import { activeColourScheme, shownRooms, type SchemeResult } from './colour-fills.js';
 import { parsePat } from './hatch.js';
-import { schemeLegend, viewportFills, type SheetFill } from './sheet-colours.js';
+import { schemeLegend, viewportFills, viewportSurfaceFills, type SheetFill } from './sheet-colours.js';
+import type { SurfaceFill } from './surface-fills.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
@@ -37,7 +38,9 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
-import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
+import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
+import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
+import { ARROW_NEED_MM, BAR_NEED_MM, markArea, markBox, markFits, northDegrees, siteMarkArea, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
@@ -49,9 +52,13 @@ export interface SheetText {
   text: string;
   /** Text height, paper mm. */
   size: number;
-  align?: 'left' | 'center';
+  align?: 'left' | 'center' | 'right';
   /** Degrees counter-clockwise about `at` (a title block strip reads upward); absent is level. */
   angle?: number;
+  /** Set in bold (a schedule's title, header and totals). */
+  bold?: true;
+  /** A face other than the sheet's Inter, with its italic (the project's "Tables" text style); absent: Inter. */
+  face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
 }
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
@@ -115,6 +122,8 @@ export interface SheetGraphic {
   symbols: { strokes: Polyline[]; solids: Polyline[] };
   /** The sheet's own marks drawn with a plain pen: a colour legend's frame and swatch outlines. */
   marks: Polyline[];
+  /** What a project drew on the sheet with its own pens (#479): the views' drafts and dimensions, the placed schedules' rules; absent: none. */
+  strokes?: SheetStroke[];
   texts: SheetText[];
   /** The images the sheet carries: the title block's logo. */
   images: SheetImage[];
@@ -192,13 +201,36 @@ export function sheetGraphic(
   language?: string,
   /** The model's true north (`trueNorthOf`) and the language and number setting the scale bar's figures are written in. */
   marks: { north: PlanDirection | null; locale: SheetLocale } = { north: null, locale: 'en' },
+  /** A saved project's drafts and placed schedules (#479); absent: the sheet carries its views only. */
+  project?: { annotations?: SheetAnnotations; schedules?: SheetSchedules },
+  /** The coloured surfaces of the elevations and sections that ask for them (#499), by view id: `sheetGraphics` makes them from the meshes. */
+  surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  const strokes: SheetStroke[] = [];
   // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
   const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
+  const drawingArea = drawingAreaIn(paper, frameOf(sheet));
+  const drawMarks = (area: Rect, scale: number, arrowDegrees: number | null, bar: boolean): void => {
+    const shapes = viewportMarks({ area, scale, arrowDegrees, bar, locale: marks.locale });
+    out.symbols.strokes.push(...shapes.strokes);
+    out.symbols.solids.push(...shapes.solids);
+    out.texts.push(...shapes.texts);
+  };
+  /** A site plan's marks that do not fit inside its drawing, placed beside it after the loop (`own`: its index in `out.viewports`). */
+  const besideSite: { box: Rect; own: number; scale: number; need: { w: number; h: number }; arrowDegrees: number | null; bar: boolean }[] = [];
   for (const vp of vps) {
+    // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
+    const schedule = project?.schedules ? placedListSchedule(sheet, doc.sheets, vp, project.schedules) : null;
+    if (schedule) {
+      const g = scheduleGraphics(schedule, vp, project?.schedules?.face);
+      strokes.push(...g.strokes);
+      out.texts.push(...g.texts);
+      out.viewports.push({ viewId: vp.viewId, box: g.box });
+      continue;
+    }
     const view = doc.views.find((v) => v.id === vp.viewId);
     const made = drawings.get(vp.viewId);
     const k = 1000 / vp.scale;
@@ -217,6 +249,8 @@ export function sheetGraphic(
       }
       // The rooms the view hides keep neither colour nor pattern, as in the app's sheets (`shownRooms`).
       const scheme = shownRooms(schemes.get(vp.viewId), graphics, globalIdOf) ?? undefined;
+      const surface = surfaces.get(vp.viewId);
+      if (surface) out.fills.push(...viewportSurfaceFills(surface, at, box));
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box, patterns, pens.materialHatch.hairline));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
@@ -237,20 +271,43 @@ export function sheetGraphic(
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
     }
+    // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
+    if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
+      const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box }, project.annotations);
+      strokes.push(...drafted.strokes);
+      out.texts.push(...drafted.texts);
+    }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
-    const area = marksBox ? markArea(marksBox, drawingAreaIn(paper, frameOf(sheet))) : null;
-    if (area && drawing && (flags.northArrow || flags.scaleBar)) {
-      const shapes = viewportMarks({ area, scale: vp.scale, arrowDegrees: flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null, bar: flags.scaleBar, locale: marks.locale });
-      out.symbols.strokes.push(...shapes.strokes);
-      out.symbols.solids.push(...shapes.solids);
-      out.texts.push(...shapes.texts);
+    // A site plan's marks stand beside its drawing when they do not fit inside it (`siteMarkArea`), placed once every viewport on the sheet is known; any other view's are left out then.
+    const site = view?.kind === 'plan' && view.site === true;
+    if (drawing && marksBox && (flags.northArrow || flags.scaleBar)) {
+      const north = flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null;
+      const inside = markArea(marksBox, drawingArea);
+      const wanted = [
+        { need: ARROW_NEED_MM, arrowDegrees: north, bar: false, on: north !== null },
+        { need: BAR_NEED_MM, arrowDegrees: null, bar: true, on: flags.scaleBar },
+      ];
+      for (const m of wanted) {
+        if (!m.on) continue;
+        if (site && !markFits(inside, m.need)) besideSite.push({ box: marksBox, own: out.viewports.length - 1, scale: vp.scale, need: m.need, arrowDegrees: m.arrowDegrees, bar: m.bar });
+        else if (inside) drawMarks(inside, vp.scale, m.arrowDegrees, m.bar);
+      }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
   }
-  // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner (the viewports and their titles are not free).
+  // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.
   const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
   taken.push(titleBlockRect(paper, frameOf(sheet)));
+  for (const m of besideSite) {
+    // Its own viewport's drawing box is the one it stands beside; its title strip under the box stays taken.
+    const own = out.viewports[m.own].box;
+    const others = [...taken.filter((_, i) => i !== m.own), { x: own.x, y: own.y + own.h, w: own.w, h: 12 }];
+    const area = siteMarkArea(m.box, drawingArea, m.need, others);
+    if (area) drawMarks(area, m.scale, m.arrowDegrees, m.bar);
+  }
+  // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner.
   for (const vp of vps) {
     const view = doc.views.find((v) => v.id === vp.viewId);
     const entries = shownRooms(schemes.get(vp.viewId), resolveViewGraphics(view, doc.viewTemplates), globalIdOf)?.entries;
@@ -268,5 +325,6 @@ export function sheetGraphic(
   out.texts.push(...block.texts);
   out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
   out.images.push(...block.images);
+  if (strokes.length) out.strokes = strokes;
   return out;
 }

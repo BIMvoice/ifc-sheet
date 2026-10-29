@@ -9,17 +9,22 @@
 
 import { create } from 'zustand';
 import { annotateSet, type AnnotateProgress, type SetSummary } from './annotate-set';
+import { ALL_TAG_PARTS, type TagParts } from '@/tagall/types';
 import { choicesFrom, hasChoices, type AnnotateCommand } from './choices';
+import { effectiveOptions, presetsOfProject } from './presets';
 
 interface AnnotatePanelState {
   /** Defaults all on. */
   on: Record<AnnotateCommand, boolean>;
+  /** Which labels TAGALL places (#497); defaults all. */
+  tagParts: TagParts;
   running: AnnotateProgress | null;
   summary: SetSummary | null;
 }
 
 export const useAnnotatePanel = create<AnnotatePanelState>()(() => ({
   on: { tagall: true, dimall: true, levelall: true },
+  tagParts: { ...ALL_TAG_PARTS },
   running: null,
   summary: null,
 }));
@@ -30,15 +35,29 @@ export function switchCommand(command: AnnotateCommand, on: boolean): void {
   useAnnotatePanel.setState((s) => ({ on: { ...s.on, [command]: on } }));
 }
 
+export function switchTagPart(part: keyof TagParts, on: boolean): void {
+  useAnnotatePanel.setState((s) => ({ tagParts: { ...s.tagParts, [part]: on } }));
+}
+
+/** Switch the panel to a saved preset and run it on the set (one click, #497). Returns false for a preset that is not there. */
+export async function applyAnnotationPreset(id: string): Promise<boolean> {
+  const preset = presetsOfProject().find((p) => p.id === id);
+  if (!preset) return false;
+  useAnnotatePanel.setState({ on: { ...preset.on }, tagParts: { ...preset.tagParts } });
+  await runAnnotateSet();
+  return true;
+}
+
 /** Annotate the set with the commands switched on, as one undo step. A run in progress is not started again. */
 export async function runAnnotateSet(): Promise<void> {
-  const { on, running } = useAnnotatePanel.getState();
+  const { running, ...panel } = useAnnotatePanel.getState();
+  const { on, tagParts } = effectiveOptions(panel);
   const choices = choicesFrom(on);
   if (running || !hasChoices(choices)) return;
   abort = new AbortController();
   useAnnotatePanel.setState({ running: { done: 0, total: 0, viewName: '' }, summary: null });
   try {
-    const summary = await annotateSet({ choices, mode: 'undoable', signal: abort.signal, onProgress: (running) => useAnnotatePanel.setState({ running }) });
+    const summary = await annotateSet({ choices, tagParts, mode: 'undoable', signal: abort.signal, onProgress: (running) => useAnnotatePanel.setState({ running }) });
     useAnnotatePanel.setState({ summary });
   } finally {
     abort = null;

@@ -13,7 +13,7 @@
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from '@bimvoice/ifcsheet';
 import type { TakeoffRow } from './material-takeoff';
 import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks';
 

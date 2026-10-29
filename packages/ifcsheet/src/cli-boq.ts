@@ -20,6 +20,9 @@ import { sheetNumber } from './sheet-number.js';
 import { sheetFormat } from './units-and-numbers.js';
 import { readProjectFile, type ProjectFacts } from './project-read.js';
 import type { CliIo } from './cli.js';
+import { commandLanguage } from './cli-language.js';
+import { cliSayFor } from './cli-words.js';
+import { nameLanguageOf } from './names.js';
 
 export interface BoqArgs {
   model: string;
@@ -28,7 +31,8 @@ export interface BoqArgs {
   json: boolean;
   /** A detail row per type under each article. */
   detail: boolean;
-  locale: string;
+  /** `--locale` as given; the project's language, when it records one, comes first (`cli-language.ts`). */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -95,7 +99,7 @@ export function boqOutput(file: string, projectName: string, model: OpenedModel,
   const notes = result.lines.flatMap((l) => boqNotes(l, say));
   if (notes.length > 0) text += `\n${notes.join('\n')}\n`;
   const missing = boqMissing(result);
-  if (missing.elements > 0) text += `\n${missing.elements} elements lack a quantity an article takes: ${missing.list}.\n`;
+  if (missing.elements > 0) text += `\n${cliSayFor(nameLanguageOf(locale) ?? 'en')('boq.missing', { count: missing.elements, list: missing.list })}\n`;
   return {
     result, text,
     json: resultJson(file, projectName, result, locale),
@@ -118,7 +122,8 @@ export async function boq(args: BoqArgs, io: CliIo): Promise<number> {
   }
   // The quantities are read from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const out = boqOutput(args.model, args.project, model, project, args.locale, args.detail);
+  const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
+  const out = boqOutput(args.model, args.project, model, project, language, args.detail);
   if (args.json) io.stdout(`${JSON.stringify(out.json, null, 2)}\n`);
   else if (args.csv) io.stdout(out.csv);
   else io.stdout(out.text);

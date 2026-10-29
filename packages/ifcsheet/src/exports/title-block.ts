@@ -11,7 +11,7 @@ export { formatTitleBlockDate } from '../title-block-date.js';
 export { sheetScaleLine, sheetScaleText } from '../sheet-scale.js';
 export { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from '../title-block-fields.js';
 export {
-  DEFAULT_SOURCES, effectiveFields, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, projectTitleFields, readTitleSources, resolveField, resolvedTitleBlock, resolveTitleBlock,
+  DEFAULT_SOURCES, effectiveFields, fieldsWithoutSource, isPlaceholder, MODEL_ENTITIES, OWNER_PARTS, PRESET_SOURCES, projectNameFromFile, projectTitleFields, readTitleSources, resolveField, resolvedTitleBlock, resolveTitleBlock,
   sameSource, sourcesOf, sourceText, withSources,
   type ModelEntity, type ModelFacts as TitleBlockFacts, type OwnerPart, type ResolvedField, type TitleSource, type TitleSources,
 } from '../title-block-sources.js';

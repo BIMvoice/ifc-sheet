@@ -187,17 +187,18 @@ export const ifcsheetExportPdf: Tool = {
     const entry = getSheetSet(ctx, input.document_id as string);
     const { set, model, id } = entry;
     const { exportPdf } = await import('@bimvoice/ifcsheet/headless');
-    const { sheets } = await drawSet(entry, model);
+    const { sheets, notes } = await drawSet(entry, model);
     const pdf = await exportPdf(sheets, { title: set.document.name });
     const pages = sheets.length;
-    const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength };
+    const base = { document_id: id, pages, sheets: sheets.map((s) => s.number), bytes: pdf.byteLength, notes };
+    const said = notes.length ? ` Not printed: ${notes.join(' ')}` : '';
     if (typeof input.file_path !== 'string') {
-      return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
+      return okResult(`Exported ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) as base64.${said}`, { ...base, pdf_base64: Buffer.from(pdf).toString('base64') });
     }
     const filePath = await outputPath(input.file_path, ctx);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, pdf);
-    return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.`, { ...base, file_path: filePath });
+    return okResult(`Wrote ${pages} pages (${pdf.byteLength.toLocaleString()} bytes) to ${filePath}.${said}`, { ...base, file_path: filePath });
   },
 };
 

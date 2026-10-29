@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { readLineType, type CustomLineType } from '@/drafting/line-types';
-import { listAt } from '../project-read';
+import { listAt } from '@bimvoice/ifcsheet';
 import { listField } from './define';
 
 declare module '../types' {

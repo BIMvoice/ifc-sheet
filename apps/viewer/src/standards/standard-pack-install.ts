@@ -6,7 +6,7 @@
  * Installing a standards pack in the project (#365), and taking it back.
  *
  * "Install standard" changes every part the pack carries in ONE undo step (`runAsOneUndoStep`): the graphic standard
- * with its styles, the title block layout, the units and number format, the numbering scheme. The values the project
+ * with its styles, the title block layout, the units and number format, the numbering scheme, the material hatch rows. The values the project
  * held before are kept with the project (`installedStandard.previous`) the first time, so a later install of the same
  * or another pack never overwrites them with a pack's own values, and "Reset" (also one undo step) puts them back.
  * Installing the same pack again changes nothing.
@@ -19,6 +19,7 @@ import { setGraphicStandard } from '@/project/graphic-standard-actions';
 import { setSchemeForNewSheets } from '@/project/sheet-renumber';
 import { applyRomanianTitleBlock, resetTitleBlockTemplate } from '@/project/title-block-template-actions';
 import { setUnitsAndNumbers, useProjectStore } from '@/project/project-store';
+import { hasPackMaterials, withPackMaterials } from '@bimvoice/ifcsheet';
 import type { StandardPack } from './standard-pack';
 
 const state = () => useProjectStore.getState();
@@ -28,9 +29,12 @@ function capture(pack: StandardPack, already: StandardPreviousValues): StandardP
   const s = state();
   const out: StandardPreviousValues = { ...already };
   if (pack.graphicStandard !== undefined && !('graphicStandard' in out)) out.graphicStandard = s.graphicStandard ?? null;
+  // Choosing a graphic standard also sets the opening-line direction (`setGraphicStandard`), so it is kept with it.
+  if (pack.graphicStandard !== undefined && !('openingLines' in out)) out.openingLines = s.openingLines ?? null;
   if (pack.titleBlockTemplate !== undefined && !('titleBlockTemplate' in out)) out.titleBlockTemplate = s.titleBlockTemplate ?? null;
   if (pack.unitsAndNumbers !== undefined && !('unitsAndNumbers' in out)) out.unitsAndNumbers = s.unitsAndNumbers ?? null;
   if (pack.sheetNumbering !== undefined && !('sheetNumbering' in out)) out.sheetNumbering = s.sheetNumbering ?? null;
+  if (pack.materials !== undefined && !('materials' in out)) out.materials = s.materials ?? null;
   return out;
 }
 
@@ -44,6 +48,7 @@ export function isApplied(pack: StandardPack, s: ReturnType<typeof state> = stat
   if (pack.titleBlockTemplate !== undefined && !same(s.titleBlockTemplate, pack.titleBlockTemplate)) return false;
   if (pack.unitsAndNumbers !== undefined && !Object.entries(pack.unitsAndNumbers).every(([k, v]) => same(s.unitsAndNumbers?.[k as keyof typeof s.unitsAndNumbers], v))) return false;
   if (pack.sheetNumbering !== undefined && !same(s.sheetNumbering, pack.sheetNumbering)) return false;
+  if (pack.materials !== undefined && !hasPackMaterials(s.materials, pack.materials)) return false;
   return true;
 }
 
@@ -56,6 +61,7 @@ export function installStandard(pack: StandardPack): void {
     if (pack.titleBlockTemplate !== undefined) applyRomanianTitleBlock(pack.titleBlockTemplate);
     if (pack.unitsAndNumbers !== undefined) setUnitsAndNumbers(pack.unitsAndNumbers);
     if (pack.sheetNumbering !== undefined) setSchemeForNewSheets(pack.sheetNumbering);
+    if (pack.materials !== undefined) useProjectStore.setState({ materials: withPackMaterials(state().materials ?? [], pack.materials), dirty: true });
     useProjectStore.setState({ installedStandard: { id: pack.id, version: pack.version, previous }, dirty: true });
   });
 }
@@ -67,11 +73,14 @@ export function resetStandard(): boolean {
   const { previous } = installed;
   runAsOneUndoStep(() => {
     if ('graphicStandard' in previous) setGraphicStandard(previous.graphicStandard ?? 'default');
+    // After the standard: putting it back sets the direction that standard names, and the project's own choice comes first.
+    if ('openingLines' in previous) useProjectStore.setState({ openingLines: previous.openingLines ?? undefined, dirty: true });
     if ('titleBlockTemplate' in previous) {
       if (previous.titleBlockTemplate) applyRomanianTitleBlock(previous.titleBlockTemplate); else resetTitleBlockTemplate();
     }
     if ('unitsAndNumbers' in previous) useProjectStore.setState({ unitsAndNumbers: previous.unitsAndNumbers ?? undefined, dirty: true });
     if ('sheetNumbering' in previous) useProjectStore.setState({ sheetNumbering: previous.sheetNumbering ?? undefined, dirty: true });
+    if ('materials' in previous) useProjectStore.setState({ materials: previous.materials ?? undefined, dirty: true });
     useProjectStore.setState({ installedStandard: undefined, dirty: true });
   });
   return true;

@@ -48,7 +48,7 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   return useMemo(() => ({
     locale, title,
     mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
-    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'),
+    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'), varies: t('joineryRow.varies'),
     op: (op: PanelOperation) => t(`joinery.op.${op}` as TranslationKey),
   }), [t, locale, title]);
 }
@@ -155,12 +155,14 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
   const schedules = useProjectStore((s) => s.schedules);
+  // The cells typed over the model's text (#446) are part of the data.
+  const joineryOverrides = useProjectStore((s) => s.joineryOverrides);
   const labels = useScheduleLabels(schedule?.name ?? '');
   const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban' || schedule.kind === 'rooms' || schedule.kind === 'boq' || schedule.kind === 'list') return null;
-    return scheduleDataOf(schedule, undefined, schedules ?? []);
+    return scheduleDataOf(schedule, undefined, schedules ?? [], joineryOverrides);
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores; schedules: the text rows.
-  }, [schedule?.kind, schedule?.sub, schedules, mutationVersion, models, catalogue, mapping]);
+  }, [schedule?.kind, schedule?.sub, schedules, joineryOverrides, mutationVersion, models, catalogue, mapping]);
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');
@@ -170,6 +172,7 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
 /** The layouts of the schedules placed on `sheet`, by schedule id. */
 export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayout> {
   const schedules = useProjectStore((s) => s.schedules);
+  const joineryOverrides = useProjectStore((s) => s.joineryOverrides);
   const sheets = useProjectStore((s) => s.sheets);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const models = useViewerStore((s) => s.models);
@@ -209,11 +212,11 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
     for (const vp of sheet.viewports ?? []) {
       const schedule = schedules?.find((s) => s.id === vp.viewId);
       if (!schedule || (schedule.kind !== 'door' && schedule.kind !== 'window' && schedule.kind !== 'all') || out.some((r) => r.id === schedule.id)) continue;
-      out.push({ id: schedule.id, data: scheduleDataOf(schedule), scale: schedule.scale ?? 50 });
+      out.push({ id: schedule.id, data: scheduleDataOf(schedule, undefined, schedules, joineryOverrides), scale: schedule.scale ?? 50 });
     }
     return out;
     // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` reads from the stores.
-  }, [heldKey, schedules, mutationVersion, models, catalogue, mapping]);
+  }, [heldKey, schedules, joineryOverrides, mutationVersion, models, catalogue, mapping]);
   const joineryViews = useElementViews(joinery);
   const { layouts, loaded } = useMemo(() => {
     const out = new Map<string, ScheduleLayout>();

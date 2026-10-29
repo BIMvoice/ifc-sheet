@@ -9,6 +9,7 @@
  * time it is wanted.
  */
 
+import { registerHolders } from '@bimvoice/ifcsheet';
 import { sheetScaleText } from '@bimvoice/ifcsheet';
 import { drawingArea, SET_PAPER, sheetGroup, type SetGroup } from './drawing-set';
 import { registerFit, type RegisterFit } from '@/joinery/register-layout';
@@ -53,11 +54,8 @@ export function holdsRegister(sheet: Pick<ProjectSheet, 'viewports'>, schedules:
   return (sheet.viewports ?? []).some((v) => ids.has(v.viewId));
 }
 
-/** The sheets that hold the register `registerId`, by the page each shows: its own sheet first, then its continuation sheets. */
-export function registerHolders<S extends Pick<ProjectSheet, 'viewports'>>(sheets: readonly S[], registerId: string): S[] {
-  const pageOf = (s: S) => (s.viewports ?? []).find((vp) => vp.viewId === registerId)?.page ?? 0;
-  return sheets.filter((s) => (s.viewports ?? []).some((vp) => vp.viewId === registerId)).sort((a, b) => pageOf(a) - pageOf(b));
-}
+// Which sheets hold a schedule, by page, is the engine's (`schedule-place.ts`): the command line places a schedule's pages the same way (#479).
+export { registerHolders };
 
 /**
  * The paper every page of the register `registerId` is fitted to: its own

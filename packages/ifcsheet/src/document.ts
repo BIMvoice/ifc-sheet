@@ -218,7 +218,7 @@ export interface SheetViewport {
   keyPlanOf?: string;
   /**
    * A north arrow in the viewport's corner, turned to the model's true north (plans only), and a graphic scale bar sized for its scale
-   * (`viewport-marks.ts`). `true` / `false` is the user's choice; absent follows the view: on for a site plan, off otherwise.
+   * (`viewport-marks.ts`). `true` / `false` is the user's choice; absent: off, a site plan too.
    */
   northArrow?: boolean;
   scaleBar?: boolean;

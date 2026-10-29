@@ -6,7 +6,7 @@
 /** Schedules and lists: readiness, the bill of quantities, list schedules, sub-reports and their checks, joinery, rooms and areas. Add new exports of this area here, not in `../index.ts`. */
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
-export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
+export { READINESS_EN, READINESS_RO, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
 // The bill of quantities (antemasuratoare, #75). Reading it from models is `/project`: it loads the parser.
 export {
   BOQ_QUANTITIES, BOQ_UNITS, BOQ_UNIT_TEXT, COUNT_QUANTITY, MAX_WASTE, boqProblem, boqPropertyNames, hasSelector, newArticle, quantityDimension, readBoqArticle, readBoqArticles, unitDimension,
@@ -19,6 +19,10 @@ export {
 } from '../list-schedule.js';
 export { listFigure, listTableCells, listTableText } from '../list-figures.js';
 export { MAX_LIST_OVERRIDES, clearListOverride, listColumnKey, orphanedOverrides, overrideOf, readListOverrides, setListOverride, withListOverrides, type ListCellOverride } from '../list-overrides.js';
+export {
+  MAX_JOINERY_OVERRIDES, OVERRIDABLE_ROWS, clearJoineryOverride, dropJoineryOverrides, isOverridableRow, joineryCellText, joineryOverrideOf, orphanedJoineryOverrides, readJoineryOverrides, setJoineryOverride, typeIdentityOf,
+  type JoineryCellOverride, type OverridableRow, type TypeFacts,
+} from '../joinery-overrides.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';
 export { boqLineText, boqNotes, boqTable, boqTableCells, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
 export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '../schedule-csv.js';
@@ -39,6 +43,7 @@ export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
   type OccurrenceFacts, type PropertyFact, type PropertyOp, type PropertyTest,
 } from '../schedule-filter.js';
+export { MAX_MODEL_ROWS, isModelRowId, modelRowId, modelRowLabel, modelRowNumber, modelRowText, modelRowsOf, readModelRows, type ModelRow } from '../joinery-model-rows.js';
 export {
   MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
   type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,

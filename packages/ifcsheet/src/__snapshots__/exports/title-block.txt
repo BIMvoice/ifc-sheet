@@ -1,0 +1,103 @@
+BUILTIN_PARAMS: value
+BuiltinParam: type (type-only)
+CellLine: type (type-only)
+CurrentRevision: type (type-only)
+DEFAULT_SHEET_TYPE: value
+DEFAULT_SHEET_WEIGHTS: value
+DEFAULT_SOURCES: value
+DEFAULT_TITLE_BLOCK_METRICS: value
+FIELD_PARAMS: value
+FactOverrides: type (type-only)
+FittedCell: type (type-only)
+ITEM_KINDS: value
+ImportedTitleBlock: type (type-only)
+LOGO_FIELD: value
+LOGO_MAX_BYTES: value
+MAX_CELL_LINES: value
+MAX_TEMPLATE_ITEMS: value
+MAX_TEXT: value
+MODEL_ENTITIES: value
+ModelEntity: type (type-only)
+OWNER_PARTS: value
+OwnerPart: type (type-only)
+PARAM_NAME: value
+PLACEABLE_FIELDS: value
+PRESET_SOURCES: value
+ParamNameProblem: type (type-only)
+PlaceFieldOptions: type (type-only)
+ProjectRevision: type (type-only)
+REVISION_ID_PARAM: value
+RO_COLUMNS: value
+RO_ONLY_CAPTIONS_EN: value
+RO_ROWS: value
+ResolvedField: type (type-only)
+RevisionDraft: type (type-only)
+RevisionSource: type (type-only)
+RoCaption: type (type-only)
+RoOnlyCaption: type (type-only)
+SILENT_FACTS: value
+SOFT_BUILTINS: value
+STANDARD_CAPTIONS_EN: value
+StandardCaption: type (type-only)
+TEXT_FIT_MIN: value
+TITLE_BLOCK_CAPTIONS_RO: value
+TITLE_BLOCK_FIELDS: value
+TOKEN: value
+TemplateItem: type (type-only)
+TemplateLine: type (type-only)
+TemplateLogo: type (type-only)
+TemplateRect: type (type-only)
+TemplateText: type (type-only)
+TitleBlockFacts: type (type-only)
+TitleBlockField: type (type-only)
+TitleBlockImportError: value+type
+TitleBlockMetrics: type (type-only)
+TitleBlockMisfit: type (type-only)
+TitleBlockParam: type (type-only)
+TitleBlockTemplate: type (type-only)
+TitleSource: type (type-only)
+TitleSources: type (type-only)
+checkParamName: value
+cloudRevisionId: value
+currentRevisionOf: value
+effectiveFields: value
+fieldBuiltins: value
+fieldsWithoutSource: value
+fitCell: value
+fitText: value
+formatTitleBlockDate: value
+importTitleBlockDxf: value
+importTitleBlockSvg: value
+isPlaceholder: value
+ownTitleBlockPack: value
+paramLookup: value
+placeField: value
+placedFields: value
+printTitleBlock: value
+projectNameFromFile: value
+projectTitleFields: value
+readSheetParams: value
+readStoreFacts: value
+readTitleBlock: value
+readTitleBlockParams: value
+readTitleBlockTemplate: value
+readTitleSources: value
+resolveField: value
+resolveParamText: value
+resolveTitleBlock: value
+resolvedTitleBlock: value
+romanianTitleBlock: value
+sameSource: value
+sheetFields: value
+sheetLookup: value
+sheetRevisions: value
+sheetScaleLine: value
+sheetScaleText: value
+sourceText: value
+sourcesOf: value
+standardTitleBlock: value
+textWidthEm: value
+titleBlockMisfits: value
+titleBlockOf: value
+truncateToWidth: value
+withSources: value

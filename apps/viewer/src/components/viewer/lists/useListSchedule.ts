@@ -17,7 +17,7 @@ import { useProjectStore } from '@/project/project-store';
 import { useSheetLocale } from '@/project/units-and-numbers';
 import { layoutTableOnSheet, syncSchedulePages } from '@/project/schedule-fit';
 import type { ProjectSchedule, ProjectSheet } from '@/project/types';
-import { layoutListSchedule } from '@/joinery/list-schedule-layout';
+import { layoutListSchedule } from '@bimvoice/ifcsheet';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { prepareListProviders } from '@/lib/lists/prepare-providers';
 import { listTableSourceOf, runListSchedule, type ListScheduleRun } from '@/lib/lists/list-schedule-run';

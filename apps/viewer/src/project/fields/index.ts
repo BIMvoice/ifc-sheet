@@ -24,7 +24,7 @@
  */
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
-import { readDraft, readDraftLayer } from '@/drafting/draft-file';
+import { readDraft, readDraftLayer } from '@bimvoice/ifcsheet';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { resolve } from '@/i18n/registry';
@@ -39,16 +39,18 @@ import { readStructureProfileList } from '@ifc-lite/create';
 import { readCadLayerRule } from '../cad-layers-file';
 import { readNumberingScheme } from '../numbering';
 import { readMaterial } from '@bimvoice/ifcsheet/materials';
-import { isString, listAt, readCivilDrawing, readCurrentJoinery, readFlips, readModel, readSheet, readTypicalSection, readView, type Json } from '../project-read';
+import { readCivilDrawing, readCurrentJoinery, readFlips, readModel, readTypicalSection } from '../project-read';
+import { isString, listAt, readSheet, readView, type Json } from '@bimvoice/ifcsheet';
 import { readSavedSectionCuts } from '../saved-cuts-file';
-import { readTitleBlock } from '../sheet-file';
+import { readTitleBlock } from '@bimvoice/ifcsheet';
 import { readSeriesTemplates, readTemplate } from '../sheet-templates';
-import { readDimStyles, readGraphicStandard, readLayerGroups, readTextStyles } from '../standards-file';
+import { readDimStyles, readGraphicStandard, readLayerGroups, readTextStyles } from '@bimvoice/ifcsheet';
 import { readTitleBlockParams, readTitleBlockTemplate } from '../title-block-file';
 import { readTitleSources } from '../title-block-sources';
 import type { ProjectDocument } from '../types';
-import { readPhaseSource } from '../view-graphics-file';
-import { readViewTemplates } from '../view-templates-file';
+import { readPhaseSource } from '@bimvoice/ifcsheet';
+import { readViewTemplates } from '@bimvoice/ifcsheet';
+import { annotationPresetsField } from './annotation-presets';
 import { boqArticlesField } from './boq-articles';
 import { byggesaksbimField } from './byggesaksbim';
 import { installedStandardField } from './installed-standard';
@@ -148,6 +150,8 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
+  // The office's annotation presets (#497); absent: none.
+  annotationPresetsField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | keyof RegisteredFieldKeys;

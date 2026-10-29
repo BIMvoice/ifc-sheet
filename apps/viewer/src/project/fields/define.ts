@@ -10,7 +10,7 @@
  * A field file imports types and its own data module only, never `project-store` or `project-file`:
  * the store imports this folder.
  */
-import type { Json } from '../project-read';
+import type { Json } from '@bimvoice/ifcsheet';
 import type { ProjectDocument } from '../types';
 
 export type FieldKey = keyof ProjectDocument;

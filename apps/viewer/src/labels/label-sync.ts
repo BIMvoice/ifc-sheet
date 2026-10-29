@@ -15,6 +15,7 @@
 import { useEffect } from 'react';
 import type { AnnotationType } from '@/catalogue/types';
 import type { DraftEntity } from '@/drafting/types';
+import { isParametricLabel, tagOverrideOf } from '@/drafting/tag-override';
 import { withAnnotationScreenUp } from '@/drafting/annotation';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { viewScreenUp } from '@/project/view-screen-up';
@@ -29,7 +30,7 @@ import { parseTemplate, type ParsedTemplate } from './label-template';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useSheetLocale } from '@/project/units-and-numbers';
 
-export const isParametricLabel = (d: DraftEntity): boolean => d.shape.type === 'text' && typeof d.params.labelOf === 'string' && typeof d.params.atype === 'string';
+export { isParametricLabel };
 
 const parsed = new Map<string, ParsedTemplate>();
 function templateOf(text: string): ParsedTemplate {
@@ -52,7 +53,8 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
     if (!spec) return d;
     let out = d;
     if (el) {
-      const text = resolveWithExtras(templateOf(spec.template), el, locale, spec.missing, extrasOf(d.params));
+      // A text the person wrote over the label (#542) stays; the frame still follows the type.
+      const text = tagOverrideOf(d) ?? resolveWithExtras(templateOf(spec.template), el, locale, spec.missing, extrasOf(d.params));
       if (text !== d.shape.text || spec.frame !== d.shape.frame) {
         const { frame: _old, ...rest } = d.shape;
         out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };

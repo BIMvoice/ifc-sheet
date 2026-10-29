@@ -51,7 +51,7 @@ type Step =
  * FROZEN: the fields held when the list moved onto the fields themselves. A NEW field opts in on its own definition with
  * `heldByUndo: true` (`project/fields/define.ts`, see `germanyLandField`), so two PRs adding one never edit this line.
  */
-const FROZEN_STEP_FIELDS: readonly FieldKey[] = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips'];
+const FROZEN_STEP_FIELDS: readonly FieldKey[] = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'openingLines', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips'];
 const STEP_FIELDS: readonly FieldKey[] = [...FROZEN_STEP_FIELDS, ...DOCUMENT_FIELDS.filter((f) => f.heldByUndo && !FROZEN_STEP_FIELDS.includes(f.key)).map((f) => f.key)];
 type StepField = FieldKey;
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];

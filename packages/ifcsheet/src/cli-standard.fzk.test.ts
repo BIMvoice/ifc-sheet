@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { EXIT, run } from './cli.js';
+import { buildStandard } from './cli-standard.js';
+import { DEFAULT_SCHEME } from './numbering.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -94,7 +96,36 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     expect(existsSync(join(dir, 'set.pdf'))).toBe(false);
   });
 
-  it('is an option of build only', async () => {
+  it('ro and de: the standard\'s numbering scheme numbers the sheets, and its sheet numbers are printed', async () => {
+    // No standard prescribes a pattern, so both packs state the default scheme; the build takes it from the pack, not from the engine's fallback.
+    expect(buildStandard('ro', undefined)?.sheetNumbering).toEqual(DEFAULT_SCHEME);
+    expect(buildStandard('de', undefined)?.sheetNumbering).toEqual(DEFAULT_SCHEME);
+    expect(buildStandard(undefined, undefined)?.sheetNumbering).toBeUndefined();
+    const ro = await build('--standard', 'ro');
+    expect(ro.code).toBe(EXIT.ok);
+    expect(ro.texts).toContain('A-101');
+  }, 120_000);
+
+  it('materials --standard: the pack\'s hatch rows are laid over the table, and Romanian and German differ', async () => {
+    const hatches = async (...extra: string[]) => {
+      const c = capture();
+      const code = await run(['materials', FZK, '--json', ...extra], c.io);
+      expect(c.err()).toBe('');
+      expect(code).toBe(EXIT.ok);
+      return Object.fromEntries((JSON.parse(c.out()) as { materials: { name: string; hatch: string | null; auto: boolean }[] }).materials.map((m) => [m.name, m]));
+    };
+    const plain = await hatches();
+    expect(plain.Holz).toMatchObject({ hatch: null, auto: true });
+    const ro = await hatches('--standard', 'ro');
+    expect(ro.Holz).toMatchObject({ hatch: null, auto: true });
+    const de = await hatches('--standard', 'de');
+    expect(de.Holz).toMatchObject({ hatch: 'WOOD', auto: false });
+    const c = capture();
+    expect(await run(['materials', FZK, '--standard', 'din'], c.io)).toBe(EXIT.usage);
+    expect(c.err()).toContain('unknown standard "din"');
+  }, 120_000);
+
+  it('is an option of build and materials only', async () => {
     const c = capture();
     expect(await run(['check', FZK, '--standard', 'ro'], c.io)).toBe(EXIT.usage);
     expect(c.err()).toContain('--standard');
