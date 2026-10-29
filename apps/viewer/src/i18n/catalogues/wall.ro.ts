@@ -191,6 +191,8 @@ export const wallRo = {
   'wall.add.draftingBlank': 'Vedere de desenare goală',
   'wall.add.draftingName': 'Vedere de desenare',
   'wall.vp.drawingNumber': 'Numărul desenului (gol: numerotat în ordinea de citire)',
+  'wall.vp.northArrow': 'Indicator de nord (orientat spre nordul geografic al modelului)',
+  'wall.vp.scaleBar': 'Scară grafică',
   'wall.vp.threeD.projection': 'Proiecție',
   'wall.vp.threeD.axonometric': 'Axonometrică, la scară',
   'wall.vp.threeD.perspective': 'Perspectivă, fără scară',

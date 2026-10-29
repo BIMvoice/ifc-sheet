@@ -7,7 +7,7 @@
  * catalogue file. A malformed entry fails with its path.
  */
 
-import { readDraft, readDraftLayer } from '@/drafting/draft-file';
+import { readDraft, readDraftLayer } from '@bimvoice/ifcsheet';
 import { fail, readSymbol } from './readers';
 import type { LibraryDetail } from './types';
 

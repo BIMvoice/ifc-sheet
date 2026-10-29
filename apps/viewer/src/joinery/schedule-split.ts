@@ -9,7 +9,7 @@
  * so a sub-report is the same table on the Wall, on the sheet and when hung.
  */
 
-import { scheduleOf } from '@bimvoice/ifcsheet';
+import { scheduleOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule } from '@/project/types';
 import { scheduleData, type ScheduleData, type ScheduleKind } from './schedule-data';
@@ -17,12 +17,13 @@ import { scheduleData, type ScheduleData, type ScheduleKind } from './schedule-d
 /**
  * The content of the joinery schedule `schedule`: its kind's rows, sorted and numbered by its content choice (its own, or its parent's),
  * whole or the part its sub-report keeps, with the text rows and the row choice it prints, from `schedules` (the project's by default).
- * The assembly is the engine's (`scheduleOf`).
+ * The assembly is the engine's (`scheduleOf`), the project's typed cells (#446) included.
  */
 export function scheduleDataOf(
   schedule: Pick<ProjectSchedule, 'kind' | 'sub'> & Partial<Pick<ProjectSchedule, 'id'>>,
   read: (kind: ScheduleKind) => ScheduleData = scheduleData,
   schedules: readonly ProjectSchedule[] = useProjectStore.getState().schedules ?? [],
+  overrides: readonly JoineryCellOverride[] | undefined = useProjectStore.getState().joineryOverrides,
 ): ScheduleData {
-  return scheduleOf(schedules, { id: schedule.id ?? '', sub: schedule.sub }, read(schedule.kind as ScheduleKind));
+  return scheduleOf(schedules, { id: schedule.id ?? '', sub: schedule.sub }, read(schedule.kind as ScheduleKind), overrides);
 }

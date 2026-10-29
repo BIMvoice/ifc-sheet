@@ -9,11 +9,11 @@
  * layout for the drawing, the picking box and the bounds, so they agree.
  */
 
+import { TEXT_FRAMES, asTextFrame, type TextFrame } from '@bimvoice/ifcsheet';
 import { textWidthEm, type TextFace } from './text-width';
 
-export const TEXT_FRAMES = ['box', 'rounded', 'bubble'] as const;
-/** The outline around a text, as drawing practice has it; none is the absence of the field. */
-export type TextFrame = (typeof TEXT_FRAMES)[number];
+// The frames are part of the drafted shape, which the engine reads (`draft-types.ts`).
+export { TEXT_FRAMES, asTextFrame, type TextFrame };
 
 /** Line pitch, in text heights. */
 export const LINE_PITCH = 1.25;
@@ -61,6 +61,3 @@ export function textBlock(text: string, height: number, frame?: TextFrame, face?
   }
   return { lines: placed, box, frame: { kind: 'rect', x: outer.x0, y: outer.y0, w, h, radius: frame === 'rounded' ? Math.min(w, h) * 0.25 : 0 }, outer };
 }
-
-/** The frames a stored value may name, else none. */
-export const asTextFrame = (v: unknown): TextFrame | undefined => (TEXT_FRAMES as readonly unknown[]).includes(v) ? (v as TextFrame) : undefined;

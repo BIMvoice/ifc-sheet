@@ -70,6 +70,7 @@ const graphics: Required<ViewGraphics> = {
   presetId: 'structure', categories: { walls: category, doors: { visible: false } }, grid: { visible: false, ends: 'start' },
   phases: { show: ['existing', 'demolish'], styles: { demolish: { lineColor: '#ffcc00', lineWeight: 'heavy', dashed: false, fillColor: '#fff2a8' } } },
   colourScheme: { property: 'Pset_SpaceCommon.Category', target: 'elements', classes: ['IfcSpace', 'IfcWall'], colours: { office: '#aabbcc' }, palette: 'okabe-ito' },
+  colouredSurfaces: true,
   // Single elements by GlobalId, including ones the model has not got (kept, #32 #33), and a hidden line.
   hiddenElements: ['2O2Fr$t4X7Zf8NOew3FLOH', '0000000000000000000000'],
   elements: {
@@ -78,6 +79,8 @@ const graphics: Required<ViewGraphics> = {
     },
   },
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
+  // A plan's switch for the model's own plan symbols (#489): only `false` is a setting, on is the default.
+  usePlanSymbols: false,
   // A template's class and material mapping, kept on a view that was detached from it (#31).
   styleRules: [{ id: 'sr-w', by: 'class', match: ['IfcWall'], style: { lineColor: '#112233', fillColor: '#445566', lineWeight: 'heavy', cutHatch: 'ANSI31', hatchScale: 2 } }],
   detailLevel: 'coarse',
@@ -157,7 +160,7 @@ const legend: Required<ProjectLegend> = {
 const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'lt-centre', group: 'g1', print: false };
 
 const viewport: Required<SheetViewport> = {
-  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, placed: true, placedPages: [{ page: 3, x: 120, y: 80 }], keyPlanOf: 'vp0', drawingNumber: '7',
+  id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, placed: true, placedPages: [{ page: 3, x: 120, y: 80 }], keyPlanOf: 'vp0', northArrow: false, scaleBar: true, drawingNumber: '7',
 };
 const sheet: Required<ProjectSheet> = {
   id: 'sh1', number: 'A-201', autoNumber: true, numberOverride: true, series: 'elevations', name: 'Plans', createdAt: 9, paper: { kind: 'elongated', base: 'A2', factor: 3 }, orientation: 'portrait', viewports: [viewport],

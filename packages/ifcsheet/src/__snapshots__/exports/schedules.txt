@@ -39,6 +39,7 @@ ExportTable: type (type-only)
 FootprintMesh: type (type-only)
 GapType: type (type-only)
 INTERIOR: value
+JoineryCellOverride: type (type-only)
 JoineryMapping: type (type-only)
 LIST_COUNT_ID: value
 LIST_WORDS_EN: value
@@ -53,9 +54,11 @@ ListScheduleDef: type (type-only)
 ListScheduleTable: type (type-only)
 ListTableSource: type (type-only)
 MARK_SCHEMES: value
+MAX_JOINERY_OVERRIDES: value
 MAX_KEPT_APART: value
 MAX_LABEL_LENGTH: value
 MAX_LIST_OVERRIDES: value
+MAX_MODEL_ROWS: value
 MAX_START: value
 MAX_TEXT_LENGTH: value
 MAX_TEXT_ROWS: value
@@ -64,9 +67,12 @@ MappingMatch: type (type-only)
 MappingSource: type (type-only)
 MarkOf: type (type-only)
 ModelFacts: type (type-only)
+ModelRow: type (type-only)
+OVERRIDABLE_ROWS: value
 OccurrenceFacts: type (type-only)
 OfficeClassificationAccessor: type (type-only)
 OrphanCell: type (type-only)
+OverridableRow: type (type-only)
 PROPERTY_OPS: value
 PartRef: type (type-only)
 ProjectSchedule: type (type-only)
@@ -74,6 +80,7 @@ PropertyFact: type (type-only)
 PropertyOp: type (type-only)
 PropertyTest: type (type-only)
 READINESS_EN: value
+READINESS_RO: value
 ROOM_AREA_NAMES: value
 ROOM_AREA_QTO: value
 ROOM_SCHEDULE_EN: value
@@ -119,6 +126,7 @@ SubReportFix: type (type-only)
 TagWrite: type (type-only)
 TaggedEntry: type (type-only)
 TextHolder: type (type-only)
+TypeFacts: type (type-only)
 addTextRow: value
 applyContent: value
 boqLineText: value
@@ -133,6 +141,7 @@ boqTypeLabel: value
 canSplit: value
 checkSubReports: value
 cleanText: value
+clearJoineryOverride: value
 clearListOverride: value
 computeBoq: value
 contentOf: value
@@ -142,6 +151,7 @@ describeBoqProblem: value
 describeReadiness: value
 doorOperationOf: value
 doorSwingFlips: value
+dropJoineryOverrides: value
 elementCount: value
 estimatedAreas: value
 exportCsv: value
@@ -152,7 +162,11 @@ fitToElement: value
 followedTags: value
 hasSelector: value
 isClean: value
+isModelRowId: value
 isOpenFilter: value
+isOverridableRow: value
+joineryCellText: value
+joineryOverrideOf: value
 keepApart: value
 keepId: value
 listColumnKey: value
@@ -166,11 +180,17 @@ listWordsFor: value
 meshFootprintArea: value
 meshFootprintPerimeter: value
 modelReadiness: value
+modelRowId: value
+modelRowLabel: value
+modelRowNumber: value
+modelRowText: value
+modelRowsOf: value
 newArticle: value
 normaliseName: value
 occurrenceMarkOf: value
 orderedRows: value
 orphanCells: value
+orphanedJoineryOverrides: value
 orphanedOverrides: value
 overrideOf: value
 parseDoorOperation: value
@@ -187,9 +207,11 @@ quantityDimension: value
 readBoqArticle: value
 readBoqArticles: value
 readJoineryMapping: value
+readJoineryOverrides: value
 readKeptApart: value
 readListOverrides: value
 readListScheduleDef: value
+readModelRows: value
 readPropertyTest: value
 readSchedule: value
 readScheduleClassification: value
@@ -215,6 +237,7 @@ roomScheduleWords: value
 ruralReadiness: value
 scheduleFilterProperties: value
 scheduleOf: value
+setJoineryOverride: value
 setListOverride: value
 setTextCell: value
 shownRows: value
@@ -230,6 +253,7 @@ textOwner: value
 textRowId: value
 textRowsOf: value
 tidy: value
+typeIdentityOf: value
 typeLabel: value
 unitDimension: value
 withListClassification: value

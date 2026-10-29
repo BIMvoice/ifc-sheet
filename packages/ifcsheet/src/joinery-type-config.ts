@@ -1,0 +1,132 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The opening configuration of a door or window TYPE (#448): how many leaves it has (1 to 3), how each one opens, and whether a fixed
+ * fanlight sits over them. For models from other tools, whose types carry only an overall size.
+ *
+ * It is not a store of its own. Configuring a type writes one entry of the project's joinery catalogue (`JoinerySpec`: columns are the
+ * leaves, the panels carry the operations) and maps the type's GlobalId to it (`JoineryMapping.types`), so everything that already
+ * reads the catalogue and the mapping follows: the joinery schedule's elevation, the plan symbol, the project file, the headless check.
+ * The overall size is the IFC's: `fitToElement` resizes the entry to each element it draws, so the entry's own width and height are
+ * only the size of the element it was configured from.
+ *
+ * Pure, and here so the web app and the headless engine configure a type the same way.
+ */
+
+import {
+  defaultDoorSpec, defaultWindowSpec,
+  type JoineryKind, type JoinerySpec, type PanelOperation,
+} from '@ifc-lite/create';
+import type { JoineryMapping } from './joinery-mapping.js';
+
+export const MAX_LEAVES = 3;
+
+/** The fanlight's share of the opening's height. */
+export const FANLIGHT_SHARE = 0.25;
+
+export interface TypeOpening {
+  /** One operation per leaf, left to right as seen from the interior; 1 to `MAX_LEAVES` of them. */
+  operations: PanelOperation[];
+  /** A fixed light over all the leaves. */
+  fanlight: boolean;
+}
+
+const WINDOW_LEAF: readonly PanelOperation[] = ['fixed', 'side-left', 'side-right', 'tilt-turn-left', 'tilt-turn-right', 'top-hung', 'bottom-hung', 'sliding-left', 'sliding-right'];
+const DOOR_LEAF: readonly PanelOperation[] = ['fixed', 'swing-left', 'swing-right', 'door-sliding-left', 'door-sliding-right'];
+
+/** What a leaf of `kind` can do: fixed, the hinged and sliding kinds (a window also tilts). */
+export function leafOperations(kind: JoineryKind): readonly PanelOperation[] {
+  return kind === 'door' ? DOOR_LEAF : WINDOW_LEAF;
+}
+
+/** `opening` made valid for `kind`: 1 to 3 leaves, each an operation `kind` offers (an unknown one is fixed). */
+export function cleanOpening(kind: JoineryKind, opening: TypeOpening): TypeOpening {
+  const allowed = new Set<PanelOperation>(leafOperations(kind));
+  const operations = opening.operations.slice(0, MAX_LEAVES).map((o) => (allowed.has(o) ? o : 'fixed' as const));
+  return { operations: operations.length ? operations : ['fixed'], fanlight: opening.fanlight === true };
+}
+
+/** The catalogue entry for `opening` at `size` (metres, the IFC's overall size), on the kind's default frame and sash. */
+export function specFromOpening(kind: JoineryKind, size: { width: number; height: number }, opening: TypeOpening, base?: Partial<Pick<JoinerySpec, 'id' | 'name' | 'mark'>>): JoinerySpec {
+  const clean = cleanOpening(kind, opening);
+  const d = kind === 'door' ? defaultDoorSpec() : defaultWindowSpec();
+  const leaves = clean.operations.length;
+  return {
+    ...d,
+    ...base,
+    kind,
+    width: size.width, height: size.height,
+    columns: Array.from({ length: leaves }, () => 1),
+    // Rows run bottom to top: the leaves, then the fanlight.
+    rows: clean.fanlight ? [1 - FANLIGHT_SHARE, FANLIGHT_SHARE] : [1],
+    panels: [
+      ...clean.operations.map((operation, col) => ({ col, row: 0, operation })),
+      ...(clean.fanlight ? [{ col: 0, row: 1, colSpan: leaves, operation: 'fixed' as const }] : []),
+    ],
+    // The IFC gives no thermal value, and the defaults' is not the model's: a type configured from its size claims none.
+    props: { isExternal: d.props.isExternal },
+  };
+}
+
+/** The opening a catalogue entry has, or null for an entry that is not of this shape (more than 3 leaves, several rows of leaves, a panel spanning leaves). */
+export function openingOfSpec(spec: JoinerySpec): TypeOpening | null {
+  const leaves = spec.columns.length;
+  if (leaves < 1 || leaves > MAX_LEAVES || spec.rows.length > 2) return null;
+  const fanlight = spec.rows.length === 2;
+  const operations: PanelOperation[] = [];
+  for (let col = 0; col < leaves; col++) {
+    const p = spec.panels.find((x) => x.col === col && x.row === 0 && (x.colSpan ?? 1) === 1 && (x.rowSpan ?? 1) === 1);
+    if (!p) return null;
+    operations.push(p.operation);
+  }
+  return { operations, fanlight };
+}
+
+/** The id of the entry configured for a type: the type's GlobalId, so configuring it again edits the same entry. */
+export const typeEntryId = (typeGlobalId: string): string => `type-${typeGlobalId}`;
+
+export interface ConfigureTypeInput {
+  typeGlobalId: string;
+  kind: JoineryKind;
+  /** The type's name, for the entry. */
+  name: string;
+  /** The IFC's overall size, metres. */
+  size: { width: number; height: number };
+  opening: TypeOpening;
+}
+
+export interface ProjectJoinery {
+  joineryTypes: readonly JoinerySpec[];
+  joineryMapping: JoineryMapping;
+}
+
+function nextMark(kind: JoineryKind, list: readonly JoinerySpec[]): string {
+  const prefix = kind === 'door' ? 'D' : 'W';
+  const used = new Set(list.map((t) => t.mark));
+  for (let n = 1; ; n++) if (!used.has(`${prefix}${n}`)) return `${prefix}${n}`;
+}
+
+/**
+ * The project's catalogue and mapping with the type configured: its entry added (or, when the type was configured before, its leaves,
+ * divisions and size replaced, keeping its mark, name and whatever the user edited besides) and the type mapped to it. Every element
+ * of the type is then drawn with it, unless an element has a choice of its own. The inputs are not changed.
+ */
+export function configureTypeOpening(project: ProjectJoinery, input: ConfigureTypeInput): { joineryTypes: JoinerySpec[]; joineryMapping: JoineryMapping; entryId: string } {
+  const id = typeEntryId(input.typeGlobalId);
+  const list = [...project.joineryTypes];
+  const at = list.findIndex((e) => e.id === id && e.kind === input.kind);
+  const previous = at >= 0 ? list[at] : null;
+  const fresh = specFromOpening(input.kind, input.size, input.opening, { id, name: input.name || (input.kind === 'door' ? 'Door' : 'Window'), mark: previous?.mark ?? nextMark(input.kind, list) });
+  const entry: JoinerySpec = previous
+    ? { ...previous, width: fresh.width, height: fresh.height, columns: fresh.columns, rows: fresh.rows, panels: fresh.panels }
+    : fresh;
+  if (at >= 0) list[at] = entry;
+  else list.push(entry);
+  return {
+    joineryTypes: list,
+    joineryMapping: { ...project.joineryMapping, types: { ...project.joineryMapping.types, [input.typeGlobalId]: id } },
+    entryId: id,
+  };
+}

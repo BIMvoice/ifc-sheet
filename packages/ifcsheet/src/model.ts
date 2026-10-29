@@ -61,6 +61,8 @@ export interface OpenedModel {
   proposalInput(level: ProjectLevel): ProposalInput | null;
   /** The parsed model, for reads the engine does not make itself. */
   dataStore: IfcDataStore;
+  /** The render frame the meshes were made in (the offsets the geometry pass subtracted); absent without geometry or for IFCX. */
+  coordinateInfo?: GeometryResult['coordinateInfo'];
 }
 
 const footprint = (b: BoundingBox3D): Footprint => ({ min: { x: b.min.x, z: b.min.z }, max: { x: b.max.x, z: b.max.z } });
@@ -236,5 +238,6 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     includeFarElements,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),
     dataStore: ds,
+    ...(frame ? { coordinateInfo: frame } : {}),
   };
 }

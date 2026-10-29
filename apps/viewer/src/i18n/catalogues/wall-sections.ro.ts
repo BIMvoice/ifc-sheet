@@ -17,6 +17,7 @@ export const wallSectionsRo = {
   'wall.section.sub.all': 'Păstrează tot',
   'wall.section.content.default': 'În ordinea din model',
   'wall.section.content.hidden': { one: '{count} rând ascuns', few: '{count} rânduri ascunse', other: '{count} de rânduri ascunse' },
+  'wall.section.content.properties': { one: '{count} rând din model', few: '{count} rânduri din model', other: '{count} de rânduri din model' },
   'wall.section.content.reordered': 'rânduri mutate',
   'wall.section.content.sorted': 'sortat după {by}',
   'wall.section.content.sortedReverse': 'sortat după {by}, invers',

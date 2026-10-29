@@ -15,15 +15,17 @@
 
 import { ISO_PAPERS } from './paper';
 import { withContinuationPages } from './continuation-pages';
-import { sheetDrawingArea } from './viewport-resize';
 import { useProjectStore } from './project-store';
-import { registerHolders } from './drawing-register';
+import { layoutOnSheet, layoutTableOnSheet, registerHolders, scheduleBox, scheduleHomeBox, sheetDrawingArea } from '@bimvoice/ifcsheet';
 import { scheduleScaleOf, withScheduleScale } from './schedule-scale';
 import { layoutSchedule, scheduleMinBox, schedulePages, type ScheduleLabels, type ScheduleLayout, type ScheduleLayoutOptions } from '@/joinery/schedule-layout';
 import type { ElementViews } from '@/joinery/element-views';
 import type { ScheduleData } from '@/joinery/schedule-data';
 import type { Rect } from './sheet-frame';
 import type { Paper, ProjectSchedule, ProjectSheet, SheetViewport } from './types';
+
+// Where a schedule sits on the paper is the engine's (`schedule-place.ts`), so `ifcsheet build` prints a placed schedule where the sheet shows it (#479).
+export { layoutOnSheet, layoutTableOnSheet, scheduleBox, scheduleHomeBox };
 
 /** The schedules that fit their viewport's box (all but the register, which has its own fit): `layoutOnSheet`. */
 export function isFittedSchedule(schedule: Pick<ProjectSchedule, 'kind'> | undefined): boolean {
@@ -33,24 +35,6 @@ export function isFittedSchedule(schedule: Pick<ProjectSchedule, 'kind'> | undef
 /** The schedules whose table wraps to its viewport's width: the joinery lists (`layoutJoineryOnSheet`). */
 export function isJoinerySchedule(schedule: Pick<ProjectSchedule, 'kind'> | undefined): boolean {
   return schedule?.kind === 'door' || schedule?.kind === 'window' || schedule?.kind === 'all';
-}
-
-/** The box `vp` gives its table, paper mm: its own, or the size of the sheet's drawing area (centred on the viewport) while it has none. */
-export function scheduleBox(sheet: ProjectSheet, vp: Pick<SheetViewport, 'x' | 'y' | 'width' | 'height'>): Rect {
-  if (vp.width > 0 && vp.height > 0) return { x: vp.x - vp.width / 2, y: vp.y - vp.height / 2, w: vp.width, h: vp.height };
-  const area = sheetDrawingArea(sheet);
-  return { x: vp.x - area.w / 2, y: vp.y - area.h / 2, w: area.w, h: area.h };
-}
-
-/**
- * The box every page of the schedule `scheduleId` is wrapped to: its first
- * sheet's viewport's, never that of the sheet drawing a page, so a page can
- * neither repeat nor skip a band when the sheets differ (like `registerPaper`).
- */
-export function scheduleHomeBox(sheets: readonly ProjectSheet[], scheduleId: string, fallback: ProjectSheet, vp: SheetViewport): Rect {
-  const home = registerHolders(sheets, scheduleId)[0];
-  const homeVp = home?.viewports?.find((v) => v.viewId === scheduleId);
-  return home && homeVp ? scheduleBox(home, homeVp) : scheduleBox(fallback, vp);
 }
 
 /** The layout options that wrap a table into `box` at `scale`. */
@@ -102,22 +86,6 @@ export function pagesIn(data: ScheduleData, scale: number, box: Rect): number {
 }
 
 /**
- * The page of the schedule that viewport `vp` of `sheet` shows, whatever its kind: `build` lays out one page for the box of the
- * schedule's first sheet (so every page agrees on where the breaks fall), the result is given the box `vp` draws into, and the
- * smallest box a resize may shrink it to (`min`, else the layout's own `minBox`).
- */
-export function layoutOnSheet(
-  input: { sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
-  build: (wrap: Rect, page: number) => ScheduleLayout,
-  min?: { width: number; height: number },
-): ScheduleLayout {
-  const { sheets, sheet, vp } = input;
-  const layout = build(scheduleHomeBox(sheets, vp.viewId, sheet, vp), vp.page ?? 0);
-  const floor = min ?? layout.minBox;
-  return floor ? { ...layout, fit: { box: scheduleBox(sheet, vp), min: floor } } : layout;
-}
-
-/**
  * What a joinery schedule's layout reads, whoever asks: the box of the schedule's first sheet at the schedule's scale, with the
  * element views its cards draw. The sheet's pages (`layoutJoineryOnSheet`) and the count the split offer quotes (`joineryPages`) both
  * take their options from here, so they cannot count differently.
@@ -142,11 +110,3 @@ export function layoutJoineryOnSheet(
   return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...joineryOptions(wrap, scale, views), page, continued }), scheduleMinBox(data, { scale, views }));
 }
 
-/** A column table's page (takeoff, finishes, types, urban): `layout` lays out the rows that fit the first sheet's box height. */
-export function layoutTableOnSheet(
-  input: { continued?: string; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
-  layout: (paging: { maxHeight: number; page: number; continued?: string }) => ScheduleLayout,
-): ScheduleLayout {
-  const { continued, ...place } = input;
-  return layoutOnSheet(place, (wrap, page) => layout({ maxHeight: wrap.h, page, continued }));
-}

@@ -13,10 +13,11 @@ import { useState } from 'react';
 import { resolveViewGraphics, templateKindOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
-import { applyViewTemplate, detachViewTemplate, overrideCount, resetViewOverrides, saveViewAsTemplate, setViewCategory, templatesFor, usersOf } from '@/project/view-template-actions';
+import { applyViewTemplate, detachViewTemplate, overrideCount, resetViewOverrides, saveViewAsTemplate, setViewCategory, setViewColouredSurfaces, templatesFor, usersOf } from '@/project/view-template-actions';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { CardSection } from './CardSection';
 import { CategoryGraphicsList } from './CategoryGraphicsList';
+import { ViewDetailLevel } from './ViewDetailLevel';
 import { ViewportHiddenLayers } from './ViewportHiddenLayers';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 
@@ -80,10 +81,17 @@ export function GraphicsCard({ sheet, slot, view }: { sheet: ProjectSheet; slot:
               {template ? <button type="button" className={WALL_PILL} onClick={() => detachViewTemplate(view.id)}>{t('wall.gfx.detach')}</button> : null}
               {template && overrides > 0 ? <button type="button" className={WALL_PILL} onClick={() => resetViewOverrides(view.id)}>{t('wall.gfx.resetOverrides', { count: overrides })}</button> : null}
             </div>
+            {view.kind === 'elevation' || view.kind === 'section' ? (
+              <label className="mt-4 flex items-start gap-2 text-xs text-sky-200">
+                <input type="checkbox" className="mt-0.5" checked={!!effective?.colouredSurfaces} onChange={(e) => setViewColouredSurfaces(view.id, e.target.checked)} />
+                <span>{t('wall.gfx.coloured')}<span className="block text-sky-200/70">{t('wall.gfx.colouredHint')}</span></span>
+              </label>
+            ) : null}
             <p className="m-0 mt-4 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.gfx.categories')}</p>
             <CategoryGraphicsList graphics={effective?.categories} overridden={template ? view.graphics?.categories : undefined} onChange={(category, patch) => setViewCategory(view.id, category, patch)} />
           </>
         ) : null}
+        <ViewDetailLevel view={view} />
         <p className="m-0 mt-4 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.gfx.layers')}</p>
         <ViewportHiddenLayers sheetId={sheet.id} viewport={slot} view={view} />
       </div>

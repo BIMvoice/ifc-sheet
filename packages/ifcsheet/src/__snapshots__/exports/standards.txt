@@ -12,6 +12,9 @@ GRAPHIC_STANDARDS: value
 GraphicStandard: type (type-only)
 ISO_128_LINE_WIDTHS: value
 ISO_3098_HEIGHTS: value
+MARK_STYLES: value
+MarkStyle: type (type-only)
+OpeningLineDirection: type (type-only)
 PACK_NOT_SET: value
 PACK_PARTS: value
 PackNotSet: type (type-only)
@@ -27,8 +30,11 @@ TextStyle: type (type-only)
 builtInPacks: value
 germanyPack: value
 graphicStandardOf: value
+hasPackMaterials: value
 knownGraphicStandard: value
+markStyleOf: value
 packForCommandLine: value
 packPartsOf: value
 romaniaPack: value
 standardValues: value
+withPackMaterials: value

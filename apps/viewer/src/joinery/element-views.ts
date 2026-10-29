@@ -166,10 +166,19 @@ export async function elementViews(meshes: readonly MeshData[], options: Element
   meshes = placedMeshes(meshes);
   const f = elementFrame(meshes, options.awayFrom);
   if (!f || f.width < 1e-3 || f.height < 1e-3) return null;
+  // Cut in the type's own place: the origin subtracted in double precision, so the cutter's float noise (and with it how it
+  // merges collinear segments) does not depend on where in the model the window stands. A line's id (#449) is stable only then.
+  meshes = meshes.map((m) => {
+    const positions = new Float32Array(m.positions.length);
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      positions[i] = m.positions[i] - f.ox; positions[i + 1] = m.positions[i + 1] - f.oy; positions[i + 2] = m.positions[i + 2] - f.oz;
+    }
+    return { ...m, positions };
+  });
   const generator = new Drawing2DGenerator();
   const hatcher = new HatchGenerator();
   await generator.initialize();
-  const o: Vec3 = { x: f.ox, y: f.oy, z: f.oz };
+  const o: Vec3 = { x: 0, y: 0, z: 0 };
   const nExt: Vec3 = { x: f.nx, y: 0, z: f.nz };
   const u: Vec3 = { x: f.ux, y: 0, z: f.uz };
   const at = (d: Vec3, k: number): Vec3 => ({ x: o.x + d.x * k, y: o.y + d.y * k, z: o.z + d.z * k });
@@ -186,7 +195,7 @@ export async function elementViews(meshes: readonly MeshData[], options: Element
   const front = await run(planeConfig(at(frontN, f.depth / 2 + eps), frontN, cross(UP, frontN), UP, f.depth + 2 * eps), !!options.hidden, true);
   // Plan: looking down, drawing y = the exterior direction.
   const cutHeight = Math.min(options.cutHeight ?? 1.1, f.height * 0.9);
-  const plan = await run(planeConfig({ x: o.x, y: o.y + cutHeight, z: o.z }, UP, cross(nExt, UP), nExt, cutHeight + eps), false, false);
+  const plan = await run(planeConfig({ x: 0, y: cutHeight, z: 0 }, UP, cross(nExt, UP), nExt, cutHeight + eps), false, false);
   // Section: through the middle of the width, seen from +u, drawing x = the exterior direction.
   const section = await run(planeConfig(o, u, nExt, UP, f.width / 2 + eps), false, false);
   return { width: f.width, depth: f.depth, height: f.height, front, plan, section };

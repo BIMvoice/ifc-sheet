@@ -10,9 +10,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PALETTE_IDS, type ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
+import { resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { builtInPatterns } from '@/drafting/hatch/library';
+import { parsePat } from '@/drafting/hatch/pattern';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
-import { addColourLegend, colourLegendOf, patchColourScheme, setColourScheme, setValueColour } from '@/project/colour-scheme-actions';
+import { addColourLegend, colourLegendOf, patchColourScheme, setColourScheme, setSchemeShown, setValueColour, setValueHatch } from '@/project/colour-scheme-actions';
 import { propertyChoices } from '@/project/colour-scheme-choices';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSheet, ProjectView } from '@/project/types';
@@ -58,7 +61,13 @@ export function ColourInput({ value, label, onCommit }: { value: string; label: 
 export function ColourSchemeCard({ sheet, view }: { sheet: ProjectSheet; view: ProjectView }) {
   const { t } = useTranslation();
   const labels = useLegendLabels();
-  const scheme = view.graphics?.colourScheme;
+  // The view's own scheme, else its template's (#493); the edits below make the view's own copy.
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
+  const scheme = resolveViewGraphics(view, viewTemplates)?.colourScheme;
+  const shown = !!scheme && !scheme.off;
+  const hatchSource = useProjectStore((s) => s.hatchPatterns);
+  // The patterns a value can be hatched with: the built-in ones and the project's own, the solid one left out (the colour is that).
+  const patternNames = useMemo(() => [...new Set([...builtInPatterns(), ...parsePat(hatchSource ?? '').patterns].filter((p) => !p.solid).map((p) => p.name))].sort(), [hatchSource]);
   const drawing = useViewDrawings((s) => s.byView[view.id]?.drawing);
   const meshes = useDrawingRuntime().geometryResult?.meshes;
   const edits = useViewerStore((s) => s.mutationVersion);
@@ -79,7 +88,7 @@ export function ColourSchemeCard({ sheet, view }: { sheet: ProjectSheet; view: P
     return propertyChoices(ids);
   }, [scheme?.target, drawing, meshes, edits]);
   const entries = result?.entries ?? [];
-  const summary = scheme ? `${t('wall.scheme.summary', { property: schemeHeading(scheme, attributeLabeller(t)) })}, ${t('wall.scheme.valueCount', { count: entries.length })}` : t('wall.scheme.summaryOff');
+  const summary = scheme?.off ? t('wall.scheme.summaryHidden') : scheme ? `${t('wall.scheme.summary', { property: schemeHeading(scheme, attributeLabeller(t)) })}, ${t('wall.scheme.valueCount', { count: entries.length })}` : t('wall.scheme.summaryOff');
   const start = (): void => setColourScheme(view.id, view.kind === 'plan' ? { property: 'LongName', target: 'rooms' } : { property: 'ObjectType', target: 'elements' });
   const picked = scheme?.classes ?? [];
   const classesValue = picked.length > 0 ? VIEW_CATEGORIES.find((c) => c.classes.length === picked.length && c.classes.every((k) => picked.includes(k)))?.id ?? ALL : ALL;
@@ -143,14 +152,29 @@ export function ColourSchemeCard({ sheet, view }: { sheet: ProjectSheet; view: P
               {PALETTE_IDS.map((p) => <option key={p} value={p}>{t(`wall.scheme.palette.${p}` as TranslationKey)}</option>)}
             </select>
           </label>
+          <label className="mt-3 flex items-center gap-2 text-xs text-sky-200">
+            <input type="checkbox" checked={shown} onChange={(e) => setSchemeShown(view.id, e.target.checked)} />
+            {t('wall.scheme.shown')}
+          </label>
           <p className="m-0 mt-4 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.scheme.values')}</p>
-          {!readable ? <p className="m-0 mt-2 text-xs text-amber-300">{t('wall.scheme.unreadable')}</p> : null}
-          {readable && entries.length === 0 ? <p className="m-0 mt-2 text-xs text-sky-200">{t('wall.scheme.noValues')}</p> : null}
+          {!shown ? <p className="m-0 mt-2 text-xs text-sky-200">{t('wall.scheme.hiddenNote')}</p> : null}
+          {shown && !readable ? <p className="m-0 mt-2 text-xs text-amber-300">{t('wall.scheme.unreadable')}</p> : null}
+          {shown && readable && entries.length === 0 ? <p className="m-0 mt-2 text-xs text-sky-200">{t('wall.scheme.noValues')}</p> : null}
           <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
             {entries.map((e) => (
               <li key={e.key} className="flex items-center gap-2 text-sm text-white">
                 <ColourInput value={e.colour} label={t('wall.scheme.colourOf', { value: e.label })} onCommit={(hex) => setValueColour(view.id, e.key, hex)} />
                 <span className="min-w-0 flex-1 truncate">{e.label}</span>
+                {scheme.target === 'rooms' ? (
+                  <select
+                    className="w-28 shrink-0 rounded border border-sky-300/40 bg-transparent px-1 py-1 text-xs text-white" aria-label={t('wall.scheme.hatchOf', { value: e.label })}
+                    value={scheme.hatches?.[e.key] ?? ''} onChange={(ev) => setValueHatch(view.id, e.key, ev.target.value || null)}
+                  >
+                    <option value="">{t('wall.scheme.noHatch')}</option>
+                    {/* A pattern the project no longer has stays listed, so the select does not lie about what the room is drawn with. */}
+                    {[...new Set([...patternNames, ...(scheme.hatches?.[e.key] ? [scheme.hatches[e.key]] : [])])].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                ) : null}
                 {scheme.colours?.[e.key] ? <button type="button" className="text-xs text-sky-200 underline" onClick={() => setValueColour(view.id, e.key, null)}>{t('wall.scheme.reset')}</button> : null}
               </li>
             ))}

@@ -18,20 +18,24 @@
 
 import { GERMAN_PRACTICE, ROMANIAN_PRACTICE } from './graphic-standard.js';
 import type { NumberingScheme } from './document.js';
+import type { ProjectMaterial } from './materials.js';
+import { DEFAULT_SCHEME } from './numbering.js';
+import { GERMAN_MATERIALS, ROMANIAN_MATERIALS } from './standard-pack-materials.js';
 import type { UnitsAndNumbers } from './names.js';
 import { TITLE_BLOCK_CAPTIONS_RO, romanianTitleBlock, type RoCaption } from './title-block-ro.js';
 import { standardTitleBlock, type StandardCaption } from './title-block-standard.js';
 import type { TitleBlockTemplate } from './title-block-template.js';
 
 /** The parts of a drawing standard a pack can set. */
-export const PACK_PARTS = ['pens', 'titleBlock', 'units', 'numbering'] as const;
+export const PACK_PARTS = ['pens', 'titleBlock', 'units', 'numbering', 'hatches'] as const;
 export type PackPart = (typeof PACK_PARTS)[number];
 
-/** What a pack leaves to the project on purpose. Hatch patterns, materials and view templates are not parts yet: no built-in standard encodes any. */
-export const PACK_NOT_SET = ['numbering', 'lengthUnit', 'decimals', 'hatchPatterns', 'viewTemplates'] as const;
+/** What a pack leaves to the project on purpose: no built-in standard encodes a length unit, the decimals or view templates. */
+export const PACK_NOT_SET = ['lengthUnit', 'decimals', 'viewTemplates'] as const;
 export type PackNotSet = (typeof PACK_NOT_SET)[number];
 
-export const STANDARD_PACK_VERSION = 1;
+/** Raised when a built-in pack gains or changes parts: a project that installed an older version is offered the update (2: `ro-stas` gained numbering and hatches). */
+export const STANDARD_PACK_VERSION = 2;
 
 export interface StandardPack {
   /** Stable; what the project remembers it by. */
@@ -47,13 +51,28 @@ export interface StandardPack {
   unitsAndNumbers?: UnitsAndNumbers;
   /** Applied to the sheets made from now on; the sheets already numbered, issued ones included, keep their numbers. */
   sheetNumbering?: NumberingScheme;
+  /** The material hatch rules (#90): which hatch each named material draws with where a view cuts it. A row replaces the project's row of the same name; the project's other rows stay. */
+  materials?: readonly ProjectMaterial[];
   notSet: readonly PackNotSet[];
 }
 
 /** The parts a pack sets, in the order the drawer lists them. */
 export function packPartsOf(pack: StandardPack): PackPart[] {
-  return PACK_PARTS.filter((p) => (p === 'pens' ? pack.graphicStandard !== undefined : p === 'titleBlock' ? pack.titleBlockTemplate !== undefined : p === 'units' ? pack.unitsAndNumbers !== undefined : pack.sheetNumbering !== undefined));
+  const has: Record<PackPart, boolean> = {
+    pens: pack.graphicStandard !== undefined, titleBlock: pack.titleBlockTemplate !== undefined, units: pack.unitsAndNumbers !== undefined,
+    numbering: pack.sheetNumbering !== undefined, hatches: pack.materials !== undefined,
+  };
+  return PACK_PARTS.filter((p) => has[p]);
 }
+
+/**
+ * The numbering scheme of both packs: A-001 general, A-101 plans, A-201 elevations, A-301 sections... (`DEFAULT_SCHEME`).
+ * NO standard prescribes it: STAS, ISO 128 and DIN 1356-1 name no sheet numbering pattern, and the Romanian permit text
+ * (Anexa 2) numbers no sheet. So the pack's value is the project's current default, stated outright: installing sets it
+ * explicitly (the sheets made from now on, and a project's own scheme is put back by reset) but invents no "standard"
+ * pattern. The discipline letter A (arhitectură / Architektur) is the same in both languages.
+ */
+const packNumbering = (): NumberingScheme => structuredClone(DEFAULT_SCHEME);
 
 export const ROMANIA_PACK_ID = 'ro-stas';
 
@@ -61,21 +80,26 @@ export const ROMANIA_PACK_ID = 'ro-stas';
  * "România: STAS / ISO 128". Only values the app already encodes for Romanian practice:
  *  - pens: the Romanian graphic standard (`ROMANIAN_PRACTICE`): ISO 128 line widths, the hatch weights, the sheet's own
  *    pens, ISO 3098 lettering and its text and dimension styles;
+ *  - marks: section and elevation marks take the circle head with a direction triangle (#447), a drawing-office convention:
+ *    no Romanian text consulted states a section-head form;
  *  - title block: the Romanian layout (`romanianTitleBlock`, #54), drawn with those pens and heights, captions in the
  *    language of `t`;
  *  - units: a comma as the decimal separator. Area is m² and volume m³ in every project already.
- * Left to the project (`notSet`): the numbering scheme (no Romanian one is encoded), the length unit and the decimals,
- * hatch patterns and view templates. They are listed in the pull request as "to verify against STAS".
+ *  - numbering: the default scheme, stated (`packNumbering`: no standard prescribes one);
+ *  - hatches: the material rows of `ROMANIAN_MATERIALS`, by Romanian names (patterns unverified against STAS).
+ * Left to the project (`notSet`): the length unit, the decimals and view templates.
  */
 export function romaniaPack(t: (key: RoCaption) => string): StandardPack {
   return {
     id: ROMANIA_PACK_ID,
     name: 'România: STAS / ISO 128',
     version: STANDARD_PACK_VERSION,
-    description: 'Romanian drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, the cartuș, a comma for decimals. Values are the ones IfcSheet already encodes; none is checked against a STAS text.',
+    description: 'Romanian drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, the cartuș, a comma for decimals, material hatches by Romanian names, the default sheet numbering. Values are the ones IfcSheet already encodes; none is checked against a STAS text.',
     graphicStandard: ROMANIAN_PRACTICE.id,
     titleBlockTemplate: romanianTitleBlock(t, ROMANIAN_PRACTICE),
     unitsAndNumbers: { separator: 'comma' },
+    sheetNumbering: packNumbering(),
+    materials: ROMANIAN_MATERIALS(ROMANIA_PACK_ID),
     notSet: PACK_NOT_SET,
   };
 }
@@ -107,7 +131,9 @@ export const TITLE_BLOCK_CAPTIONS_DE: Record<StandardCaption, string> = {
  *    editions), the 0.5 line group; none checked against DIN 1356-1;
  *  - title block: the standard layout with German captions, the organisation field captioned Entwurfsverfasser;
  *  - units: a comma as the decimal separator (German usage; no DIN text was consulted).
- * Left to the project (`notSet`): numbering, length unit, decimals, hatch patterns and view templates. The date format
+ *  - numbering: the default scheme, stated (`packNumbering`: no standard prescribes one);
+ *  - hatches: the material rows of `GERMAN_MATERIALS`, by German names (patterns unverified against DIN 1356-1).
+ * Left to the project (`notSet`): length unit, decimals and view templates. The date format
  * (tt.mm.jjjj) is not a pack part: dates print as the project stores them.
  */
 export function germanyPack(): StandardPack {
@@ -115,10 +141,12 @@ export function germanyPack(): StandardPack {
     id: GERMANY_PACK_ID,
     name: 'German practice (ISO 128 line series)',
     version: STANDARD_PACK_VERSION,
-    description: 'German drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, a title block with German captions, a comma for decimals. Values are the ones IfcSheet can name an ISO source for; none is checked against DIN 1356-1.',
+    description: 'German drawing practice on ISO 128 line widths and ISO 3098 lettering: pens and hatch weights, a title block with German captions, a comma for decimals, material hatches by German names, the default sheet numbering. Values are the ones IfcSheet can name an ISO source for; none is checked against DIN 1356-1.',
     graphicStandard: GERMAN_PRACTICE.id,
     titleBlockTemplate: standardTitleBlock((key) => TITLE_BLOCK_CAPTIONS_DE[key], GERMAN_PRACTICE),
     unitsAndNumbers: { separator: 'comma' },
+    sheetNumbering: packNumbering(),
+    materials: GERMAN_MATERIALS(GERMANY_PACK_ID),
     notSet: PACK_NOT_SET,
   };
 }

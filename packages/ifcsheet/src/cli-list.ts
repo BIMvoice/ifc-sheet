@@ -19,6 +19,7 @@ import { sheetFormat } from './units-and-numbers.js';
 import type { ListScheduleTable } from './list-schedule.js';
 import type { ProjectSchedule } from './sub-reports.js';
 import type { CliIo } from './cli.js';
+import { commandLanguage } from './cli-language.js';
 
 export { listTableText };
 
@@ -29,7 +30,8 @@ export interface ListArgs {
   schedule?: string;
   csv: boolean;
   json: boolean;
-  locale: string;
+  /** `--locale` as given; the project's language, when it records one, comes first. */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -85,6 +87,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   try { projectText = await readFile(args.project, 'utf8'); } catch (error) { io.stderr(cannotRead(args.project, error)); return 1; }
   let project;
   try { project = readProjectFile(projectText); } catch (error) { io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`); return 1; }
+  const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
   const chosen = chooseListSchedule(args.project, project.schedules, args.schedule);
   if ('error' in chosen) {
     io.stderr(`ifcsheet: ${chosen.error}\n`);
@@ -92,7 +95,7 @@ export async function list(args: ListArgs, io: CliIo): Promise<number> {
   }
   // The values come from the entity tables: no geometry is needed or measured.
   const model = await openModel(bytes, { geometry: false });
-  const out = listOutput(args.model, args.project, model, project, chosen.found, args.locale);
+  const out = listOutput(args.model, args.project, model, project, chosen.found, language);
   if (out.empty) {
     io.stderr(`ifcsheet: nothing to list: the elements of "${chosen.found.name}" are not in ${args.model}.\n`);
     return 1;

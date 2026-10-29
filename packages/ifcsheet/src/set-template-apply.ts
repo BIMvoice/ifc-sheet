@@ -69,7 +69,8 @@ const wantedScale = (scales: readonly (number | undefined)[]): number | undefine
 };
 
 function skippedNote(sheet: string, rule: ViewRule): TemplateNote {
-  if (rule.kind === 'allPlans' || rule.kind === 'site') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: '*' } };
+  if (rule.kind === 'site') return { key: 'setTemplate.note.skipped.site', params: { sheet, place: (rule.nth ?? 0) + 1 } };
+  if (rule.kind === 'allPlans') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: '*' } };
   if (rule.kind === 'plan') return { key: 'setTemplate.note.skipped.plan', params: { sheet, storey: rule.storey > 0 ? `+${rule.storey}` : rule.storey } };
   if (rule.kind === 'section') return { key: 'setTemplate.note.skipped.section', params: { sheet, place: rule.place + 1 } };
   return { key: 'setTemplate.note.skipped.elevation', params: { sheet, direction: rule.direction } };
@@ -81,9 +82,10 @@ function sheetOf(rule: SheetRule, views: readonly ProjectView[], claimed: Set<st
   const scales: (number | undefined)[] = [];
   for (const slot of rule.slots) {
     const found = findAllByRule(slot.view, views);
-    // A rule for every storey, or for the site plan, finding none says nothing: the first asked for no particular one, and the
-    // second finds none only when the model has no storey to cut it on, which the missing plans already say.
-    if (found.length === 0 && slot.view.kind !== 'allPlans' && slot.view.kind !== 'site') notes.push(skippedNote(rule.name, slot.view));
+    // A rule for every storey, or for the FIRST site plan, finding none says nothing: the first asked for no particular one, and the
+    // second finds none only when the model has no storey to cut it on, which the missing plans already say. A rule for a FURTHER
+    // site plan (`nth`) finding none is a sheet the template wanted and the project cannot give: said, never dropped silently.
+    if (found.length === 0 && slot.view.kind !== 'allPlans' && (slot.view.kind !== 'site' || (slot.view.nth ?? 0) > 0)) notes.push(skippedNote(rule.name, slot.view));
     for (const view of found) {
       if (claimed.has(view.id)) continue;
       claimed.add(view.id);

@@ -2,11 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { READINESS_RO } from '@bimvoice/ifcsheet/readiness';
 import type { TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
 
 /** Romanian for the rest of the IfcSheet face: the privacy notice, the toast's dismiss label, the site plan, key plan and urban sheets, the readiness list, the Wall's tour and its steps, the legend's category names, the ortho switch and the viewport layer list. Term choices: `../ro-glossary.md`. */
 export const faceRo = {
+  // What each readiness finding says is the engine's Romanian, the one copy (`@bimvoice/ifcsheet` `readiness.ts`).
+  ...READINESS_RO,
   'settings.privacy.toastDisclosure': '{app} păstrează un jurnal al acțiunilor pe dispozitivul dumneavoastră. Versiunea găzduită trimite și statistici anonime de utilizare, dacă nu le dezactivați din Setările de confidențialitate.',
   'viewerShell.toast.dismiss': 'Închide notificarea',
   'settings.privacy.toastAction': 'Setări de confidențialitate',
@@ -24,28 +27,8 @@ export const faceRo = {
   'urban.add': '+ Arii și indicatori (Ac, Ad, Au, POT, CUT)',
   'ready.title': 'Ce îi lipsește modelului',
   'ready.none': 'Modelul are ce citește setul de planșe: niveluri, încăperi, materiale, cantități.',
-  'ready.noStoreys': 'Modelul nu are niveluri de clădire.',
-  'ready.noStoreys.effect': 'Setul pornește fără planuri de nivel (se face unul pe nivel), iar secțiunile nu primesc cote de nivel.',
-  'ready.noSpaces': 'Modelul nu are încăperi (IfcSpace).',
-  'ready.noSpaces.effect': 'TAGALL nu are încăperi de etichetat, deci etichetele de încăperi și verificarea încăperilor fără etichetă nu au pe ce lucra.',
-  'ready.noStorey': 'Elemente fără nivel: {count} din {total}.',
-  'ready.noStorey.effect': 'Tabelul de tâmplărie arată o liniuță în coloana Nivel pentru ele, iar câmpul Nivel al unei etichete rămâne gol.',
-  'ready.noMaterials': 'Elemente fără material: {count} din {total}.',
-  'ready.noMaterials.effect': 'Extrasul de materiale le lasă deoparte, iar câmpul Material al unei etichete rămâne gol.',
-  'ready.noQuantities': 'Elemente fără set de cantități (Qto): {count} din {total}.',
-  'ready.noQuantities.effect': 'Extrasul de materiale nu are volum sau arie pentru ele.',
-  'ready.duplicateGlobalIds': 'GlobalId-uri duplicate: {count}; entități care le partajează: {entities}.',
-  'ready.duplicateGlobalIds.effect': 'O etichetă își găsește elementul după GlobalId, deci poate arăta spre un element greșit dintre cele care îl partajează.',
-  'ready.subReportDuplicates': 'În „{schedule}”, mai multe părți conțin același tip sau element ({parts}). Tipuri: {types}, elemente: {count}: {list}.',
-  'ready.subReportDuplicates.effect': 'Sunt numărate de două ori când părțile se adună și desenate pe două planșe.',
-  'ready.subReportGaps': 'În „{schedule}”, unele elemente nu sunt în nicio parte. Tipuri: {types}, elemente: {count}: {list}.',
-  'ready.subReportGaps.effect': 'Părțile nu se adună la tabelul întreg: acele uși și ferestre nu sunt pe nicio planșă.',
-  'ready.titleBlockFit': 'Cartuș: {field} nu încape în căsuța sa pe {sheet}; scurtați valoarea sau folosiți o abreviere.',
-  'ready.titleBlockFit.effect': 'Valoarea tipărită este tăiată cu puncte de suspensie, deci o parte lipsește de pe planșă.',
   'ready.framing.label': 'Include elementele îndepărtate la încadrare',
   'ready.framing.hint': 'Dezactivat: elementele mici aflate departe de clădire (un punct topografic, un cub de origine) nu lărgesc vederile. Ele rămân în model și în tabele. Se aplică vederilor aranjate de acum înainte.',
-  'ready.farElements': '{count} elemente se află la până la {distance} de clădire: {list}.',
-  'ready.farElements.effect': 'Vederile sunt încadrate fără ele, astfel încât scara și formatul hârtiei se potrivesc clădirii. Ele rămân în model, în tabele și în cantități și sunt desenate acolo unde cad în cadru. Setarea proiectului „Include elementele îndepărtate la încadrare” le încadrează din nou.',
   'drafting.ortho': 'Ortogonal',
   'drafting.orthoCursor.on': 'Ortogonal pornit',
   'drafting.orthoCursor.held': 'Ortogonal (Shift apăsat)',
