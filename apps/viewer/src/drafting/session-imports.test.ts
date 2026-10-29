@@ -9,7 +9,10 @@
  * session cannot exist either. ISSUE reaches the issue module by a dynamic
  * import, which this walk does not follow on purpose: it is loaded when the
  * command runs. (The app store, which the session has always read, reaches
- * further on its own: this holds the line the session itself draws.)
+ * further on its own: this holds the line the session itself draws.) An eager
+ * `import.meta.glob` is a static import of every module it matches (a registry
+ * of one file per entry), so the walk follows those too; a lazy one is a
+ * dynamic import and is not followed.
  */
 
 import { describe, it } from 'node:test';
@@ -17,6 +20,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// @ts-expect-error -- a plain .mjs module of the test harness, without types
+import { expandGlob, globCalls } from '../test/import-meta-glob.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -44,6 +49,9 @@ function reach(entry: string): { files: Map<string, string | null>; packages: Se
       const next = resolveSpec(file, spec);
       if (next) stack.push([next, file]);
       else if (!spec.startsWith('.') && !spec.startsWith('@/')) packages.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
+    }
+    for (const call of globCalls(text) as { patterns: string[]; options: { eager: boolean } }[]) {
+      if (call.options.eager) for (const [, next] of expandGlob(file, call.patterns) as [string, string][]) stack.push([next, file]);
     }
   }
   return { files, packages };

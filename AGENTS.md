@@ -201,6 +201,9 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - Never stack PRs: CI only runs against `main`. Do not start work that depends on an unmerged PR; wait for it.
 - To wait on a PR, poll with a loop that prints the state every round. A silent monitor missed a merge and cost 25 minutes.
 
+**Lists every feature adds to**
+- A list that many PRs extend is one file per entry, discovered, so two PRs adding different entries never edit the same line. In the viewer a registry finds its files with `import.meta.glob` (eager, patterns relative to the registry, `*` only in the file name). The node test runner rewrites exactly that subset (`apps/viewer/src/test/import-meta-glob.mjs`, loaded by `vite-module-hooks.mjs`) and leaves any other form alone, so it fails under test as it always did. The session import guard follows eager globs like static imports.
+
 **One code path for the app and the engine**
 - Logic that the app, the CLI and MCP all need lives once in `packages/ifcsheet` and the app calls it, with a parity test. Examples: `viewStyler` (`view-style.ts`), `classificationOf` (`classification.ts`).
 - A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits `index-exports.snapshot.json`.
