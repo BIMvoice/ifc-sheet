@@ -53,3 +53,6 @@ export const underlayScaleCommand: DraftCommandDef = {
     };
   },
 };
+
+/** Found by `./registry.ts` (every `*.command.ts`), not listed there. */
+export const draftCommands: readonly DraftCommandDef[] = [underlayScaleCommand];

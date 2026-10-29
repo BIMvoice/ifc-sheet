@@ -223,6 +223,9 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - A field that a step of the drafting undo stack must put back (a standards pack, a dialog or a command sets it) carries `heldByUndo: true` on its definition (see `germanyLandField`). `FROZEN_STEP_FIELDS` in `drafting/draft-store.ts` is frozen; never add to it.
 - Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
 
+**A new drafting command**
+- Add `apps/viewer/src/drafting/commands/<name>.command.ts` exporting `draftCommands: readonly DraftCommandDef[]` (see `underlay.command.ts`). `registry.ts` finds every `*.command.ts`; its list is frozen, never edit it. A command id or typed name already taken throws when the registry loads.
+
 **A new drawer section**
 - Add a file in `apps/viewer/src/components/viewer/wall/drawer-sections/` and one import plus one entry in its `index.ts` (alphabetical). Do not edit `ProjectDrawer.tsx`.
 
