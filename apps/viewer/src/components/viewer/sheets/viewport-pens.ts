@@ -37,6 +37,11 @@ export interface Pen {
   layer: string;
   /** A colour scheme's fill (#92): the DXF carries it as a solid hatch, which a plain cut-face fill is not. */
   solid?: boolean;
+  /**
+   * A colour scheme's hatch over its rooms (#493): `d` holds the pattern's strokes, which the DXF leaves out; it writes the rooms
+   * (`outline`, their loops) as a HATCH of the pattern `name` instead, the pattern drawn `unit` paper millimetres per pattern millimetre.
+   */
+  schemeHatch?: { name: string; outline: string; unit: number };
   /** With a CAD layer standard: the element class and material the pen is split by (`dxf-tags.ts`). */
   ifcType?: string;
   material?: string;
@@ -58,6 +63,8 @@ export function viewportPens(
   standard: GraphicStandard = DEFAULT_GRAPHIC_STANDARD,
   /** The view's styler; default: the app's for these inputs (`appViewStyler`), the one the drafting view draws with. */
   styler: ViewStyler = appViewStyler(graphics, drawing, standard, styleOf),
+  /** Drawing metres one pattern millimetre of a colour scheme's hatch is (the scale the view is printed at, over 1000); default: 1:100. A pattern is drawn at its printed size whatever the scale. */
+  schemeUnit: number = HATCH_UNIT_M,
 ): Pen[] {
   const base = standard.pens;
   const pt = (p: { x: number; y: number }) => {
@@ -93,6 +100,17 @@ export function viewportPens(
   for (const h of cutHatches(drawing, graphics, standard.materialHatch, materialOf)) {
     const pattern = findPattern(h.pattern, extraPatterns);
     if (!pattern) continue;
+    if (h.scheme) {
+      // A scheme's hatch is a pen of its own per pattern, so the DXF can write the rooms as one HATCH and skip the strokes.
+      if (pattern.solid) continue;
+      const segments = hatchSegments(h.loops, pattern, { scale: schemeUnit, angleDeg: 0, maxSegments: 20000 }).segments;
+      const known = hatches.get(`scheme:${pattern.name}`);
+      const d = segments.map((seg) => `M${pt(seg.a)}L${pt(seg.b)}`).join('');
+      const outline = h.loops.map(loop).join('');
+      if (known?.schemeHatch) { known.d += d; known.schemeHatch.outline += outline; }
+      else hatches.set(`scheme:${pattern.name}`, { d, stroke: h.color, width: h.width ?? base.hatch, fill: null, layer: 'HATCH', schemeHatch: { name: pattern.name, outline, unit: schemeUnit * t.scale } });
+      continue;
+    }
     const color = ink(h.color, h.source?.entityId);
     if (pattern.solid) {
       add(`solid:${color}`, { stroke: null, width: 0, fill: color, layer: 'HATCH' }, h.loops.map(loop).join(''));

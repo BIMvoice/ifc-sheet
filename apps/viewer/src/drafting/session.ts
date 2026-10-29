@@ -25,6 +25,7 @@ import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { draftsOfView } from './draft-store';
 import { withSectionParts } from './section-symbol';
+import { markWitnessPoint } from './witness-point';
 import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
 import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
@@ -166,7 +167,7 @@ let sizeScale = 1;
 export const draftSizeScale = (): number => sizeScale;
 
 /** The settings as commands see them on the current target. */
-const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
+const scaledSettings = scaledDraftSettings(settings, () => sizeScale, () => set({ revision: get().revision + 1 }));
 
 /** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
 let userOrigin: Pt = { x: 0, y: 0 };
@@ -274,6 +275,7 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
       }
     }
     set({ selection: next });
+    markWitnessPoint(next, additive || selecting ? null : hit, p, tolerance);
     refresh();
     return;
   }

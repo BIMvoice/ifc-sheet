@@ -1,0 +1,63 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+import type { TranslationValue } from '../types';
+
+/**
+ * The German building-application drawings (Bauantrag, the Länder's Bauvorlagenverordnungen): the checklist and the sheets of the set (#372).
+ * The German terms are the ones the ordinances use (Lageplan, Bauzeichnungen, Abstandsflächen, Entwurfsverfasser); the rest is English.
+ */
+export const germanyEn = {
+  'germany.title': 'Germany (Bauantrag)',
+  'germany.intro': "The drawings of a German building application (Bauantrag), as the Bauvorlagenverordnung of the Land asks for them. Building law is the Länder's: choose the Land. Each item says where it comes from; items marked unverified are not stated by the official text read.",
+  'germany.land.label': 'Land',
+  'germany.land.none': 'Not chosen',
+  'germany.land.bayern': 'Bayern',
+  'germany.land.nrw': 'Nordrhein-Westfalen',
+  'germany.land.bw': 'Baden-Württemberg',
+  'germany.land.other': 'Other Land',
+  'germany.land.noneNote': 'No Land chosen: the Lageplan is drawn as for any other Land, at 1:500, unverified. Choose the Land to set its scale.',
+  'germany.land.otherNote': 'Nothing was read for this Land. The Lageplan is drawn at 1:500, the minimum of the model text (MBauVorlV § 7), which is not law until a Land adopts it: the scale is unverified.',
+  'germany.set.name': 'Germany (Bauantrag)',
+  'germany.set.plans': 'Floor plans (Grundrisse)',
+  'germany.set.sections': 'Sections (Schnitte)',
+  'germany.set.elevations': 'Elevations (Ansichten)',
+  'germany.set.site': 'Site plan (Lageplan)',
+  'germany.set.setback': 'Abstandsflächenplan',
+  'germany.set.siteScale.bayern': 'Scale 1:1000: the Lageplan may not be smaller (BayBauVorlV § 7).',
+  'germany.set.siteScale.nrw': 'Scale 1:500: at least that (BauPrüfVO § 3).',
+  'germany.set.siteScale.bw': 'Scale 1:500 for the drawn part (LBOVVO § 4).',
+  'germany.set.siteScale.other': 'Scale 1:500 is unverified: nothing was read for this Land.',
+  'germany.set.siteToAdd': 'Plot, neighbouring plots, existing buildings, distances and Abstandsflächen must be drawn in, with a north arrow and a graphic scale bar.',
+  'germany.set.siteToAddBw': 'Plot, neighbouring plots, existing buildings and distances must be drawn in, with a north arrow and a graphic scale bar. The Abstandsflächen go on the separate sheet.',
+  'germany.set.setbackNote': 'The Abstandsflächen are still to be drawn in: this sheet only holds the ground-floor cut, a second time (LBOVVO § 4(4) asks for them on a separate sheet).',
+  'germany.item.plans': 'Floor plans of all storeys, at 1:100',
+  'germany.item.sections': 'Sections, at 1:100',
+  'germany.item.sectionHeights': 'Heights on the sections: ground-floor level, terrain, clear room heights, roof pitch',
+  'germany.item.facades': 'Elevations, at 1:100',
+  'germany.item.facadeContent': 'On the elevations: terrain, connection to neighbouring buildings, materials and colours as the Land asks',
+  'germany.item.sitePlan': 'Site plan (Lageplan): the sheet holds the ground-floor cut only; the plot and what is on it are to be drawn in',
+  'germany.item.siteContent': 'On the Lageplan: cadastral data, neighbouring plots, existing buildings, the planned building with its distances',
+  'germany.item.setbackAreas': 'Abstandsflächen drawn in the Lageplan',
+  'germany.item.setbackSheet': 'Abstandsflächenplan on a separate sheet: the sheet holds a second ground-floor cut; the Abstandsflächen are to be drawn in',
+  'germany.item.setbackDeclaration': 'Declaration for taking over an Abstandsfläche, as a document of its own',
+  'germany.item.useCalculation': 'Calculation of GRZ and GFZ (Baumasse where set) where a B-Plan sets them: to add',
+  'germany.item.symbolsColours': 'Symbols and colours as the Land prescribes',
+  'germany.item.scaleBar': 'A graphic scale bar on the Lageplan and on every drawing: to add',
+  'germany.item.pdfA': 'Files as PDF/A (Bayern: PDF without embedded attachments or protection)',
+  'germany.item.oneFile': 'One document per file',
+  'germany.item.fileName': 'File names that state the content and the date as jjjjmmtt',
+  'germany.item.designer': 'The Entwurfsverfasser named on the Bauvorlagen',
+  'germany.item.nrwFiling': 'Whether electronic filing is mandatory statewide in Nordrhein-Westfalen',
+  'germany.item.otherDocuments': 'Baubeschreibung, Brandschutznachweis, Standsicherheitsnachweis and forms of the Land',
+  'germany.source': 'Source: {source}',
+  'germany.read': 'Read in the official text',
+  'germany.unverified': 'Unverified',
+  'germany.scale': 'Drawn at 1:{scale}',
+  'germany.scaleUnverified': 'Drawn at 1:{scale}; the scale is unverified',
+  'germany.sheetMade': 'Sheet made; its content is to be added',
+  'germany.drawn': 'Drawn from the model',
+  'germany.supply': 'To add',
+  'germany.missingLevels': 'No plan on a sheet for: {list}',
+  'germany.useSet': 'Use the Germany sheets for a new project',
+} as const satisfies Record<string, TranslationValue>;

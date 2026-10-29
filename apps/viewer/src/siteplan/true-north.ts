@@ -22,56 +22,12 @@
  *  - The screen / paper: `drawingToScreen`'s signs (`screenSigns`), y down.
  */
 
-import { EntityExtractor, type IfcDataStore } from '@ifc-lite/parser';
+import { gridNorthOf, trueNorthOf, type PlanDirection } from '@bimvoice/ifcsheet/true-north';
 import { screenSigns, worldToDrawing, type SectionAxisName } from '@/drafting/frame';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 
-/** A direction in the IFC project's XY plane, unit length. */
-export interface PlanDirection {
-  x: number;
-  y: number;
-}
-
-const CONTEXT = 'IFCGEOMETRICREPRESENTATIONCONTEXT';
-const CONTEXT_TYPE = 1;
-const TRUE_NORTH = 5;
-
-function unit(x: number, y: number): PlanDirection | null {
-  const len = Math.hypot(x, y);
-  return Number.isFinite(len) && len > 1e-12 ? { x: x / len, y: y / len } : null;
-}
-
-/** The model's true north in project XY, or `null` when no context states one. */
-export function trueNorthOf(store: IfcDataStore | null | undefined): PlanDirection | null {
-  if (!store?.source?.length || !store.entityIndex) return null;
-  const extractor = new EntityExtractor(store.source);
-  const { byId } = store.entityIndex;
-  // @raw-entity-enumeration-ok TrueNorth is not editable in the app, so the parsed base table is the model's value.
-  const contexts = store.entityIndex.byType.get(CONTEXT) ?? [];
-  let found: PlanDirection | null = null;
-  for (const id of contexts) {
-    const ref = byId.get(id);
-    const attributes = ref ? extractor.extractEntity(ref)?.attributes : undefined;
-    const northId = attributes?.[TRUE_NORTH];
-    if (typeof northId !== 'number') continue;
-    const northRef = byId.get(northId);
-    const ratios = northRef ? extractor.extractEntity(northRef)?.attributes?.[0] : undefined;
-    if (!Array.isArray(ratios) || typeof ratios[0] !== 'number' || typeof ratios[1] !== 'number') continue;
-    const north = unit(ratios[0], ratios[1]);
-    if (!north) continue;
-    if (attributes?.[CONTEXT_TYPE] === 'Model') return north;
-    found ??= north;
-  }
-  return found;
-}
-
-/** Grid north (the map's +N) in project XY, from an IfcMapConversion's X axis (abscissa, ordinate) = (cos θ, sin θ). */
-export function gridNorthOf(xAxisAbscissa: number | undefined, xAxisOrdinate: number | undefined): PlanDirection | null {
-  const a = xAxisAbscissa ?? 1;
-  const b = xAxisOrdinate ?? 0;
-  // E = a·x − b·y, N = b·x + a·y: the local direction with ΔE = 0 and ΔN > 0 is (b, a).
-  return unit(b, a);
-}
+/** Read by the engine, so the sheet's PDF and the screen turn the arrow by the same angle (`@bimvoice/ifcsheet/true-north`). */
+export { gridNorthOf, trueNorthOf, type PlanDirection };
 
 /**
  * The rotation a north arrow takes on a plan drawing: radians,

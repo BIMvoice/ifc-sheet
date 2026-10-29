@@ -8,8 +8,8 @@
 // Drawing standards: the graphic standards (pens, sheet pens, lettering) and the packs that bundle them (#365)
 export { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID, type ArrowKind, type DimStyle, type DraftLengthUnit, type FontKind, type TextPlacement, type TextStyle } from '../draft-styles.js';
 export {
-  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, GERMAN_PRACTICE, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, standardValues,
-  type GraphicStandard,
+  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, ISO_3098_HEIGHTS, GERMAN_PRACTICE, MARK_STYLES, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, markStyleOf, standardValues,
+  type GraphicStandard, type MarkStyle,
 } from '../graphic-standard.js';
 export type { OpeningLineDirection } from '../graphic-standard.js';
 export {

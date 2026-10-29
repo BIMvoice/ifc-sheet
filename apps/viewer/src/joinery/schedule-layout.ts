@@ -31,7 +31,9 @@ import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export type SchedulePrim =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; w: number }
-  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol' }
+  | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol';
+      /** A line of a type's real view that can be hidden (#449): the catalogue type's id and the line's id. */
+      pick?: { type: string; line: string } }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
 
 /** A cell of a column table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) and the column (id) it is. */

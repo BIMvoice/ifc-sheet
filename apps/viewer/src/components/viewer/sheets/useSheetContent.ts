@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -41,6 +41,7 @@ import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { entityStyles } from '@/project/model-styles';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
@@ -119,7 +120,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
         // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
         const detail = resolveDetailLevel(graphics, vp.scale);
-        const kept = raw ? atDetailLevel(withoutHiddenElements(raw, graphics, renderIdGlobalId), detail) : null;
+        const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(raw, graphics, renderIdGlobalId), view, graphics), detail) : null;
         const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
         const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
@@ -149,6 +150,8 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  // Section and elevation marks are headed as the project's graphic standard says (#447).
+  const markStyle = markStyleOf(standard);
   // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
   // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
   // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
@@ -159,12 +162,12 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const view = views.find((v) => v.id === vp.viewId);
       const overlays = styled.get(vp.viewId)?.overlays;
       const screenUp = viewScreenUp(vp.viewId);
-      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle,
       }));
     };
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
