@@ -142,7 +142,6 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
-import { Toggle } from './Toggle';
 
 
 const NO_SHEET_TRANSFORM = { current: null };
