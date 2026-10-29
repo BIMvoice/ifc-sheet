@@ -229,6 +229,9 @@ Entity references come from the file, so a recursive walk over a self-referentia
 **A new drawer section**
 - Add a file in `apps/viewer/src/components/viewer/wall/drawer-sections/` and one import plus one entry in its `index.ts` (alphabetical). Do not edit `ProjectDrawer.tsx`.
 
+**A new e2e spec in the viewer lane**
+- Put the line `// e2e-lane: viewer-e2e` under the licence header of `tests/e2e/<name>.e2e.spec.ts` (see `hatch-card-452.e2e.spec.ts`); `playwright.config.ts` reads it for both `viewer-e2e` and `viewer-e2e-ci`. `FROZEN_VIEWER_E2E` there is frozen; never add to it. Check with `npx playwright test --list --project=viewer-e2e`.
+
 **Import guards**
 - `apps/viewer/src/drafting/session-imports.test.ts` forbids the drafting session from reaching the issue pipeline (`/issue/`), the sheet UI (`components/viewer/wall|sheets/`), `react-dom` and `fflate`. A shared registry such as `project/fields/` must import only light, pure modules: #347 tripped the guard through `issue/file.ts`.
 

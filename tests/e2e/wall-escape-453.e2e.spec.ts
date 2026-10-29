@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// e2e-lane: viewer-e2e
+
 /**
  * One Escape rule for the drawing tools (#453): Esc ends the tool you are using,
  * wherever the focus is, and never leaves the drawing (the `Back to sheet` button
