@@ -19,6 +19,7 @@
 import type { TranslationKey } from '@/i18n';
 import { openUndoSpan, runAsStartingState } from '@/drafting/draft-store';
 import { useProjectStore } from '@/project/project-store';
+import type { TagParts } from '@/tagall/types';
 import { commandsFor, type AnnotateChoices } from './choices';
 import { demandDrawings, waitForDrawing, type DrawingResult } from './drawing-demand';
 import { runCommandOnView, type AnnotatableView, type CommandResult } from './run-view';
@@ -50,6 +51,10 @@ export interface AnnotateProgress {
 export interface AnnotateRun {
   choices: AnnotateChoices;
   mode: 'undoable' | 'starting';
+  /** Which labels TAGALL places (an annotation preset, #497); absent: every kind. */
+  tagParts?: TagParts;
+  /** Only these views (a preset applied to one plan); absent: every view of the right kind. */
+  viewIds?: ReadonlySet<string>;
   onProgress?: (progress: AnnotateProgress) => void;
   signal?: AbortSignal;
   /** Where the drawing of a view comes from; by default the views' own generators (`drawing-demand.ts`). */
@@ -65,8 +70,8 @@ export const yieldToPage = (): Promise<void> => new Promise((resolve) => setTime
 const isAnnotatable = (view: { kind: string }): view is AnnotatableView => view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section';
 
 /** The views the choices run on, in the project's order. */
-export function targetViews(choices: AnnotateChoices): AnnotatableView[] {
-  return useProjectStore.getState().views.filter((v): v is AnnotatableView => isAnnotatable(v) && commandsFor(v, choices).length > 0);
+export function targetViews(choices: AnnotateChoices, only?: ReadonlySet<string>): AnnotatableView[] {
+  return useProjectStore.getState().views.filter((v): v is AnnotatableView => isAnnotatable(v) && (!only || only.has(v.id)) && commandsFor(v, choices).length > 0);
 }
 
 /** The error a drawing ended with, as the reason a view was skipped. */
@@ -75,7 +80,7 @@ function noDrawing(error: string): NonNullable<ViewSummary['skipped']> {
 }
 
 export async function annotateSet(run: AnnotateRun): Promise<SetSummary> {
-  const targets = targetViews(run.choices);
+  const targets = targetViews(run.choices, run.viewIds);
   const drawingOf = run.drawingOf ?? ((view: AnnotatableView) => waitForDrawing(view.id));
   const span = run.mode === 'undoable' ? openUndoSpan() : null;
   const draft = (change: () => void) => (span ? span.run(change) : runAsStartingState(change));
@@ -97,7 +102,7 @@ export async function annotateSet(run: AnnotateRun): Promise<SetSummary> {
         // One command at a time, the page free between them: DIMALL after TAGALL on a big plan is a second long.
         for (const command of commandsFor(view, run.choices)) {
           try {
-            draft(() => { entry.results.push(runCommandOnView(view, drawing, command)); });
+            draft(() => { entry.results.push(runCommandOnView(view, drawing, command, run.tagParts)); });
           } catch (error) {
             // A command that cannot handle a view does not stop the set: it is said, and the rest go on.
             console.warn(`[annotate-set] ${command} could not run on ${view.name}`, error);
