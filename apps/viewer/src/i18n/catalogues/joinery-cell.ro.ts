@@ -14,6 +14,7 @@ export const joineryCellRo: Record<keyof typeof joineryCellEn, TranslationValue>
   'joineryCell.gone': 'Celula aleasă nu mai este în tabel. Alegeți alta.',
   'joineryCell.heading': '{row}: {type}',
   'joineryCell.model': 'Din model: {value}',
+  'joineryCell.measured': 'Măsurat pe geometria elementului: modelul nu declară nicio dimensiune (≈).',
   'joineryCell.value': 'Textul de pe planșă',
   'joineryCell.overridden': 'Scris peste textul din model, în toate tabelele de uși și ferestre. Marcată pe planșă doar aici; tipărirea nu poartă marcaj.',
   'joineryCell.reset': 'Revino la valoarea din model',

@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { joineryOverrideOf, modelRowLabel, typeIdentityOf } from '@bimvoice/ifcsheet';
+import { joineryOverrideOf, levelRowId, modelRowLabel, typeIdentityOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
@@ -45,33 +45,36 @@ export function JoineryCellCard({ schedule }: { schedule: ProjectSchedule }) {
     const data = scheduleDataOf(schedule, () => whole, schedules, overrides);
     const entry = data.entries.find((e) => typeIdentityOf(e) === mine.guid || e.key === mine.guid);
     if (!entry) return null;
-    return { entry, about: describeEntry(entry), model: cellTextOf({ ...data, overrides: undefined }, labels, entry, mine.column) };
+    // Every group of the kind, not only this part's: a saved cell belongs to the nearest of them (#485).
+    return { entry, groups: whole.entries, about: describeEntry(entry), model: cellTextOf({ ...data, overrides: undefined }, labels, entry, mine.column) };
   }, [mine, schedule, whole, schedules, overrides, labels]);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   if (!joinery) return null;
   const properties = (schedules.find((s) => s.id === schedule.id) ?? schedule).content?.properties ?? [];
   const own = mine ? properties.find((r) => r.id === mine.column) : undefined;
-  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : own ? modelRowLabel(own, properties) : mine.column) : '';
-  const current = mine && found ? joineryOverrideOf(overrides, found.entry, mine.column) : undefined;
+  const levelName = mine && mine.column === levelRowId(mine.column.slice(7)) ? mine.column.slice(7) : null;
+  const rowName = mine ? (ROW_LABELS[mine.column] ? t(ROW_LABELS[mine.column]) : own ? modelRowLabel(own, properties) : levelName ?? mine.column) : '';
+  const current = mine && found ? joineryOverrideOf(overrides, found.entry, mine.column, found.groups) : undefined;
   const summary = mine && found ? t('joineryCell.summaryPicked', { row: rowName, type: found.about }) : t('joineryCell.summary');
   const key = mine ? `${mine.guid}:${mine.column}:${current?.value ?? ''}` : '';
   // What the field holds untouched: the typed text, else the cell as the model states it (a dash is a blank cell).
   const base = current ? current.value : found?.model === '—' ? '' : found?.model ?? '';
   const text = draft?.key === key ? draft.text : base;
-  const commit = (): void => { if (mine && found && text !== base) setJoineryCellOverride(found.entry, mine.column, text, found.about); };
+  const commit = (): void => { if (mine && found && text !== base) setJoineryCellOverride(found.entry, mine.column, text, found.about, found.groups); };
   return (
     <CardSection id="joinery-cell" title={t('joineryCell.title')} summary={summary} defaultOpen={mine !== null}>
       {!mine ? <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.hint')}</p> : !found ? <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.gone')}</p> : (
         <div data-joinery-cell-editor="">
           <p className="m-0 mt-1 text-xs font-medium text-white">{t('joineryCell.heading', { row: rowName, type: found.about })}</p>
           <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.model', { value: found.model })}</p>
+          {mine.column === 'size' && found.entry.measured ? <p className="m-0 mt-1 text-xs text-sky-200">{t('joineryCell.measured')}</p> : null}
           <label className={`${WALL_LABEL} mt-2`}>
             {t('joineryCell.value')}
             <input className={WALL_FIELD} value={text} onChange={(e) => setDraft({ key, text: e.target.value })} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit(); }} />
           </label>
           {current ? <p className="m-0 mt-1 text-xs text-amber-200">{t('joineryCell.overridden')}</p> : null}
           <div className="mt-2 flex gap-2">
-            <button type="button" className={WALL_PILL} disabled={!current} onClick={() => { resetJoineryCellOverride(found.entry, mine.column); setDraft(null); }}>{t('joineryCell.reset')}</button>
+            <button type="button" className={WALL_PILL} disabled={!current} onClick={() => { resetJoineryCellOverride(found.entry, mine.column, found.groups); setDraft(null); }}>{t('joineryCell.reset')}</button>
             <button type="button" className={WALL_PILL} onClick={() => pickCell(null)}>{t('joineryCell.done')}</button>
           </div>
         </div>

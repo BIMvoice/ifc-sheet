@@ -167,7 +167,7 @@ describe('a model row on the sheet (#446)', () => {
     await load();
     const id = windowSchedule();
     addModelRow(id, { source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' });
-    setJoineryCellOverride(entryOf(W2), U, '1.6', 'W2 Window');
+    setJoineryCellOverride(entryOf(W2), U, '1.6', 'W2 Window', scheduleData('window').entries);
     const layout = await drawn(id);
     const texts = cellTexts(layout);
     assert.ok(texts.includes('1.6') && !texts.includes('varies'));
@@ -211,7 +211,7 @@ describe('the project keeps the row and the engine prints it (#446)', () => {
     addModelRow(id, { source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' });
     addModelRow(id, { source: 'quantity', psetName: 'BaseQuantities', propertyName: 'Area' });
     setRowShown(id, AREA, false);
-    setJoineryCellOverride(entryOf(W1), U, '1.5', 'W1 Window');
+    setJoineryCellOverride(entryOf(W1), U, '1.5', 'W1 Window', scheduleData('window').entries);
     const saved = serializeProject(projectDocument());
     const expected = [{ id: U, source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' }, { id: AREA, source: 'quantity', psetName: 'BaseQuantities', propertyName: 'Area' }];
     assert.deepEqual(parseProjectFile(saved).schedules?.find((s) => s.id === id)?.content?.properties, expected);
@@ -230,7 +230,7 @@ describe('the project keeps the row and the engine prints it (#446)', () => {
     const id = windowSchedule();
     addModelRow(id, { source: 'property', psetName: 'Pset_WindowCommon', propertyName: 'ThermalTransmittance' });
     addModelRow(id, { source: 'quantity', psetName: 'BaseQuantities', propertyName: 'Area' });
-    setJoineryCellOverride(entryOf(W1), U, '1.5', 'W1 Window');
+    setJoineryCellOverride(entryOf(W1), U, '1.5', 'W1 Window', scheduleData('window').entries);
     const saved = serializeProject(projectDocument());
     const app = joineryExport(scheduleDataOf(scheduleById(id)!), joineryLabels(LABELS)).tables[0];
 
@@ -242,6 +242,7 @@ describe('the project keeps the row and the engine prints it (#446)', () => {
     assert.deepEqual(table.header, app.header);
     assert.deepEqual(table.rows.map((r) => r.slice(0, 7)), app.rows.map((r) => r.slice(0, 7)));
     const u = table.header.indexOf('ThermalTransmittance'), area = table.header.indexOf('Area');
-    assert.deepEqual(table.rows.map((r) => [r[0], r[u], r[area]]), [['W1', '1.5', 0.785082789239], ['W2', 'varies', 2.4]]);
+    // The typed 1.5 is a number in a row of numbers, so the spreadsheet keeps it as one (#485), as it keeps the model's.
+    assert.deepEqual(table.rows.map((r) => [r[0], r[u], r[area]]), [['W1', 1.5, 0.785082789239], ['W2', 'varies', 2.4]]);
   });
 });
