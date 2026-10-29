@@ -22,8 +22,13 @@ import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/m
 import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
+import type { ModelRow } from './joinery-model-rows.js';
+import { createHeadlessListProvider } from './list-provider.js';
+import { readModelRowCells } from './joinery-model-values.js';
+import type { ListDataProvider } from '@ifc-lite/lists';
 import type { ScheduleTextRow } from './schedule-text.js';
 import { doorOperationOf } from './door-operation.js';
+import type { JoineryCellOverride } from './joinery-overrides.js';
 import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
@@ -43,10 +48,16 @@ export interface ScheduleOccurrence {
   predefinedType?: string | null;
   /** The properties the schedule was asked to read (`IsExternal`, and those the project's filters name), for the property filter. */
   properties?: PropertyFact[];
+  /** The text of the model rows the schedules chose (`ModelRow`), by row id: the element's property or quantity, else its type's. A row the element and its type say nothing for has no entry. */
+  modelValues?: Record<string, string>;
+  /** The rows of `modelValues` whose value is a number, as the number (`modelRowNumber`): the text is what the sheet prints, the number what a spreadsheet keeps. */
+  modelNumbers?: Record<string, number>;
 }
 
 export interface ScheduleEntry {
   key: string;
+  /** The GlobalId of the model's IfcTypeObject this type is, when it has one (a configured type); the first model's when several carry it. A typed cell is kept under it (`typeIdentityOf`). */
+  typeGlobalId?: string;
   kind: 'door' | 'window';
   /** The configured type; null for elements without one. */
   spec: JoinerySpec | null;
@@ -71,6 +82,8 @@ export interface ScheduleData {
   textRows?: ScheduleTextRow[];
   /** The schedule's content choice, for the layout's row choice (#186): not read from the model, attached by `scheduleOf`. */
   content?: ScheduleContent;
+  /** The cells typed over the model's text (#446), by type and row: the project's, attached by `scheduleOf` so every reader prints the same text. */
+  overrides?: JoineryCellOverride[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
@@ -83,6 +96,8 @@ export interface ScheduleModel extends Live {
   modelId: string;
   /** An entity's Name. Default: the one the store holds (`storedName`); the app passes its overlay-aware read. */
   nameOf?: (id: number) => string;
+  /** The Lists engine's provider over the model, for the model rows. Default: the headless one over the store; the app passes its own, which sees the edit overlay. */
+  listProvider?: () => ListDataProvider;
 }
 
 /** What the project contributes to a joinery schedule. */
@@ -235,14 +250,16 @@ function markUntyped(entries: ScheduleEntry[]): void {
  * The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied; with `content`, sorted and numbered
  * as that choice says (`applyContent`, the one rule), which a schedule saved with a choice prints and a project without one does not.
  */
-export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent, propertyNames: readonly string[] = []): ScheduleData {
+export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent, propertyNames: readonly string[] = [], modelRows: readonly ModelRow[] = []): ScheduleData {
   // The properties read are the ones a filter names (the project's, given by the caller, and this content's own) and IsExternal.
   const names = new Set(filterPropertyNames([content?.filter]).concat(propertyNames.map((n) => n.toLowerCase())));
-  return applyContent(modelRows(models, project, kind, names), content);
+  // The model rows read are those the caller names (all the project's schedules') and this content's own.
+  const rows = [...new Map([...modelRows, ...(content?.properties ?? [])].map((r) => [r.id, r] as const)).values()];
+  return applyContent(readRows(models, project, kind, names, rows), content);
 }
 
 /** The model's rows, in the order and with the marks the models give them. */
-function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>): ScheduleData {
+function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>, modelRows: readonly ModelRow[]): ScheduleData {
   const byKey = new Map<string, ScheduleEntry>();
   const levelElevation = new Map<string, number>();
   const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
@@ -283,6 +300,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       const spec = (type.spec.id && fromCatalogue.get(type.spec.id)) || type.spec;
       const key = spec.id ?? `${modelId}:${type.typeId}`;
       const entry = byKey.get(key) ?? { key, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] };
+      if (!entry.typeGlobalId && type.globalId) entry.typeGlobalId = type.globalId;
       byKey.set(key, entry);
       for (const id of occurrencesOfTypeInStore(dataStore, type.typeId, view)) {
         if (view?.isDeleted(id)) continue;
@@ -321,6 +339,17 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       byKey.set(key, entry);
       if (operation && !entry.operations?.includes(operation)) (entry.operations ??= []).push(operation);
       count(entry, id);
+    }
+    // The model rows the schedules chose, read for this model's occurrences in one pass.
+    if (modelRows.length > 0) {
+      const mine = [...byKey.values()].flatMap((e) => e.occurrences.filter((o) => o.modelId === modelId));
+      const values = readModelRowCells({ modelId, dataStore, provider: model.listProvider ?? (() => createHeadlessListProvider(dataStore)) }, mine.map((o) => o.expressId), modelRows);
+      for (const o of mine) {
+        const v = values.get(o.expressId);
+        if (!v) continue;
+        o.modelValues = v.texts;
+        if (Object.keys(v.numbers).length > 0) o.modelNumbers = v.numbers;
+      }
     }
   }
   // Catalogue types not placed yet still belong in the schedule (with no count).

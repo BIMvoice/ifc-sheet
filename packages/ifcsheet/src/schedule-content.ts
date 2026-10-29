@@ -16,6 +16,7 @@
  */
 
 import type { ProjectSchedule, SplitData, SplitEntry } from './sub-reports.js';
+import { readModelRows, type ModelRow } from './joinery-model-rows.js';
 import { textOwner } from './schedule-text.js';
 import { isOpenFilter, readSubReportFilter, subReportData, type SubReportFilter } from './schedule-filter.js';
 
@@ -73,6 +74,11 @@ export interface ScheduleContent {
    */
   filter?: SubReportFilter;
   symbols?: ScheduleSymbols;
+  /**
+   * The properties and quantities of the model the schedule has a row for (#446), by the list's column key (`ModelRow.id`). Each is a row like
+   * the built-in ones: shown or hidden, moved and typed over by that id, and read from the model by the engine.
+   */
+  properties?: ModelRow[];
 }
 
 /** Whether the header cell of a type draws its elevation / its plan under `content`. */
@@ -123,12 +129,14 @@ export function readScheduleContent(raw: unknown): ScheduleContent | undefined {
     if (y.plan === false) symbols.plan = false;
     if (symbols.elevation === false || symbols.plan === false) out.symbols = symbols;
   }
-  return out.rows || out.sort || out.numbering || out.filter || out.symbols ? out : undefined;
+  const properties = readModelRows(o.properties);
+  if (properties) out.properties = properties;
+  return out.rows || out.sort || out.numbering || out.filter || out.symbols || out.properties ? out : undefined;
 }
 
 /** Every row, in the order the content puts them, and whether it is shown: what the card lists. `textIds` are the ids of the text rows. */
 export function orderedRows(content: ScheduleContent | undefined, textIds: readonly string[]): { id: string; shown: boolean }[] {
-  const known = [...ROW_IDS as readonly string[], ...textIds.map(textRowId)];
+  const known = [...ROW_IDS as readonly string[], ...(content?.properties ?? []).map((r) => r.id), ...textIds.map(textRowId)];
   const set = new Set(known);
   const chosen = [...new Set(content?.rows?.order ?? [])].filter((id) => set.has(id));
   const ordered = [...chosen, ...known.filter((id) => !chosen.includes(id))];
