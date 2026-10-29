@@ -13,9 +13,11 @@
  */
 
 import { isRasterView } from './axonometric';
-import { drawingAreaIn, frameOf, type Rect } from './sheet-frame';
-import { paperOf } from './sheets';
-import type { ProjectSheet, ProjectView, SheetViewport } from './types';
+import type { Rect } from './sheet-frame';
+import type { ProjectView, SheetViewport } from './types';
+
+// The sheet's drawing area is the engine's (`schedule-place.ts`): a placed schedule fills the same area there (#479).
+export { sheetDrawingArea } from '@bimvoice/ifcsheet';
 
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -27,14 +29,6 @@ export const MIN_VIEWPORT_MM = { width: 20, height: 15 } as const;
 /** What a resize sets on the viewport: the box, its centre on the paper, and the drawing point shown there. */
 export type ViewportFrame = Pick<SheetViewport, 'x' | 'y' | 'width' | 'height'> & { center: { x: number; y: number } };
 
-/**
- * The sheet's drawing area, paper mm: inside its frame's margins, beside its
- * title block. The same `drawingAreaIn` the sheet SVG and the scales read, so
- * a resize cannot stop short of, or run past, the area the sheet draws.
- */
-export function sheetDrawingArea(sheet: ProjectSheet): Rect {
-  return drawingAreaIn(paperOf(sheet), frameOf(sheet));
-}
 
 /**
  * Whether a view's viewport has a crop to resize: a drawing that is cut to its

@@ -7,8 +7,7 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
-import { asTextFrame } from './text-block';
-import type { AnnotationShape, DraftEntity, DraftLayer, LevelRef, DraftParamValue, DraftShape, EntityShape, Pt } from './types';
+import { asTextFrame, type AnnotationShape, type DraftEntity, type DraftLayer, type LevelRef, type DraftParamValue, type DraftShape, type EntityShape, type Pt } from './draft-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

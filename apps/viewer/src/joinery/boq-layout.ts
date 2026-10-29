@@ -12,7 +12,7 @@
 import { boqTable, boqTableCells, textWidthEm, truncateToWidth, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
+import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
 
 export interface BoqSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

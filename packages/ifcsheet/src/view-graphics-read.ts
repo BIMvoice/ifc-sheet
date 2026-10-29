@@ -4,13 +4,12 @@
 
 /**
  * Reading a view's graphics (categories, phases, grid) and the project's phase
- * source from a project file (`project-file.ts`): malformed fields are dropped,
+ * source from a project file (the app's `project-file.ts`, the headless `project-read.ts`): malformed fields are dropped,
  * never fatal.
  */
 
-import { readColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
-import { PHASES, type PhaseSource } from './phases';
-import type { CategoryGraphics, ElementGraphics, PhaseId, PhaseStyle, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics } from './types';
+import { readColourScheme } from './colour-scheme.js';
+import { PHASES, type CategoryGraphics, type ElementGraphics, type PhaseId, type PhaseSource, type PhaseStyle, type StyleRule, type StyleRuleStyle, type ViewGraphics, type ViewGridGraphics } from './view-graphics-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

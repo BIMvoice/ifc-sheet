@@ -12,7 +12,7 @@
  * laid out, is what `fit` in `schedule-fit` places, clips and counts.
  */
 
-import type { ScheduleCell, ScheduleLayout, SchedulePrim } from './schedule-layout';
+import type { ScheduleCell, ScheduleLayout, SchedulePrim } from './schedule-prim.js';
 
 export const ROW = 6;
 export const TEXT = 2.5;
@@ -82,6 +82,18 @@ export interface TableBlock {
   skipEmpty?: boolean;
   /** The id of each column, for the rows that can be picked. */
   columnIds?: readonly string[];
+}
+
+/** A note broken at spaces into lines of about `chars` characters (2 mm text); about 120 fill a line across the table. */
+export function wrapNote(note: string, chars = 120): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of note.split(' ')) {
+    if (line && line.length + 1 + word.length > chars) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 export type TableItem =

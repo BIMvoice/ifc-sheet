@@ -9,11 +9,12 @@
  * kind (an area, a volume, a length) decides its decimals, a count is whole.
  */
 
-import { listTableCells, textWidthEm, truncateToWidth, type ListScheduleTable } from '@bimvoice/ifcsheet';
-import type { SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table';
-import { wrapNote } from '@/urban/urban-layout';
+import { listTableCells } from './list-figures.js';
+import type { ListScheduleTable } from './list-schedule.js';
+import { textWidthEm, truncateToWidth } from './text-width.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import { layoutPagedTable, PAD, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem, wrapNote } from './paged-table.js';
 
 const GAP = 4;
 

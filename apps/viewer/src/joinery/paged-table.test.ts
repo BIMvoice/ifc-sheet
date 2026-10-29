@@ -21,7 +21,7 @@ import type { RoomFinishes } from './room-finishes';
 import type { Totals, TypeQuantities } from './type-quantities';
 import type { UrbanIndicators } from '@/urban/indicators';
 import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PAD, textWidth } from './paged-table';
+import { layoutPagedTable, PAD, textWidth } from '@bimvoice/ifcsheet';
 
 export const TAKEOFF_LABELS: TakeoffLabels = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
 export const FINISH_LABELS: RoomFinishLabels = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };
