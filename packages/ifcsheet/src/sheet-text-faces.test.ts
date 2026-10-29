@@ -66,7 +66,7 @@ describe('the PDF sets bold and the Tables face', () => {
 
   it('writes the bold and the face into the file', async () => {
     const sheet = (texts: SheetGraphic['texts']): SheetGraphic => ({
-      sheetId: 's', number: 'A-1', name: 'S', paper: { w: 297, h: 210 }, frame: [], fills: [], cut: [], lines: [], pens: [], marks: [], texts, images: [], underlays: [], viewports: [],
+      sheetId: 's', number: 'A-1', name: 'S', paper: { w: 297, h: 210 }, frame: [], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts, images: [], underlays: [], viewports: [],
     });
     // The font each text is set in, as a reader sees it: its internal name and its family.
     const fonts = async (texts: SheetGraphic['texts']): Promise<Record<string, { name: string; family: string }>> => {
