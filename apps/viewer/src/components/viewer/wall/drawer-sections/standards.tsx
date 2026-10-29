@@ -13,10 +13,9 @@ import { installStandard, isApplied, resetStandard } from '@/standards/standard-
 import { WALL_PILL } from '../wall-type';
 import type { DrawerSection } from './types';
 
-const PART_LABEL = { pens: 'standards.pack.part.pens', titleBlock: 'standards.pack.part.titleBlock', units: 'standards.pack.part.units', numbering: 'standards.pack.part.numbering' } as const;
+const PART_LABEL = { pens: 'standards.pack.part.pens', titleBlock: 'standards.pack.part.titleBlock', units: 'standards.pack.part.units', numbering: 'standards.pack.part.numbering', hatches: 'standards.pack.part.hatches' } as const;
 const NOT_SET_LABEL: Record<(typeof PACK_NOT_SET)[number], TranslationKey> = {
-  numbering: 'standards.pack.notSet.numbering', lengthUnit: 'standards.pack.notSet.lengthUnit', decimals: 'standards.pack.notSet.decimals',
-  hatchPatterns: 'standards.pack.notSet.hatchPatterns', viewTemplates: 'standards.pack.notSet.viewTemplates',
+  lengthUnit: 'standards.pack.notSet.lengthUnit', decimals: 'standards.pack.notSet.decimals', viewTemplates: 'standards.pack.notSet.viewTemplates',
 };
 
 function PackCard({ pack, description }: { pack: StandardPack; description: string }) {

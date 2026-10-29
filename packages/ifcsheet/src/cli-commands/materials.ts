@@ -10,12 +10,13 @@ import type { CliCommand } from '../cli-command.js';
 export const materialsCommand: CliCommand = {
   name: 'materials',
   usageRank: 300,
-  usage: `  ifcsheet materials <model.ifc> [--project <file>] [--json]`,
+  usage: `  ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]`,
   helpRank: 300,
   help: `  materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
-          app's Materials section edits); a material it has no row for is guessed from its name.`,
+          app's Materials section edits); a material it has no row for is guessed from its name.
+          With --standard, that standard's hatch rows (ro, de) are laid over the table first.`,
   async run(rest, values, io) {
-    return await materials({ rest, json: values.json === true, project: values.project, foreignOption: Boolean(values.out || values.dxf || values.name || values['include-far-elements']) }, io);
+    return await materials({ rest, json: values.json === true, project: values.project, standard: values.standard, foreignOption: Boolean(values.out || values.dxf || values.name || values['include-far-elements']) }, io);
   },
 };

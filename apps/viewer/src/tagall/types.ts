@@ -38,6 +38,15 @@ export function upgradeTagAllTypes(types: AnnotationType[]): AnnotationType[] {
   return types.map((t) => (old(t) && t.label ? { ...t, label: { ...t.label, template: ROOM_TEMPLATE } } : t));
 }
 
+/** Which of TAGALL's three kinds of label to place (#497). A kind left out is not placed; one already placed stays. */
+export interface TagParts {
+  doors: boolean;
+  windows: boolean;
+  rooms: boolean;
+}
+
+export const ALL_TAG_PARTS: Readonly<TagParts> = { doors: true, windows: true, rooms: true };
+
 export interface TagAllSummary {
   /** Marks added to doors and windows, and how many of those the tool numbered because the model gives neither Tag nor Name. */
   marks: number;

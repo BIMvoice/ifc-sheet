@@ -95,7 +95,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     : project.set.sheets.length > 0 ? `ifcsheet: ${args.pac ? '--pac' : '--template'} lays the sheets out by its rules; the ${project.set.sheets.length} sheets of ${args.project} are not printed.\n`
     : `ifcsheet: ${args.project} holds no drawing set (no sheet); laying out a fresh one.\n`);
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = own ?? generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
+  const generated = own ?? generateDefaultSet(model, { ...(standard.sheetNumbering ? { scheme: standard.sheetNumbering } : {}), ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
