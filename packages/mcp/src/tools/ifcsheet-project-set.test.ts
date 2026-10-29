@@ -160,6 +160,28 @@ describe.skipIf(missing !== null)('a hand-arranged project prints the same throu
     expect(await figures('en', { language: 'en' })).toEqual({ cli: ['8.50'], mcp: ['8.50'] });
     expect(await figures('none', {})).toEqual({ cli: ['8.50'], mcp: ['8.50'] });
   }, 300_000);
+
+  it('a Romanian project\'s room schedule and drawing register are worded in Romanian through MCP, page for page as the build prints them', async () => {
+    const document_id = (await ok('ifcsheet_generate_set', { model_id: modelId })).document_id as string;
+    const saved = join(tmp, 'saved-lists.ifclite-project.json');
+    await ok('ifcsheet_save_project', { document_id, file_path: saved });
+    const doc = JSON.parse(await readFile(saved, 'utf8'));
+    const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
+    doc.language = 'ro';
+    doc.sheets.push(onSheet('s-rooms', 'X-903', 'rooms'), onSheet('s-reg', 'X-000', 'reg'));
+    doc.schedules = [{ id: 'rooms', name: 'Încăperi', kind: 'rooms', createdAt: 0 }, { id: 'reg', name: 'Registru', kind: 'register', createdAt: 0 }];
+    doc.drafts = [];
+    doc.draftLayers = [];
+    const file = join(tmp, 'lists.ifclite-project.json');
+    await writeFile(file, JSON.stringify(doc));
+    await cli('build', FZK, '--project', file, '--out', join(tmp, 'lists-cli.pdf'));
+    const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_path: file });
+    await ok('ifcsheet_export_pdf', { document_id: loaded.document_id, file_path: join(tmp, 'lists-mcp.pdf') });
+    const [fromCli, fromMcp] = [await pageTexts(join(tmp, 'lists-cli.pdf')), await pageTexts(join(tmp, 'lists-mcp.pdf'))];
+    expect(fromCli.flat()).toEqual(expect.arrayContaining(['Planșa', 'Revizie', 'Sinteza ariilor (Su, Sc, Sd)']));
+    expect(fromMcp.flat()).toEqual(expect.arrayContaining(['Planșa', 'Revizie', 'Sinteza ariilor (Su, Sc, Sd)']));
+  }, 300_000);
+
   it('content the engine does not print yet is named in the tool result, as the build names it on stderr', async () => {
     const document_id = (await ok('ifcsheet_generate_set', { model_id: modelId })).document_id as string;
     const saved = join(tmp, 'saved-left-out.ifclite-project.json');

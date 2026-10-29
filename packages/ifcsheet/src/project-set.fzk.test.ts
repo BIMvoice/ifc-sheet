@@ -109,6 +109,31 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(pages[1]).toEqual(expect.arrayContaining(['X-902', 'Walls by type', 'Type', 'Count', 'NetSideArea (m²)', 'Total', '13']));
   }, 240_000);
 
+  it('prints the revision the project\'s records name in each sheet\'s title block: one named by the sheet, one by a cloud on its view', async () => {
+    const base = arranged();
+    const [first, second] = base.sheets as { id: string }[];
+    const plan = doc.views.find((v) => v.kind === 'plan')!;
+    const project = {
+      ...base,
+      sheets: [first, { ...second, revisionIds: ['rev-1'] }],
+      drafts: [...(base.drafts as unknown[]), { id: 'cloud', viewId: plan.id, layerId: '0', shape: { type: 'text', p: { x: 0, y: 0 }, text: '', height: 0.25, rotation: 0 }, params: { revisionId: 'rev-2' } }],
+      revisions: [
+        { id: 'rev-1', code: 'ZB7', date: '2026-01-02', description: 'Walls sheet', by: 'PC' },
+        { id: 'rev-2', code: 'ZC9', date: '2026-02-03', description: 'Plan cloud', by: 'PC' },
+      ],
+    };
+    const { code, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages[0]).toContain('ZC9');
+    expect(pages[0]).not.toContain('ZB7');
+    expect(pages[1]).toContain('ZB7');
+    expect(pages[1]).not.toContain('ZC9');
+    // The same project with no records prints neither.
+    const none = await build(writeProject({ ...project, revisions: [] }));
+    expect(none.pages.flat()).not.toContain('ZB7');
+    expect(none.pages.flat()).not.toContain('ZC9');
+  }, 240_000);
+
   it('prints the rooms schedule, the bill of quantities and the drawing register where they were placed, and names the kinds it still leaves out', async () => {
     const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
     const base = arranged();
