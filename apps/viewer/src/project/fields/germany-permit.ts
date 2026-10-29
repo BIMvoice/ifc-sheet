@@ -28,3 +28,12 @@ export const germanyLandField = optionalField('germanyLand', (raw) => {
   const land = GERMANY_LANDS.find((l) => l === raw.germanyLand);
   return land ? { germanyLand: land } : {};
 });
+
+/** Registered by this file (`./registered.ts`): found there, not listed. */
+export const registeredFields = [germanyLandField, germanyPermitField] as const;
+declare module './registered' {
+  interface RegisteredFieldKeys {
+    germanyLand: true;
+    germanyPermit: true;
+  }
+}

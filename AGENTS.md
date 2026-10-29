@@ -219,7 +219,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - Every English key without Romanian is listed in `scripts/ro-coverage-baseline/<namespace>.txt` (one file per key namespace, the part before the first dot), and the list only shrinks. After translating keys, run `pnpm lint:ro-coverage-baseline` and commit what it rewrites; never edit those files by hand.
 
 **A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
-- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`, then add one import line and one entry to `REGISTERED_FIELD_DEFS` in `registered.ts` (#525). Never add to `DOCUMENT_FIELD_DEFS` in `index.ts`: that list is frozen, `fields.test.ts` pins it, and four PRs (#514, #402, #428, #480) broke main or their own CI by appending there.
+- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`. In `<key>.ts`, register it: `export const registeredFields = [myField] as const;` and `declare module './registered' { interface RegisteredFieldKeys { myKey: true } }` (see `germany-permit.ts`). `registered.ts` finds the file; edit no list. Never add to `DOCUMENT_FIELD_DEFS` in `index.ts`: that list is frozen and `fields.test.ts` pins it.
 - Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
 
 **A new drawer section**

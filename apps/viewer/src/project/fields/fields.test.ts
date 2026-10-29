@@ -4,18 +4,21 @@
 
 /**
  * The document field registry (#144): one entry per field, the store built from it. That every
- * `ProjectDocument` field has an entry is a compile-time check (`MissingField` in `./index.ts`); the
- * round trip and the recovery tests check what the store does with them.
+ * `ProjectDocument` field has an entry is a compile-time check (`MissingField` in `./index.ts`, against the frozen
+ * list and the keys registered files declare); that a registered file is found is checked here, that every sample's
+ * key is a field by the round trip (`project-roundtrip.test.ts`); the round trip and the recovery tests check what the store does with them.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// @ts-expect-error -- a plain .mjs module of the test harness, without types
+import { expandGlob, globCalls } from '../../test/import-meta-glob.mjs';
 import { DOCUMENT_FIELDS, FIELDS_IN_READ_ORDER, emptyDocument, loadedFields, readDocumentFields } from './index';
 import { defineField, listField, optionalField, recordField } from './define';
 import { READ_ORDER } from './read-order';
-import { assembleFields } from './registered';
+import { assembleFields, REGISTERED_FIELD_DEFS } from './registered';
 import { EMPTY_PROJECT, PROJECT_DOCUMENT_KEYS } from '../project-store';
 import type { ProjectDocument } from '../types';
 
@@ -54,6 +57,12 @@ describe('the document field registry', () => {
 
   it('refuses a registered field whose key is already listed', () => {
     assert.throws(() => assembleFields([listField('comments', () => [])], [listField('comments', () => [])]), /share the key "comments"/);
+  });
+
+  it('finds the fields that register themselves in their own file', () => {
+    // Two that were registered when the registry began finding its files; a new field is not added here.
+    for (const key of ['germanyLand', 'lineTypes']) assert.ok(REGISTERED_FIELD_DEFS.some((f) => f.key === key), `${key} is not found`);
+    assert.deepEqual(DOCUMENT_FIELDS.slice(KEYS_BEFORE_REGISTERED.length).map((f) => f.key), [...REGISTERED_FIELD_DEFS.map((f) => f.key)].sort());
   });
 
   it('lists each field once', () => {
@@ -142,9 +151,15 @@ describe('the document field registry', () => {
     const entry = path.join(src, 'project/fields/index.ts');
     const via = new Map<string, string | null>([[entry, null]]);
     for (const file of via.keys()) {
-      for (const m of fs.readFileSync(file, 'utf8').matchAll(edge)) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const m of text.matchAll(edge)) {
         const to = resolveSpec(file, m[1]);
         if (to && !via.has(to)) via.set(to, file);
+      }
+      // `./registered.ts` finds its fields with an eager glob: each match is a static import.
+      for (const call of globCalls(text) as { patterns: string[]; options: { eager: boolean } }[]) {
+        if (!call.options.eager) continue;
+        for (const [, to] of expandGlob(file, call.patterns) as [string, string][]) if (!via.has(to)) via.set(to, file);
       }
     }
     const chain = (file: string): string => (via.get(file) ? `${chain(via.get(file) as string)} -> ` : '') + path.relative(src, file);
