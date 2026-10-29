@@ -215,7 +215,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 **Translations** (`apps/viewer/src/i18n/`)
 - New strings go in a NEW catalogue pair `catalogues/<feature>.en.ts` and `<feature>.ro.ts`, registered in the sub-barrel for its first letter: `barrels/en-a-e.ts`, `en-f-l.ts`, `en-m-r.ts`, `en-s-z.ts`; `barrels/ro-a-l.ts`, `ro-m-z.ts`.
 - Never define a key in two catalogues of one language; `catalogues-disjoint.test.ts` fails on it.
-- Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`.
+- Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`. To widen what `ro.test.ts` requires Romanian for, add `i18n/ro-scope/<feature>.ts` exporting `prefixes` and/or `keys` (see `ro-scope/drafting-standards.ts`); its `IN_SCOPE` and `IN_SCOPE_KEYS` lists are frozen. Put a new regression case in a test file of its own, not at the end of `ro.test.ts`.
 - Every English key without Romanian is listed in `scripts/ro-coverage-baseline/<namespace>.txt` (one file per key namespace, the part before the first dot), and the list only shrinks. After translating keys, run `pnpm lint:ro-coverage-baseline` and commit what it rewrites; never edit those files by hand.
 
 **A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
