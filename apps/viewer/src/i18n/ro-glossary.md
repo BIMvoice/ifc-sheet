@@ -81,6 +81,12 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Tilt and turn | Oscilo-batant | |
 | Pivot, horizontal axis | Pivotant, ax orizontal | The only opening "basculant" may describe |
 | Pivot, vertical axis | Pivotant, ax vertical | |
+| Frame (of a door or window) | Toc | "Toc și canat" for the section; the frame's depth and width are "Adâncime toc", "Lățime toc" (`joinery.*`, #475) |
+| Mullion / transom | Montant / traversă | The vertical and horizontal bars between the fields of a window |
+| Panel (a field of the window grid) | Câmp | Not "panou", which is the Wall |
+| Window board / external sill | Glaf interior / glaf exterior | Not "parapet", which is the wall under the window |
+| Threshold | Prag | |
+| Glazing | Vitraj | The glass colour is "Sticlă" |
 | Layer / line type / weight (drafting standards) | Strat / tip de linie / grosime | `standards.layer.*` (#513); "Activ" for a layer that is on; line types Continuă, Întreruptă, Punctată, Linie-punct |
 | Text style / text height | Stil de text / înălțimea textului | "Stil de cotare" for a dimension style; `standards.text.*`, `standards.dim.*` |
 | Font (sans serif / serif / monospace) | Font (fără serife / cu serife / monospațiat) | "Font" is the same word in both languages; font names (Inter, Times, Courier) are never translated |

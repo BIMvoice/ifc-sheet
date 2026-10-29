@@ -22,7 +22,7 @@ import ro from './ro';
  * dialog, the feedback dialog, a drawing's annotation bar and the export dialogs the palette opens (including the anonymized subset, the modified-IFC review and the Cesium ion upload), and the toasts of the exports the palette starts and of opening a file.
  */
 // `ready.` is the model-readiness list (#403): its keys are built at render, so the face check below cannot see them.
-const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'ready.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
+const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.', 'joinerySymbol.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'ready.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
   // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
   'commandPalette.', 'settings.', 'feedback.',
   // The export dialogs the palette's export rows open: IFC, GLB, KMZ, USD, energy model and the to-scale PDF. Not the Properties panel's edit card (`geometryExport.editCard.`) nor the sheet-setup and title-block editors (`sheetsPdf.sheetSetup.`, `sheetsPdf.titleBlock.`), which the face hides.
@@ -37,6 +37,8 @@ const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'libra
  * titles, the project, version and export commands).
  */
 const IN_SCOPE_KEYS = new Set<string>([
+  // The joinery schedule's controls (#475): their prefix also holds the 4D schedule's keys, which the face does not reach.
+  'schedule.count', 'schedule.empty', 'schedule.folder', 'schedule.kind', 'schedule.new', 'schedule.newName', 'schedule.number', 'schedule.numberHint', 'schedule.numbered', 'schedule.scale', 'schedule.zoomIn', 'schedule.zoomOut', 'typeQty.sheet', 'typeQty.empty', 'typeQty.noQtoNote',
   // The drafting standards dialog's layers, text styles and dimension styles (#513): every key of its English file. Not the dialog's other tabs (`standards.tab.types`, `.symbols`, `.library`, `.cad`).
   ...Object.keys(draftingStandardsEn),
   'standards.open', 'standards.el.style', 'standards.el.height', 'standards.el.editText', 'standards.el.reset', 'standards.el.resetTag', 'standards.el.tagOverridden', 'standards.text.bold', 'standards.text.italic',
