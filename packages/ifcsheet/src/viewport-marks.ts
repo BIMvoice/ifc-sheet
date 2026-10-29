@@ -205,24 +205,37 @@ export const ARROW_NEED_MM = { w: 2 * (ARROW_HALF_MM + MARK_MARGIN_MM), h: 2 * (
 /** What a scale bar needs of its box: the shortest bar and its margins, and the height of the bar with its figures. */
 export const BAR_NEED_MM = { w: 2 * BAR_MIN_MM + 2 * MARK_MARGIN_MM, h: BAR_H_MM + TICK_MM + LABEL_GAP_MM + LABEL_MM + 2 * MARK_MARGIN_MM };
 
+/** Whether a mark that needs `need` fits in `r`. */
+export function markFits(r: Rect | null, need: { w: number; h: number }): r is Rect {
+  return r !== null && r.w >= need.w && r.h >= need.h;
+}
+
+const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
 /**
- * The room a site plan's mark sits in: inside its drawing box where the mark fits there (`markArea`), else in the first strip of the
- * drawing area beside the box (right, left, above, below) that has room, so a small plot at a large scale still gets its arrow and bar
- * instead of none. `null` when there is no room anywhere. The app places a site plan's marks in a free spot of its own
- * (`siteplan/site-symbols.ts`), which needs the plot; the headless build has only the box.
+ * The room a site plan's mark sits in: inside its drawing box where the mark fits there (`markArea`), else in a strip right beside
+ * the box (right, left, above, below), as deep as the mark needs and along the box's side, inside the drawing area and clear of
+ * everything in `taken` (the sheet's other viewports, their titles, the title block). A small plot at a large scale so still gets its
+ * arrow and bar next to it, never at the far side of the sheet or over another drawing. `null` when there is no such room.
+ * The app places a site plan's marks in a free spot of its own (`siteplan/site-symbols.ts`), which needs the plot; the headless
+ * build has only the box.
  */
-export function siteMarkArea(box: Rect, drawingArea: Rect, need: { w: number; h: number }): Rect | null {
-  const fits = (r: Rect | null): r is Rect => r !== null && r.w >= need.w && r.h >= need.h;
+export function siteMarkArea(box: Rect, drawingArea: Rect, need: { w: number; h: number }, taken: readonly Rect[] = []): Rect | null {
   const inside = markArea(box, drawingArea);
-  if (fits(inside)) return inside;
-  const d = drawingArea;
-  const strips: Rect[] = [
-    { x: box.x + box.w, y: d.y, w: d.x + d.w - (box.x + box.w), h: d.h },
-    { x: d.x, y: d.y, w: box.x - d.x, h: d.h },
-    { x: d.x, y: d.y, w: d.w, h: box.y - d.y },
-    { x: d.x, y: box.y + box.h, w: d.w, h: d.y + d.h - (box.y + box.h) },
+  if (markFits(inside, need)) return inside;
+  const h = Math.max(box.h, need.h);
+  const w = Math.max(box.w, need.w);
+  const beside: Rect[] = [
+    { x: box.x + box.w, y: box.y, w: need.w, h },
+    { x: box.x - need.w, y: box.y, w: need.w, h },
+    { x: box.x, y: box.y - need.h, w, h: need.h },
+    { x: box.x, y: box.y + box.h, w, h: need.h },
   ];
-  return strips.find(fits) ?? null;
+  for (const strip of beside) {
+    const area = markArea(strip, drawingArea);
+    if (markFits(area, need) && !taken.some((t) => overlaps(area, t))) return area;
+  }
+  return null;
 }
 
 /**

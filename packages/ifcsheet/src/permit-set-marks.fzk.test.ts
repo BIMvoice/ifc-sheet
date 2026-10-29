@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, norwaySetTemplate, pacRuralSetTemplate, pacSetTemplate, parseSetTemplate, serializeSetTemplate, type DefaultSet, type SetTemplate } from './index.js';
 import { openModel, sheetGraphics, type OpenedModel } from './headless.js';
-import { viewportMarkFlags } from './viewport-marks.js';
+import { ARROW_NEED_MM, siteMarkArea, viewportMarkFlags } from './viewport-marks.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -52,6 +52,22 @@ describe('the templates themselves', () => {
   });
 });
 
+// #482 review: a site plan's outside marks stand right beside its box and keep off the rest of the sheet.
+describe('siteMarkArea', () => {
+  const area = { x: 0, y: 0, w: 400, h: 280 };
+  const box = { x: 100, y: 100, w: 20, h: 20 };
+  it('takes the strip right beside the box, as deep as the mark needs, not the far side of the sheet', () => {
+    const r = siteMarkArea(box, area, ARROW_NEED_MM)!;
+    expect(r).toEqual({ x: 120, y: 100, w: ARROW_NEED_MM.w, h: ARROW_NEED_MM.h });
+  });
+  it('skips a side another viewport sits on, and gives none when every side is taken', () => {
+    const right = { x: 125, y: 90, w: 100, h: 100 };
+    expect(siteMarkArea(box, area, ARROW_NEED_MM, [right])!.x).toBe(100 - ARROW_NEED_MM.w);
+    const all = [right, { x: 0, y: 90, w: 98, h: 100 }, { x: 90, y: 0, w: 60, h: 98 }, { x: 90, y: 122, w: 60, h: 100 }];
+    expect(siteMarkArea(box, area, ARROW_NEED_MM, all)).toBeNull();
+  });
+});
+
 describe.skipIf(missing !== null)('the permit sets of AC20-FZK-Haus', () => {
   let model: OpenedModel;
   let pac: DefaultSet;
@@ -77,25 +93,30 @@ describe.skipIf(missing !== null)('the permit sets of AC20-FZK-Haus', () => {
     expect(marksOf(norway)).toEqual([['elevation', undefined, true], ['plan', true, true], ['section', undefined, true], ['site', true, true]]);
   });
 
-  it('puts a mark on a viewport only where the template drew a view into it (a schedule or a cover has none)', () => {
+  it('puts a mark on every viewport the template drew a view into', () => {
     let withView = 0;
-    let withoutView = 0;
     for (const set of [pac, rural, norway]) {
       for (const sheet of set.document.sheets) {
         for (const vp of sheet.viewports ?? []) {
-          const marked = vp.northArrow !== undefined || vp.scaleBar !== undefined;
-          if (set.document.views.some((v) => v.id === vp.viewId)) {
-            withView++;
-            expect(marked, sheet.name).toBe(true);
-          } else {
-            // The FZK sets hold no viewport without a view today; the branch stays for a template that adds one.
-            withoutView++;
-            expect(marked, sheet.name).toBe(false);
-          }
+          if (!set.document.views.some((v) => v.id === vp.viewId)) continue;
+          withView++;
+          expect(vp.northArrow !== undefined || vp.scaleBar !== undefined, sheet.name).toBe(true);
         }
       }
     }
     expect(withView).toBeGreaterThan(0);
+  });
+
+  // #482 review: the FZK sets hold no viewport without a view, so this is a hand-made one asking for both marks.
+  it('draws no mark on a viewport whose view is not in the project, even when it asks for both', async () => {
+    const before = await sheetGraphics(norway, model);
+    const sheet = norway.document.sheets[0];
+    const orphan = { id: 'orphan', viewId: 'no-such-view', x: 50, y: 50, scale: 100, width: 60, height: 60, center: null, northArrow: true, scaleBar: true };
+    const withOrphan: DefaultSet = { ...norway, document: { ...norway.document, sheets: norway.document.sheets.map((sh) => (sh.id === sheet.id ? { ...sh, viewports: [...(sh.viewports ?? []), orphan] } : sh)) } };
+    const after = await sheetGraphics(withOrphan, model);
+    const marksOn = (gs: typeof before) => gs.find((g) => g.sheetId === sheet.id)!;
+    expect(marksOn(after).texts.filter((t) => t.text === 'N').length).toBe(marksOn(before).texts.filter((t) => t.text === 'N').length);
+    expect(marksOn(after).symbols.strokes.length).toBe(marksOn(before).symbols.strokes.length);
   });
 
   it('a north arrow is only ever drawn on a plan: the facades and sections resolve to no arrow', () => {
@@ -140,6 +161,12 @@ describe.skipIf(missing !== null)('the permit sets of AC20-FZK-Haus', () => {
     const inside = (p: { x: number; y: number }) => p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h;
     expect(inside(arrow!.at)).toBe(false);
     expect(bar.flat().some(inside)).toBe(false);
+    // #482 review: beside its own drawing, and on nothing else of the sheet (another viewport and its title).
+    const others = g.viewports.filter((v) => v.viewId !== siteView.id).map((v) => ({ ...v.box, h: v.box.h + 12 }));
+    const on = (r: { x: number; y: number; w: number; h: number }) => (p: { x: number; y: number }) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+    for (const r of others) expect([arrow!.at, ...bar.flat()].some(on(r))).toBe(false);
+    const near = (p: { x: number; y: number }) => Math.max(box.x - p.x, p.x - (box.x + box.w), box.y - p.y, p.y - (box.y + box.h));
+    expect(near(arrow!.at)).toBeLessThan(40);
     const frame = g.frame[0];
     const xs = frame.map((p) => p.x);
     const ys = frame.map((p) => p.y);
