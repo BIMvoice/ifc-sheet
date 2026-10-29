@@ -38,12 +38,17 @@ async function packagedFont(): Promise<Uint8Array> {
   return new Uint8Array(await readFile(new URL('../fonts/Inter-Regular.ttf', import.meta.url)));
 }
 
-/** The bold file the package ships next to it (`fonts/Inter-Bold.ttf`); absent, bold text is set in the regular face. */
+/**
+ * The bold file the package ships next to it (`fonts/Inter-Bold.ttf`). Missing, bold text is set in the regular
+ * face and the run says so; any other read error is not a missing file and is thrown.
+ */
 async function packagedBold(): Promise<Uint8Array | undefined> {
+  const { readFile } = await import('node:fs/promises');
   try {
-    const { readFile } = await import('node:fs/promises');
     return new Uint8Array(await readFile(new URL('../fonts/Inter-Bold.ttf', import.meta.url)));
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    console.warn('[ifcsheet] fonts/Inter-Bold.ttf is not in the package; bold text is set in the regular face');
     return undefined;
   }
 }
