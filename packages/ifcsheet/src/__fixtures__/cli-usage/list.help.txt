@@ -1,0 +1,3 @@
+  list    A schedule built from the Lists engine (the app's Schedule from the model): the elements of the project's list definition by
+          class, storey and property, its columns, grouped and summed, with the total. The rows and totals are the Lists panel's, the CSV
+          is the app's file. --schedule names which one (its id or name; the only one when the project has one). Text, CSV or JSON.

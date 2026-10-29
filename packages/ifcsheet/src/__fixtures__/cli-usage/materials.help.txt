@@ -1,0 +1,3 @@
+  materials  The model's materials and how each draws where a view cuts it: hatch, scale,
+          fill, hatch pen, membrane. With --project, the project's own table applies (what the
+          app's Materials section edits); a material it has no row for is guessed from its name.

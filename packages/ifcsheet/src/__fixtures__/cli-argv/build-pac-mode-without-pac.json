@@ -1,0 +1,13 @@
+{
+ "argv": [
+  "build",
+  "m.ifc",
+  "--pac-mode",
+  "rural",
+  "--out",
+  "a.pdf"
+ ],
+ "code": 2,
+ "stdout": "",
+ "stderr": "ifcsheet build has --pac-mode only with --pac.\n"
+}

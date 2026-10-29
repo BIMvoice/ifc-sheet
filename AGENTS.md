@@ -205,6 +205,10 @@ Entity references come from the file, so a recursive walk over a self-referentia
 - Logic that the app, the CLI and MCP all need lives once in `packages/ifcsheet` and the app calls it, with a parity test. Examples: `viewStyler` (`view-style.ts`), `classificationOf` (`classification.ts`).
 - A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits `index-exports.snapshot.json`.
 
+**The `ifcsheet` command line** (`packages/ifcsheet/src/`)
+- A new command is a file in `cli-commands/` and one line in `cli-commands/index.ts`; `run` and the help text read that list.
+- `cli-registry.test.ts` pins the help text and the answers to command lines that need no IFC file. Its fixtures are one file per section (`__fixtures__/cli-usage/<command>.usage.txt`, `<command>.help.txt`, `options.txt`) and one file per added command line (`__fixtures__/cli-argv/<name>.json`). `ARGV_CASES` and `cli-argv.main.json` are frozen: never append to them. To add a command line, write `__fixtures__/cli-argv/<name>.json` with just `{ "argv": [...] }`; then fill it in, or refresh every fixture after an intended change, with `IFCSHEET_CLI_FIXTURE_UPDATE=1 pnpm --filter @bimvoice/ifcsheet exec vitest run src/cli-registry.test.ts`, and review the diff.
+
 **Translations** (`apps/viewer/src/i18n/`)
 - New strings go in a NEW catalogue pair `catalogues/<feature>.en.ts` and `<feature>.ro.ts`, registered in the sub-barrel for its first letter: `barrels/en-a-e.ts`, `en-f-l.ts`, `en-m-r.ts`, `en-s-z.ts`; `barrels/ro-a-l.ts`, `ro-m-z.ts`.
 - Never define a key in two catalogues of one language; `catalogues-disjoint.test.ts` fails on it.
