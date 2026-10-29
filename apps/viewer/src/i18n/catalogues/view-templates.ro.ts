@@ -28,6 +28,8 @@ export const viewTemplatesRo = {
   'wall.gfx.weightOf': 'Grosimea liniei pentru {category}',
   'wall.gfx.weightSet': 'Cea stabilită',
   'wall.gfx.overridden': 'Stabilit pe acest desen, nu de șablon',
+  'wall.gfx.coloured': 'Suprafețe colorate',
+  'wall.gfx.colouredHint': 'Umple suprafețele vizibile cu culorile materialelor din model, sub linii. DXF-ul păstrează doar liniile.',
   'wall.gfx.layers': 'Straturi ascunse pe această planșă',
   'wall.gfx.layersNone': 'Proiectul nu are încă straturi de desenare.',
   'wall.gfx.layerShown': 'Arată stratul {layer} în acest cadru',

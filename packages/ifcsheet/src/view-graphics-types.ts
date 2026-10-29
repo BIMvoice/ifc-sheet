@@ -131,6 +131,8 @@ export interface ViewGraphics {
   categories?: Record<string, CategoryGraphics>;
   /** The view coloured by a property (`colour-scheme.ts`, #92). Absent: not coloured. */
   colourScheme?: ColourScheme;
+  /** An elevation or section that fills its visible surfaces with the colours of the model's materials (#499), under the linework. Absent or false: the line and hatch styles alone. A view template carries it. */
+  colouredSurfaces?: boolean;
   /**
    * A plan draws the 2D plan symbol of an element or its type (a Plan / FootPrint or Annotation representation, `plan-symbols.ts`) in place
    * of the element's cut or projection. Absent or `true`: it does; `false` forces the 3D cut. The view's own, never a template's.

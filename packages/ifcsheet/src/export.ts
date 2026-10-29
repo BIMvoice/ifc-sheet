@@ -227,7 +227,7 @@ function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
  */
 function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
   const byColour = new Map<string, Polyline[]>();
-  for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
+  for (const fill of sheet.fills.filter((f) => !f.surface)) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
   const layers = [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
   // A value's hatch (#493): R12 has no pattern either, so its strokes are lines on a layer named for the pattern (`COLOUR-HATCH-PARQUET`).
   const byPattern = new Map<string, Polyline[]>();

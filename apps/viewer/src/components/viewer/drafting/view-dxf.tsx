@@ -71,7 +71,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
   const paperUnit = (view.scale ?? 100) / 1000;
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={1} height={1} overflow="visible">
-      {pens.map((p, i) => (
+      {pens.filter((p) => !p.surface).map((p, i) => (
         <Fragment key={i}>
           <path {...penTags(p.layer, p.width, !!p.dash, p.stroke ?? '#000000', p)} {...dxfIgnore(p)} d={p.d} fill="none" stroke={p.stroke ?? 'none'} strokeWidth={p.width} />
           <SchemeHatchDxf pen={p} />

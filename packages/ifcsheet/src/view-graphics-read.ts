@@ -84,6 +84,7 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
       ...(Object.keys(styles).length ? { styles } : {}),
     };
   }
+  if (typeof raw.colouredSurfaces === 'boolean') out.colouredSurfaces = raw.colouredSurfaces;
   const scheme = readColourScheme(raw.colourScheme);
   if (scheme) out.colourScheme = scheme;
   if (raw.usePlanSymbols === false) out.usePlanSymbols = false;

@@ -11,7 +11,7 @@
 import type { Pen } from './viewport-pens';
 
 /** The attribute that keeps a scheme hatch's strokes out of the DXF. */
-export const dxfIgnore = (pen: Pen): { 'data-export-ignore-dxf'?: 'true' } => (pen.schemeHatch ? { 'data-export-ignore-dxf': 'true' } : {});
+export const dxfIgnore = (pen: Pen): { 'data-export-ignore-dxf'?: 'true' } => (pen.schemeHatch || pen.surface ? { 'data-export-ignore-dxf': 'true' } : {});
 
 export function SchemeHatchDxf({ pen }: { pen: Pen }) {
   if (!pen.schemeHatch) return null;

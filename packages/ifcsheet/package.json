@@ -80,6 +80,11 @@
       "import": "./dist/colour-scheme.js",
       "default": "./dist/colour-scheme.js"
     },
+    "./surface-fills": {
+      "types": "./dist/surface-fills.d.ts",
+      "import": "./dist/surface-fills.js",
+      "default": "./dist/surface-fills.js"
+    },
     "./hatch": {
       "types": "./dist/hatch.d.ts",
       "import": "./dist/hatch.js",

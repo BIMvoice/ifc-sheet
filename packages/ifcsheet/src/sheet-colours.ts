@@ -14,6 +14,7 @@ import { orderedFills, type SchemeResult } from './colour-fills.js';
 import { schemeTitle, type SchemeEntry } from './colour-scheme.js';
 import { findPattern, hatchSegments, type HatchPattern } from './hatch.js';
 import type { Polyline, SheetText } from './sheet-graphic.js';
+import type { SurfaceFill } from './surface-fills.js';
 import type { Rect } from './sheet-frame.js';
 
 /** One filled region of a sheet: its loops (an outer boundary and any holes, each ending where it starts) filled even-odd. */
@@ -21,6 +22,8 @@ export interface SheetFill {
   loops: Polyline[];
   /** `#rrggbb`. */
   colour: string;
+  /** A coloured surface of an elevation or section (#499): painted in the PDF, kept out of the DXF, which carries the lines only. */
+  surface?: true;
   /** The pattern drawn over the colour (#493): its name, and its strokes on the paper (each a run of two points), clipped to the region. */
   hatch?: { pattern: string; strokes: Polyline[]; /** Pen of the strokes, paper mm. */ width: number };
 }
@@ -39,6 +42,20 @@ export function hatchOf(loops: readonly Polyline[], name: string, patterns: read
   // A dot (a zero-length stroke) is drawn as a speck a tenth of a millimetre long.
   const strokes = segments.map((s): Polyline => [s.a, s.a.x === s.b.x && s.a.y === s.b.y ? { x: s.b.x + 0.1, y: s.b.y } : s.b]);
   return strokes.length > 0 ? { pattern: pattern.name, strokes, width } : undefined;
+}
+
+/**
+ * The coloured surfaces of an elevation or section in one viewport (#499), under the linework and under a colour scheme's fills: one
+ * region per triangle in the order given (far to near), because a region's loops are filled even-odd and overlapping triangles would
+ * cancel out.
+ */
+export function viewportSurfaceFills(surfaces: readonly SurfaceFill[], at: (p: Point2D) => Point2D, box: Rect): SheetFill[] {
+  const out: SheetFill[] = [];
+  for (const s of surfaces) {
+    const ring = clipPolygon(s.polygon.outer.map(at), box);
+    if (ring.length >= 3) out.push({ loops: [closed(ring)], colour: s.surfaceColour, surface: true });
+  }
+  return out;
 }
 
 const closed = (pts: readonly Point2D[]): Point2D[] => [...pts, pts[0]];

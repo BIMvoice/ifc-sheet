@@ -35,6 +35,7 @@ import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
 import { schemeResultOf } from '@/project/view-colour-scheme';
+import { withSurfaceFills } from '@/project/view-surface-fills';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
@@ -121,8 +122,10 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
         const detail = resolveDetailLevel(graphics, vp.scale);
         const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(raw, graphics, renderIdGlobalId), view, graphics), detail) : null;
-        const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
+        const styledKept = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        // The coloured style of an elevation or section (#499): the visible surfaces in the materials' colours, under the linework.
+        const drawing = styledKept ? withSurfaceFills(styledKept, view, graphics, symbolMeshes, hiddenClasses(graphics)) : null;
         const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
