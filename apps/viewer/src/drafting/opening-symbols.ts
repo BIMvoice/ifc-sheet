@@ -55,7 +55,68 @@ function hull(points: Pt[]): Pt[] {
 
 /** The minimum-area rectangle around `points` (rotating the hull's edges), or null when degenerate. */
 export function minAreaRect(points: Pt[]): OpeningRect | null {
-  const h = hull(points);
+  return rectOfHull(hull(points));
+}
+
+/**
+ * The points of `xy` (x0, y0, x1, y1, ...) that can be corners of their convex hull: every point but those inside the octagon of the
+ * extreme points (least and greatest x, y, x + y and x - y) by more than a rounding margin. A point that deep inside lies inside the
+ * hull, so `hull` drops it anyway and returns the same corners without it; a door's mesh has about a thousand vertices and most of
+ * them are inside its footprint (#154).
+ */
+export function hullCandidates(xy: Float64Array, n: number): Pt[] {
+  const all = (): Pt[] => {
+    const out: Pt[] = new Array(n);
+    for (let i = 0; i < n; i++) out[i] = { x: xy[2 * i], y: xy[2 * i + 1] };
+    return out;
+  };
+  if (n < 9) return all();
+  // Extreme points, in the order they lie around the hull (counter-clockwise from the bottom): the least y, the greatest x - y, x,
+  // x + y, y, y - x, and the least x and x + y. `best` holds the greatest of each score (y negated for the least, and so on).
+  const ext = [0, 0, 0, 0, 0, 0, 0, 0];
+  const best = [-Infinity, -Infinity, -Infinity, -Infinity, -Infinity, -Infinity, -Infinity, -Infinity];
+  let big = 0;
+  for (let i = 0; i < n; i++) {
+    const x = xy[2 * i], y = xy[2 * i + 1];
+    big = Math.max(big, Math.abs(x), Math.abs(y));
+    if (-y > best[0]) { best[0] = -y; ext[0] = i; }
+    if (x - y > best[1]) { best[1] = x - y; ext[1] = i; }
+    if (x > best[2]) { best[2] = x; ext[2] = i; }
+    if (x + y > best[3]) { best[3] = x + y; ext[3] = i; }
+    if (y > best[4]) { best[4] = y; ext[4] = i; }
+    if (y - x > best[5]) { best[5] = y - x; ext[5] = i; }
+    if (-x > best[6]) { best[6] = -x; ext[6] = i; }
+    if (-x - y > best[7]) { best[7] = -x - y; ext[7] = i; }
+  }
+  const ox: number[] = [], oy: number[] = [];
+  for (const i of ext) {
+    const x = xy[2 * i], y = xy[2 * i + 1];
+    if (ox.length && ox[ox.length - 1] === x && oy[oy.length - 1] === y) continue;
+    ox.push(x); oy.push(y);
+  }
+  while (ox.length > 1 && ox[0] === ox[ox.length - 1] && oy[0] === oy[oy.length - 1]) { ox.pop(); oy.pop(); }
+  // Points all on one line or at one point leave an octagon with no inside (each edge has its reverse), so every point is kept.
+  const m = ox.length;
+  // How far inside an edge a point must be to be dropped, scaled to the coordinates so rounding cannot decide it.
+  const size = Math.max(best[2] + best[6], best[4] + best[0]);
+  const margin = 1e-9 * (size + big);
+  const ex: number[] = [], ey: number[] = [], el: number[] = [];
+  for (let k = 0; k < m; k++) {
+    const dx = ox[(k + 1) % m] - ox[k], dy = oy[(k + 1) % m] - oy[k];
+    ex.push(dx); ey.push(dy); el.push(margin * Math.hypot(dx, dy));
+  }
+  const out: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = xy[2 * i], y = xy[2 * i + 1];
+    let inside = true;
+    for (let k = 0; k < m && inside; k++) inside = ex[k] * (y - oy[k]) - ey[k] * (x - ox[k]) > el[k];
+    if (!inside) out.push({ x, y });
+  }
+  return out;
+}
+
+/** The minimum-area rectangle around a convex hull (`hull`'s), or null when degenerate. */
+function rectOfHull(h: Pt[]): OpeningRect | null {
   if (h.length < 3) return null;
   let best: { area: number; rect: OpeningRect } | null = null;
   for (let i = 0; i < h.length; i++) {
@@ -229,6 +290,64 @@ function statedFlips(op: DoorOperation, l2w: readonly number[], plane: SectionPl
 
 const KIND: Record<string, 'door' | 'window'> = { IFCDOOR: 'door', IFCDOORSTANDARDCASE: 'door', IFCWINDOW: 'window', IFCWINDOWSTANDARDCASE: 'window' };
 
+interface JoineryElement { id: number; kind: 'door' | 'window'; meshes: MeshData[]; minY: number; maxY: number }
+
+/** Each mesh list's doors and windows, by element, with the height range of all its meshes: read once per model, not once per plan (#154). */
+const joineryByMeshes = new WeakMap<readonly MeshData[], { length: number; elements: JoineryElement[] }>();
+
+function joineryElements(meshes: readonly MeshData[]): JoineryElement[] {
+  const held = joineryByMeshes.get(meshes);
+  if (held && held.length === meshes.length) return held.elements;
+  const byId = new Map<number, JoineryElement>();
+  for (const mesh of meshes) {
+    const kind = KIND[(mesh.ifcType ?? '').toUpperCase()];
+    if (!kind || (mesh.geometryClass ?? 0) === 2) continue;
+    const oy = mesh.origin?.[1] ?? 0;
+    let el = byId.get(mesh.expressId);
+    if (!el) byId.set(mesh.expressId, el = { id: mesh.expressId, kind, meshes: [], minY: Infinity, maxY: -Infinity });
+    el.meshes.push(mesh);
+    const p = mesh.positions;
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      const y = oy + p[i + 1];
+      el.minY = Math.min(el.minY, y);
+      el.maxY = Math.max(el.maxY, y);
+    }
+  }
+  const elements = [...byId.values()];
+  joineryByMeshes.set(meshes, { length: meshes.length, elements });
+  return elements;
+}
+
+/** Every vertex of `meshes` in world coordinates (the mesh's local-frame origin + its positions), flat. */
+function worldPoints(meshes: readonly MeshData[]): number[] {
+  const world: number[] = [];
+  for (const mesh of meshes) {
+    const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
+    const p = mesh.positions;
+    for (let i = 0; i + 2 < p.length; i += 3) world.push(ox + p[i], oy + p[i + 1], oz + p[i + 2]);
+  }
+  return world;
+}
+
+/** The opening `meshes` cut by the plan `plane` (horizontal, not custom) make: the minimum-area rectangle round their footprint. */
+function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): OpeningRect | null {
+  let n = 0;
+  for (const mesh of meshes) n += Math.floor(mesh.positions.length / 3);
+  const xy = new Float64Array(2 * n);
+  let k = 0;
+  for (const mesh of meshes) {
+    const [ox, , oz] = mesh.origin ?? [0, 0, 0];
+    const p = mesh.positions;
+    // `worldToDrawing` for a plan: x (negated when flipped) and z.
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      const x = ox + p[i];
+      xy[k++] = plane.flipped ? -x : x;
+      xy[k++] = oz + p[i + 2];
+    }
+  }
+  return rectOfHull(hull(hullCandidates(xy, n)));
+}
+
 /**
  * The door and window symbols of a plan cut at `plane` (a horizontal plane,
  * world units): every door / window whose meshes the cut height passes
@@ -241,46 +360,23 @@ export function openingSymbols(
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
-  const joinery = meshes.filter((mesh) => KIND[(mesh.ifcType ?? '').toUpperCase()] && (mesh.geometryClass ?? 0) !== 2);
-  // First each element's height range, over all its meshes: only the elements the cut passes through are
-  // projected, not every door and window of every storey (#154).
-  const range = new Map<number, { minY: number; maxY: number }>();
-  for (const mesh of joinery) {
-    const oy = mesh.origin?.[1] ?? 0;
-    const r = range.get(mesh.expressId) ?? { minY: Infinity, maxY: -Infinity };
-    const p = mesh.positions;
-    for (let i = 0; i + 2 < p.length; i += 3) {
-      const y = oy + p[i + 1];
-      r.minY = Math.min(r.minY, y);
-      r.maxY = Math.max(r.maxY, y);
-    }
-    range.set(mesh.expressId, r);
-  }
-  const byId = new Map<number, { kind: 'door' | 'window'; pts: Pt[]; world: number[]; l2w?: number[] }>();
-  for (const mesh of joinery) {
-    const r = range.get(mesh.expressId)!;
-    if (cut < r.minY || cut > r.maxY) continue;
-    // World = the mesh's local-frame origin + its positions.
-    const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
-    const entry = byId.get(mesh.expressId) ?? { kind: KIND[(mesh.ifcType ?? '').toUpperCase()], pts: [], world: [] };
-    entry.l2w ??= mesh.localToWorld;
-    const p = mesh.positions;
-    for (let i = 0; i + 2 < p.length; i += 3) {
-      const y = oy + p[i + 1];
-      entry.pts.push(worldToDrawing(plane, { x: ox + p[i], y, z: oz + p[i + 2] }));
-      entry.world.push(ox + p[i], y, oz + p[i + 2]);
-    }
-    byId.set(mesh.expressId, entry);
+  const byId = new Map<number, { kind: 'door' | 'window'; meshes: readonly MeshData[]; l2w?: number[] }>();
+  // Only the elements the cut passes through are projected, not every door and window of every storey (#154).
+  for (const el of joineryElements(meshes)) {
+    if (cut < el.minY || cut > el.maxY) continue;
+    let l2w: number[] | undefined;
+    for (const mesh of el.meshes) l2w ??= mesh.localToWorld;
+    byId.set(el.id, { kind: el.kind, meshes: el.meshes, l2w });
   }
   const out: OpeningSymbol[] = [];
   for (const [id, entry] of byId) {
     const configured = entry.l2w ? typedOf(id) : null;
-    const typed = configured && entry.l2w ? typedPlanSymbol(configured.spec, entry.world, entry.l2w, plane, configured.flips, configured.source !== 'model') : null;
+    const typed = configured && entry.l2w ? typedPlanSymbol(configured.spec, worldPoints(entry.meshes), entry.l2w, plane, configured.flips, configured.source !== 'model') : null;
     if (typed) {
       out.push({ id, kind: entry.kind, shapes: typed.thin, heavy: typed.heavy, dashed: typed.dashed });
       continue;
     }
-    const rect = minAreaRect(entry.pts);
+    const rect = footprintRect(entry.meshes, plane);
     if (!rect) continue;
     if (entry.kind === 'door') {
       const stated = operationOf(id);
