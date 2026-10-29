@@ -239,7 +239,12 @@ export default defineConfig({
       },
     }),
     wasm(),
-    topLevelAwait(),
+    // No vite-plugin-top-level-await here: the target is `esnext`, so top-level
+    // await is emitted natively. The plugin wrapped every chunk with a dynamic
+    // import() in one async function, which the browser parses on the main
+    // thread when it runs: about 175 ms of the app-start task (#154). The
+    // worker build below keeps it; scripts/check-tla-chunk-await.mjs fails if a
+    // chunk evaluated at app start is wrapped again.
     cesiumStaticAssets(),
     oauthCallbackRoutes(),
     // Dalux's API sends no CORS headers, so it must go through a same-origin
@@ -353,7 +358,9 @@ export default defineConfig({
           // not-yet-populated binding — "C is not a function" at module
           // scope (issue #2243). Keep radix/floating-ui in their own chunk,
           // clear of the store's async taint, so their module-init always
-          // finishes before anything can import from them.
+          // finishes before anything can import from them. (The app build has
+          // used native top-level await since #154, which orders module-init
+          // correctly; the split is kept.)
           if (id.includes('/node_modules/@radix-ui/') || id.includes('/node_modules/@floating-ui/')) return 'radix-ui';
           // three.js + addons — only the /mcp landing imports them, keep
           // the main viewer / pages off the hook.
