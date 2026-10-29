@@ -17,7 +17,7 @@ import { joineryViewDrafts, withViewDrafts, isJoineryDraftType, type JoineryView
 import type { JoineryViewDraft } from '@ifc-lite/create';
 import { useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, draftsOfView } from '@/drafting/draft-store';
-import { readShape } from '@/drafting/draft-file';
+import { readShape } from '@bimvoice/ifcsheet';
 import { layerPen } from '@/drafting/styles';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import { joineryEntry, updateJoinery } from './catalog';

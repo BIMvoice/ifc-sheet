@@ -195,10 +195,7 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
   // A joinery type's view keeps only some shapes: a command that would make another is refused, not drawn and lost (#492).
-  if (isJoineryDraftViewId(viewId) && !JOINERY_VIEW_COMMANDS.has(def.id)) {
-    say({ key: 'joinery.draft.refused' });
-    return true;
-  }
+  if (isJoineryDraftViewId(viewId) && !JOINERY_VIEW_COMMANDS.has(def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
   cancelCommand();
   endedByUser = false;
   say({ key: def.labelKey });

@@ -19,9 +19,7 @@ import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 
 import { FileDown, Layers, Maximize2, Redo2, Undo2 } from 'lucide-react';
-
 import { openStandards } from '@/project/standards-dialog-store';
-
 import { useTranslation } from '@/i18n';
 
 import { viewportState } from '@/project/viewport-state';
@@ -32,9 +30,8 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Drawing2DCanvas } from '@/components/viewer/Drawing2DCanvas';
 
 import { useFocusOnFinding } from './useFocusOnFinding';
-import { Toggle } from './Toggle';
 import { targetFitTransform, type DraftingTarget } from './drafting-target';
-export type { DraftingTarget } from './drafting-target';
+export type { DraftingTarget };
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 
 import { useViewControls } from '@/hooks/useViewControls';
