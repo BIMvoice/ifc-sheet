@@ -6,14 +6,12 @@
  * Finding a free spot for a symbol on a drawing: the first candidate place
  * whose box, grown by a margin, touches none of what is already drawn there.
  * Pure, in paper millimetres (y down), so margins are what the reader sees.
- *
- * `Box` and `overlaps` have the shape and meaning of the elevation marks'
- * slide-to-clear boxes (cross references, `drafting/cross-ref-marks.ts` on
- * its branch), so the two searches can share one helper once both are merged.
+ * The engine owns it so a site plan's north arrow and scale bar are placed
+ * by one rule on the screen, in the PDF and in the DXF (`site-marks.ts`, #430).
  */
 
-import type { Pt } from '@/drafting/types';
-import { insideRing } from './plot';
+import type { Pt } from './draft-types.js';
+import { insideRing } from './plot-geometry.js';
 
 export interface Box {
   x0: number;
@@ -26,7 +24,7 @@ export interface Box {
 export type Obstacle =
   | { kind: 'segment'; a: Pt; b: Pt }
   | { kind: 'box'; box: Box }
-  | { kind: 'area'; ring: Pt[] };
+  | { kind: 'area'; ring: readonly Pt[] };
 
 export const boxOf = (pts: readonly Pt[]): Box => ({
   x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)),
@@ -75,10 +73,10 @@ export const boxAt = (at: Pt, size: { w: number; h: number }): Box => ({ x0: at.
 /**
  * The top-left corner of the first box of `size`, among `candidates` (top-left
  * corners, in order of preference), that clears every obstacle by `margin`;
- * `fallback` when none does.
+ * `null` when none does.
  */
-export function freeSpot(size: { w: number; h: number }, candidates: readonly Pt[], obstacles: readonly Obstacle[], margin: number, fallback: Pt): Pt {
-  return candidates.find((c) => !obstacles.some((o) => hits(boxAt(c, size), o, margin))) ?? fallback;
+export function freeSpot(size: { w: number; h: number }, candidates: readonly Pt[], obstacles: readonly Obstacle[], margin: number): Pt | null {
+  return candidates.find((c) => !obstacles.some((o) => hits(boxAt(c, size), o, margin))) ?? null;
 }
 
 /**

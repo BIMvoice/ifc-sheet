@@ -30,6 +30,11 @@
       "import": "./dist/viewport-marks.js",
       "default": "./dist/viewport-marks.js"
     },
+    "./site-marks": {
+      "types": "./dist/site-marks.d.ts",
+      "import": "./dist/site-marks.js",
+      "default": "./dist/site-marks.js"
+    },
     "./readiness": {
       "types": "./dist/readiness.d.ts",
       "import": "./dist/readiness.js",
