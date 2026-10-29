@@ -86,12 +86,9 @@ describe('the ground of an elevation on a triangulated terrain', () => {
     assert.ok(wall.length > 0 && wall.length < 24, 'some wall lines are cut away or shortened');
   });
 
-  it('comes in well under a third of a second with 20 000 terrain edges and four thousand wall lines', () => {
-    const ground = strip(10_000, 100);
-    assert.equal(ground.length, 20_000);
-    const d = drawing([...ground, ...walls(100, 1000)]);
-    // One warm-up run, then the fastest of three: a shared CI runner's scheduling noise can add a few hundred milliseconds to any
-    // single run, while the pairwise rule this guards against costs seconds on every one, so the bound below still catches it.
+  /** The fastest of three runs on a warmed engine, ms, and the drawing's heavy top profile. */
+  const timed = (steps: number, wallCount: number) => {
+    const d = drawing([...strip(steps, 100), ...walls(100, wallCount)]);
     let out = drawingWithGround(d, 'elevation');
     let ms = Infinity;
     for (let run = 0; run < 3; run++) {
@@ -99,10 +96,26 @@ describe('the ground of an elevation on a triangulated terrain', () => {
       out = drawingWithGround(d, 'elevation');
       ms = Math.min(ms, performance.now() - started);
     }
-    console.log(`ground profile: ${ground.length} edges, fastest of 3: ${ms.toFixed(0)} ms`);
-    assert.equal(out.lines.filter((l) => l.ifcType === 'IfcSite').length, 10_000, 'the top chain is the profile');
-    assert.ok(out.lines.filter((l) => l.ifcType === 'IfcWall').length >= 1000, 'the walls stay');
-    // Near-linear work takes under a hundred milliseconds; the pairwise rule and a scan per bisection step take seconds.
-    assert.ok(ms < 300, `${ms.toFixed(0)} ms`);
+    return { ms, out };
+  };
+
+  // The work grows with the terrain, not with its square: this is a ratio, so it holds on any machine, loaded or not. A quadratic
+  // pass (the pairwise rule, or a scan of the profile per bisection step) takes about sixteen times as long for four times the edges.
+  it('grows with the terrain, not with its square: four times the edges take less than eight times as long', () => {
+    timed(1000, 100); // warm the engine up
+    const small = timed(2500, 250);
+    const large = timed(10_000, 1000);
+    console.log(`ground profile scaling: ${small.ms.toFixed(0)} ms for 5 000 edges, ${large.ms.toFixed(0)} ms for 20 000 (x${(large.ms / small.ms).toFixed(1)})`);
+    assert.equal(large.out.lines.filter((l) => l.ifcType === 'IfcSite').length, 10_000, 'the top chain is the profile');
+    assert.ok(large.out.lines.filter((l) => l.ifcType === 'IfcWall').length >= 1000, 'the walls stay');
+    assert.ok(large.ms < 8 * small.ms, `x${(large.ms / small.ms).toFixed(1)}`);
+  });
+
+  // A ceiling for gross regressions only: a healthy pass takes tens of milliseconds, and the pairwise rule takes seconds, so a loaded
+  // shared runner (this once measured 1412 ms in CI) stays well under it. Quadratic growth is the ratio test's to catch.
+  it('comes in well under three seconds with 20 000 terrain edges and four thousand wall lines', () => {
+    const { ms } = timed(10_000, 1000);
+    console.log(`ground profile: 20000 edges, fastest of 3: ${ms.toFixed(0)} ms`);
+    assert.ok(ms < 3000, `${ms.toFixed(0)} ms`);
   });
 });

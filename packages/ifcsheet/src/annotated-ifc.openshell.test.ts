@@ -41,6 +41,12 @@ interface Reading {
   marked: { guid: string; Mark: string }[];
 }
 
+/**
+ * Each test starts a Python process that imports ifcopenshell and validates a whole file: about 3.5 s alone, and past vitest's 5 s default on a
+ * machine running the rest of the suite (seen at 10.5 s for both). A minute is a ceiling for a hung process, not a budget.
+ */
+const OPENSHELL_TIMEOUT_MS = 60_000;
+
 const dir = mkdtempSync(join(tmpdir(), 'ifcsheet-annotated-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -74,7 +80,7 @@ describe.skipIf(!python)('IfcOpenShell reads the annotated copy', () => {
     expect(seen.new_findings).toEqual([]);
     expect(seen.annotations.map((a) => [a.name, a.storey, a.literals, a.curves])).toEqual([['Level 1', 'Level 1', ['W-9', '4,00'], 3]]);
     expect(seen.marked).toEqual([{ guid: '0wall200000000000000000', Mark: 'W-9' }]);
-  });
+  }, OPENSHELL_TIMEOUT_MS);
 
   it('FZK (IFC4): the added entities validate and each annotation is on its own storey', async () => {
     const source = new Uint8Array(readFileSync(FZK));
@@ -90,5 +96,5 @@ describe.skipIf(!python)('IfcOpenShell reads the annotated copy', () => {
       ['Roof floor', 'Dachgeschoss', 'IfcBuildingStorey', ['R1', '4,00'], 3],
     ]);
     expect(seen.annotations[0].pset).toMatchObject({ View: 'Ground floor', Scale: '1:100' });
-  });
+  }, OPENSHELL_TIMEOUT_MS);
 });
