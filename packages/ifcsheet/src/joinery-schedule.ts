@@ -23,6 +23,7 @@ import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStor
 import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
 import type { ModelRow } from './joinery-model-rows.js';
+import { fillTypedValues, markMeasuredTypes, noteMeasured } from './joinery-typed-rows.js';
 import { createHeadlessListProvider } from './list-provider.js';
 import { readModelRowCells } from './joinery-model-values.js';
 import type { ListDataProvider } from '@ifc-lite/lists';
@@ -31,7 +32,7 @@ import { doorOperationOf } from './door-operation.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
 import { statedOrMeasuredSize } from './element-size.js';
 import type { MeshData } from '@ifc-lite/geometry';
-import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
+import { TYPE_ENTRY_PREFIX, fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
 
@@ -276,7 +277,7 @@ export function joineryScheduleData(models: Iterable<ScheduleModel>, project: Jo
 
 /** The model's rows, in the order and with the marks the models give them. */
 function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>, modelRows: readonly ModelRow[]): ScheduleData {
-  const byKey = new Map<string, ScheduleEntry>();
+  const byKey = new Map<string, ScheduleEntry>(), measuredOf = new Map<string, { width: number; height: number }>();
   const levelElevation = new Map<string, number>();
   const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
   const fromCatalogue = new Map(project.joineryTypes.map((spec) => [spec.id, spec]));
@@ -341,6 +342,7 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
         const entry = byKey.get(mappedSpec.id) ?? { key: mappedSpec.id, kind: mappedSpec.kind, spec: mappedSpec, mark: mappedSpec.mark, name: mappedSpec.name, width: mappedSpec.width, height: mappedSpec.height, counts: {}, total: 0, occurrences: [] };
         byKey.set(mappedSpec.id, entry);
         count(entry, id);
+        if (mappedSpec.id.startsWith(TYPE_ENTRY_PREFIX)) noteMeasured(entry, measuredOf, statedOrMeasuredSize(real(attrs[9]) * unit, real(attrs[8]) * unit, () => model.meshesOf?.(id)));
         continue;
       }
       // No OverallWidth / OverallHeight (a non-parametric window): the side the IFC does not state is measured from its body, in its own frame (#485).
@@ -370,6 +372,7 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
       }
     }
   }
+  fillTypedValues(byKey.values(), modelRows);
   // Catalogue types not placed yet still belong in the schedule (with no count).
   for (const spec of fromCatalogue.values()) {
     if (!spec.id || byKey.has(spec.id) || !wanted(spec.kind)) continue;
@@ -379,7 +382,7 @@ function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind
     .filter((e) => e.total > 0 || e.spec)
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
-  markUntyped(entries);
+  markUntyped(entries); markMeasuredTypes(entries, measuredOf);
   for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) {
     e.measuredWidth = e.occurrences.every((o) => o.measuredWidth);
     e.measuredHeight = e.occurrences.every((o) => o.measuredHeight);

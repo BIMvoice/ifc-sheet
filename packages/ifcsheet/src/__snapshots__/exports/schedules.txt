@@ -21,6 +21,8 @@ BoqTypeLine: type (type-only)
 BoqUnit: type (type-only)
 BoqWordKey: type (type-only)
 COUNT_QUANTITY: value
+CUSTOM_KEYS: value
+CUSTOM_PSET: value
 CheckEntry: type (type-only)
 CheckOccurrence: type (type-only)
 CheckPart: type (type-only)
@@ -55,6 +57,7 @@ ListScheduleDef: type (type-only)
 ListScheduleTable: type (type-only)
 ListTableSource: type (type-only)
 MARK_SCHEMES: value
+MAX_CUSTOM_PROPS: value
 MAX_JOINERY_OVERRIDES: value
 MAX_KEPT_APART: value
 MAX_LABEL_LENGTH: value
@@ -124,6 +127,7 @@ SubReport: type (type-only)
 SubReportCheck: type (type-only)
 SubReportFilter: type (type-only)
 SubReportFix: type (type-only)
+TYPE_ENTRY_PREFIX: value
 TagWrite: type (type-only)
 TaggedEntry: type (type-only)
 TextHolder: type (type-only)
@@ -141,12 +145,15 @@ boqTableCells: value
 boqTypeLabel: value
 canSplit: value
 checkSubReports: value
+cleanCustomProps: value
 cleanText: value
 clearJoineryOverride: value
 clearListOverride: value
 computeBoq: value
 contentOf: value
 csvDelimiter: value
+customPropNames: value
+customValueOf: value
 declared: value
 describeBoqProblem: value
 describeReadiness: value
@@ -159,6 +166,7 @@ exportCsv: value
 fillTemplate: value
 filterPropertyNames: value
 filterReview: value
+fireOf: value
 fitFootprint: value
 fitToElement: value
 followedTags: value
@@ -213,6 +221,7 @@ propertyValueText: value
 quantityDimension: value
 readBoqArticle: value
 readBoqArticles: value
+readCustomProps: value
 readJoineryMapping: value
 readJoineryOverrides: value
 readKeptApart: value
@@ -259,6 +268,7 @@ textCellText: value
 textOwner: value
 textRowId: value
 textRowsOf: value
+thermalOf: value
 tidy: value
 typeIdentityOf: value
 typeLabel: value

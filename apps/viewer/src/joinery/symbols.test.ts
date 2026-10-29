@@ -5,7 +5,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec, type JoinerySpec } from '@ifc-lite/create';
+import { specFromOpening } from '@bimvoice/ifcsheet/project';
 import { elevationSymbol, openingMarks, planSymbol, sectionSymbol, strokeBounds } from './symbols';
+import { headArch } from './head-shape';
 
 const R = { x0: 0, x1: 1, z0: 0, z1: 2 };
 
@@ -108,4 +110,19 @@ describe('section symbol', () => {
     assert.ok(b.min.x < spec.frame.offset - spec.frame.depth / 2 - 0.1);
     assert.equal(strokes.filter((s) => s.weight === 'thin').length, 1);
   });
+});
+
+describe('an arched head with a fixed light above the leaves (#448)', () => {
+  // A round head on a wide opening and a pointed one: the springing line is below the transom, so the leaves reach into the arch.
+  for (const [width, height, head] of [[1.6, 1.5, { shape: 'round' as const }], [1.2, 1.8, { shape: 'pointed' as const }]] as const) {
+    it(`${head.shape} ${width} x ${height}: no leaf, sash or opening line is drawn outside the frame's inner arch`, () => {
+      const spec = { ...specFromOpening('window', { width, height }, { operations: ['tilt-turn-left', 'tilt-turn-right'], fanlight: true }), head };
+      const arch = headArch(spec)!;
+      assert.ok(arch.springing < spec.height * 0.75, 'the arch springs below the transom');
+      const strokes = elevationSymbol(spec);
+      let worst = 0;
+      for (const s of strokes.slice(1)) for (const p of s.pts) worst = Math.max(worst, p.y - arch.z(p.x, spec.frame.width));
+      assert.ok(worst < 1e-6, `a point is ${(worst * 1000).toFixed(0)} mm above the inner arch`);
+    });
+  }
 });

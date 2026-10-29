@@ -32,6 +32,7 @@ import {
   isDoorLeaf, joineryBoxes, normalisedPanels, panelRect, swingsInPlan,
   type CellRect, type JoineryBox, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
+import { archPoints, headArch, type HeadArch } from './head-shape';
 
 export interface P2 { x: number; y: number }
 
@@ -239,15 +240,63 @@ function hardware(spec: JoinerySpec, p: JoineryPanel, r: CellRect): JoineryStrok
   return out;
 }
 
+/** Half the width of the arch `inset` metres inside the head at height `y`: the arch's line is at or above `y` within it. */
+function archHalfWidth(arch: HeadArch, y: number, inset: number, a: number): number {
+  if (arch.z(0, inset) < y) return 0;
+  let lo = 0, hi = a;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (arch.z(m, inset) >= y) lo = m; else hi = m; }
+  return lo;
+}
+
+/**
+ * A panel's rectangle clipped by the arch `inset` metres inside the head: its top follows the arch where the arch is lower than the
+ * rectangle's top, and its sides stop where the arch meets its bottom. Null when the arch leaves nothing of it. A leaf under a fanlight
+ * reaches into the arch too when the arch springs below the transom.
+ */
+function archedRect(arch: HeadArch, r: CellRect, inset: number, a: number, weight: StrokeWeight): JoineryStroke | null {
+  const half = archHalfWidth(arch, r.z0, inset, a);
+  const x0 = Math.max(r.x0, -half), x1 = Math.min(r.x1, half);
+  if (x1 - x0 < 1e-6) return null;
+  const top = archPoints(arch, x0, x1, inset).map((q) => ({ x: q.x, y: Math.max(r.z0, Math.min(q.y, r.z1)) }));
+  return { pts: [{ x: x0, y: r.z0 }, { x: x1, y: r.z0 }, ...top], closed: true, weight };
+}
+
+/** A point of a panel's opening symbol brought inside the arch: a point on the panel's top edge drops onto the arch, any other moves in along its height. */
+function intoArch(arch: HeadArch, q: P2, r: CellRect, inset: number, a: number): P2 {
+  const y = q.y >= r.z1 - 1e-9 ? Math.max(r.z0, Math.min(arch.z(q.x, inset), r.z1)) : q.y;
+  if (y <= arch.z(q.x, inset) + 1e-9) return { x: q.x, y };
+  const half = archHalfWidth(arch, y, inset, a);
+  return { x: Math.sign(q.x) * Math.min(Math.abs(q.x), half), y };
+}
+
 export function elevationSymbol(spec: JoinerySpec, options: ElevationOptions = {}): JoineryStroke[] {
-  const out: JoineryStroke[] = [rect(-spec.width / 2, 0, spec.width / 2, spec.height, 'outline')];
+  const arch = headArch(spec);
+  const f = spec.frame.width;
+  const outer = arch
+    ? { pts: [{ x: -spec.width / 2, y: 0 }, { x: spec.width / 2, y: 0 }, ...archPoints(arch, -spec.width / 2, spec.width / 2, 0, 48)], closed: true, weight: 'outline' as const }
+    : rect(-spec.width / 2, 0, spec.width / 2, spec.height, 'outline');
+  const out: JoineryStroke[] = [outer];
   for (const p of normalisedPanels(spec)) {
     const r = panelRect(spec, p);
-    out.push(rect(r.x0, r.z0, r.x1, r.z1, 'outline'));
+    // A panel that reaches above the frame's inner arch follows it: the top row, and a row under a fanlight when the arch springs below
+    // the transom. Its outline, its sash and its opening symbol are clipped by the arch.
+    const a = spec.width / 2;
+    const arched = arch !== null && r.z1 > Math.min(arch.z(r.x0, f), arch.z(r.x1, f)) + 1e-9;
     const sash = p.operation !== 'fixed' && (!isDoorLeaf(p.operation) || p.glazed);
     const inner = sash ? { x0: r.x0 + spec.sash.width, x1: r.x1 - spec.sash.width, z0: r.z0 + spec.sash.width, z1: r.z1 - spec.sash.width } : r;
-    if (sash) out.push(rect(inner.x0, inner.z0, inner.x1, inner.z1, 'thin'));
-    out.push(...openingMarks(p.operation, r, options.side === 'exterior', options.convention));
+    const marks = openingMarks(p.operation, r, options.side === 'exterior', options.convention);
+    if (!arched) {
+      out.push(rect(r.x0, r.z0, r.x1, r.z1, 'outline'));
+      if (sash) out.push(rect(inner.x0, inner.z0, inner.x1, inner.z1, 'thin'));
+      out.push(...marks);
+    } else {
+      const panel = archedRect(arch, r, f, a, 'outline');
+      if (!panel) continue;
+      out.push(panel);
+      const sashed = sash ? archedRect(arch, inner, f + spec.sash.width, a, 'thin') : null;
+      if (sashed) out.push(sashed);
+      out.push(...marks.map((m) => ({ ...m, pts: m.pts.map((q) => intoArch(arch, q, r, f, a)) })));
+    }
     if (options.hardware) out.push(...hardware(spec, p, r));
   }
   if (spec.kind === 'window' && spec.board.exterior > 0 && options.side === 'exterior') {

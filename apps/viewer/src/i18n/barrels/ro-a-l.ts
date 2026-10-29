@@ -38,6 +38,7 @@ import { issueRo } from '../catalogues/issue.ro';
 import { joineryRo } from '../catalogues/joinery.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
 import { joineryCellRo } from '../catalogues/joinery-cell.ro';
+import { joineryHeadRo } from '../catalogues/joinery-head.ro';
 import { landxmlRo } from '../catalogues/landxml.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
@@ -79,6 +80,7 @@ export const roAL = {
   ...joineryRo,
   ...keyboardShortcutsRo,
   ...joineryCellRo,
+  ...joineryHeadRo,
   ...landxmlRo,
   ...listScheduleRo,
 } as const;
