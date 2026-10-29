@@ -1,0 +1,3 @@
+gantt.workCalendar.toggle.ariaLabel
+gantt.workCalendar.toggle.tooltipOff
+gantt.workCalendar.toggle.tooltipOn

@@ -1,0 +1,3 @@
+textAnnotationEditor.hint
+textAnnotationEditor.inputLabel
+textAnnotationEditor.placeholder

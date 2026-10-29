@@ -1,0 +1,5 @@
+splitTool.barLabel
+splitTool.cutDistanceAria
+splitTool.failed
+splitTool.hint
+splitTool.unitMetres

@@ -1,0 +1,8 @@
+resultView.actions
+resultView.coverage
+resultView.evidence
+resultView.incomplete
+resultView.models
+resultView.population
+resultView.region
+resultView.source

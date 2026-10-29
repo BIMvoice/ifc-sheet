@@ -1,0 +1,6 @@
+assistantUsage.budgetExhausted
+assistantUsage.freeChecking
+assistantUsage.freeRemaining
+assistantUsage.freeUnknown
+assistantUsage.receiptTokens
+assistantUsage.receiptUnreported

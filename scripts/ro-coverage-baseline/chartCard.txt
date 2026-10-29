@@ -1,0 +1,12 @@
+chartCard.copyName
+chartCard.dragToMoveTitle
+chartCard.duplicateAriaLabel
+chartCard.duplicateChartTitle
+chartCard.editAriaLabel
+chartCard.editChartTitle
+chartCard.frameAriaLabel
+chartCard.frameTitle
+chartCard.noSourceFilterMatches
+chartCard.nothingToBucket
+chartCard.removeAriaLabel
+chartCard.removeChartTitle

@@ -1,0 +1,5 @@
+modelTagRuleEditor.noTagsYet
+modelTagRuleEditor.pickTagsAriaLabel
+modelTagRuleEditor.pickTagsPlaceholder
+modelTagRuleEditor.selectedCount
+modelTagRuleEditor.unresolvedWarning

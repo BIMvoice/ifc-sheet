@@ -1,0 +1,10 @@
+filterGroups.addGroup
+filterGroups.addGroupTitle
+filterGroups.groupCountOr
+filterGroups.groupLabel
+filterGroups.limit
+filterGroups.noRules
+filterGroups.readbackTitle
+filterGroups.removeGroupAriaLabel
+filterGroups.ruleCount
+filterGroups.tabsAriaLabel
