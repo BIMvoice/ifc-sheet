@@ -30,7 +30,7 @@ import { dirname, join, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
-const CALL = 'import.meta.glob(';
+const CALL = 'import.meta.glob';
 const OPTION_KEYS = new Set(['eager', 'import']);
 
 /** The text between the parenthesis at `open` and its match, skipping strings and comments; -1 when unbalanced. */
@@ -53,6 +53,30 @@ function closingParen(source, open) {
     }
   }
   return -1;
+}
+
+/**
+ * The index of the `(` that opens a `import.meta.glob` call whose name ends at `from`, past an optional type argument
+ * list (`import.meta.glob<Foo>(`: Node 24 hands the hook TypeScript source with the generics still in it, Node 22 with
+ * them stripped); -1 when what follows is not a call.
+ */
+function callParen(code, from) {
+  let i = from;
+  while (/\s/.test(code[i] ?? '')) i += 1;
+  if (code[i] === '<') {
+    let depth = 0;
+    for (; i < code.length; i += 1) {
+      if (code[i] === '<') depth += 1;
+      else if (code[i] === '>' && code[i - 1] !== '=') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    if (i >= code.length) return -1;
+    i += 1;
+    while (/\s/.test(code[i] ?? '')) i += 1;
+  }
+  return code[i] === '(' ? i : -1;
 }
 
 /** `[patterns, options]` when the argument text is literals in the supported subset, else null. */
@@ -152,7 +176,8 @@ export function globCalls(source) {
   const calls = [];
   const code = codeOnly(source);
   for (let at = code.indexOf(CALL); at >= 0; at = code.indexOf(CALL, at + CALL.length)) {
-    const open = at + CALL.length - 1;
+    const open = callParen(code, at + CALL.length);
+    if (open < 0) continue;
     const close = closingParen(source, open);
     if (close < 0) break;
     const parsed = parseGlobArguments(source.slice(open + 1, close));

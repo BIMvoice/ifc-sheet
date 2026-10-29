@@ -48,4 +48,14 @@ describe('import.meta.glob under the test runner', () => {
     assert.deepEqual(calls.map((c: { patterns: string[]; options: { eager: boolean } }) => [c.patterns, c.options.eager]), [[['./entries/*.ts', '!./entries/*.skip.ts'], true]]);
     assert.deepEqual(expandGlob(REGISTRY, ['./entries/*.ts', '!./entries/*.skip.ts']).map(([key]: [string, string]) => key), ['./entries/a.ts', './entries/b.ts']);
   });
+
+  it('rewrites a call that still carries its type arguments, as Node 24 hands the hook the TypeScript source', async () => {
+    // The real module that failed all eight CI shards on Node 24: its call is `import.meta.glob<{ ... }>([...], { eager: true })`.
+    // Importing it is the test: the old hook left that call alone and the import threw `import.meta.glob is not a function`.
+    const registered = await import('../project/fields/registered');
+    assert.ok(Object.keys(registered).length > 0);
+    const spaced = "const a = import.meta.glob < Record<string, () => void> > ('./entries/*.ts');";
+    assert.equal(transformImportMetaGlob(spaced, new URL('./x.ts', import.meta.url).href)?.includes('import.meta.glob'), false);
+    assert.equal(globCalls('const a = import.meta.globber(); const b = import.meta.glob;').length, 0);
+  });
 });

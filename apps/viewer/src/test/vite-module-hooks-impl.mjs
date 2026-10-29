@@ -98,7 +98,7 @@ export async function load(url, context, nextLoad) {
   // load-bearing for code that does not need it, and hide the next real break.
   // `import.meta.glob` (a registry finding its one-file-per-entry modules) is
   // rewritten as Vite would, for the subset `import-meta-glob.mjs` supports.
-  const globbed = text.includes('import.meta.glob(') ? transformImportMetaGlob(text, url) : null;
+  const globbed = text.includes('import.meta.glob') ? transformImportMetaGlob(text, url) : null;
   const body = globbed ?? text;
   if (!body.includes('import.meta.env')) return globbed === null ? loaded : { ...loaded, source: body, format: 'module', shortCircuit: true };
 
