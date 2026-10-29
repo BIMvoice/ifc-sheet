@@ -9,19 +9,24 @@
  * numbering moves the tags of the elements the schedule had numbered, so the plan tags say what the schedule says.
  */
 
-import { useEffect, useState } from 'react';
-import { MAX_START, orderedRows, SORTS, symbolsShown, textOwner, type SortBy } from '@bimvoice/ifcsheet';
+import { useEffect, useMemo, useState } from 'react';
+import { MAX_START, modelRowLabel, orderedRows, SORTS, symbolsShown, textOwner, type SortBy } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { isJoinerySchedule } from '@/project/schedule-fit';
-import { moveRow, resetContent, setNumbering, setRowShown, setSort, setSymbolShown } from '@/joinery/schedule-content-actions';
+import { addModelRow, moveRow, resetContent, setNumbering, setRowShown, setSort, setSymbolShown } from '@/joinery/schedule-content-actions';
 import type { ProjectSchedule } from '@/project/types';
 import { toast } from '@/components/ui/toast';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 import { CardSection } from './CardSection';
+import { useViewerStore } from '@/store';
+import { scheduleData, type ScheduleKind } from '@/joinery/schedule-data';
+import { scheduleDataOf } from '@/joinery/schedule-split';
+import { joineryModelFacts } from '@/joinery/joinery-model-facts';
+import { AddColumnPicker } from '../lists/ListScheduleColumns';
 import { contentSummary } from './card-section-summary';
 
-const ROW_LABELS: Record<string, TranslationKey> = {
+export const ROW_LABELS: Record<string, TranslationKey> = {
   name: 'schedule.row.name', size: 'schedule.row.size', operation: 'schedule.row.operation', sill: 'schedule.row.sill',
   levels: 'wall.content.row.levels', total: 'schedule.row.total', u: 'schedule.row.uValue', fire: 'schedule.row.fire',
 };
@@ -48,7 +53,13 @@ function NumberField({ value, label, fallback, disabled, onCommit }: { value: nu
 export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule }) {
   const { t } = useTranslation();
   const schedules = useProjectStore((s) => s.schedules ?? []);
-  if (!isJoinerySchedule(schedule)) return null;
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
+  const models = useViewerStore((s) => s.models);
+  const joinery = isJoinerySchedule(schedule);
+  // What the schedule's elements and types carry in the models, for the picker (#446); mutationVersion / models: what the read depends on.
+  // Cut by the schedule's own filter (`scheduleDataOf`), so a sub-report or a split schedule offers what ITS elements carry, not the building's.
+  const found = useMemo(() => (joinery ? joineryModelFacts(scheduleDataOf(schedule, () => scheduleData(schedule.kind as ScheduleKind), schedules)) : null), [joinery, schedule, schedules, mutationVersion, models]);
+  if (!joinery) return null;
   const owner = textOwner(schedules, schedule);
   if (!owner) return null;
   const inherited = owner.id !== schedule.id ? owner : null;
@@ -57,7 +68,8 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
   const rows = orderedRows(content, typed.map((r) => r.id));
   const label = (id: string): string => {
     const key = ROW_LABELS[id];
-    return key ? t(key) : typed.find((r) => `text:${r.id}` === id)?.label ?? id;
+    const own = content?.properties?.find((r) => r.id === id);
+    return key ? t(key) : own ? modelRowLabel(own, content?.properties ?? []) : typed.find((r) => `text:${r.id}` === id)?.label ?? id;
   };
   const sequence = content?.numbering?.marks === 'sequence';
   // The tags of elements the schedule had numbered follow a change of marks; where they cannot (Edit mode is off), say so.
@@ -78,9 +90,19 @@ export function ScheduleContentCard({ schedule }: { schedule: ProjectSchedule })
               </label>
               <button type="button" className={WALL_PILL} aria-label={t('wall.content.up', { row: label(r.id) })} disabled={i === 0} onClick={() => moveRow(schedule.id, r.id, -1)}>↑</button>
               <button type="button" className={WALL_PILL} aria-label={t('wall.content.down', { row: label(r.id) })} disabled={i === rows.length - 1} onClick={() => moveRow(schedule.id, r.id, 1)}>↓</button>
+              <button type="button" className={WALL_PILL} disabled={!r.shown} aria-label={t('joineryCell.removeColumn', { name: label(r.id) })} onClick={() => setRowShown(schedule.id, r.id, false)}>×</button>
             </li>
           ))}
         </ul>
+        {/* The same choice the list schedules offer (#446): the columns the table does not print, to add back. */}
+        <AddColumnPicker
+          facts={{ classes: new Map(), storeys: [], properties: found?.properties ?? new Map(), quantities: found?.quantities ?? new Map(), attributes: rows.filter((r) => !r.shown).map((r) => r.id) }}
+          taken={new Set((content?.properties ?? []).map((r) => r.id))} omitClassification label={t('joineryCell.addColumn')} labelOf={label}
+          onAdd={(column) => {
+            if (column.source === 'attribute') setRowShown(schedule.id, column.propertyName, true);
+            else if (column.source === 'property' || column.source === 'quantity') { if (!addModelRow(schedule.id, { source: column.source, psetName: column.psetName, propertyName: column.propertyName })) toast.error(t('joineryCell.tooManyRows')); }
+          }}
+        />
       </fieldset>
 
       <fieldset className="m-0 mt-3 border-0 p-0">

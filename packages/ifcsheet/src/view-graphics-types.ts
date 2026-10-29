@@ -116,6 +116,11 @@ export interface ViewGraphics {
   colourScheme?: ColourScheme;
   /** An elevation or section that fills its visible surfaces with the colours of the model's materials (#499), under the linework. Absent or false: the line and hatch styles alone. A view template carries it. */
   colouredSurfaces?: boolean;
+  /**
+   * A plan draws the 2D plan symbol of an element or its type (a Plan / FootPrint or Annotation representation, `plan-symbols.ts`) in place
+   * of the element's cut or projection. Absent or `true`: it does; `false` forces the 3D cut. The view's own, never a template's.
+   */
+  usePlanSymbols?: boolean;
   /** Elements hidden in this view, by GlobalId (#33). The 3D view's hide / isolate state is not followed. */
   hiddenElements?: GlobalId[];
   /** Per-element overrides, by GlobalId (#32): the most specific layer, over the category's. */

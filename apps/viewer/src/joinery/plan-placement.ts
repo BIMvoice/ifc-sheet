@@ -30,9 +30,13 @@ function unit(v: V3): V3 | null {
   return l > 1e-9 ? [v[0] / l, v[1] / l, v[2] / l] : null;
 }
 
-/** `world`: the element's vertices (flat x, y, z, renderer frame); `flips`: how its mapped body is turned (`emitMappedBody`). */
+/**
+ * `world`: the element's vertices (flat x, y, z, renderer frame); `flips`: how its mapped body is turned (`emitMappedBody`).
+ * `windowSwings`: the side-hung and tilt-turn leaves of a window are drawn open too, the leaf line and its dashed arc (#448); a door's
+ * always are.
+ */
 export function typedPlanSymbol(
-  spec: JoinerySpec, world: readonly number[], localToWorld: readonly number[], plane: SectionPlaneConfig, flips = 0,
+  spec: JoinerySpec, world: readonly number[], localToWorld: readonly number[], plane: SectionPlaneConfig, flips = 0, windowSwings = false,
 ): TypedPlanSymbol | null {
   const m = localToWorld;
   const ex = unit([m[0], m[4], m[8]]);
@@ -71,7 +75,7 @@ export function typedPlanSymbol(
     return worldToDrawing(plane, { x: w[0], y: w[1], z: w[2] });
   };
   const out: TypedPlanSymbol = { thin: [], heavy: [], dashed: [] };
-  for (const s of planSymbol(spec, { cutZ })) {
+  for (const s of planSymbol(spec, { cutZ, windowSwings })) {
     const shape: DraftShape = { type: 'polyline', pts: s.pts.map(toDrawing), closed: !!s.closed };
     (s.dashed ? out.dashed : s.weight === 'cut' ? out.heavy : out.thin).push(shape);
   }

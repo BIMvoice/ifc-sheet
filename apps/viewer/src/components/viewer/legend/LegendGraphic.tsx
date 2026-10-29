@@ -59,14 +59,15 @@ function useLegendEnv(): LegendEnv {
   const textStyles = useProjectStore((s) => s.textStyles);
   const byView = useViewDrawings((s) => s.byView);
   const meshes = useDrawingRuntime().geometryResult?.meshes;
+  const viewTemplates = useProjectStore((s) => s.viewTemplates);
   // The viewer store: material names are read from the loaded models, which edits and loads change.
   const models = useViewerStore((s) => s.models);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   return useMemo(
-    () => ({ labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes }),
+    () => ({ labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes, viewTemplates }),
     // models / mutationVersion do not appear in the env but must make a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes, models, mutationVersion],
+    [labels, views, sheets, drafts, layers, table, annotationTypes, symbols, patterns, textStyles, byView, meshes, viewTemplates, models, mutationVersion],
   );
 }
 

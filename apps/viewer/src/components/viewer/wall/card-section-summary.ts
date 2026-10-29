@@ -27,9 +27,11 @@ export const filterActive = (filter: SubReportFilter | undefined): boolean => !!
 export function contentSummary(content: ScheduleContent | undefined, textIds: readonly string[], t: T): Summary {
   const rows = orderedRows(content, textIds);
   const hidden = rows.filter((r) => !r.shown).length;
-  const natural = orderedRows(undefined, textIds);
+  // The default order: the built-in rows, then the properties the schedule lists, then the text rows.
+  const natural = orderedRows({ properties: content?.properties }, textIds);
   const parts: string[] = [];
   if (hidden > 0) parts.push(t('wall.section.content.hidden', { count: hidden }));
+  if (content?.properties?.length) parts.push(t('wall.section.content.properties', { count: content.properties.length }));
   if (rows.some((r, i) => r.id !== natural[i].id)) parts.push(t('wall.section.content.reordered'));
   const sort = content?.sort;
   if (sort) parts.push(t(sort.descending ? 'wall.section.content.sortedReverse' : 'wall.section.content.sorted', { by: t(`wall.section.content.by.${sort.by}` as TranslationKey) }));

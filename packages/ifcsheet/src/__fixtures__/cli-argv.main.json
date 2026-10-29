@@ -168,7 +168,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -198,7 +198,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -208,7 +208,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -229,7 +229,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check takes one model, --project, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--json] [--include-far-elements]\n"
+  "stderr": "ifcsheet check takes one model, --project, --ids, --json and --include-far-elements only: ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]\n"
  },
  {
   "argv": [
@@ -237,7 +237,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard and --json only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]\n"
  },
  {
   "argv": [
@@ -257,7 +257,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard and --json only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]\n"
  },
  {
   "argv": [
@@ -277,7 +277,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet materials takes one model, --project and --json only: ifcsheet materials <model.ifc> [--project <file>] [--json]\n"
+  "stderr": "ifcsheet materials takes one model, --project, --standard and --json only: ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]\n"
  },
  {
   "argv": [
@@ -696,7 +696,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet check has no --standard; it is an option of build (known: ro, de).\n"
+  "stderr": "ifcsheet check has no --standard; it is an option of build and materials (known: ro, de).\n"
  },
  {
   "argv": [
@@ -707,7 +707,7 @@
   ],
   "code": 2,
   "stdout": "",
-  "stderr": "ifcsheet list has no --standard; it is an option of build (known: ro, de).\n"
+  "stderr": "ifcsheet list has no --standard; it is an option of build and materials (known: ro, de).\n"
  },
  {
   "argv": [

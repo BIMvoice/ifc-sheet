@@ -44,6 +44,7 @@ export const viewTemplatesRo = {
   'wall.tpl.detail.scale': 'După scară',
   'wall.tpl.delete': 'Șterge șablonul {name}; desenele lui își păstrează grafica',
   'viewGraphics.detail': 'Nivel de detaliu',
+  'viewGraphics.planSymbols': 'Folosește simbolurile de plan din model',
   'viewGraphics.detail.auto': 'După scară ({level})',
   'viewGraphics.detail.template': 'Din șablon ({level})',
   'viewGraphics.detail.coarse': 'Grosier (doar contururi)',

@@ -20,8 +20,8 @@
  * its own `graphics` object unchanged: a project from before templates draws exactly as it did.
  *
  * What a template carries: the graphic override preset, the structural grid, the per-category graphics (visibility, line
- * colour, cut fill, line weight, cut hatch) and its class and material mapping (`styleRules`, #31). What it does not, and the view keeps whatever its template: `colourScheme` (a
- * scheme paints one view's rooms or elements by one property, and has a legend of its own, #92) and `phases` (a survey or
+ * colour, cut fill, line weight, cut hatch) and its class and material mapping (`styleRules`, #31). A house style of room fills (`colourScheme`, #92, #493: the property, the colours and the hatch per value) rides with it, and
+ * the view's own scheme, when it has one, wins over the template's whole (`activeColourScheme`, `colour-fills.ts`). What it does not, and the view keeps whatever its template: `phases` (a survey or
  * demolition view is a purpose of one view, not a house style), and the drafting layers a view hides (layer ids belong to the
  * project's drafting, not to a kind of drawing).
  */
@@ -34,7 +34,7 @@ export type ViewTemplateKind = 'plan' | 'section' | 'elevation';
 export const VIEW_TEMPLATE_KINDS: readonly ViewTemplateKind[] = ['plan', 'section', 'elevation'];
 
 /** The part of a view's graphics a template carries. */
-export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories' | 'styleRules' | 'detailLevel' | 'colouredSurfaces'>;
+export type TemplateGraphics = Pick<ViewGraphics, 'presetId' | 'grid' | 'categories' | 'styleRules' | 'colourScheme' | 'detailLevel' | 'colouredSurfaces'>;
 
 export interface ProjectViewTemplate {
   id: string;
@@ -87,6 +87,8 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Res
   const grid = template.grid || own?.grid ? { ...template.grid, ...own?.grid } : undefined;
   const presetId = own?.presetId !== undefined ? own.presetId : template.presetId;
   const rules = template.styleRules?.length ? template.styleRules : undefined;
+  // The view's own scheme replaces the template's whole: half of one property's colours under another's would mean nothing.
+  const colourScheme = own?.colourScheme ?? template.colourScheme;
   const detailLevel = own?.detailLevel ?? template.detailLevel;
   const coloured = own?.colouredSurfaces !== undefined ? own.colouredSurfaces : template.colouredSurfaces;
   return {
@@ -97,11 +99,12 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Res
     ...(presetId !== undefined ? { presetId } : {}),
     ...(own?.phases ? { phases: own.phases } : {}),
     ...(categories ? { categories } : {}),
-    ...(own?.colourScheme ? { colourScheme: own.colourScheme } : {}),
+    ...(colourScheme ? { colourScheme } : {}),
     // Single elements are the view's own, never a template's (#32, #33): they ride over whatever the template says.
     ...(own?.hiddenElements ? { hiddenElements: own.hiddenElements } : {}),
     ...(own?.elements ? { elements: own.elements } : {}),
     ...(own?.hiddenLines ? { hiddenLines: own.hiddenLines } : {}),
+    ...(own?.usePlanSymbols === false ? { usePlanSymbols: false } : {}),
   };
 }
 
@@ -149,20 +152,23 @@ export function templateGraphicsOf(graphics: ViewGraphics | undefined): Template
   if (graphics?.grid) out.grid = structuredClone(graphics.grid);
   if (graphics?.categories) out.categories = structuredClone(graphics.categories);
   if (graphics?.styleRules?.length) out.styleRules = structuredClone(graphics.styleRules);
+  if (graphics?.colourScheme) out.colourScheme = structuredClone(graphics.colourScheme);
   if (graphics?.detailLevel) out.detailLevel = graphics.detailLevel;
   if (graphics?.colouredSurfaces !== undefined) out.colouredSurfaces = graphics.colouredSurfaces;
   return out;
 }
 
-/** What a view keeps of its graphics when its overrides are reset: the parts no template carries. */
+/** What a view keeps of its graphics when its overrides are reset: the parts no template carries, and its own colour scheme. */
 export function untemplatedGraphics(graphics: ViewGraphics | undefined): ViewGraphics | undefined {
   const out: ViewGraphics = {};
   if (graphics?.phases) out.phases = graphics.phases;
+  // Its own scheme stays with the view too: resetting its overrides or applying a template does not take its colours away (a template's scheme is the fallback under it).
   if (graphics?.colourScheme) out.colourScheme = graphics.colourScheme;
   // Single elements stay with the view: a template cannot carry them, so applying or resetting one never drops them (#32, #33).
   if (graphics?.hiddenElements) out.hiddenElements = graphics.hiddenElements;
   if (graphics?.elements) out.elements = graphics.elements;
   if (graphics?.hiddenLines) out.hiddenLines = graphics.hiddenLines;
+  if (graphics?.usePlanSymbols === false) out.usePlanSymbols = false;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

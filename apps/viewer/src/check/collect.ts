@@ -11,6 +11,7 @@ import { useProjectStore } from '@/project/project-store';
 import { snapshotElements } from '@/whatchanged/snapshot';
 import { effectiveTitleBlock } from '@/project/title-block-model';
 import { useViewerStore } from '@/store';
+import { scheduleData } from '@/joinery/schedule-data';
 import { useViewDrawings } from '@/project/view-drawings';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
@@ -45,9 +46,9 @@ function lastKnown(guid: string): { name?: string; className?: string } | undefi
 const modelsLoaded = (): boolean => [...useViewerStore.getState().models.values()].some((m) => m.ifcDataStore);
 
 export function collectInput(): CheckInput {
-  const { views, sheets, drafts, name, schedules } = useProjectStore.getState();
+  const { views, sheets, drafts, name, schedules, joineryOverrides } = useProjectStore.getState();
   const titleBlock = effectiveTitleBlock();
-  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
+  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], ...(modelsLoaded() && joineryOverrides?.length ? { joinery: { overrides: joineryOverrides, entries: scheduleData('all').entries } } : {}), titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
 }
 
 /** What is missing from the project as it stands. */

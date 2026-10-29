@@ -89,6 +89,20 @@ describe('a scheme read from a project file (#92)', () => {
   });
 });
 
+describe('the hatch and the switch of a scheme (#493)', () => {
+  it('are read from a project file, and what is malformed is dropped', () => {
+    expect(readColourScheme({ property: 'LongName', target: 'rooms', hatches: { wohnen: ' PARQUET ', bad: 3, blank: ' ' }, off: true }))
+      .toEqual({ property: 'LongName', target: 'rooms', hatches: { wohnen: 'PARQUET' }, off: true });
+    expect(readColourScheme({ property: 'LongName', target: 'rooms', hatches: {}, off: false })).toEqual({ property: 'LongName', target: 'rooms' });
+  });
+
+  it('give an entry the pattern of its value and leave the other values plain', () => {
+    const found = new Map([['a', { label: 'A', ids: new Set([1]) }], ['b', { label: 'B', ids: new Set([2]) }]]);
+    const entries = schemeEntries(found, { hatches: { b: 'BRICK', z: 'TILES' } });
+    expect(entries.map((e) => e.hatch)).toEqual([undefined, 'BRICK']);
+  });
+});
+
 describe('a fill clipped to its viewport (#92)', () => {
   const box = { x: 0, y: 0, w: 10, h: 10 };
   it('stays whole inside, and is cut to the box as one closed shape across a side', () => {

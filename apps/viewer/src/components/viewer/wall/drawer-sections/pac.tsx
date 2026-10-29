@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { PAC_INTERVENTIONS, PAC_RURAL_ITEMS, pacCoverage, type PacKind } from '@bimvoice/ifcsheet';
 import { deliver, runIssue } from '@/issue/run';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { permitPackOf, setPacIntervention, setPacMode, useProjectStore } from '@/project/project-store';
+import { permitPackOf, setPacIntervention, useProjectStore } from '@/project/project-store';
 import { ruralScopeFindings } from '@/check/rural-scope';
 import { describeMissing } from '@/check/readiness-say';
 import { useUrbanIndicators } from '../../urban/useUrban';
@@ -40,11 +40,6 @@ function Pac() {
   return (
     <section className="border-t border-sky-300/10 px-4 py-3" aria-label={t('pac.title')}>
       <h3 className="m-0 mb-1.5 text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('pac.title')}</h3>
-      <fieldset aria-label={t('pac.mode.label')} className="m-0 mb-2 flex min-w-0 flex-wrap gap-1 border-0 p-0">
-        {([false, true] as const).map((mode) => (
-          <button key={String(mode)} type="button" aria-pressed={pack === (mode ? 'pacRural' : 'pacFull')} data-pac-mode={mode ? 'rural' : 'standard'} onClick={() => setPacMode(mode ? 'rural' : 'full')} className={`rounded-full border px-2 py-0.5 text-2xs ${pack === (mode ? 'pacRural' : 'pacFull') ? 'border-cyan-400/60 text-cyan-300' : 'border-sky-300/20 text-sky-100/80'}`}>{t(mode ? 'pac.mode.rural' : 'pac.mode.standard')}</button>
-        ))}
-      </fieldset>
       {outside.length > 0 ? (
         <ul aria-live="polite" data-pac-scope="" className="m-0 mb-2 list-none p-0 text-xs text-amber-200">
           {outside.map((f) => <li key={f.kind}>{describeMissing(f)}</li>)}

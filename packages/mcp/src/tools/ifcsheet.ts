@@ -237,7 +237,7 @@ async function projectOf(input: Record<string, unknown>, ctx: Parameters<Tool['h
 export const ifcsheetCheckReadiness: Tool = {
   name: 'ifcsheet_check_readiness',
   description:
-    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model. Optionally also reads a saved IfcSheet project (project_path, or project_json with the file\'s text): then a schedule split into parts is checked as the app checks it, for an element listed in more than one part or in none (kinds subReportDuplicates and subReportGaps), using the project\'s joinery catalogue and symbol mapping.',
+    'Say what an opened model lacks that the drawing set reads (building storeys, rooms, materials, quantity sets, unique GlobalIds) and which drawings or schedules are weaker for it. Returns ready (true when nothing would weaken the drawings) and the findings, each with its kind, what is missing, what is weaker (plain English) and the counts. The same report as `ifcsheet check`. Needs a model_id from ifcsheet_open_model. Optionally also reads a saved IfcSheet project (project_path, or project_json with the file\'s text): then a schedule split into parts is checked as the app checks it, for an element listed in more than one part or in none (kinds subReportDuplicates and subReportGaps), using the project\'s joinery catalogue and symbol mapping. Norway: with ids "byggesaksbim", or a project that opted in (its byggesaksbim field is true), the seven Obligatorisk checks of ByggesaksBIM (DiBK) are also run and each failing one is a finding (kinds byggesaksbimH1 to byggesaksbimH7, byggesaksbimNone); a model that is not IFC4 is not checked and gets one finding (byggesaksbimSchema), and a check that cannot run is a tool error; the same findings as `ifcsheet check --ids byggesaksbim` and the app; without either nothing of it is run. The opt-in of an earlier ifcsheet_load_project is NOT remembered by this tool: pass project_path or project_json, or ids "byggesaksbim", on every call.',
   scope: 'read',
   inputSchema: {
     type: 'object',
@@ -245,6 +245,7 @@ export const ifcsheetCheckReadiness: Tool = {
       model_id: MODEL_ID,
       project_path: { type: 'string', description: 'Path to a saved project (.ifclite-project.json) on the server (must be inside the allowed paths). Give this or project_json, or neither to check the model alone.' },
       project_json: { type: 'string', description: 'The text of a saved project file. Give this or project_path.' },
+      ids: { type: 'string', enum: ['byggesaksbim'], description: 'An extra requirement set to check the model against: "byggesaksbim" (Norway, DiBK). A project that opted in runs it without this.' },
     },
     required: ['model_id'],
     additionalProperties: false,
@@ -252,8 +253,21 @@ export const ifcsheetCheckReadiness: Tool = {
   async handler(input, ctx) {
     const entry = getSheetModel(ctx, input.model_id as string);
     const read = await projectOf(input, ctx);
-    const { readinessWithProject } = await import('@bimvoice/ifcsheet/headless');
-    const findings = readinessWithProject(entry.model, read?.project, entry.id).map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
+    if (input.ids !== undefined && input.ids !== 'byggesaksbim') {
+      throw new ToolExecutionError({ code: ToolErrorCode.INVALID_INPUT, message: `Unknown ids "${String(input.ids)}" (known: byggesaksbim).` });
+    }
+    const { readinessWithProject, byggesaksbimReadiness } = await import('@bimvoice/ifcsheet/headless');
+    // The same rule as `ifcsheet check`: the flag or the project's opt-in, its findings after the model's own.
+    let norway: Awaited<ReturnType<typeof byggesaksbimReadiness>> = [];
+    if (input.ids === 'byggesaksbim' || read?.project.byggesaksbim === true) {
+      try {
+        norway = await byggesaksbimReadiness([{ dataStore: entry.model.dataStore, modelId: entry.id }]);
+      } catch (error) {
+        // An empty list would read as "all good": the check did not run, so the tool fails and says why.
+        throw new ToolExecutionError({ code: ToolErrorCode.UNSUPPORTED_OPERATION, message: `The ByggesaksBIM check could not run: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const findings = [...readinessWithProject(entry.model, read?.project, entry.id), ...norway].map((f) => ({ kind: f.kind, ...describeReadiness(f), params: f.params }));
     const ready = findings.length === 0;
     return okResult(
       ready
