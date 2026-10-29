@@ -81,6 +81,11 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Tilt and turn | Oscilo-batant | |
 | Pivot, horizontal axis | Pivotant, ax orizontal | The only opening "basculant" may describe |
 | Pivot, vertical axis | Pivotant, ax vertical | |
+| Layer / line type / weight (drafting standards) | Strat / tip de linie / grosime | `standards.layer.*` (#513); "Activ" for a layer that is on; line types Continuă, Întreruptă, Punctată, Linie-punct |
+| Text style / text height | Stil de text / înălțimea textului | "Stil de cotare" for a dimension style; `standards.text.*`, `standards.dim.*` |
+| Font (sans serif / serif / monospace) | Font (fără serife / cu serife / monospațiat) | "Font" is the same word in both languages; font names (Inter, Times, Courier) are never translated |
+| Tables style (the text style schedules, reports and the register follow) | Stil pentru tabele | "Tabele" names the style, as in the generated sheet names; the register is "registrul de desene" |
+| Extension gap / extension beyond | Distanța liniei de ajutor / depășirea liniei de ajutor | |
 | Library | Bibliotecă | |
 | Project navigator | Navigatorul de proiect | |
 | Keyboard (settings) | Tastatură | |
@@ -117,7 +122,7 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 
 The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar, and the export dialogs its palette opens: IFC, GLB, KMZ, USD, energy model, the to-scale PDF, the anonymized subset, the review before the modified IFC and the Cesium ion upload), the drafting tools' panels
 and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the sheet PDF setup and title-block dialogs (`sheetsPdf.sheetSetup.*`, `sheetsPdf.titleBlock.*`) and the
-drafting standards stay English except the layer print flag, the line types editor and the per-element line overrides (`catalogues/drafting-standards.ro.ts`: strat, tip de linie, tipar, grosime, culoare, tipărire); a missing key falls back to English one by one.
+annotation types, symbols, library and CAD layers tabs of the drafting standards stay English (its layers, text style, dimension style tabs, line types editor and per-element line overrides are Romanian since #513); a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule
 sheet made before this change, and anything a person typed are stored text and stay
 as they were. Storey names come from the IFC and are never translated.
