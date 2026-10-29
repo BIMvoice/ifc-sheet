@@ -40,7 +40,9 @@ import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
-import { ARROW_NEED_MM, BAR_NEED_MM, markArea, markBox, markFits, northDegrees, siteMarkArea, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
+import type { Obstacle } from './free-spot.js';
+import { siteMarks, siteObstacles } from './site-marks.js';
+import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
@@ -219,8 +221,8 @@ export function sheetGraphic(
     out.symbols.solids.push(...shapes.solids);
     out.texts.push(...shapes.texts);
   };
-  /** A site plan's marks that do not fit inside its drawing, placed beside it after the loop (`own`: its index in `out.viewports`). */
-  const besideSite: { box: Rect; own: number; scale: number; need: { w: number; h: number }; arrowDegrees: number | null; bar: boolean }[] = [];
+  /** A site plan's marks, placed once every viewport on the sheet is known (`siteMarks`; `own`: its index in `out.viewports`). */
+  const siteJobs: { box: Rect; own: number; scale: number; arrowDegrees: number | null; bar: boolean; obstacles: Obstacle[] }[] = [];
   for (const vp of vps) {
     // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
     const schedule = project?.schedules ? placedListSchedule(sheet, doc.sheets, vp, project.schedules) : null;
@@ -280,19 +282,20 @@ export function sheetGraphic(
     }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
-    // A site plan's marks stand beside its drawing when they do not fit inside it (`siteMarkArea`), placed once every viewport on the sheet is known; any other view's are left out then.
+    // A site plan's marks go in a free spot clear of its plot and footprint, or beside its box (`siteMarks`), placed after the loop; any other view's go in its corners.
     const site = view?.kind === 'plan' && view.site === true;
     if (drawing && marksBox && (flags.northArrow || flags.scaleBar)) {
       const north = flags.northArrow ? northDegrees(drawing.config.plane, marks.north) : null;
-      const inside = markArea(marksBox, drawingArea);
-      const wanted = [
-        { need: ARROW_NEED_MM, arrowDegrees: north, bar: false, on: north !== null },
-        { need: BAR_NEED_MM, arrowDegrees: null, bar: true, on: flags.scaleBar },
-      ];
-      for (const m of wanted) {
-        if (!m.on) continue;
-        if (site && !markFits(inside, m.need)) besideSite.push({ box: marksBox, own: out.viewports.length - 1, scale: vp.scale, need: m.need, arrowDegrees: m.arrowDegrees, bar: m.bar });
-        else if (inside) drawMarks(inside, vp.scale, m.arrowDegrees, m.bar);
+      if (site) {
+        const toPaper = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
+        const obstacles = siteObstacles({ polygons: drawing.cutPolygons, drafts: project?.annotations?.drafts ?? [], viewId: vp.viewId, toPaper, locale: marks.locale });
+        siteJobs.push({ box: marksBox, own: out.viewports.length - 1, scale: vp.scale, arrowDegrees: north, bar: flags.scaleBar, obstacles });
+      } else {
+        const inside = markArea(marksBox, drawingArea);
+        if (inside) {
+          if (north !== null) drawMarks(inside, vp.scale, north, false);
+          if (flags.scaleBar) drawMarks(inside, vp.scale, null, true);
+        }
       }
     }
     if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
@@ -300,12 +303,14 @@ export function sheetGraphic(
   // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.
   const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
   taken.push(titleBlockRect(paper, frameOf(sheet)));
-  for (const m of besideSite) {
+  for (const m of siteJobs) {
     // Its own viewport's drawing box is the one it stands beside; its title strip under the box stays taken.
     const own = out.viewports[m.own].box;
     const others = [...taken.filter((_, i) => i !== m.own), { x: own.x, y: own.y + own.h, w: own.w, h: 12 }];
-    const area = siteMarkArea(m.box, drawingArea, m.need, others);
-    if (area) drawMarks(area, m.scale, m.arrowDegrees, m.bar);
+    const shapes = siteMarks({ box: m.box, drawingArea, scale: m.scale, arrowDegrees: m.arrowDegrees, bar: m.bar, locale: marks.locale, obstacles: m.obstacles, taken: others });
+    out.symbols.strokes.push(...shapes.strokes);
+    out.symbols.solids.push(...shapes.solids);
+    out.texts.push(...shapes.texts);
   }
   // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner.
   for (const vp of vps) {

@@ -16,8 +16,8 @@
 import { forwardRef, Fragment, memo, useId, useMemo } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useTranslation } from '@/i18n';
-import type { SectionAxisName, ViewTransform } from '@/drafting/frame';
-import { isGeometry, type DraftEntity, type DraftLayer, type SymbolInstanceShape } from '@/drafting/types';
+import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import { isGeometry, type DraftEntity, type DraftLayer } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect as PaperRect } from '@/project/sheet-frame';
 import { mmPerMetre, paperOf, viewportBox } from '@/project/sheets';
@@ -53,10 +53,11 @@ import { LegendGraphic } from '../legend/LegendGraphic';
 import type { LegendLayout } from '@/legend/legend-layout';
 import type { CivilLayout } from '@/civil/civil-drawings';
 import { useLiveSymbolContext, useSiteFrame } from '@/siteplan/site-frame';
+import { coordinateLabels } from '@/siteplan/site-symbols';
 import { useSheetLocale } from '@/project/units-and-numbers';
 import { ViewportMarks, viewportMarkShapes } from './ViewportMarks';
 import { keyPlanHighlight, viewportExtent, type Rect } from '@/siteplan/key-plan';
-import { KeyPlanHighlight, SiteOverlay, SiteSymbols } from '../siteplan/SiteGraphics';
+import { KeyPlanHighlight, SiteOverlay } from '../siteplan/SiteGraphics';
 import { SiteBalance } from '../siteplan/SiteBalance';
 import type { SiteContent } from '../siteplan/useSheetSite';
 import type { EntityStyleOf } from '@/project/model-styles';
@@ -182,10 +183,11 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const keyPlan = vp.keyPlanOf !== undefined;
   // The pictures this sheet prints under the view (#457): chosen per sheet, drawn beneath the linework with the same transform.
   const underlays = keyPlan || !view ? [] : printedUnderlays(allUnderlays, view.id, sheetId);
-  // The north arrow and scale bar the viewport asks for, the engine's shapes (`viewport-marks.ts`) in the drawing's corners. A site plan keeps its own free-spot symbols (`SiteSymbols`, clear of the plot), so it takes no corner marks (proper avoidance for every drawing: issue #430).
+  // The north arrow and scale bar the viewport asks for, the engine's shapes (`viewport-marks.ts`) in the drawing's corners; a site plan's in a free spot clear of its plot and footprint (`site-marks.ts`, #430), as the PDF and DXF place them.
   const north = useSiteFrame().north;
   const sheetLocale = useSheetLocale();
-  const marks = content.site ? null : viewportMarkShapes({ vp, view, drawing, drawingArea, north, locale: sheetLocale });
+  const siteLabels = content.site ? coordinateLabels(drafts, factor, t, axis, live, layerColor) : undefined;
+  const marks = viewportMarkShapes({ vp, view, drawing, drawingArea, north, locale: sheetLocale, ...(content.site ? { site: { drafts, toPaper: (p) => drawingToScreen(p, t, axis), labels: siteLabels } } : {}) });
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
@@ -220,11 +222,6 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
         {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
       {content.site ? <SiteBalance x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
-      {content.site ? <SiteSymbols site={content.site} transform={t} axis={axis} scale={vp.scale} box={{ x: left, y: top, width: box.width, height: box.height }} live={live}
-        symbols={drafts.flatMap((e): SymbolInstanceShape[] => {
-          const shown = e.shape.type === 'symbol' && layerColor.get(e.layerId) !== null ? annotationAtFactor(e.shape, factor) : null;
-          return shown?.type === 'symbol' ? [shown] : [];
-        })} /> : null}
     </g>
   );
 });
