@@ -99,7 +99,7 @@
    501 apps/viewer/src/components/viewer/tools/measure-modes/radius.ts
    818 apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
    677 apps/viewer/src/components/viewer/tools/MeasureQuantities.tsx
-   926 apps/viewer/src/components/viewer/useGeometryStreaming.ts
+   900 apps/viewer/src/components/viewer/useGeometryStreaming.ts
    893 apps/viewer/src/components/viewer/useMouseControls.ts
    461 apps/viewer/src/components/viewer/ViewerLayout.tsx
   1632 apps/viewer/src/components/viewer/Viewport.tsx
@@ -266,7 +266,7 @@
    467 packages/renderer/src/raycast-engine.ts
    401 packages/renderer/src/render-section-plane.ts
    462 packages/renderer/src/scene-raycaster.ts
-  4118 packages/renderer/src/scene.ts
+  4000 packages/renderer/src/scene.ts
    639 packages/renderer/src/section-2d-overlay.ts
    564 packages/renderer/src/shaders/main.wgsl.ts
    417 packages/renderer/src/shadow-pass.ts

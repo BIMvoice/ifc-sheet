@@ -86,6 +86,7 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
   }
   const scheme = readColourScheme(raw.colourScheme);
   if (scheme) out.colourScheme = scheme;
+  if (raw.usePlanSymbols === false) out.usePlanSymbols = false;
   Object.assign(out, readElementGraphics(raw));
   if (isObject(raw.grid)) {
     const grid: ViewGridGraphics = {};

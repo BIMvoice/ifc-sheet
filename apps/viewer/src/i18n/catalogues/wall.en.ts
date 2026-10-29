@@ -158,6 +158,8 @@ export const wallEn = {
   'wall.shell.language': 'Language',
   'wall.vp.eyebrow': 'Drawing on this sheet',
   'wall.vp.drawingNumber': 'Drawing number (empty: numbered in reading order)',
+  'wall.vp.northArrow': 'North arrow (turned to the model\'s true north)',
+  'wall.vp.scaleBar': 'Graphic scale bar',
   'wall.vp.scale': 'Scale',
   'wall.vp.scaleOther': 'Other…',
   'wall.vp.scaleTyped': 'Scale 1 : (Enter to apply)',

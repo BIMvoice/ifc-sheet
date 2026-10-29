@@ -52,7 +52,10 @@ function readViewRule(v: unknown, path: string): ViewRule {
   const o = objectAt(v, path);
   if (o.kind === 'plan') return typeof o.storey === 'number' && Number.isInteger(o.storey) ? { kind: 'plan', storey: o.storey } : fail(`${path}/storey`, 'must be a whole number: the storeys above (+) or below (-) the ground storey');
   if (o.kind === 'allPlans') return { kind: 'allPlans' };
-  if (o.kind === 'site') return { kind: 'site' };
+  if (o.kind === 'site') {
+    if (o.nth === undefined) return { kind: 'site' };
+    return typeof o.nth === 'number' && Number.isInteger(o.nth) && o.nth >= 1 ? { kind: 'site', nth: o.nth } : fail(`${path}/nth`, 'must be a whole number from 1: the second site plan, the third, ...');
+  }
   if (o.kind === 'elevation') {
     const direction = ELEVATION_DIRECTIONS.find((d) => d === o.direction);
     return direction ? { kind: 'elevation', direction } : fail(`${path}/direction`, 'must be north, south, east or west');

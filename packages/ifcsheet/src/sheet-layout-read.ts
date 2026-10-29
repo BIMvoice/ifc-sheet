@@ -41,6 +41,8 @@ function readViewport(v: unknown, path: string): SheetViewport {
     ...(isNumber(v.page) && Number.isInteger(v.page) && v.page > 0 ? { page: v.page } : {}),
     ...(v.placed === true && isNumber(v.page) && v.page > 0 ? { placed: true } : {}),
     ...readPlacedPages(v.placedPages),
+    ...(typeof v.northArrow === 'boolean' ? { northArrow: v.northArrow } : {}),
+    ...(typeof v.scaleBar === 'boolean' ? { scaleBar: v.scaleBar } : {}),
     ...(isString(v.keyPlanOf) && v.keyPlanOf ? { keyPlanOf: v.keyPlanOf } : {}),
     ...(isString(v.drawingNumber) && v.drawingNumber.trim() ? { drawingNumber: v.drawingNumber.trim() } : {}),
   };

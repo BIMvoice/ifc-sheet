@@ -18,7 +18,9 @@ export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGrap
 export { exportDxf, exportPdf } from './export.js';
 export { projectSheetOptions, type LeftOut, type ProjectSheetSource } from './project-sheets.js';
 export { SCHEDULE_CONTINUED } from './sheet-schedules.js';
+export { readPlanSymbols, withPlanSymbols, type PlanSymbol, type PlanSymbolRead } from './plan-symbols.js';
 export { IFC_GUID, isPhysicalElement, readModelFacts, readinessOfModel, type FactSource } from './readiness-read.js';
+export { byggesaksbimDocument, byggesaksbimReadiness, byggesaksbimReadinessOrError, byggesaksbimReport } from './byggesaksbim/run.js';
 export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
 export * from './project.js';
 export { createHeadlessListProvider } from './list-provider.js';

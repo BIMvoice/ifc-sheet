@@ -22,21 +22,25 @@ interface Props {
   extraPatterns: readonly HatchPattern[];
   transform: ViewTransform;
   axis: SectionAxisName;
+  /** Drawing metres one pattern millimetre of a colour scheme's hatch is (the view's scale over 1000), so it is the printed size; default 1:100. */
+  schemeUnit?: number;
 }
 
-export const CutHatchLayer = memo(function CutHatchLayer({ hatches, extraPatterns, transform, axis }: Props) {
+export const CutHatchLayer = memo(function CutHatchLayer({ hatches, extraPatterns, transform, axis, schemeUnit = HATCH_UNIT_M }: Props) {
   const uid = useId();
   // Pattern strokes in drawing space, once per hatch set; mapped to the screen per frame.
   const strokes = useMemo(() => hatches.map((h) => {
     const pattern = findPattern(h.pattern, extraPatterns);
-    const segments = pattern && !pattern.solid ? hatchSegments(h.loops, pattern, { scale: h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments : [];
+    const segments = pattern && !pattern.solid ? hatchSegments(h.loops, pattern, { scale: h.scheme ? schemeUnit : h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments : [];
     return { hatch: h, solid: !!pattern?.solid, segments };
-  }), [hatches, extraPatterns]);
+  }), [hatches, extraPatterns, schemeUnit]);
   if (strokes.length === 0) return null;
   return (
     <svg data-cut-hatches className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
       {strokes.map(({ hatch, solid, segments }, i) => {
         const outline = hatch.loops.map((l) => shapePath({ type: 'polyline', pts: l, closed: true }, transform, axis)).join('');
+        // A scheme's hatch is a pattern over its colour: a solid one adds nothing (the room is filled already).
+        if (solid && hatch.scheme) return null;
         if (solid) return <path key={i} d={outline} fill={hatch.color} fillOpacity={0.85} fillRule="evenodd" />;
         const d = segments.map((s) => {
           const a = drawingToScreen(s.a, transform, axis);

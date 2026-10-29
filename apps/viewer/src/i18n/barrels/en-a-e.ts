@@ -29,6 +29,7 @@ import { automationEditorEn } from '../catalogues/automation-editor.en';
 import { bcfDraftsEn } from '../catalogues/bcf-drafts.en';
 import { bcfEn } from '../catalogues/bcf.en';
 import { boqEn } from '../catalogues/boq.en';
+import { byggesaksbimEn } from '../catalogues/byggesaksbim.en';
 import { bulkPropertyEditorEn } from '../catalogues/bulk-property-editor.en';
 import { cadLayersEn } from '../catalogues/cad-layers.en';
 import { catalogueEn } from '../catalogues/catalogue.en';
@@ -103,6 +104,7 @@ export const enAE = {
   ...bcfDraftsEn,
   ...bcfEn,
   ...boqEn,
+  ...byggesaksbimEn,
   ...bulkPropertyEditorEn,
   ...cadLayersEn,
   ...catalogueEn,

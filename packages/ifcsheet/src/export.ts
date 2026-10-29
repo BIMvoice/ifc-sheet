@@ -27,9 +27,10 @@
 
 import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
 import type { Polyline, SheetGraphic, SheetPen, SheetText } from './sheet-graphic.js';
+import { FILL_HATCH } from './sheet-colours.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
-const PEN = { frame: 0.5, mark: 0.18 } as const;
+const PEN = { frame: 0.5, mark: 0.18, symbol: 0.25 } as const;
 
 /** The font file the package ships (`fonts/Inter-Regular.ttf`, SIL Open Font License), read from disk in Node. */
 async function packagedFont(): Promise<Uint8Array> {
@@ -127,6 +128,11 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
       const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
       doc.setFillColor(fill.colour);
       doc.path(ops).fillEvenOdd();
+      // A value's hatch (#493) goes over its colour and under every line.
+      if (fill.hatch) {
+        doc.setDrawColor(FILL_HATCH.ink);
+        stroke(fill.hatch.strokes, fill.hatch.width);
+      }
     }
     // The drawings by pen, in the app's paint order: the cut faces' fills, then the hidden, seen and cut lines.
     for (const pen of sheet.pens) {
@@ -156,6 +162,10 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     }
     doc.setLineDashPattern([], 0);
     doc.setDrawColor('#000000');
+    // The viewports' north arrows and scale bars: the solid halves in black, every outline at the pen of the app's SITE-SYMBOLS layer.
+    doc.setFillColor('#000000');
+    for (const pts of sheet.symbols.solids) doc.path([{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]).fill();
+    stroke(sheet.symbols.strokes, PEN.symbol);
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
@@ -218,7 +228,12 @@ function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
 function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
   const byColour = new Map<string, Polyline[]>();
   for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
-  return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+  const layers = [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
+  // A value's hatch (#493): R12 has no pattern either, so its strokes are lines on a layer named for the pattern (`COLOUR-HATCH-PARQUET`).
+  const byPattern = new Map<string, Polyline[]>();
+  for (const fill of sheet.fills) if (fill.hatch) byPattern.set(fill.hatch.pattern, [...(byPattern.get(fill.hatch.pattern) ?? []), ...fill.hatch.strokes]);
+  const hatches = [...byPattern].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([pattern, polylines]) => ({ name: `COLOUR-HATCH-${pattern.replace(/[^A-Za-z0-9_-]/g, '_').toUpperCase()}`, color: FILL_HATCH.ink, polylines, closed: false }));
+  return [...layers, ...hatches];
 }
 
 /**
@@ -250,6 +265,9 @@ export function exportDxf(sheet: SheetGraphic): string {
       { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
       // R12 has no line weight: the project's drafts, dimensions and schedule rules on one layer, their outlines only.
       ...(sheet.strokes?.length ? [{ name: 'SHEET-DRAFTS', color: '#000000', polylines: sheet.strokes.flatMap((s) => [...s.runs]), closed: false }] : []),
+      // The north arrows and scale bars, on the layer the app's DXF gives them (`SITE-SYMBOLS`); the solid halves are their closed outlines (R12 has no hatch).
+      // Only a sheet that has any gets the layer, so a sheet that asks for none writes the file it always did.
+      ...(sheet.symbols.strokes.length + sheet.symbols.solids.length > 0 ? [{ name: 'SITE-SYMBOLS', color: '#000000', polylines: [...sheet.symbols.strokes, ...sheet.symbols.solids], closed: false }] : []),
       ...colourLayers(sheet),
     ],
   });
