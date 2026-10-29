@@ -77,7 +77,7 @@ export function viewportAnnotations(
     const shape = e.shape;
     const mark = context(colour, lookOf(a.book, e.params));
     if (isGeometry(shape)) {
-      drawCurve(shape, layer, e.params, a.lineTypes, mark);
+      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), mark);
       continue;
     }
     const sized = annotationAtFactor(shape, factor);

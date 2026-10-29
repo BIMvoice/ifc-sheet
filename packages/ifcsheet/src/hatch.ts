@@ -9,5 +9,5 @@
 
 export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from './hatch-pattern.js';
 export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from './hatch-fill.js';
-export { builtInPatterns, findPattern } from './hatch-library.js';
+export { HATCH_UNIT_M, builtInPatterns, findPattern } from './hatch-library.js';
 export type { Pt } from './hatch-pt.js';
