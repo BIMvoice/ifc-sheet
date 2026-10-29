@@ -17,14 +17,16 @@ export function defaultDraftSettings(): DraftSettings {
 /**
  * Annotation sizes (text height, hatch scale) are model metres on a view; a
  * sheet drafts in paper millimetres, where the same settings read x10.
+ * `onChange` runs after every write a command makes, so what shows a setting (a toolbar toggle) follows it however the write came.
  */
 const SCALED = new Set<keyof DraftSettings>(['textHeight', 'hatchScale']);
 
-export function scaledDraftSettings(settings: DraftSettings, scale: () => number): DraftSettings {
+export function scaledDraftSettings(settings: DraftSettings, scale: () => number, onChange: () => void = () => {}): DraftSettings {
   return new Proxy(settings, {
     get: (target, key) => (SCALED.has(key as keyof DraftSettings) ? (target[key as keyof DraftSettings] as number) * scale() : target[key as keyof DraftSettings]),
     set: (target, key, value) => {
       (target as unknown as Record<string, unknown>)[key as string] = SCALED.has(key as keyof DraftSettings) ? Number(value) / scale() : value;
+      onChange();
       return true;
     },
   });

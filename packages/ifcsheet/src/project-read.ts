@@ -60,6 +60,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   includeFarElements: boolean;
   /** The cells of the joinery schedules typed over the model's (#446), by type and row; absent when the file has none. `scheduleOf` prints them. */
   joineryOverrides?: JoineryCellOverride[];
+  /** The project opts in to the ByggesaksBIM (Norway) readiness check (#372); false when the file does not say so. */
+  byggesaksbim: boolean;
   /** The bill of quantities' articles (#75); empty when the file has none. */
   boqArticles: BoqArticle[];
   /** The office's classification mappings (#89); empty when the file has none. */
@@ -124,6 +126,7 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
     ...(readJoineryOverrides(parsed.joineryOverrides) ? { joineryOverrides: readJoineryOverrides(parsed.joineryOverrides) } : {}),
+    byggesaksbim: parsed.byggesaksbim === true,
     boqArticles: readBoqArticles(parsed.boqArticles),
     classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),

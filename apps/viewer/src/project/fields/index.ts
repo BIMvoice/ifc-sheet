@@ -48,7 +48,9 @@ import { readTitleSources } from '../title-block-sources';
 import type { ProjectDocument } from '../types';
 import { readPhaseSource } from '../view-graphics-file';
 import { readViewTemplates } from '../view-templates-file';
+import { annotationPresetsField } from './annotation-presets';
 import { boqArticlesField } from './boq-articles';
+import { byggesaksbimField } from './byggesaksbim';
 import { installedStandardField } from './installed-standard';
 import { classificationMappingsField } from './classification-mappings';
 import { commentsField } from './comments';
@@ -134,6 +136,8 @@ const DOCUMENT_FIELD_DEFS = [
   classificationMappingsField,
   // The standards pack installed in the project and the values it replaced (#365); absent: none.
   installedStandardField,
+  // The project opts in to the ByggesaksBIM (Norway) readiness check (#372); absent: off.
+  byggesaksbimField,
   // The language the generated names were made in (set when the starting set is made); absent: not recorded.
   languageField,
   // The works the permit project is for (#364); absent: a new building.
@@ -144,6 +148,8 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
+  // The office's annotation presets (#497); absent: none.
+  annotationPresetsField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
 type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];

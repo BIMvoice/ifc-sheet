@@ -17,6 +17,7 @@ import { applyViewTemplate, detachViewTemplate, overrideCount, resetViewOverride
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { CardSection } from './CardSection';
 import { CategoryGraphicsList } from './CategoryGraphicsList';
+import { ViewDetailLevel } from './ViewDetailLevel';
 import { ViewportHiddenLayers } from './ViewportHiddenLayers';
 import { WALL_FIELD, WALL_PILL } from './wall-type';
 
@@ -84,6 +85,7 @@ export function GraphicsCard({ sheet, slot, view }: { sheet: ProjectSheet; slot:
             <CategoryGraphicsList graphics={effective?.categories} overridden={template ? view.graphics?.categories : undefined} onChange={(category, patch) => setViewCategory(view.id, category, patch)} />
           </>
         ) : null}
+        <ViewDetailLevel view={view} />
         <p className="m-0 mt-4 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.gfx.layers')}</p>
         <ViewportHiddenLayers sheetId={sheet.id} viewport={slot} view={view} />
       </div>

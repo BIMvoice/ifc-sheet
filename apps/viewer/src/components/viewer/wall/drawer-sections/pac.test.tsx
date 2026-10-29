@@ -118,11 +118,11 @@ describe('the PAC checklist', () => {
   });
 
   it('keeps the permit project mode in the project file: the switch writes it, a saved project reopens in it, the full one is saved as absent', () => {
+    // The choice itself is the permit pack radio group (`permit-pack.test.tsx`); here the mode is set the way it writes it.
     const ui = mount();
-    const pressed = (mode: string) => ui.querySelector(`[data-pac-mode="${mode}"]`)?.getAttribute('aria-pressed');
-    assert.deepEqual([pressed('standard'), pressed('rural')], ['true', 'false']);
-    act(() => { ui.querySelector<HTMLButtonElement>('[data-pac-mode="rural"]')!.click(); });
-    assert.equal(useProjectStore.getState().pacMode, 'rural', 'the switch writes the project');
+    assert.equal(ui.querySelectorAll('[data-pac-item="rural.plans"]').length, 0);
+    act(() => setPacMode('rural'));
+    assert.equal(useProjectStore.getState().pacMode, 'rural', 'the mode is written to the project');
     const saved = serializeProject(projectDocument());
     assert.equal(JSON.parse(saved).pacMode, 'rural');
     // Reopen: a fresh project loads the saved file, and a fresh drawer shows the mode it was left in.
@@ -132,10 +132,9 @@ describe('the PAC checklist', () => {
     act(() => loadProjectDocument(parseProjectFile(saved)));
     assert.equal(useProjectStore.getState().pacMode, 'rural');
     const reopened = mount();
-    assert.equal(reopened.querySelector('[data-pac-mode="rural"]')?.getAttribute('aria-pressed'), 'true');
     assert.ok(reopened.querySelector('[data-pac-item="rural.plans"]'), 'the Anexa 3 list is shown');
     // Back to the full one: stored as absent; a value the file should not hold loads as absent.
-    act(() => { reopened.querySelector<HTMLButtonElement>('[data-pac-mode="standard"]')!.click(); });
+    act(() => setPacMode('full'));
     assert.equal('pacMode' in JSON.parse(serializeProject(projectDocument())), false);
     assert.equal(parseProjectFile(saved.replace('"rural"', '"urban"')).pacMode, undefined);
     setPacMode('rural');
@@ -180,8 +179,7 @@ describe('the simplified PAC checklist (Anexa 3)', () => {
     const Section = pacSection.component;
     const ui = render(<Section go={() => undefined} onClose={() => undefined} extent={null} />);
     assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_ITEMS.length);
-    const toggle = ui.querySelector('[data-pac-mode="rural"]') as HTMLElement;
-    act(() => toggle.click());
+    act(() => setPacMode('rural'));
     const row = (id: string) => ui.querySelector(`[data-pac-item="${id}"]`);
     assert.equal(ui.querySelectorAll('[data-pac-item]').length, PAC_RURAL_ITEMS.length);
     assert.match(row('rural.fencePlans')?.textContent ?? '', /Anexa 3, 1 f\), 8 c\)/);
