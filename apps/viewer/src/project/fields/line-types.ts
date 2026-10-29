@@ -15,3 +15,11 @@ declare module '../types' {
 
 /** The project's own line types (#496); absent: only the built-in ones. */
 export const lineTypesField = listField('lineTypes', (raw) => listAt(raw, 'lineTypes').map((v, i) => readLineType(v, `/lineTypes/${i}`)), { presentOnly: true });
+
+/** Registered by this file (`./registered.ts`): found there, not listed. */
+export const registeredFields = [lineTypesField] as const;
+declare module './registered' {
+  interface RegisteredFieldKeys {
+    lineTypes: true;
+  }
+}

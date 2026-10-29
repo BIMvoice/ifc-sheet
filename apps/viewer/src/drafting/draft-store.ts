@@ -12,6 +12,8 @@
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
 import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from '@/project/types';
+import { DOCUMENT_FIELDS } from '@/project/fields';
+import type { FieldKey } from '@/project/fields/define';
 import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
 import type { DraftEntity, DraftParamValue, EntityShape } from './types';
 
@@ -45,9 +47,13 @@ type Step =
  * Project fields a grouped step may also change, held whole (the title block's parameter list and layout, #143; the fields a standards pack sets, #365): undo puts
  * back the value from before the step only while the field is still the value the step left, the same identity rule the
  * deltas follow, so a step never overwrites what came after it, nor a project opened since.
+ *
+ * FROZEN: the fields held when the list moved onto the fields themselves. A NEW field opts in on its own definition with
+ * `heldByUndo: true` (`project/fields/define.ts`, see `germanyLandField`), so two PRs adding one never edit this line.
  */
-const STEP_FIELDS = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'openingLines', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips', 'germanyLand', 'joineryOverrides'] as const;
-type StepField = (typeof STEP_FIELDS)[number];
+const FROZEN_STEP_FIELDS: readonly FieldKey[] = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'openingLines', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips'];
+const STEP_FIELDS: readonly FieldKey[] = [...FROZEN_STEP_FIELDS, ...DOCUMENT_FIELDS.filter((f) => f.heldByUndo && !FROZEN_STEP_FIELDS.includes(f.key)).map((f) => f.key)];
+type StepField = FieldKey;
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
 /**

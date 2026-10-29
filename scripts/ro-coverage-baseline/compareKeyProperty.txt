@@ -1,0 +1,5 @@
+compareKeyProperty.duplicateNote
+compareKeyProperty.globalId
+compareKeyProperty.invalidNote
+compareKeyProperty.label
+compareKeyProperty.placeholder

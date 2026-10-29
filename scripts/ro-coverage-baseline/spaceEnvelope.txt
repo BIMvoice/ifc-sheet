@@ -1,0 +1,13 @@
+spaceEnvelope.flat
+spaceEnvelope.floor
+spaceEnvelope.invalid
+spaceEnvelope.label
+spaceEnvelope.left
+spaceEnvelope.mode
+spaceEnvelope.move
+spaceEnvelope.pick
+spaceEnvelope.pitched
+spaceEnvelope.refused
+spaceEnvelope.ridge
+spaceEnvelope.right
+spaceEnvelope.slope

@@ -1,0 +1,14 @@
+chartsPanel.addChartButton
+chartsPanel.addChartEmptyStateButton
+chartsPanel.clearSliceButton
+chartsPanel.clearSliceTitle
+chartsPanel.colorIn3DLabel
+chartsPanel.colorIn3DTitle
+chartsPanel.dashboardAriaLabel
+chartsPanel.focusModeAriaLabel
+chartsPanel.focusModeTitle
+chartsPanel.loadModelEmptyState
+chartsPanel.noChartsEmptyState
+chartsPanel.onClickLabel
+chartsPanel.scopeAriaLabel
+chartsPanel.scopeLabel

@@ -37,6 +37,12 @@ export interface DocumentField<K extends FieldKey> {
    * so a key the file lacks keeps whatever the store held before.
    */
   load?(value: ProjectDocument[K] | undefined): ProjectDocument[K];
+  /**
+   * A grouped step of the drafting undo stack keeps this field whole, its value before and after, and undo puts the
+   * value back while the field still holds what the step left (`STEP_FIELDS` in `drafting/draft-store.ts`). Set it on a
+   * field that a standards pack, a dialog or a command sets inside a step. Without it, undo does not touch the field.
+   */
+  heldByUndo?: true;
 }
 
 /** Reads `key` only when the file has it, as `read` makes it. */

@@ -1,0 +1,5 @@
+  rooms   The room and area schedule: every room (IfcSpace) by level with its number, name and
+          area, a total per level and for the building (the urban indicators' Au). An area is the
+          model's NetFloorArea (else GrossFloorArea), else the footprint of the room's geometry;
+          the last lines say which. Text, or CSV with --csv, or JSON with --json. With --project the text writes
+          figures in the project's "Units and numbers" format (comma, decimals).

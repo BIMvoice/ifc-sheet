@@ -1,0 +1,9 @@
+planHandles.handle.move
+planHandles.handle.slide
+planHandles.handle.wallEnd
+planHandles.move.hint
+planHandles.move.label
+planHandles.move.notMovable
+planHandles.slide.hint
+planHandles.slide.label
+planHandles.slide.notHosted

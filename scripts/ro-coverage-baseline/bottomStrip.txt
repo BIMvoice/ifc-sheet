@@ -1,0 +1,8 @@
+bottomStrip.close
+bottomStrip.closeTabAriaLabel
+bottomStrip.dockBelow
+bottomStrip.dockBeside
+bottomStrip.gripTitle
+bottomStrip.maximize
+bottomStrip.restore
+bottomStrip.tabListAriaLabel

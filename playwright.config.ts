@@ -2,6 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { BEGIN_FRAME_CHROME_ARGS } from './tests/benchmark/frames/begin-frame-driver';
 
@@ -24,6 +27,26 @@ function onlyCollabProject(): boolean {
   );
   return projects.length > 0 && projects.every((p) => p === 'viewer-collab-e2e');
 }
+
+/**
+ * The specs of the viewer-e2e lane (`viewer-e2e`, and `viewer-e2e-ci` in CI). FROZEN_VIEWER_E2E is the list as it
+ * stood when the lane moved onto the specs themselves: nothing is added to it. A new spec joins the lane with a
+ * line of its own, `// e2e-lane: viewer-e2e`, so two PRs adding a spec never edit the same line of this file
+ * (see `tests/e2e/hatch-card-452.e2e.spec.ts`).
+ */
+const FROZEN_VIEWER_E2E = /(assistant-context|assistant-report-claims|assistant-check-authoring|assistant-artifacts|viewer-smoke|semantic-linked-records|mobile-page-zoom|mobile-panels|mobile-long-press|mobile-journey|usd-export|laz-wasm|copc-lod|copc-deviation|deviation-attribution|model-reposition|document-text|content-storage|document-chart-source-6629|validation-colors|rte-gpu-witness|federation-control-triplet|landxml-units-smoke|ribbon-labels|ribbon-classic-migration|panel-groups-5873|ribbon-reachability-5874|hierarchy-names|hierarchy-row-selection|bulk-target-sources|bulk-filter-groups|entity-context-menu|ribbon-entity-actions|viewport-hud|command-palette-entry|navigation-presets|sticky-overrides|orbit-pivot-marker|target-size-focus-5826|visibility-chips|visibility-empty-result|visibility-scenarios|section-measure-lasting-5893|lens-filter-groups|keyboard-dispatcher|lists-value-rules|swept-disk-centreline|swept-disk-inspection|swept-disk-source-snap|ortho-depth-nudge|wall-card-scroll|wall-tab-focus-295|info-dialog-fit-342)\.e2e\.spec\.ts/;
+const E2E_DIR = fileURLToPath(new URL('./tests/e2e/', import.meta.url));
+
+/** Every `tests/e2e/*.e2e.spec.ts` that has the line `// e2e-lane: <lane>`, as a pattern matching its path. */
+function specsOfLane(lane: string): RegExp[] {
+  const marker = new RegExp(`^// e2e-lane: ${lane}$`, 'm');
+  return readdirSync(E2E_DIR)
+    .filter((name) => name.endsWith('.e2e.spec.ts') && marker.test(readFileSync(join(E2E_DIR, name), 'utf8')))
+    .sort()
+    .map((name) => new RegExp(`/e2e/${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+}
+
+const VIEWER_E2E_SPECS: RegExp[] = [FROZEN_VIEWER_E2E, ...specsOfLane('viewer-e2e')];
 
 export default defineConfig({
   // Covers tests/benchmark (perf) and tests/e2e (functional smoke);
@@ -52,7 +75,7 @@ export default defineConfig({
   projects: [
     {
       name: 'viewer-e2e',
-      testMatch: /(assistant-context|assistant-report-claims|assistant-check-authoring|assistant-artifacts|viewer-smoke|semantic-linked-records|mobile-page-zoom|mobile-panels|mobile-long-press|mobile-journey|usd-export|laz-wasm|copc-lod|copc-deviation|deviation-attribution|model-reposition|document-text|content-storage|document-chart-source-6629|validation-colors|rte-gpu-witness|federation-control-triplet|landxml-units-smoke|ribbon-labels|ribbon-classic-migration|panel-groups-5873|ribbon-reachability-5874|hierarchy-names|hierarchy-row-selection|bulk-target-sources|bulk-filter-groups|entity-context-menu|ribbon-entity-actions|viewport-hud|command-palette-entry|navigation-presets|sticky-overrides|orbit-pivot-marker|target-size-focus-5826|visibility-chips|visibility-empty-result|visibility-scenarios|section-measure-lasting-5893|lens-filter-groups|keyboard-dispatcher|lists-value-rules|swept-disk-centreline|swept-disk-inspection|swept-disk-source-snap|ortho-depth-nudge|wall-card-scroll|wall-tab-focus-295|info-dialog-fit-342|plan-cut-height-drag-451|wall-escape-453|hatch-card-452|underlay-pdf-image|smoke-fixes-540-543)\.e2e\.spec\.ts/,
+      testMatch: VIEWER_E2E_SPECS,
       timeout: 240000,
       use: {
         ...devices['Desktop Chrome'],
@@ -73,7 +96,7 @@ export default defineConfig({
     },
     {
       name: 'viewer-e2e-ci',
-      testMatch: /(assistant-context|assistant-report-claims|assistant-check-authoring|assistant-artifacts|viewer-smoke|semantic-linked-records|mobile-page-zoom|mobile-panels|mobile-long-press|mobile-journey|usd-export|laz-wasm|copc-lod|copc-deviation|deviation-attribution|model-reposition|document-text|content-storage|document-chart-source-6629|validation-colors|rte-gpu-witness|federation-control-triplet|landxml-units-smoke|ribbon-labels|ribbon-classic-migration|panel-groups-5873|ribbon-reachability-5874|hierarchy-names|hierarchy-row-selection|bulk-target-sources|bulk-filter-groups|entity-context-menu|ribbon-entity-actions|viewport-hud|command-palette-entry|navigation-presets|sticky-overrides|orbit-pivot-marker|target-size-focus-5826|visibility-chips|visibility-empty-result|visibility-scenarios|section-measure-lasting-5893|lens-filter-groups|keyboard-dispatcher|lists-value-rules|swept-disk-centreline|swept-disk-inspection|swept-disk-source-snap|ortho-depth-nudge|wall-card-scroll|wall-tab-focus-295|info-dialog-fit-342|plan-cut-height-drag-451|wall-escape-453|hatch-card-452|underlay-pdf-image|smoke-fixes-540-543)\.e2e\.spec\.ts/,
+      testMatch: VIEWER_E2E_SPECS,
       timeout: 240000,
       use: {
         baseURL: BASE_URL,

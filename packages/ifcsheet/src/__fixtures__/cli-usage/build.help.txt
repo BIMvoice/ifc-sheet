@@ -1,0 +1,15 @@
+  build   Lay out the starting drawing set of the model (a plan per level, the
+          elevations, the proposed sections) and write it as one PDF, a page per
+          sheet. With --dxf, also write one DXF per sheet into that directory.
+          With --template, the sheets are made by the rules of a set template (a .bvset file
+          saved from a project) instead: the same plan-per-storey, elevation and section
+          rules the app applies, a rule the model cannot meet skipped and said.
+          With --pac, the sheets are the permit project's (PAC, Legea 169/2026 Anexa 2: plans, facades, sections) and the
+          one PDF opens with the opis page: the contents Anexa 2 lists, each with its point and whether the file holds it.
+          The sheets and views (and with --pac the opis) are in the language the project records, else --locale
+          (ro or en), else English (Romanian with --pac).
+          A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
+          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
+          With --project, the sheets are the project's own when it holds any (its views, its sheets with the
+          viewports where they were put, the dimensions and texts drawn on the views, the list schedules placed);
+          a project with no sheet gets the starting set. Which one is printed is said on stderr.

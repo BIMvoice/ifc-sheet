@@ -1,0 +1,1 @@
+  ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>] [--project <file>]

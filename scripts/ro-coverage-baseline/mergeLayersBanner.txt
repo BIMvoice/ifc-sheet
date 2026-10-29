@@ -1,0 +1,5 @@
+mergeLayersBanner.dismissAriaLabel
+mergeLayersBanner.reloadButton
+mergeLayersBanner.subtitle
+mergeLayersBanner.titleDisabled
+mergeLayersBanner.titleEnabled

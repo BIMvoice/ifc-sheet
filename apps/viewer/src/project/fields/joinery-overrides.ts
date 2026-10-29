@@ -12,5 +12,16 @@ declare module '../types' {
   }
 }
 
-/** Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was. */
-export const joineryOverridesField = optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides));
+/** Typed cells of the joinery schedules (#446): absent unless the user typed one, so a project without any is saved as it always was. Undo puts back the cells a step changed. */
+export const joineryOverridesField = {
+  ...optionalField('joineryOverrides', whenUsable('joineryOverrides', readJoineryOverrides)),
+  heldByUndo: true,
+} as const;
+
+/** Registered by this file (`./registered.ts`): found there, not listed. */
+export const registeredFields = [joineryOverridesField] as const;
+declare module './registered' {
+  interface RegisteredFieldKeys {
+    joineryOverrides: true;
+  }
+}

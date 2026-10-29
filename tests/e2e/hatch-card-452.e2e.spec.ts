@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// e2e-lane: viewer-e2e
+
 /**
  * A hatched zone already drawn can be changed (#452). The hatch tool's card sets
  * the NEXT zone only, and a chosen zone had no card at all, so changing the pattern

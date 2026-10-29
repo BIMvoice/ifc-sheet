@@ -1,0 +1,1 @@
+  ifcsheet classify <model.ifc> --project <file> [--system <name>] [--csv | --json] [--locale <ro|en>]

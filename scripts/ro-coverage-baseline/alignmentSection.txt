@@ -1,0 +1,10 @@
+alignmentSection.approximate
+alignmentSection.axis
+alignmentSection.axisFallback
+alignmentSection.distance
+alignmentSection.error
+alignmentSection.help
+alignmentSection.loading
+alignmentSection.mode
+alignmentSection.model
+alignmentSection.noAxes

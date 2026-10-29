@@ -1,0 +1,13 @@
+align.alreadyAligned
+align.bar.count
+align.hint.commit
+align.hint.reference
+align.hint.targets
+align.label
+align.mode.aria
+align.mode.bottom
+align.mode.centre
+align.mode.left
+align.mode.middle
+align.mode.right
+align.mode.top

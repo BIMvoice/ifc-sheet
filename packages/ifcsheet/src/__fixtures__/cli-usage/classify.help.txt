@@ -1,0 +1,3 @@
+  classify  The model's types with their classification code: the model's own IfcClassificationReference first, else the
+          project's mapping (a type, a material or a class to the office's code). --system picks one of the project's
+          systems (default: the first). Text, CSV with --csv, JSON with --json.

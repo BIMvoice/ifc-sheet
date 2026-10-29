@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// e2e-lane: viewer-e2e
+
 /**
  * PDF and image underlays in a real browser (#457): the unit tests never run the PDF worker or OffscreenCanvas.
  * Demo project, plan A-101, a page of a two-page PDF and a PNG laid under the drawing, scaled from two clicked

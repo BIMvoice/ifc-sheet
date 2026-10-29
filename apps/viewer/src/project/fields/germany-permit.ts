@@ -23,8 +23,20 @@ declare module '../types' {
 /** Off is stored as absent, so a project that never chose saves exactly as before; anything but `true` loads as absent. */
 export const germanyPermitField = optionalField('germanyPermit', (raw) => (raw.germanyPermit === true ? { germanyPermit: true as const } : {}));
 
-/** A value that is not one of the four Länder choices loads as absent. */
-export const germanyLandField = optionalField('germanyLand', (raw) => {
-  const land = GERMANY_LANDS.find((l) => l === raw.germanyLand);
-  return land ? { germanyLand: land } : {};
-});
+/** A value that is not one of the four Länder choices loads as absent. Undo puts back the Land a step changed. */
+export const germanyLandField = {
+  ...optionalField('germanyLand', (raw) => {
+    const land = GERMANY_LANDS.find((l) => l === raw.germanyLand);
+    return land ? { germanyLand: land } : {};
+  }),
+  heldByUndo: true,
+} as const;
+
+/** Registered by this file (`./registered.ts`): found there, not listed. */
+export const registeredFields = [germanyLandField, germanyPermitField] as const;
+declare module './registered' {
+  interface RegisteredFieldKeys {
+    germanyLand: true;
+    germanyPermit: true;
+  }
+}

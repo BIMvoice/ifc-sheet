@@ -3,18 +3,22 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The fields registered by their own file (#144). A NEW FIELD adds its `fields/<key>.ts` and one import line below,
- * kept sorted by file name, plus its entry in `REGISTERED_FIELD_DEFS` (one line, same order). Nothing is appended to the
- * end of the list in `./index.ts` any more, so two PRs adding a field each touch a different line.
+ * The fields registered by their own file (#144), found, not listed: no line of this file or of `./index.ts` is edited
+ * to add a field, so two PRs adding a field each touch only their own files. A NEW FIELD's `fields/<key>.ts`:
+ *   - exports `registeredFields`, the list of the fields it defines (`export const registeredFields = [myField] as const;`);
+ *   - declares their keys here, which `MissingField` in `./index.ts` checks every `ProjectDocument` key against:
+ *     `declare module './registered' { interface RegisteredFieldKeys { myKey: true } }`.
+ * See `./germany-permit.ts`. Every `fields/*.ts` is loaded (not the tests, the samples, `./index.ts` or this file); one
+ * without `registeredFields` adds nothing, and the frozen list in `./index.ts` keeps its fields there.
  *
- * The list's order is not the file's order: `assembleFields` sorts by field key, so the key order of a saved file
- * (the fields of `./index.ts` first, then these) does not depend on where a line sits or on import order. A field
- * added here is written after every field of `./index.ts`; its place among the registered ones is its key's.
+ * The list's order is not the folder's: `assembleFields` sorts by field key, so the key order of a saved file (the fields
+ * of `./index.ts` first, then these) does not depend on file names or load order. A field registered here is written
+ * after every field of `./index.ts`; its place among the registered ones is its key's.
  */
 import type { DocumentField, FieldKey } from './define';
-import { joineryOverridesField } from './joinery-overrides';
-import { germanyLandField, germanyPermitField } from './germany-permit';
-import { lineTypesField } from './line-types';
+
+/** The key of every registered field, each added by its own file through `declare module './registered'`. */
+export interface RegisteredFieldKeys {}
 
 /** `legacy` (the frozen list in `./index.ts`) followed by `registered` sorted by key; a key listed twice throws. */
 export function assembleFields(legacy: readonly DocumentField<FieldKey>[], registered: readonly DocumentField<FieldKey>[]): DocumentField<FieldKey>[] {
@@ -28,9 +32,7 @@ export function assembleFields(legacy: readonly DocumentField<FieldKey>[], regis
   return all;
 }
 
-export const REGISTERED_FIELD_DEFS = [
-  germanyLandField,
-  germanyPermitField,
-  joineryOverridesField,
-  lineTypesField,
-] as const satisfies readonly DocumentField<FieldKey>[];
+const modules = import.meta.glob<{ registeredFields?: readonly DocumentField<FieldKey>[] }>(['./*.ts', '!./*.test.ts', '!./*.sample.ts', '!./index.ts'], { eager: true });
+
+/** Every field a `fields/<key>.ts` registers, in no particular order (`assembleFields` sorts them). */
+export const REGISTERED_FIELD_DEFS: readonly DocumentField<FieldKey>[] = Object.values(modules).flatMap((m) => m.registeredFields ?? []);

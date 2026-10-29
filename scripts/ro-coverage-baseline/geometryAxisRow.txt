@@ -1,0 +1,2 @@
+geometryAxisRow.decreaseAriaLabel
+geometryAxisRow.increaseAriaLabel

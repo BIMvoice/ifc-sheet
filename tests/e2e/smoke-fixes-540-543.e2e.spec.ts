@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// e2e-lane: viewer-e2e
+
 /**
  * Four defects a browser smoke test of main found (#540 to #543), run in the real app on the demo project: the
  * underlay panel is on the drawing opened from a sheet, a drawing's own detail level is in its card, the pencil on a

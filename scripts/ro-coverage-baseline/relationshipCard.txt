@@ -1,0 +1,2 @@
+relationshipCard.exactRecords
+relationshipCard.showMore

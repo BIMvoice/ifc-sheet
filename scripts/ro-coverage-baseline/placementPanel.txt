@@ -1,0 +1,11 @@
+placementPanel.georeference.editToggleOff
+placementPanel.georeference.editToggleOn
+placementPanel.georeference.emptyHint
+placementPanel.georeference.emptyTitle
+placementPanel.georeference.startHint
+placementPanel.headerCloseTitle
+placementPanel.local.emptyHint
+placementPanel.local.emptyTitle
+placementPanel.local.startButton
+placementPanel.tabs.georeference
+placementPanel.tabs.local

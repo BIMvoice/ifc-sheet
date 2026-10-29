@@ -1,0 +1,12 @@
+documentMenu.actions
+documentMenu.actionsTitle
+documentMenu.copySuffix
+documentMenu.delete
+documentMenu.duplicate
+documentMenu.exportTemplate
+documentMenu.importFailed
+documentMenu.importFailedWithReason
+documentMenu.importTemplate
+documentMenu.imported
+documentMenu.namePrompt
+documentMenu.rename

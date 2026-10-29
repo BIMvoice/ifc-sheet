@@ -30,9 +30,15 @@
  * `--import` flag. That non-obviousness is most of why the wall looked
  * permanent; see `apps/viewer/package.json`'s `test` script.
  *
+ * A third, added for registries: `import.meta.glob`, a Vite transform, is
+ * rewritten for the plain subset `import-meta-glob.mjs` describes, so a list
+ * made of one file per entry (discovered, not listed) loads under the runner
+ * as it does in the app.
+ *
  * Scope is deliberately narrow: `resolve` only claims the `~icons/` prefix,
  * and `load` only touches files under this repo whose source actually mentions
- * `import.meta.env`. Everything else falls through to the default loader.
+ * `import.meta.env` or calls `import.meta.glob`. Everything else falls through
+ * to the default loader.
  */
 
 import { register } from 'node:module';

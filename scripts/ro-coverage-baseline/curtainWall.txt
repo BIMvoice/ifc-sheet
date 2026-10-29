@@ -1,0 +1,13 @@
+curtainWall.field.baseOffset
+curtainWall.field.mullionDepth
+curtainWall.field.mullionWidth
+curtainWall.field.panelHeight
+curtainWall.field.panelWidth
+curtainWall.hint.end
+curtainWall.hint.start
+curtainWall.label
+curtainWall.noOpening
+curtainWall.palette
+curtainWall.summary
+curtainWall.tooManyPanels
+curtainWall.tooShort
