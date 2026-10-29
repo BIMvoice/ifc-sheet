@@ -3,7 +3,7 @@ ifcsheet: drawing sets from IFC models
 Usage:
   ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]
   ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements]
-  ifcsheet materials <model.ifc> [--project <file>] [--json]
+  ifcsheet materials <model.ifc> [--project <file>] [--standard <id>] [--json]
   ifcsheet boq <model.ifc> --project <file> [--csv | --json] [--detail] [--locale <ro|en>]
   ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>] [--project <file>]
   ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]
@@ -32,6 +32,7 @@ Commands:
   materials  The model's materials and how each draws where a view cuts it: hatch, scale,
           fill, hatch pen, membrane. With --project, the project's own table applies (what the
           app's Materials section edits); a material it has no row for is guessed from its name.
+          With --standard, that standard's hatch rows (ro, de) are laid over the table first.
   boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
           in its own unit, from the quantities the model declares (never zero for a missing one: the elements
           that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.
