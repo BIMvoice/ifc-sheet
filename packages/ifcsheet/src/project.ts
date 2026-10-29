@@ -9,6 +9,10 @@
 
 export { readJoineryList, readJoinerySpec } from './joinery-spec-read.js';
 export {
+  FANLIGHT_SHARE, MAX_LEAVES, cleanOpening, configureTypeOpening, leafOperations, openingOfSpec, specFromOpening, typeEntryId,
+  type ConfigureTypeInput, type ProjectJoinery, type TypeOpening,
+} from './joinery-type-config.js';
+export {
   JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
   type JoineryViewLineLike, type JoineryViewName,
 } from './joinery-view-detail.js';

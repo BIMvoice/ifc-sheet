@@ -38,6 +38,30 @@ function wrapToWidth(text: string, size: number, width: number): string[] {
   return lines.length ? lines : [text];
 }
 
+/**
+ * The block with each column wide enough for the text that would otherwise run into its neighbour (#543): a left-aligned cell is
+ * followed by a filled cell, or ends the row; a figure, right-aligned, is preceded by one. A cell that spills into an empty neighbour
+ * is left as it is, so a table that fits keeps its columns exactly.
+ */
+function fitColumns(block: TableBlock): TableBlock {
+  const columns = [...block.columns];
+  const rows = block.header ? [{ cells: block.header, bold: true }, ...block.rows] : block.rows;
+  for (const row of rows) {
+    row.cells.forEach((text, c) => {
+      if (block.skipEmpty && !text) return;
+      const figure = block.numeric(c);
+      const neighbour = row.cells[figure ? c - 1 : c + 1];
+      if (neighbour !== undefined && !neighbour) return;
+      // The same estimate the line wrapping uses, a little wider for bold; the cell is inset by PAD on both sides.
+      const need = textWidth(text, TEXT) * (row.bold ? 1.08 : 1) + 2 * PAD;
+      if (need > columns[c]) columns[c] = Math.ceil(need);
+    });
+  }
+  return columns.some((w, c) => w !== block.columns[c]) ? { ...block, columns } : block;
+}
+
+const fitted = (items: readonly TableItem[]): TableItem[] => items.map((i) => (i.kind === 'table' ? { ...i, block: fitColumns(i.block) } : i));
+
 export interface TableRow {
   cells: readonly string[];
   bold?: boolean;
@@ -165,7 +189,8 @@ export function tableMinBox(items: readonly TableItem[], tail = 0): { width: num
   return { width: widthOf(items), height: TITLE_H + ROW * 2 + Math.max(0, ...items.flatMap((i) => (i.kind === 'text' ? [i.h] : []))) + tail };
 }
 
-export function layoutPagedTable(title: string, titleSize: number, items: readonly TableItem[], options: PagedOptions = {}): ScheduleLayout {
+export function layoutPagedTable(title: string, titleSize: number, source: readonly TableItem[], options: PagedOptions = {}): ScheduleLayout {
+  const items = fitted(source);
   const tail = options.tail ?? 0;
   const width = widthOf(items);
   const pages = paginate(flatten(items, width), options.maxHeight, tail);
