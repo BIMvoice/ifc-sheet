@@ -16,9 +16,10 @@
 import { createSectionConfig, Drawing2DGenerator, type Drawing2D, type SectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ModelExtent } from './drawing-set.js';
-import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
+import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
 import { customPlaneCenter } from './section-plane.js';
 import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
+import { boundedProjectionBands, viewProjection } from './plan-projection.js';
 import { levelFloorY, planDepthBelowCut, resolvePlanLevel } from './view-defaults.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
@@ -49,6 +50,20 @@ function storedPlane(plane: SectionProjectPlane, depth: number): SectionConfig {
   return config;
 }
 
+/**
+ * A plan in a model with fewer than two levels, as the app draws it: the app scopes a plan's bands to its storey from
+ * two floors up (`useDrawingGeneration`), and with one there is no other floor to keep out, so the whole extent is
+ * looked at on both sides of the cut. The floor side is the plan's depth (its cut height when it has none), and what
+ * is overhead is drawn too: the bridge model's deck sits above its storey at 0, and its 1.2 m cut meets none of it (#615).
+ * The bands are `boundedProjectionBands`, the function the app's hook calls.
+ */
+function singleLevelPlan(view: PlanProjectView, cut: number, extent: ModelExtent): SectionConfig {
+  const { constructionProjectionDepth: depth } = viewProjection(view);
+  const full = Math.max(extent.max.y - extent.min.y, 1e-3);
+  const { below, above } = boundedProjectionBands({ below: full, above: full }, { depth: depth ?? 0, position: cut, axisMax: extent.max.y, down: true, plainPlan: true });
+  return createSectionConfig('y', cut, { projectionDepth: below, clipProjectionBands: true, projectionBelowDepth: below, projectionAboveDepth: above, includeHiddenLines: false });
+}
+
 /** The generator's settings for `view`, or `null` for a view with no plane (3D, drafting) or a plan whose level is gone. */
 export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLevel[], extent: ModelExtent): SectionConfig | null {
   const span = Math.max(extent.max.x - extent.min.x, extent.max.y - extent.min.y, extent.max.z - extent.min.z, 1);
@@ -56,9 +71,9 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!level) return null;
-      // A plan with no depth of its own shows its cut. A cut above the model stays there and cuts nothing (#226).
+      // A cut above the model stays there and cuts nothing (#226).
       const cut = levelFloorY(level) + view.cutHeight;
-      return createSectionConfig('y', cut, { projectionDepth: planDepthBelowCut(view.viewDepth ?? 0, cut, extent.max.y), includeHiddenLines: false });
+      return levels.length < 2 && !view.reflected ? singleLevelPlan(view, cut, extent) : createSectionConfig('y', cut, { projectionDepth: planDepthBelowCut(view.viewDepth ?? 0, cut, extent.max.y), includeHiddenLines: false });
     }
     case 'elevation': {
       if (view.interior) return storedPlane(view.interior.plane, view.viewDepth ?? span);
@@ -79,25 +94,9 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
 export const isEmptyDrawing = (d: Drawing2D): boolean => d.lines.length === 0 && d.cutPolygons.length === 0 && d.projectionPolygons.length === 0;
 
 /**
- * How the app draws a plan whose cut, with its own depth, shows nothing, when the model has fewer than two levels (the
- * app scopes the bands to the storey from two up, `useDrawingGeneration.ts`): the floor side as deep as the cut is high
- * (`constructionProjectionDepth` of a plan with no depth, `project/view-drawings.ts`), and the overhead side over the whole
- * extent, because with one level there is no other floor to keep out. A bridge deck above a storey at 0 is seen
- * from there: its cut at 1.2 m meets nothing, and the deck above it is what the app draws. `null` for a view that is not a
- * plan, or a model with two levels or more (a cut with nothing in its storey is empty there, in the app too).
- */
-export function overheadPlanConfig(view: ProjectView, config: SectionConfig, levels: readonly ProjectLevel[], extent: ModelExtent): SectionConfig | null {
-  if (view.kind !== 'plan' || levels.length >= 2) return null;
-  const below = planDepthBelowCut(view.cutHeight > 0 ? view.cutHeight : 0, config.plane.position, extent.max.y);
-  const above = Math.max(extent.max.y - extent.min.y, 1e-3);
-  return { ...config, projectionDepth: below, clipProjectionBands: true, projectionBelowDepth: below, projectionAboveDepth: above };
-}
-
-/**
  * The drawing of every view in `views` that has a plane, by view id. Views
  * whose drawing fails are left out and reported through `onError`. A plan
- * whose cut shows nothing is drawn as the app draws it (`overheadPlanConfig`);
- * one still empty after that is reported through `onEmpty`.
+ * left with nothing to draw is reported through `onEmpty`.
  */
 export async function generateViewDrawings(
   views: readonly ProjectView[], meshes: MeshData[], levels: readonly ProjectLevel[], extent: ModelExtent,
@@ -124,9 +123,7 @@ export async function generateViewDrawings(
       if (!config) continue;
       try {
         const projection = config.projectionDepth > 0;
-        let drawing = await generator.generate(meshes, config, { includeHiddenLines: false, includeProjection: projection, includeEdges: projection, mergeLines: true });
-        const overhead = view.kind === 'plan' && isEmptyDrawing(drawing) ? overheadPlanConfig(view, config, levels, extent) : null;
-        if (overhead) drawing = await generator.generate(meshes, overhead, { includeHiddenLines: false, includeProjection: true, includeEdges: true, mergeLines: true });
+        const drawing = await generator.generate(meshes, config, { includeHiddenLines: false, includeProjection: projection, includeEdges: projection, mergeLines: true });
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);
         out.set(view.id, drawing);
       } catch (err) {

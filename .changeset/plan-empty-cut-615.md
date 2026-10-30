@@ -2,4 +2,4 @@
 "@bimvoice/ifcsheet": patch
 ---
 
-A plan whose cut meets nothing is no longer blank in `ifcsheet build` and the engine's PDF and DXF when the model has one level: it is drawn as the app draws it, with the overhead side of the cut over the whole extent (a bridge deck above a storey at 0). `generateViewDrawings` and `sheetGraphics` report a plan that is still empty through `onEmpty` and `onEmptyView` (Refs #615).
+Every plan in a model with fewer than two levels draws what is overhead as the app does, in `ifcsheet build` and the engine's PDF and DXF: the whole extent is seen on both sides of the cut, the floor side as deep as the plan's depth (its cut height when it has none). A bridge deck above a storey at 0, whose 1.2 m cut met nothing, is no longer a blank sheet, and a one-level plan gains dashed overhead lines. The bands come from one function, `boundedProjectionBands`, that the app's drawing hook calls too, with `viewProjection` for a view's depth. `generateViewDrawings` and `sheetGraphics` report a plan that is still empty through `onEmpty` and `onEmptyView` (Refs #615).
