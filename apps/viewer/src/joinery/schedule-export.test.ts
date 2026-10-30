@@ -23,7 +23,7 @@ import { roomFinishes, type RoomInput } from './room-finishes';
 import { finishTable, layoutRoomFinishes } from './room-finishes-layout';
 import { typeQuantities, type TypeElement } from './type-quantities';
 import { layoutTypeQuantities, typeQuantityTable } from './type-quantities-layout';
-import { layoutRegister, registerTable } from './register-layout';
+import { layoutRegister, registerTable } from '@bimvoice/ifcsheet';
 import { layoutUrban, urbanTable, type UrbanLabels } from '@/urban/urban-layout';
 import type { UrbanIndicators } from '@/urban/indicators';
 import { assertSameRows, csvLines, joineryLabels, shows, tableCsv, textsOf } from './export-test-util';

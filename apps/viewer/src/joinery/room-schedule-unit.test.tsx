@@ -14,15 +14,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as jspdf from 'jspdf';
 import { encodeDxfCp1252 } from '@ifc-lite/drawing-2d';
-import { roomSchedule, type RoomRecord } from '@bimvoice/ifcsheet';
+import { layoutRoomSchedule, PAD, roomSchedule, roomScheduleCells, textWidth, type RoomRecord } from '@bimvoice/ifcsheet';
 import { roomScheduleEn } from '@/i18n/catalogues/room-schedule.en';
 import { roomScheduleRo } from '@/i18n/catalogues/room-schedule.ro';
 import { roomSummaryEn } from '@/i18n/catalogues/room-summary.en';
 import { roomSummaryRo } from '@/i18n/catalogues/room-summary.ro';
 import { embedFonts, missingGlyphs } from '@/issue/pdf-fonts';
 import { roomScheduleLabelsOf } from '@/components/viewer/joinery/room-schedule-hooks';
-import { layoutRoomSchedule, roomScheduleCells } from './room-schedule-layout';
-import { PAD, textWidth } from '@bimvoice/ifcsheet';
 
 const ROOMS: RoomRecord[] = [
   { id: 'a', number: '1', name: 'Flur', level: 0, area: 12.5, source: 'quantity', perimeter: 14 },

@@ -13,6 +13,12 @@ DraftLayer: type (type-only)
 DraftParamValue: type (type-only)
 DraftShape: type (type-only)
 EntityShape: type (type-only)
+HATCH_UNIT_M: value
+HatchLineFamily: type (type-only)
+HatchOptions: type (type-only)
+HatchPattern: type (type-only)
+HatchResult: type (type-only)
+HatchSegment: type (type-only)
 Json: type (type-only)
 LayerGroup: type (type-only)
 LayerVisibilityScope: type (type-only)
@@ -45,17 +51,24 @@ TEXT_OVERRIDES: value
 TableBlock: type (type-only)
 TableItem: type (type-only)
 TextFrame: type (type-only)
+angularLayout: value
 annotationAtFactor: value
 annotationFactor: value
+arcPoints: value
 arrowMark: value
 asTextFrame: value
+axisLayout: value
+builtInPatterns: value
 dashFor: value
 dashOf: value
 dimStyleOf: value
 entityPen: value
 fail: value
+findPattern: value
 formatDimension: value
 formatLength: value
+formatLevel: value
+hatchSegments: value
 holdsSet: value
 isDisciplineId: value
 isGeometry: value
@@ -70,13 +83,17 @@ layoutListSchedule: value
 layoutOnSheet: value
 layoutPagedTable: value
 layoutTableOnSheet: value
+leaderTextRight: value
+levelWitness: value
 linearLayout: value
 listAt: value
 lookOf: value
 naturalDecimals: value
 overrideKey: value
 pageTitle: value
+parsePat: value
 projectSetOf: value
+radialLayout: value
 readDimStyles: value
 readDraft: value
 readDraftLayer: value
@@ -99,6 +116,7 @@ resolveDim: value
 resolveText: value
 scheduleBox: value
 scheduleHomeBox: value
+serializePat: value
 sheetDrawingArea: value
 tablesFace: value
 textStyleOf: value

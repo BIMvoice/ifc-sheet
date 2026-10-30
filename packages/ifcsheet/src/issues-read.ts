@@ -8,8 +8,8 @@
  * place of the problem rather than silently repaired.
  */
 
-import { paperFromLabel } from '@/project/paper';
-import type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from '@/issue/types';
+import { paperFromLabel } from './paper.js';
+import type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from './issue-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

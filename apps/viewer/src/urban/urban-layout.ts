@@ -13,7 +13,8 @@
  */
 
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, type TableItem, wrapNote } from '@bimvoice/ifcsheet';
+import { layoutPagedTable, PEN, wrapNote, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
+
 export { wrapNote };
 import { sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ExportCell, ExportTable } from '@/joinery/schedule-export';

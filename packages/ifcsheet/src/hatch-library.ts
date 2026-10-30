@@ -90,3 +90,6 @@ export function findPattern(name: string, extra?: readonly HatchPattern[]): Hatc
   }
   return builtInPatterns().find((p) => p.name === key);
 }
+
+/** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
+export const HATCH_UNIT_M = 0.1;

@@ -4,12 +4,16 @@
 
 /**
  * #479: `ifcsheet build --project` prints the drawing set the app saved, as the app's sheets show it. On AC20-FZK-Haus the Wall lays
- * out its set; a plan's viewport is moved by hand, a dimension and a text are drawn on that plan, and a list schedule is placed on
- * a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
+ * out its set; a plan's viewport is moved by hand, a dimension and a text are drawn on that plan together with one of each other
+ * kind the command line prints (a level mark, a leader, a radial and an angular dimension, a grid axis, two hatches, a circle
+ * and an arc), and a list schedule is placed on a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
  * the issue captures, `captureSheets`):
  *   - the PDF has a page per sheet, in the set's order, each printing its sheet's number;
  *   - the dimension's figure and the text are printed at the paper point where the sheet draws them (so the moved viewport is where
  *     it was put);
+ *   - every text of those drafts is printed where the sheet draws it, and every corner of every line, ring and hatch stroke the
+ *     sheet draws for them is a corner of a path in the PDF, within the same tolerance;
+ *   - stderr no longer names those kinds as left out;
  *   - every text of the placed schedule (title, header, rows, totals) is printed, at the point the sheet draws it.
  * The engine's own side, without the app, is `packages/ifcsheet/src/project-set.fzk.test.ts`.
  */
@@ -27,12 +31,14 @@ import { cleanup } from '@/test/render.js';
 import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
 import { setExtent } from '@/draft-set/body';
 import { clearDraftHistory, commitDrafts, newDraft } from '@/drafting/draft-store';
+import type { EntityShape } from '@/drafting/types';
 import { captureSheets } from '@/issue/capture';
+import { addBoqArticle, updateBoqArticle } from '@/boq/boq-actions';
 import { addListScheduleToSet } from '@/joinery/list-schedule-actions';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { useViewerStore } from '@/store';
-import { startDrawingSet } from './drawing-set-actions';
+import { addRegisterToSet, addScheduleToSet, startDrawingSet } from './drawing-set-actions';
 import { modelLevels } from './model-levels';
 import { projectDocument, resetProject, syncProjectWithModels, useProjectStore } from './project-store';
 import { serializeProject } from './project-file';
@@ -108,9 +114,76 @@ function nearest(t: Placed, page: readonly PdfText[]): { found: PdfText; off: nu
   return best;
 }
 
+interface Corner { x: number; y: number }
+
+/** The corners of what `root` draws as lines and fills: each path's points, a circle's four quadrants, a rect's four corners (paper mm). */
+function svgCorners(root: Element): Corner[] {
+  const out: Corner[] = [];
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    if (el.tagName === 'path') {
+      const commands = el.getAttribute('d') ?? '';
+      // The commands the sheet writes for a path: M and L with absolute points, h for a dot, Z; arcs (`a`) only draw a dot's disc.
+      if ([...commands.matchAll(/[A-Za-z]/g)].some((letter) => letter[0] === 'a')) continue;
+      for (const [, x, y] of commands.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g)) out.push({ x: Number(x), y: Number(y) });
+    } else if (el.tagName === 'circle') {
+      const [cx, cy, r] = ['cx', 'cy', 'r'].map((a) => Number(el.getAttribute(a)));
+      out.push({ x: cx + r, y: cy }, { x: cx - r, y: cy }, { x: cx, y: cy + r }, { x: cx, y: cy - r });
+    } else if (el.tagName === 'rect') {
+      const [x, y, w, h] = ['x', 'y', 'width', 'height'].map((a) => Number(el.getAttribute(a)));
+      out.push({ x, y }, { x: x + w, y }, { x, y: y + h }, { x: x + w, y: y + h });
+    }
+  }
+  return out;
+}
+
+/** Every point of every path the PDF pages draw (paper mm from the top left). */
+async function pdfCorners(bytes: Uint8Array): Promise<Corner[][]> {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = pdfjs.getDocument({ data: bytes.slice() });
+  const pdf = await task.promise;
+  try {
+    const pages: Corner[][] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const height = page.view[3] * MM_PER_PT;
+      const { fnArray, argsArray } = await page.getOperatorList();
+      const corners: Corner[] = [];
+      fnArray.forEach((fn, j) => {
+        if (fn !== pdfjs.OPS.constructPath) return;
+        // The path as pdf.js hands it over: [draw op, its numbers...] runs. 0 move and 1 line take a point, 2 a curve three, 3 two, 4 closes.
+        const run = Array.from(argsArray[j][1][0] as ArrayLike<number>);
+        const takes = [2, 2, 6, 4, 0];
+        for (let k = 0; k < run.length; k += 1 + takes[run[k]]) {
+          for (let m = 1; m <= takes[run[k]]; m += 2) corners.push({ x: run[k + m] * MM_PER_PT, y: height - run[k + m + 1] * MM_PER_PT });
+        }
+      });
+      pages.push(corners);
+    }
+    return pages;
+  } finally {
+    await task.destroy();
+  }
+}
+
 const WALLS_BY_TYPE = {
   filter: { classes: ['IfcWallStandardCase'] }, groupBy: ['type'], sum: ['area'],
   columns: [{ id: 'type', source: 'attribute' as const, propertyName: 'Type' }, { id: 'area', source: 'quantity' as const, psetName: 'BaseQuantities', propertyName: 'NetSideArea' }],
+};
+
+/** One of each kind besides the dimension and the text, placed round the viewport's centre `c`, metres. */
+const KINDS = (c: { x: number; y: number }): EntityShape[] => {
+  const square = (x: number, y: number, side: number) => [{ x, y }, { x: x + side, y }, { x: x + side, y: y + side }, { x, y: y + side }];
+  return [
+    { type: 'level', p: { x: c.x - 3, y: c.y + 2.5 }, value: 2.7, height: 0.25 },
+    { type: 'leader', pts: [{ x: c.x + 1, y: c.y + 2.5 }, { x: c.x + 2, y: c.y + 3 }, { x: c.x + 3, y: c.y + 3 }], text: 'Leader note', height: 0.25 },
+    { type: 'radial', c: { x: c.x - 2, y: c.y - 1 }, r: 0.8, at: { x: c.x - 1, y: c.y - 0.4 }, diameter: true, height: 0.25 },
+    { type: 'angular', c: { x: c.x + 2, y: c.y - 1 }, a: { x: c.x + 3, y: c.y - 1 }, b: { x: c.x + 2, y: c.y }, at: { x: c.x + 2.8, y: c.y - 0.2 }, height: 0.25 },
+    { type: 'axis', a: { x: c.x - 3.5, y: c.y - 2.5 }, b: { x: c.x - 3.5, y: c.y - 0.5 }, label: 'A', bubble: 'circle', ends: 'both', size: 0.5, height: 0.25, lineType: 'dashdot' },
+    { type: 'hatch', loops: [square(c.x + 3, c.y - 3, 1), square(c.x + 3.3, c.y - 2.7, 0.4)], pattern: 'LINES45', scale: 1, angle: 0 },
+    { type: 'hatch', loops: [square(c.x + 1, c.y - 3, 1)], pattern: 'SOLID', scale: 1, angle: 0 },
+    { type: 'circle', c: { x: c.x, y: c.y + 0.2 }, r: 0.6 },
+    { type: 'arc', c: { x: c.x + 0.5, y: c.y - 1.5 }, r: 0.7, start: 0.3, end: 2.2 },
+  ];
 };
 
 const dirs: string[] = [];
@@ -153,8 +226,14 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
       ...useProjectStore.getState().drafts,
       newDraft(plan.id, '0', { type: 'dimension', variant: 'aligned', a: { x: c.x - 4.25, y: c.y }, b: { x: c.x + 4.25, y: c.y }, at: { x: c.x, y: c.y + 1 }, height: 0.25 }),
       newDraft(plan.id, '0', { type: 'text', p: { x: c.x, y: c.y - 2 }, text: 'Hand note', height: 0.25, rotation: 0 }),
+      ...KINDS(c).map((shape) => newDraft(plan.id, '0', shape)),
     ]);
     const scheduleSheetId = addListScheduleToSet('Walls by type', WALLS_BY_TYPE);
+    // The other kinds the engine prints: the rooms schedule, the bill of quantities and the drawing register, each on a sheet of its own.
+    const roomsSheetId = addScheduleToSet('rooms', 'Room schedule');
+    updateBoqArticle(addBoqArticle('m2'), { code: 'EXAMPLE-001', description: 'EXAMPLE: wall faces', filter: { classes: ['IfcWallStandardCase'] }, quantity: 'NetSideArea' });
+    const boqSheetId = addScheduleToSet('boq', 'Bill of quantities');
+    const registerSheetId = addRegisterToSet('Drawing register');
 
     // What the app's sheets draw, then the project as the app saves it, built by the command line.
     const sheets = useProjectStore.getState().sheets;
@@ -189,11 +268,44 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
     assert.deepEqual(drafted.map((t) => t.text).sort(), ['8.50', 'Hand note'], 'the sheet draws the dimension\'s figure and the text');
     at(drafted, planPage, 'the plan\'s drafts');
 
+    // The other kinds: each one's texts, and every corner of what the sheet strokes or fills for it, are in the PDF. The sheet draws the
+    // drafts in order, each in a group of its own (a line or arc as a bare path), after the drawing: they are its last children.
+    const room = svgOf(planSheet.id).querySelector(`[data-viewport-id="${vp.id}"] > g`)!;
+    const kinds = KINDS(c);
+    const ours = [...room.children].slice(-(kinds.length + 2));
+    assert.equal(ours.length, kinds.length + 2, 'the sheet draws the dimension, the text and one of each other kind');
+    const paths = (await pdfCorners(new Uint8Array(readFileSync(join(dir, 'set.pdf')))))[sheets.findIndex((s) => s.id === planSheet.id)];
+    kinds.forEach((kind, i) => {
+      const drawn = ours[i + 2];
+      const corners = svgCorners(drawn);
+      assert.ok(corners.length > 0, `the sheet strokes something for the ${kind.type}`);
+      for (const corner of corners) {
+        const off = Math.min(...paths.map((p) => Math.max(Math.abs(p.x - corner.x), Math.abs(p.y - corner.y))));
+        assert.ok(off < TOLERANCE, `the ${kind.type}: a corner at (${corner.x.toFixed(2)}, ${corner.y.toFixed(2)}) is ${off.toFixed(2)} mm from the nearest path point of the PDF`);
+      }
+      at(placedTexts(drawn), planPage, `the ${kind.type}`);
+    });
+    assert.ok(ours.slice(2).some((g) => placedTexts(g).some((t) => t.text === '+2.70')), 'the sheet writes the level mark\'s figure');
+    for (const word of ['level marks', 'leaders', 'radial', 'angular', 'grid axes', 'hatches', 'circles', 'arcs']) assert.ok(!stderr.includes(word), `stderr no longer names ${word} as left out: ${stderr}`);
+
     // Every text of the placed schedule: title, header, rows and totals.
     const scheduleSheet = sheets.find((s) => s.id === scheduleSheetId)!;
     const scheduleVp = scheduleSheet.viewports![0];
     const cells = placedTexts(svgOf(scheduleSheet.id).querySelector(`[data-viewport-id="${scheduleVp.id}"]`)!);
     for (const want of ['Walls by type', 'Type', 'Count', 'Total', '13']) assert.ok(cells.some((t) => t.text === want), `the sheet's schedule prints "${want}": ${cells.map((t) => t.text).join('|')}`);
     at(cells, pdf[sheets.indexOf(scheduleSheet)], 'the schedule');
+
+    // The rooms schedule, the bill of quantities and the register: every text of the table the sheet draws is printed where it draws it,
+    // and the build no longer says it leaves them out.
+    const tableOf = (id: string, what: string, wanted: readonly string[]) => {
+      const sheet = sheets.find((s) => s.id === id)!;
+      const texts = placedTexts(svgOf(sheet.id).querySelector(`[data-viewport-id="${sheet.viewports![0].id}"]`)!);
+      for (const want of wanted) assert.ok(texts.some((t) => t.text === want), `the sheet's ${what} prints "${want}": ${texts.map((t) => t.text).join('|')}`);
+      at(texts, pdf[sheets.indexOf(sheet)], what);
+    };
+    tableOf(roomsSheetId, 'rooms schedule', ['Room schedule', 'Total building (Au)']);
+    tableOf(boqSheetId, 'bill of quantities', ['Bill of quantities', 'EXAMPLE-001']);
+    tableOf(registerSheetId, 'drawing register', ['Drawing register', 'Sheet', 'Title', 'Scale', 'Revision', 'Date', scheduleSheet.number]);
+    assert.doesNotMatch(stderr, /(rooms|boq|register) schedule/, 'the build prints these kinds and does not name them as left out');
   });
 });

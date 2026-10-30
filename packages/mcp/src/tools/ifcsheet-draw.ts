@@ -13,7 +13,7 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readClassificationMappings, readProjectLanguage, readProjectSet, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectLanguage, readProjectSet, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
   type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
@@ -99,7 +99,11 @@ function projectOf(document: ProjectDocument): ProjectSheetSource | null {
   const raw = document as unknown as Record<string, unknown>;
   if (!Array.isArray(raw.drafts) && !Array.isArray(raw.schedules)) return null;
   const schedules = (Array.isArray(raw.schedules) ? raw.schedules : []).flatMap((s) => readSchedule(s) ?? []);
-  return { set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings) };
+  const urbanSettings = readUrbanSettings(raw.urbanSettings);
+  return {
+    set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings),
+    boqArticles: readBoqArticles(raw.boqArticles), ...(document.titleBlock ? { titleBlock: document.titleBlock } : {}), ...(urbanSettings ? { urbanSettings } : {}),
+  };
 }
 
 /**

@@ -60,10 +60,10 @@ async function pageTexts(pdf: string): Promise<string[][]> {
   }
 }
 
-async function build(project: string): Promise<{ code: number; err: string; pages: string[][] }> {
+async function build(project: string, extra: string[] = []): Promise<{ code: number; err: string; pages: string[][] }> {
   const out = join(scratch(), 'set.pdf');
   const c = capture();
-  const code = await run(['build', FZK, '--project', project, '--out', out], c.io);
+  const code = await run(['build', FZK, '--project', project, '--out', out, ...extra], c.io);
   return { code, err: c.err(), pages: code === EXIT.ok ? await pageTexts(out) : [] };
 }
 
@@ -108,6 +108,81 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(pages[0]).toEqual(expect.arrayContaining(['X-901', 'Hand arranged', '8.50', 'Hand note']));
     expect(pages[1]).toEqual(expect.arrayContaining(['X-902', 'Walls by type', 'Type', 'Count', 'NetSideArea (m²)', 'Total', '13']));
   }, 240_000);
+
+  it('prints the revision the project\'s records name in each sheet\'s title block: one named by the sheet, one by a cloud on its view', async () => {
+    const base = arranged();
+    const [first, second] = base.sheets as { id: string }[];
+    const plan = doc.views.find((v) => v.kind === 'plan')!;
+    const project = {
+      ...base,
+      sheets: [first, { ...second, revisionIds: ['rev-1'] }],
+      drafts: [...(base.drafts as unknown[]), { id: 'cloud', viewId: plan.id, layerId: '0', shape: { type: 'text', p: { x: 0, y: 0 }, text: '', height: 0.25, rotation: 0 }, params: { revisionId: 'rev-2' } }],
+      revisions: [
+        { id: 'rev-1', code: 'ZB7', date: '2026-01-02', description: 'Walls sheet', by: 'PC' },
+        { id: 'rev-2', code: 'ZC9', date: '2026-02-03', description: 'Plan cloud', by: 'PC' },
+      ],
+    };
+    const { code, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages[0]).toContain('ZC9');
+    expect(pages[0]).not.toContain('ZB7');
+    expect(pages[1]).toContain('ZB7');
+    expect(pages[1]).not.toContain('ZC9');
+    // The same project with no records prints neither.
+    const none = await build(writeProject({ ...project, revisions: [] }));
+    expect(none.pages.flat()).not.toContain('ZB7');
+    expect(none.pages.flat()).not.toContain('ZC9');
+  }, 240_000);
+
+  it('prints the rooms schedule, the bill of quantities and the drawing register where they were placed, and names the kinds it still leaves out', async () => {
+    const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
+    const base = arranged();
+    const project = {
+      ...base,
+      sheets: [...(base.sheets as unknown[]), onSheet('s-rooms', 'X-903', 'rooms'), onSheet('s-boq', 'X-904', 'boq'), onSheet('s-reg', 'X-000', 'reg'), onSheet('s-door', 'X-905', 'doors')],
+      schedules: [
+        ...(base.schedules as unknown[]),
+        { id: 'rooms', name: 'Room schedule', kind: 'rooms', createdAt: 0 },
+        { id: 'boq', name: 'Bill of quantities', kind: 'boq', createdAt: 0 },
+        { id: 'reg', name: 'Drawing register', kind: 'register', createdAt: 0 },
+        { id: 'doors', name: 'Doors', kind: 'door', createdAt: 0 },
+      ],
+      boqArticles: [{ id: 'a1', code: 'EXAMPLE-001', description: 'EXAMPLE: wall faces', unit: 'm2', filter: { classes: ['IfcWallStandardCase'] }, quantity: 'NetSideArea', factor: 1 }],
+    };
+    const { code, err, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages).toHaveLength(6);
+    expect(pages[2]).toEqual(expect.arrayContaining(['Room schedule', 'Total building (Au)', 'Area summary (Su, Sc, Sd)']));
+    expect(pages[3]).toEqual(expect.arrayContaining(['Bill of quantities', 'Article code', 'EXAMPLE-001']));
+    expect(pages[4]).toEqual(expect.arrayContaining(['Drawing register', 'Sheet', 'Revision', 'X-901', 'X-905']));
+    for (const printed of ['rooms schedule', 'boq schedule', 'register schedule']) expect(err).not.toContain(printed);
+    expect(err).toContain('X-905 X-905: the door schedule "Doors" not printed yet');
+  }, 240_000);
+
+  it('words the room and register headings in the run\'s one language: a Romanian project prints Romanian with no flags, a project recording none prints English, --locale ro words that one', async () => {
+    const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
+    const base = arranged();
+    const withLists = {
+      ...base,
+      sheets: [...(base.sheets as unknown[]), onSheet('s-rooms', 'X-903', 'rooms'), onSheet('s-reg', 'X-000', 'reg')],
+      schedules: [...(base.schedules as unknown[]), { id: 'rooms', name: 'Încăperi', kind: 'rooms', createdAt: 0 }, { id: 'reg', name: 'Registru', kind: 'register', createdAt: 0 }],
+    };
+    const romanian = ['Planșa', 'Titlu', 'Scara', 'Revizie', 'Data', 'Sinteza ariilor (Su, Sc, Sd)', 'Total clădire'];
+    const english = ['Sheet', 'Area summary (Su, Sc, Sd)', 'Total building'];
+    const ro = await build(writeProject({ ...withLists, language: 'ro' }));
+    expect(ro.code).toBe(EXIT.ok);
+    expect(ro.pages).toHaveLength(4);
+    expect(ro.pages.flat()).toEqual(expect.arrayContaining(romanian));
+    for (const word of english) expect(ro.pages.flat()).not.toContain(word);
+    const none = writeProject(withLists);
+    const en = await build(none);
+    expect(en.code).toBe(EXIT.ok);
+    expect(en.pages.flat()).toEqual(expect.arrayContaining(['Sheet', 'Area summary (Su, Sc, Sd)']));
+    expect(en.pages.flat()).not.toContain('Revizie');
+    const asked = await build(none, ['--locale', 'ro']);
+    expect(asked.code).toBe(EXIT.ok);
+    expect(asked.pages.flat()).toEqual(expect.arrayContaining(romanian));
+  }, 720_000);
 
   it('a project with no sheet gets the starting set, and says so', async () => {
     const { code, err, pages } = await build(writeProject({}));

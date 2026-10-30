@@ -9,10 +9,13 @@
  * `boqTable` (the one the XLSX and CSV write), so the file holds the rows the sheet prints.
  */
 
-import { boqTable, boqTableCells, textWidthEm, truncateToWidth, type BoqResult, type BoqSay } from '@bimvoice/ifcsheet';
-import type { SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
+import { boqTable, boqTableCells } from './boq-table.js';
+import type { BoqSay } from './boq-words.js';
+import type { BoqResult } from './boq-compute.js';
+import { textWidthEm, truncateToWidth } from './text-width.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import { layoutPagedTable, PEN, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table.js';
 
 export interface BoqSheetLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

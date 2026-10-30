@@ -9,6 +9,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
+import { arcPoints } from '@bimvoice/ifcsheet';
 import { entityPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
@@ -26,18 +27,6 @@ import { useTranslation } from '@/i18n';
 import { tagOverrideOf } from '@/drafting/tag-override';
 import { AnnotationGraphics } from './AnnotationGraphics';
 import type { LiveSymbolContext } from '@/siteplan/live-symbols';
-
-const ARC_STEP = Math.PI / 48;
-
-function arcPoints(c: Pt, r: number, start: number, end: number): Pt[] {
-  let sweep = end - start;
-  while (sweep <= 0) sweep += Math.PI * 2;
-  const steps = Math.max(2, Math.ceil(sweep / ARC_STEP));
-  return Array.from({ length: steps + 1 }, (_, i) => {
-    const a = start + (sweep * i) / steps;
-    return { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
-  });
-}
 
 /** The shape as an SVG path in screen coordinates. */
 export function shapePath(shape: DraftShape, t: ViewTransform, axis: SectionAxisName): string {

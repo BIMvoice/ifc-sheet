@@ -7,7 +7,7 @@
  * refused with its place; a missing date, description or author is empty.
  */
 
-import type { ProjectRevision } from './types';
+import type { ProjectRevision } from './revisions.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
