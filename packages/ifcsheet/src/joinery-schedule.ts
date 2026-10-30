@@ -109,6 +109,8 @@ export interface Live { dataStore: IfcDataStore; view: MutablePropertyView | nul
 
 export interface ScheduleModel extends Live {
   modelId: string;
+  /** The model's name, as the list provider labels it ("used in"). Default: none. */
+  name?: string;
   /** An entity's Name. Default: the one the store holds (`storedName`); the app passes its overlay-aware read. */
   nameOf?: (id: number) => string;
   /** The Lists engine's provider over the model, for the model rows. Default: the headless one over the store; the app passes its own, which sees the edit overlay. */

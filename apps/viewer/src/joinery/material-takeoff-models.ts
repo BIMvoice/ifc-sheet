@@ -12,10 +12,9 @@
 
 import { extractAllMaterialsOnDemand, extractProjectUnits, ProjectUnits } from '@ifc-lite/parser';
 import { withMeasured } from '@bimvoice/ifcsheet';
-import { createListDataProvider } from '@/lib/lists';
-import { useViewerStore } from '@/store';
+import type { ScheduleModel } from '@bimvoice/ifcsheet/project';
 import { elementQuantities, materialShares, type TakeoffElement } from './material-takeoff';
-import { elementMeshLookup, type InstancedMeshes } from './element-meshes';
+import { loadedScheduleModels, providerOf } from './schedule-models';
 
 /** SI scales of a model's area and volume units (undeclared: the length unit squared, cubed). */
 export function quantityScales(units: ProjectUnits): { length: number; volume: number; area: number } {
@@ -27,22 +26,17 @@ export function quantityScales(units: ProjectUnits): { length: number; volume: n
   };
 }
 
-/** `instanced`: the pieces of a GPU-instanced element (default: the live renderer's scene). */
-export function collectTakeoffElements(instanced?: InstancedMeshes): TakeoffElement[] {
-  const s = useViewerStore.getState();
+/** The takeoff's elements over `models` (default: the loaded, visible ones). */
+export function collectTakeoffElements(models: readonly ScheduleModel[] = loadedScheduleModels()): TakeoffElement[] {
   const out: TakeoffElement[] = [];
-  for (const [modelId, model] of s.models) {
-    const store = model.ifcDataStore;
-    if (!store || model.visible === false) continue;
-    const view = s.mutationViews.get(modelId) ?? undefined;
-    const provider = createListDataProvider(store, model.name, undefined, view);
+  for (const model of models) {
+    const store = model.dataStore, provider = providerOf(model);
     const scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
-    const meshesOf = elementMeshLookup(model, instanced);
     for (const id of provider.getAllEntityIds?.() ?? []) {
       const materials = materialShares(extractAllMaterialsOnDemand(store, id));
       if (materials.length === 0) continue;
       const className = provider.getEntityTypeName(id);
-      const q = withMeasured(elementQuantities(provider.getQuantitySets(id), scales), className, () => meshesOf(id));
+      const q = withMeasured(elementQuantities(provider.getQuantitySets(id), scales), className, () => model.meshesOf?.(id));
       out.push({ className, materials, volume: q.volume, area: q.area, volumeSource: q.volumeSource, areaSource: q.areaSource, ...(q.volumeRefusal ? { volumeRefusal: q.volumeRefusal } : {}) });
     }
   }

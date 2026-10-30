@@ -12,8 +12,9 @@
 
 import { IfcTypeEnum, RelationshipType, type SpatialNode } from '@ifc-lite/data';
 import { extractProjectUnits, ProjectUnits } from '@ifc-lite/parser';
-import { createListDataProvider, type ListDataProvider } from '@/lib/lists';
-import { useViewerStore } from '@/store';
+import type { ListDataProvider } from '@/lib/lists';
+import type { ScheduleModel } from '@bimvoice/ifcsheet/project';
+import { loadedScheduleModels, providerOf } from './schedule-models';
 import { quantityScales } from './material-takeoff-models';
 import { coveringArea, coveringPredefinedType, type CoveringInput, type RoomInput, type Surface } from './room-finishes';
 
@@ -40,14 +41,13 @@ function spacesOf(node: SpatialNode, storeyElevations: ReadonlyMap<number, numbe
   return out;
 }
 
-export function collectRoomInputs(): RoomInput[] {
-  const s = useViewerStore.getState();
+export function collectRoomInputs(models: readonly ScheduleModel[] = loadedScheduleModels()): RoomInput[] {
   const out: RoomInput[] = [];
-  for (const [modelId, model] of s.models) {
-    const store = model.ifcDataStore;
-    const hierarchy = store?.spatialHierarchy;
-    if (!store || !hierarchy || model.visible === false) continue;
-    const provider: ListDataProvider = createListDataProvider(store, model.name, undefined, s.mutationViews.get(modelId) ?? undefined);
+  for (const model of models) {
+    const { modelId, dataStore: store } = model;
+    const hierarchy = store.spatialHierarchy;
+    if (!hierarchy) continue;
+    const provider: ListDataProvider = providerOf(model);
     const areaScale = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty()).area;
     const graph = store.relationships;
     const coverings = (ids: readonly number[]): CoveringInput[] => ids
