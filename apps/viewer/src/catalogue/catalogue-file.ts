@@ -16,7 +16,7 @@ import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { DraftLayer } from '@/drafting/types';
 import { readCadLayerRule } from '@/project/cad-layers-file';
 import type { CadLayerRule } from '@/project/cad-layers';
-import { readBoqArticle, readClassificationMapping, type BoqArticle, type ClassificationMapping, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
+import { readBoqArticle, type BoqArticle, type ProjectViewTemplate } from '@bimvoice/ifcsheet';
 import { readMaterial } from '@bimvoice/ifcsheet/materials';
 import { readViewTemplate } from '@bimvoice/ifcsheet';
 import { readStandards } from '@bimvoice/ifcsheet';
@@ -28,16 +28,23 @@ import type { TagFieldConfig } from '@/tagfields/tag-fields';
 import { fail, readAnnotationType, readLegend, readList, readSymbol } from './readers';
 import { readLibraryDetail } from './detail-reader';
 import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from './types';
+import { assembleCatalogueKinds, REGISTERED_CATALOGUE_KIND_DEFS, type RegisteredCatalogueData, type RegisteredCatalogueKind } from './registered-kinds';
 
 export const CATALOGUE_FILE_SUFFIX = '.bvlib';
 export const CATALOGUE_FILE_FORMAT = 'bvlib';
 export const CATALOGUE_FILE_VERSION = 1;
 
-/** The kinds of definition a catalogue carries, in the order the dialog lists them. */
-export const CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings'] as const;
-export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
+/** The kinds of definition a catalogue carries that are listed here, in the order the dialog lists them; a new kind is a file of its own (`./registered-kinds.ts`). */
+export const FROZEN_CATALOGUE_KINDS = ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates'] as const;
+export type CatalogueKind = (typeof FROZEN_CATALOGUE_KINDS)[number] | keyof RegisteredCatalogueData;
 
-export interface Catalogue {
+/** The kinds registered by their own file (`./kinds/`), after the frozen ones, by key. */
+export const REGISTERED_CATALOGUE_KINDS = assembleCatalogueKinds(FROZEN_CATALOGUE_KINDS, REGISTERED_CATALOGUE_KIND_DEFS);
+
+/** Every kind of definition a catalogue carries, in the order the dialog lists them. */
+export const CATALOGUE_KINDS: readonly CatalogueKind[] = [...FROZEN_CATALOGUE_KINDS, ...REGISTERED_CATALOGUE_KINDS.map((d) => d.key as CatalogueKind)];
+
+export interface Catalogue extends RegisteredCatalogueData {
   layers: DraftLayer[];
   layerGroups: LayerGroup[];
   textStyles: TextStyle[];
@@ -63,8 +70,6 @@ export interface Catalogue {
   boqArticles: BoqArticle[];
   /** The office's view templates (#44): graphics for plans, sections and elevations, with their class and material mapping (#31). Importing does not assign them to any view. */
   viewTemplates: ProjectViewTemplate[];
-  /** The office's classification mappings (#89): class, type and material to the codes of its systems. IfcSheet ships no code table; the mapping travels with the office library. */
-  classificationMappings: ClassificationMapping[];
 }
 
 export interface CatalogueFile extends Catalogue {
@@ -74,9 +79,15 @@ export interface CatalogueFile extends Catalogue {
   savedAt: string;
 }
 
-export const emptyCatalogue = (): Catalogue => ({
-  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [], boqArticles: [], viewTemplates: [], classificationMappings: [],
-});
+/** What a catalogue holds of the kinds `catalogue-file.ts` lists, as opposed to the registered ones (`./registered-kinds.ts`). */
+type FrozenCatalogue = Omit<Catalogue, keyof RegisteredCatalogueData>;
+
+/** `frozen` with every registered kind added, each as `entry` gives it. */
+const withRegistered = (frozen: FrozenCatalogue, entry: (d: RegisteredCatalogueKind) => unknown): Catalogue => ({ ...frozen, ...(Object.fromEntries(REGISTERED_CATALOGUE_KINDS.map((d) => [d.key, entry(d)])) as unknown as RegisteredCatalogueData) });
+
+export const emptyCatalogue = (): Catalogue => withRegistered({
+  layers: [], layerGroups: [], textStyles: [], dimStyles: [], hatchPatterns: '', materials: [], annotationTypes: [], symbols: [], legends: [], cadLayers: [], details: [], sheetTemplates: [], boqArticles: [], viewTemplates: [],
+}, (d) => d.empty());
 
 /** `catalogue` cut down to the chosen kinds (layer groups travel with their layers, text styles with the dimension styles that need them). */
 export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKind>): Catalogue {
@@ -95,7 +106,7 @@ export function selectKinds(catalogue: Catalogue, kinds: ReadonlySet<CatalogueKi
   if (kinds.has('sheetTemplates')) out.sheetTemplates = catalogue.sheetTemplates;
   if (kinds.has('boqArticles')) out.boqArticles = catalogue.boqArticles;
   if (kinds.has('viewTemplates')) out.viewTemplates = catalogue.viewTemplates;
-  if (kinds.has('classificationMappings')) out.classificationMappings = catalogue.classificationMappings;
+  for (const d of REGISTERED_CATALOGUE_KINDS) if (kinds.has(d.key as CatalogueKind)) (out as unknown as Record<string, unknown>)[d.key] = (catalogue as unknown as Record<string, unknown>)[d.key];
   return out;
 }
 
@@ -137,23 +148,24 @@ export function parseCatalogue(text: string): { name: string; catalogue: Catalog
   return {
     name: typeof file.name === 'string' && file.name.trim() ? file.name : 'Catalogue',
     catalogue: {
-      layers: readList(file, 'layers', (v, p) => readDraftLayer(v, p), WHAT),
-      layerGroups: standards.layerGroups.filter((g) => groupIds.has(g.id)),
-      textStyles: standards.textStyles.filter((t) => textIds.has(t.id)),
-      dimStyles: standards.dimStyles.filter((d) => dimIds.has(d.id)),
-      hatchPatterns: typeof file.hatchPatterns === 'string' ? file.hatchPatterns : '',
-      materials: readList(file, 'materials', (v, p) => readMaterialStrict(v, p), WHAT),
-      // A library written before the room label read the tag name takes the new template, as a project does on load.
-      annotationTypes: upgradeTagAllTypes(readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT)),
-      symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
-      legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
-      cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
-      ...readTagFieldsEntry(file),
-      details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
-      sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
-      boqArticles: readList(file, 'boqArticles', (v, p) => readBoqArticle(v) ?? fail(p, 'must be a bill of quantities article { id, code }', WHAT), WHAT),
-      viewTemplates: readList(file, 'viewTemplates', (v, p) => readViewTemplate(v) ?? fail(p, 'must be a view template { id, name, kind }', WHAT), WHAT),
-      classificationMappings: readList(file, 'classificationMappings', (v, p) => readClassificationMapping(v) ?? fail(p, 'must be a classification mapping { id, system: { name }, rules }', WHAT), WHAT),
+      ...withRegistered({
+        layers: readList(file, 'layers', (v, p) => readDraftLayer(v, p), WHAT),
+        layerGroups: standards.layerGroups.filter((g) => groupIds.has(g.id)),
+        textStyles: standards.textStyles.filter((t) => textIds.has(t.id)),
+        dimStyles: standards.dimStyles.filter((d) => dimIds.has(d.id)),
+        hatchPatterns: typeof file.hatchPatterns === 'string' ? file.hatchPatterns : '',
+        materials: readList(file, 'materials', (v, p) => readMaterialStrict(v, p), WHAT),
+        // A library written before the room label read the tag name takes the new template, as a project does on load.
+        annotationTypes: upgradeTagAllTypes(readList(file, 'annotationTypes', (v, p) => readAnnotationType(v, p, WHAT), WHAT)),
+        symbols: readList(file, 'symbols', (v, p) => readSymbol(v, p, WHAT), WHAT),
+        legends: readList(file, 'legends', (v, p) => readLegend(v, p, WHAT), WHAT),
+        cadLayers: readList(file, 'cadLayers', (v, p) => readCadLayerRule(v, p, WHAT), WHAT),
+        ...readTagFieldsEntry(file),
+        details: readList(file, 'details', (v, p) => readLibraryDetail(v, p, WHAT), WHAT),
+        sheetTemplates: readList(file, 'sheetTemplates', (v, p) => readTemplate(v) ?? fail(p, 'must be a sheet template { id, name, paper }', WHAT), WHAT),
+        boqArticles: readList(file, 'boqArticles', (v, p) => readBoqArticle(v) ?? fail(p, 'must be a bill of quantities article { id, code }', WHAT), WHAT),
+        viewTemplates: readList(file, 'viewTemplates', (v, p) => readViewTemplate(v) ?? fail(p, 'must be a view template { id, name, kind }', WHAT), WHAT),
+        }, (d) => d.read(file, WHAT)),
       ...(file.graphicStandard === undefined ? {} : { graphicStandard: knownStandard(file.graphicStandard) }),
     },
   };

@@ -25,10 +25,10 @@ import { parsePat, serializePat, type HatchPattern } from '@/drafting/hatch/patt
 import { STANDARD } from '@/drafting/styles';
 import { freshProjectId } from '@/project/view-defaults';
 import { TAG_FIELD_IDS, TAG_KINDS, withSources, type TagFieldConfig } from '@/tagfields/tag-fields';
-import type { Catalogue, CatalogueKind } from './catalogue-file';
+import { REGISTERED_CATALOGUE_KINDS, type Catalogue, type CatalogueKind } from './catalogue-file';
+import type { RegisteredCatalogueData } from './registered-kinds';
 import { mergeCadLayers } from './cad-layers-merge';
 import { mergeBoqArticles } from './boq-merge';
-import { mergeClassificationMappings } from './classification-merge';
 
 export type ClashPolicy = 'mine' | 'theirs' | 'both';
 
@@ -194,17 +194,20 @@ export function mergeCatalogues(
   const templates = mergeNamed(mine.sheetTemplates, incoming.sheetTemplates, policy, 'template', fresh);
   const viewTemplates = mergeNamed(mine.viewTemplates, incoming.viewTemplates, policy, 'viewtemplate', fresh);
   const boq = mergeBoqArticles(mine.boqArticles, incoming.boqArticles, policy, fresh);
-  const classification = mergeClassificationMappings(mine.classificationMappings, incoming.classificationMappings, policy, fresh);
+  // The kinds a file of their own registers (`./registered-kinds.ts`), merged the same way, after the ones above.
+  const registered = REGISTERED_CATALOGUE_KINDS.map((d) => ({ key: d.key, ...d.merge((mine as unknown as Record<string, unknown>)[d.key], (incoming as unknown as Record<string, unknown>)[d.key], policy, fresh) }));
   return {
     maps: { layers: layers.ids, symbols: symbols.ids, patterns: patterns.names },
     catalogue: {
       ...(tagFields.config ? { tagFields: tagFields.config } : {}),
       layers: layers.list, layerGroups: groups.list, textStyles: texts.list, dimStyles: dims.list, hatchPatterns: patterns.text,
-      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list, boqArticles: boq.list, viewTemplates: viewTemplates.list, classificationMappings: classification.list,
+      materials: materials.list, annotationTypes: types.list, symbols: symbols.list, legends: legends.list, cadLayers: cad.list, details: details.list, sheetTemplates: templates.list, boqArticles: boq.list, viewTemplates: viewTemplates.list,
+      ...(Object.fromEntries(registered.map((r) => [r.key, r.list])) as unknown as RegisteredCatalogueData),
     },
     report: {
       layers: layers.report, textStyles: texts.report, dimStyles: dims.report, hatchPatterns: patterns.report,
-      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report, boqArticles: boq.report, viewTemplates: viewTemplates.report, classificationMappings: classification.report,
+      materials: materials.report, annotationTypes: types.report, symbols: symbols.report, legends: legends.report, cadLayers: cad.report, tagFields: tagFields.report, details: details.report, sheetTemplates: templates.report, boqArticles: boq.report, viewTemplates: viewTemplates.report,
+      ...(Object.fromEntries(registered.map((r) => [r.key, r.report])) as Record<keyof RegisteredCatalogueData, KindReport>),
     },
   };
 }
