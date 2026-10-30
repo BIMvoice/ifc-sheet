@@ -12,27 +12,27 @@
  * Drawn with them (`sheet-marks.ts`): level marks, leaders, radial and angular dimensions, grid axes, hatches, and circles and arcs.
  *
  * Symbols are drawn too (`sheet-symbols.ts`), from the built-in library and the project's own, with the scale of the viewport and the
- * north and coordinates of the model (`site-frame.ts`); on a model with a map conversion the engine does not read, a coordinate point
- * is not drawn.
+ * north and coordinates of the model (`site-frame.ts`): a coordinate point on a model with a map conversion prints Easting and
+ * Northing, on one without it the local X and Y.
  *
- * Not drawn yet, and reported through `onSkipped`: a text's frame and leader (the frame is measured by the app's text widths), and
- * a dimension figure's leader when the figure was moved off its line.
+ * A text's frame and leader are drawn (`sheet-text-frame.ts`), and a dimension figure moved off its line carries its leader
+ * (`dimension-figure.ts`). The frame is measured with the width table, the app with the browser's font where it has one.
  */
 
 import type { Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline, pointInBox } from './clip.js';
-import { angularLayout, linearLayout, radialLayout } from './dimension-layout.js';
+import { dimensionLayout } from './dimension-figure.js';
 import { entityPen, formatDimension, layerPrints, layerShows, lookOf, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import { AXIS_NAME } from './drawing-frame.js';
-import { isGeometry, type AnnotationShape, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
+import { isGeometry, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
 import { drawAxis, drawCurve, drawHatch, drawLeader, drawLevel, type MarkContext } from './sheet-marks.js';
 import { drawSymbol } from './sheet-symbols.js';
+import { drawTextFrame, upOf } from './sheet-text-frame.js';
 import { liveSymbolContext, COORDINATE_LABELS, type SiteFrame } from './site-frame.js';
-import { COORDINATE_POINT_ID } from './live-symbols.js';
 import { findSymbol, type DraftSymbol } from './symbols.js';
 import { label, readableAngle, textInk, tickStrokes, type Frame, type SheetStroke } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
@@ -52,17 +52,8 @@ export interface SheetAnnotations {
   /** The project's own symbols; a symbol names one, or a built-in. */
   symbols?: readonly DraftSymbol[];
   /** The model's frame, for the north arrow and the coordinate point; without it they are drawn as placed. */
-  site?: SiteFacts;
+  site?: SiteFrame;
   locale: SheetLocale;
-  /** A draft of a kind not printed yet, once per draft. */
-  onSkipped?: (kind: AnnotationShape['type'], view: ProjectView | undefined) => void;
-}
-
-/** What the model tells the symbols (`siteFrameOf`): its frame, and what of it the engine could not read. */
-export interface SiteFacts {
-  frame: SiteFrame;
-  /** The model has a usable map conversion, which the app reads through its anchor georeference and the engine does not. */
-  georeferenced: boolean;
 }
 
 export type { SheetStroke };
@@ -88,7 +79,7 @@ export function viewportAnnotations(
   const own = a.symbols ?? [];
   // Scale bar, north arrow and coordinate points follow this viewport's scale and the model, as the sheet's do (`siteplan/live-symbols.ts`).
   const axis = plane ? AXIS_NAME[plane.axis] : 'down';
-  const live = a.site ? liveSymbolContext(a.site.frame, plane, axis, vp.scale, a.locale, COORDINATE_LABELS) : null;
+  const live = a.site ? liveSymbolContext(a.site, plane, axis, vp.scale, a.locale, COORDINATE_LABELS) : null;
   const context = (colour: string, look: MarkContext['look']): MarkContext => ({ at, frame, clip, box, mmPerMetre, colour, look, locale: a.locale, patterns: a.patterns ?? [], out });
   for (const e of a.drafts) {
     if (e.viewId !== vp.viewId) continue;
@@ -110,21 +101,18 @@ export function viewportAnnotations(
       const deg = readableAngle(sized.rotation, frame);
       // One label per line, each a line pitch under the one before, in the text's own frame.
       sized.text.split('\n').forEach((line, i) => out.texts.push(label(at(sized.p), line, Math.max(px, 1), deg, i * 1.25 * Math.max(px, 1), 'left', textInk(look.text, look.text.color ?? colour))));
-      if (sized.frame || sized.leader) a.onSkipped?.('text', view);
+      drawTextFrame(sized, mark, look.text, look.text.color ?? colour);
     } else if (sized.type === 'leader') drawLeader(sized, mark);
     else if (sized.type === 'level') drawLevel(sized, mark);
     else if (sized.type === 'axis') drawAxis(sized, mark);
     else if (sized.type === 'hatch') drawHatch(sized, mark);
     else if (sized.type === 'symbol') {
-      // A coordinate point on a model the app places on the map is left out, not printed from the local frame.
-      if (a.site?.georeferenced && sized.symbolId === COORDINATE_POINT_ID) a.onSkipped?.('symbol', view);
-      else drawSymbol(sized, mark, { own, live, axis });
-    }
-    else {
+      drawSymbol(sized, mark, { own, live, axis });
+    } else {
       const dim = look.dim;
       const o = { extGap: dim.extGap * paperUnit, extOver: dim.extOver * paperUnit, format: (m: number) => formatDimension(a.locale, m, dim), locale: a.locale };
-      const layout = sized.type === 'dimension' ? linearLayout(sized.a, sized.b, sized.at, sized.variant, sized.text, o)
-        : sized.type === 'radial' ? radialLayout(sized.c, sized.r, sized.at, sized.diameter, o) : angularLayout(sized.c, sized.a, sized.b, sized.at, o);
+      // A figure moved off its line carries its leader, among the layout's lines (`dimension-figure.ts`).
+      const layout = dimensionLayout(sized, o, { up: upOf(frame), right: frame.kx });
       const ink = dim.color ?? colour;
       // The sheet's widths for a dimension on paper (`strokeScale` 0.25): lines 0.75 of it, ticks 1.5.
       out.strokes.push({ colour: ink, width: 0.1875, runs: layout.lines.flatMap((l) => clip([at(l.a), at(l.b)])) });
@@ -137,9 +125,7 @@ export function viewportAnnotations(
       const px = sized.height * mmPerMetre;
       // Above the line in the text's own frame (screen-up for a level line, screen-left for an upright one); centred breaks the line under it.
       const shift = dim.placement === 'centered' ? px * 0.35 : dim.placement === 'below' ? dim.textGap + px * 0.8 : -dim.textGap;
-      const textAt = sized.type === 'dimension' ? sized.textAt : undefined;
-      out.texts.push(label(at(textAt ?? layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center', textInk(look.text, look.text.color ?? dim.color ?? colour)));
-      if (textAt) a.onSkipped?.('dimension', view);
+      out.texts.push(label(at(layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center', textInk(look.text, look.text.color ?? dim.color ?? colour)));
     }
   }
   if (box) out.texts = out.texts.filter((t) => pointInBox(t.at, box));

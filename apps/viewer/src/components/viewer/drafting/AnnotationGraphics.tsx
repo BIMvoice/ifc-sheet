@@ -181,11 +181,13 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
   if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;
   const textColor = selected ? '#2563eb' : look.text.color ?? base;
   const px = shape.height * t.scale;
+  // Which way is up on the screen in this view's drawing y: a text's leader and a moved figure's leader sit by it, not by the session's.
+  const up: 1 | -1 = screenSigns(axis).ky === 1 ? -1 : 1;
   /** Paper millimetres → screen px. */
   const mm = (v: number) => v * paperUnit * t.scale;
   switch (shape.type) {
     case 'text': {
-      const line = textLeader(shape);
+      const line = textLeader(shape, up);
       const label = <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
       if (!line) return label;
       // The same line and arrow an element tag's leader has.
@@ -266,7 +268,7 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
         extOver: dim.extOver * paperUnit,
         format: (m) => formatDimension(locale, m, dim),
         locale,
-      });
+      }, { up, right: screenSigns(axis).kx });
       const lineColor = selected ? '#2563eb' : dim.color ?? base;
       const lines = layout.lines.map((l) => polyline([l.a, l.b], t, axis)).join('');
       const size = Math.max(mm(dim.arrowSize), 3 * k);

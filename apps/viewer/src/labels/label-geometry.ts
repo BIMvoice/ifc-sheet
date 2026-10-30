@@ -8,17 +8,13 @@
  * the two are apart. Pure, in drawing units.
  */
 
+import { clampToRect, rectCentre, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types';
 
-export interface Rect {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-}
+// The rectangle, its centre and the nearest point of it are the engine's (`text-leader.ts`), where a text's leader starts.
+export { clampToRect, rectCentre, type Rect };
 
 export const rectAround = (c: Pt, w: number, h: number): Rect => ({ x0: c.x - w / 2, y0: c.y - h / 2, x1: c.x + w / 2, y1: c.y + h / 2 });
-export const rectCentre = (r: Rect): Pt => ({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
 export const growRect = (r: Rect, m: number): Rect => ({ x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m });
 
 export function ringBounds(ring: readonly Pt[]): Rect {
@@ -77,11 +73,6 @@ export function rectInsideRing(r: Rect, ring: readonly Pt[]): boolean {
     for (let k = 0; k < 4; k++) if (segmentsCross(a, b, corners[k], corners[(k + 1) % 4])) return false;
   }
   return true;
-}
-
-/** The point of the rectangle nearest `p` (`p` itself when inside). */
-export function clampToRect(r: Rect, p: Pt): Pt {
-  return { x: Math.min(Math.max(p.x, r.x0), r.x1), y: Math.min(Math.max(p.y, r.y0), r.y1) };
 }
 
 function nearestOnSegment(a: Pt, b: Pt, p: Pt): Pt {

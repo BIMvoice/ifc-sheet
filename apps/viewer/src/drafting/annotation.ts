@@ -12,12 +12,11 @@
 import { nearestOnShape, shapeBounds } from './curves';
 import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
-import { findSymbol, missingSymbolMark, placeSymbol, angularLayout, axisLayout as engineAxisLayout, formatLength, formatLevel, linearLayout, radialLayout, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
-import { add, mirrorPt, rotatePt, scale, sub } from './vec';
-import { figureUp, leaderOf } from './figure-layout';
+import { findSymbol, missingSymbolMark, placeSymbol, axisLayout as engineAxisLayout, dimensionLayout as engineDimensionLayout, formatLength, formatLevel, textBoxOf, textLeaderOf, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
+import { add, mirrorPt, rotatePt } from './vec';
 import { leaderTextRight } from './leader-segments';
-import { leaderStart } from '@/labels/label-leader';
 import { textBlock, type TextFrame } from './text-block';
+import { textWidthEm } from './text-width';
 // A linear dimension's layout and the length format are the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` prints the same figure (#479).
 export { formatLength, type DimensionLayout, type LayoutOptions };
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
@@ -26,23 +25,12 @@ import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type
 export { formatLevel };
 
 /**
- * The short leader a figure carries when it was moved off its dimension line (above, below, or past the end of
- * the string): from the middle of the line to the figure's near edge. Nothing for a figure left on the line.
+ * A dimension's layout, with the leader of a figure moved off its line: the engine's one function (`dimension-figure.ts`), which the
+ * PDF of `ifcsheet build` calls too. `frame` is the view the dimension is in (default: the view being annotated); the figure's width
+ * is measured with the browser's font.
  */
-function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a: Pt; b: Pt }[] {
-  const line = layout.lines[2];
-  const along = { x: Math.cos(layout.textAngle), y: Math.sin(layout.textAngle) };
-  const l = leaderOf(add(line.a, scale(sub(line.b, line.a), 0.5)), textAt, height, figureUp(along, screenUp, screenRight), along, textBlock(layout.label, height).outer.x1);
-  return l ? [l] : [];
-}
-
-export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {
-  if (shape.type === 'dimension') {
-    const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
-    return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
-  }
-  if (shape.type === 'radial') return radialLayout(shape.c, shape.r, shape.at, shape.diameter, o);
-  return angularLayout(shape.c, shape.a, shape.b, shape.at, o);
+export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}, frame: { up: 1 | -1; right: 1 | -1 } = { up: screenUp, right: screenRight }): DimensionLayout {
+  return engineDimensionLayout(shape, o, frame, textWidthEm);
 }
 
 /**
@@ -92,20 +80,17 @@ export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): 
 
 export { HATCH_UNIT_M } from '@bimvoice/ifcsheet';
 
-/** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
-export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
-  if (!shape.leader) return null;
-  const pts = textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame);
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-  const from = leaderStart({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, shape.frame === 'bubble', shape.leader);
-  return from ? { from, tip: shape.leader } : null;
+/**
+ * The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element (the engine's `textLeaderOf`,
+ * which the PDF of `ifcsheet build` places it with). `up` is the screen-up of the view the text is in (default: the view being annotated).
+ */
+export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>, up: 1 | -1 = screenUp): { from: Pt; tip: Pt } | null {
+  return textLeaderOf(shape, up, textWidthEm);
 }
 
 /** A text box's corners (frame included), as the text block lays it out. */
 export function textBox(p: Pt, text: string, height: number, rotation: number, frame?: TextFrame): Pt[] {
-  const { outer } = textBlock(text, height, frame);
-  const at = (x: number, y: number): Pt => ({ x: p.x + x, y: p.y - y * screenUp });
-  return [at(outer.x0, outer.y1), at(outer.x1, outer.y1), at(outer.x1, outer.y0), at(outer.x0, outer.y0)].map((c) => rotatePt(c, p, rotation));
+  return textBoxOf(p, text, height, rotation, frame, screenUp, textWidthEm);
 }
 
 export const axisLayout: (shape: AxisShape) => { bubbles: Pt[]; r: number } = engineAxisLayout;

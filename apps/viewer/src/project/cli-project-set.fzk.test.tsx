@@ -6,7 +6,7 @@
  * #479: `ifcsheet build --project` prints the drawing set the app saved, as the app's sheets show it. On AC20-FZK-Haus the Wall lays
  * out its set; a plan's viewport is moved by hand, a dimension and a text are drawn on that plan together with one of each other
  * kind the command line prints (a level mark, a leader, a radial and an angular dimension, a grid axis, two hatches, a circle,
- * an arc, and four symbols: the north arrow, the scale bar, a coordinate point and one the project holds itself), and a list schedule is placed on a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
+ * an arc, a text in a box with a leader, a text in a bubble, a dimension with its figure moved off its line, and four symbols: the north arrow, the scale bar, a coordinate point and one the project holds itself), and a list schedule is placed on a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
  * the issue captures, `captureSheets`):
  *   - the PDF has a page per sheet, in the set's order, each printing its sheet's number;
  *   - the dimension's figure and the text are printed at the paper point where the sheet draws them (so the moved viewport is where
@@ -129,6 +129,10 @@ function svgCorners(root: Element): Corner[] {
     } else if (el.tagName === 'circle') {
       const [cx, cy, r] = ['cx', 'cy', 'r'].map((a) => Number(el.getAttribute(a)));
       out.push({ x: cx + r, y: cy }, { x: cx - r, y: cy }, { x: cx, y: cy + r }, { x: cx, y: cy - r });
+    } else if (el.tagName === 'ellipse') {
+      // A text's bubble frame: the four quadrant points (the engine's outline has them among its vertices).
+      const [cx, cy, rx, ry] = ['cx', 'cy', 'rx', 'ry'].map((a) => Number(el.getAttribute(a)));
+      out.push({ x: cx + rx, y: cy }, { x: cx - rx, y: cy }, { x: cx, y: cy + ry }, { x: cx, y: cy - ry });
     } else if (el.tagName === 'rect') {
       const [x, y, w, h] = ['x', 'y', 'width', 'height'].map((a) => Number(el.getAttribute(a)));
       out.push({ x, y }, { x: x + w, y }, { x, y: y + h }, { x: x + w, y: y + h });
@@ -189,6 +193,10 @@ const KINDS = (c: { x: number; y: number }): EntityShape[] => {
     { type: 'symbol', symbolId: 'builtin:scale-bar', p: { x: c.x + 0.5, y: c.y + 3.5 }, scale: 1, rotation: 0 },
     { type: 'symbol', symbolId: 'builtin:coordinate-point', p: { x: c.x + 1.5, y: c.y + 1.2 }, scale: 0.1, rotation: 0 },
     { type: 'symbol', symbolId: PROJECT_SYMBOL.id, p: { x: c.x - 1.5, y: c.y + 1.5 }, scale: 0.1, rotation: 0.4 },
+    // A text in a box with a leader to a point on the plan, a text in a bubble, and a dimension whose figure was moved off its line (its leader).
+    { type: 'text', p: { x: c.x - 3.5, y: c.y + 0.3 }, text: 'Boxed', height: 0.25, rotation: 0, frame: 'box', leader: { x: c.x - 2, y: c.y + 1.1 } },
+    { type: 'text', p: { x: c.x + 2.2, y: c.y + 2 }, text: 'Tag', height: 0.25, rotation: 0, frame: 'bubble' },
+    { type: 'dimension', variant: 'aligned', a: { x: c.x - 2, y: c.y - 3.4 }, b: { x: c.x + 0.5, y: c.y - 3.4 }, at: { x: c.x - 0.7, y: c.y - 3 }, height: 0.25, textAt: { x: c.x + 1.5, y: c.y - 2.3 } },
   ];
 };
 
@@ -327,7 +335,7 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
     assert.deepEqual(['N', 'BAY'].filter((want) => !symbolTexts.some((t) => t === want)), [], `the sheet writes the arrow's N and the project symbol's word: ${symbolTexts.join('|')}`);
     const coordinatePoint = ours[2 + kinds.findIndex((k) => k.type === 'symbol' && k.symbolId === 'builtin:coordinate-point')];
     assert.equal(placedTexts(coordinatePoint).length, 2, 'the sheet writes two lines of coordinates (each is checked against the PDF above)');
-    for (const word of ['symbols', 'level marks', 'leaders', 'radial', 'angular', 'grid axes', 'hatches', 'circles', 'arcs']) assert.ok(!stderr.includes(word), `stderr no longer names ${word} as left out: ${stderr}`);
+    for (const word of ['symbols', 'level marks', 'leaders', 'radial', 'angular', 'grid axes', 'hatches', 'circles', 'arcs', 'frame or leader', 'moved figure', 'coordinate point']) assert.ok(!stderr.includes(word), `stderr no longer names ${word} as left out: ${stderr}`);
 
     // Every text of the placed schedule: title, header, rows and totals.
     const scheduleSheet = sheets.find((s) => s.id === scheduleSheetId)!;
