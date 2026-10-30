@@ -25,8 +25,8 @@
  * finishes, never how much of it each room has, so an equal share is the only
  * split they support. The schedule marks such areas and says so in a note.
  *
- * Pure: rooms in, rows out. `collectRoomInputs` reads the loaded models into
- * that input.
+ * Pure: rooms in, rows out. `roomInputsOf` (`room-finishes-read.ts`) reads the models into that input, for the app and the
+ * command line alike.
  */
 
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';

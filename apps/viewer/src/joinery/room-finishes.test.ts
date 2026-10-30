@@ -11,8 +11,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import { coveringArea, coveringPredefinedType, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput } from './room-finishes.js';
-import { finishTable, layoutRoomFinishes } from './room-finishes-layout.js';
+import { coveringArea, coveringPredefinedType, finishLines, roomFinishes, surfaceOf, type CoveringInput, type RoomInput, finishTable, layoutRoomFinishes } from '@bimvoice/ifcsheet';
 import { csvLines, tableCsv } from './export-test-util.js';
 
 const LABELS = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms: area split equally.' };

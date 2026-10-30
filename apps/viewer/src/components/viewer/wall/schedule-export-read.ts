@@ -18,9 +18,8 @@ import { joineryExport, type JoineryExportLabels } from '@/joinery/schedule-layo
 import { takeoffRows } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { takeoffTable, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
-import { roomFinishes } from '@/joinery/room-finishes';
+import { roomFinishes, finishTable, type RoomFinishLabels } from '@bimvoice/ifcsheet';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
-import { finishTable, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
 import { registerTable, type RegisterLabels } from '@bimvoice/ifcsheet';

@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import ts from 'typescript';
+import { FINISHES_WORDS_EN } from '@bimvoice/ifcsheet';
 import { en } from './en';
 import { KEY_COMMANDS } from '../lib/commands/keyboard-commands';
 import { shownOnTheWall } from '../lib/commands/wall-key-commands';
@@ -74,6 +75,11 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
   for (const row of shownOnTheWall(KEY_COMMANDS)) {
     if (Object.hasOwn(cat, row.labelKey)) continue;
     found.set(row.labelKey, (found.get(row.labelKey) ?? new Set()).add('lib/commands/keyboard-commands.ts'));
+  }
+  // #581: the finishes table's words come from the engine's word table, so no face file names them; its keys are read off the table.
+  for (const key of Object.keys(FINISHES_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/finishes-words.ts'));
   }
   return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
 }

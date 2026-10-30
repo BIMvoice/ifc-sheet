@@ -9,11 +9,12 @@
  * same lines (`finishLines`).
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from '@bimvoice/ifcsheet';
-import { finishLines, hasSharedFinish, SURFACES, type Finish, type FinishLine, type RoomFinishes } from './room-finishes';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import type { ExportTable } from './schedule-csv.js';
+import { layoutPagedTable, PEN, ROW, TEXT, type PagedOptions, type TableBlock, type TableItem } from './paged-table.js';
+import { finishLines, hasSharedFinish, SURFACES, type Finish, type FinishLine, type RoomFinishes } from './room-finishes.js';
 
 export interface RoomFinishLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

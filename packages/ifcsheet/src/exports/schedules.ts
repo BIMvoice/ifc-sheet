@@ -85,3 +85,10 @@ export { readIssues } from '../issues-read.js';
 export { readRevisions } from '../revision-read.js';
 export type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from '../issue-types.js';
 export { SHEET_WORDS_EN, SHEET_WORDS_RO, registerLabelsOf, roomScheduleLabelsOf, sheetSayFor, type RoomScheduleData, type SheetSay, type SheetWordKey } from '../sheet-words.js';
+// The room finishes schedule (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  SURFACES, coveringArea, coveringPredefinedType, finishLines, hasSharedFinish, roomFinishes, surfaceOf,
+  type CoveringInput, type Finish, type FinishLine, type FinishSource, type RoomFinishes, type RoomInput, type Surface,
+} from '../room-finishes.js';
+export { finishHeader, finishRows, finishTable, layoutRoomFinishes, type RoomFinishLabels } from '../room-finishes-layout.js';
+export { FINISHES_WORDS_EN, FINISHES_WORDS_RO, finishLabelsOf, finishesSayFor, type FinishesSay, type FinishesWordKey } from '../finishes-words.js';
