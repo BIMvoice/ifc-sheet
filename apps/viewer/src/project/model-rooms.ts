@@ -16,7 +16,7 @@ import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUtils';
-import { farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
+import { farElementLabel, frameEntities, storeyElementIds } from '@bimvoice/ifcsheet';
 import type { FarElementFact } from '@bimvoice/ifcsheet/readiness';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals';
@@ -82,8 +82,9 @@ export interface BuildingFraming {
 }
 
 /**
- * The extent of the building itself: what the storeys of `levels` contain,
- * without the site, terrain or anything else around it, and without the small
+ * The extent of the building itself: what the storeys of `levels` contain and
+ * the parts aggregated under it (`storeyElementIds`, the elements the engine
+ * frames and cuts too), without the site, terrain or anything else around it, and without the small
  * stray elements far from it (a survey point, an origin cube: `frameEntities`
  * in `@bimvoice/ifcsheet`, the rule the command line frames by too). The set's
  * scales and the sections' cuts are measured on it; `extent` is `null` when no
@@ -100,11 +101,10 @@ export function buildingFraming(levels: readonly ProjectLevel[], meshes: MeshDat
     const hierarchy = store?.spatialHierarchy;
     if (!store || !hierarchy || model.visible === false) continue;
     const offset = model.idOffset ?? 0;
-    for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''))) {
-      for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) {
-        ids.push(id + offset);
-        owner.set(id + offset, { store, expressId: id });
-      }
+    const storeys = findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? '')).map((n) => n.expressId);
+    for (const id of storeyElementIds(hierarchy, storeys, (e) => store.entities.getTypeEnum(e))) {
+      ids.push(id + offset);
+      owner.set(id + offset, { store, expressId: id });
     }
   }
   if (ids.length === 0) return { extent: null, far: [] };

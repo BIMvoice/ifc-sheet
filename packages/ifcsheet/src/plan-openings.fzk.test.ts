@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
 import { exportDxf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
 import { sheetGraphic } from './sheet-graphic.js';
-import { planOpeningSymbols } from './plan-openings.js';
+import { drawnBySymbol, planOpeningSymbols, withoutOpeningBodies } from './plan-openings.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { PEN_TABLE } from './view-style.js';
 import { resolveViewGraphics } from './view-templates.js';
@@ -64,5 +64,29 @@ describe.skipIf(missing !== null)('the sheets of AC20-FZK-Haus draw the door and
     // A sheet with symbols draws fewer cut rings and lines than the same sheet with the bodies.
     const sheet = within.findIndex((s) => s.symbols > 0);
     expect(within[sheet].cut + within[sheet].lines).toBeLessThan(without[sheet].cut + without[sheet].lines);
+  }, 120_000);
+
+  it('keeps the cut and the lines of the walls and every other element that is not a door or a window: only those two are replaced by symbols', async () => {
+    const plans = set.document.views.filter((v) => v.kind === 'plan');
+    const drawings = await generateViewDrawings(plans, model.buildingMeshes, set.levels, model.extent!);
+    const count = (rows: readonly { ifcType?: string }[], keep: (t: string | undefined) => boolean) => rows.filter((r) => keep(r.ifcType)).length;
+    const others = (t: string | undefined) => !/^IfcDoor|^IfcWindow/i.test(t ?? '');
+    let wallCuts = 0, otherRows = 0;
+    for (const d of drawings.values()) {
+      const after = withoutOpeningBodies(d);
+      for (const key of ['lines', 'cutPolygons', 'projectionPolygons'] as const) {
+        expect(count(after[key], others), `${key}: elements that are not doors or windows are kept`).toBe(count(d[key], others));
+        expect(count(after[key], (t) => !others(t)), `${key}: no door or window body is left`).toBe(0);
+        otherRows += count(d[key], others);
+      }
+      wallCuts += count(after.cutPolygons, (t) => /^IfcWall/i.test(t ?? ''));
+    }
+    expect(wallCuts, 'the plans cut walls, and the cut stays').toBeGreaterThan(0);
+    expect(otherRows, 'rows compared').toBeGreaterThan(0);
+    expect(drawnBySymbol('IFCWALL'), 'a wall is not drawn by a symbol').toBe(false);
+    expect(drawnBySymbol('IFCWALLSTANDARDCASE')).toBe(false);
+    expect(drawnBySymbol('IFCSLAB')).toBe(false);
+    expect(drawnBySymbol('IFCDOOR')).toBe(true);
+    expect(drawnBySymbol('IFCWINDOW')).toBe(true);
   }, 120_000);
 });

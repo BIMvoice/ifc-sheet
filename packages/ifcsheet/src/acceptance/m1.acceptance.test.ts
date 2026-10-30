@@ -52,8 +52,8 @@ interface Case {
   sections: number;
   /** Classes that some section must cut. */
   sectionCuts: string[];
-  /** Part of the doors and windows the plans do not draw yet; their share that must be drawn (1 = all of them). */
-  drawnShare: number;
+  /** The GlobalIds of the doors and windows no plan draws, each for a reason given where it is listed; every other one must be drawn. */
+  notDrawn: string[];
 }
 
 const CASES: Case[] = [
@@ -61,19 +61,19 @@ const CASES: Case[] = [
     name: 'AC20-FZK-Haus (ArchiCAD 20, KIT)', file: here('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'),
     storeys: ['Erdgeschoss', 'Dachgeschoss'], doors: 5, windows: 11, rooms: 7,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], drawnShare: 1,
+    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
   },
   {
     name: 'bloc-p4 (residential block, five storeys)', file: here('../../../../apps/viewer/public/samples/bloc-p4.ifc'),
     storeys: ['Parter', 'Etaj 1', 'Etaj 2', 'Etaj 3', 'Etaj 4'], doors: 86, windows: 89, rooms: 90,
     sheets: [['A-101', 'Floor plans 1'], ['A-102', 'Floor plans 2'], ['A-103', 'Floor plans 3'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWall'], drawnShare: 1,
+    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWall'], notDrawn: [],
   },
   {
     name: 'federated arch.ifc (hand-written, two levels)', file: here('../../../../apps/viewer/src/test/fixtures/federated/arch.ifc'),
     storeys: ['Level 0', 'Level 1'], doors: 1, windows: 0, rooms: 0,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 1, sectionCuts: ['IfcWall'], drawnShare: 1,
+    emptyPlans: [], sections: 1, sectionCuts: ['IfcWall'], notDrawn: [],
   },
   {
     // ara3d ISSUE_068, a Norwegian school (ARK NUS skolebygg): 56 MB, no redistribution licence stated, so it is never committed.
@@ -81,9 +81,15 @@ const CASES: Case[] = [
     name: 'ISSUE_068 skolebygg (school, optional)', file: process.env.IFCSHEET_ACCEPTANCE_SKOLEBYGG ?? here('../../../../tests/models/ara3d/ISSUE_068_ARK_NUS_skolebygg.ifc'),
     storeys: ['Plan 00U', 'Plan 01', 'Plan 02', 'Plan 03', 'Plan 04'], doors: 310, windows: 266, rooms: 307,
     sheets: [['A-101', 'Floor plans 1'], ['A-102', 'Floor plans 2'], ['A-103', 'Floor plans 3'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    // Plan 04 cuts nothing (roof storey). Measured 2026-10-30: the plans draw 295 of 310 doors and 264 of 266 windows; the rest sit
-    // where no plan's cut reaches them. Raise the share to 1 when #586 is fixed, never lower it.
-    emptyPlans: ['Plan 04'], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], drawnShare: 0.9,
+    // Plan 04 cuts nothing (roof storey). The 8 curtain wall doors, parts of an IfcCurtainWall, are drawn since #586. Not drawn yet,
+    // because each lies wholly above or below its storey plan's cut and a default plan shows its cut only (#586): seven 0.6 m and 1.0 m
+    // wall hatches ("Luke"), 0.0 to 1.0 m or 2.0 to 2.6 m above their floors, and two 0.7 m windows whose sill is 1.21 m above Plan 01,
+    // 1 cm over its 1.2 m cut. Take an id out when its element is drawn; never add one.
+    emptyPlans: ['Plan 04'], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'],
+    notDrawn: [
+      '3c1awkLoXAxBYHBQ4qGhaL', '36R5E2q5f2TvXJ1UAvvL5k', '3ObdPKQKnADxl0koLMbmvC', '3ObdPKQKnADxl0koLMbn2b', '3ObdPKQKnADxl0koLMbn0A',
+      '3ObdPKQKnADxl0koLMbn0B', '3T0LSRCJr579Hfd5wOgKiJ', '223VDxzbP01Q1$4uieT7Bn', '2QmceMdeT2FxfkNdzVxgpJ',
+    ],
   },
 ];
 
@@ -113,6 +119,20 @@ function shown(drawing: Drawing2D, ifcType: string): Set<number> {
   return new Set([...drawing.cutPolygons, ...drawing.lines].filter((e) => e.ifcType === ifcType).map((e) => e.entityId));
 }
 const cutOf = (drawing: Drawing2D, ifcType: string): number => drawing.cutPolygons.filter((p) => p.ifcType === ifcType).length;
+
+/** The GlobalIds of the model's elements of `type` (upper case, as the parser indexes them) that no plan shows, sorted. */
+function notDrawnOf(r: Run, c: Case, ifcType: string, type: string): string[] {
+  const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, ifcType)]));
+  const ids = r.model.dataStore.entityIndex.byType.get(type) ?? [];
+  expect(ids).toHaveLength(type === 'IFCDOOR' ? c.doors : c.windows);
+  for (const listed of c.notDrawn) expect(typeOf(r, listed), `${listed} is a door or window of the model`).toBeDefined();
+  return ids.filter((id) => !drawn.has(id)).map((id) => r.model.dataStore.entities.getGlobalId(id) ?? `#${id}`).sort();
+}
+const typeOf = (r: Run, globalId: string): string | undefined => {
+  const ds = r.model.dataStore;
+  for (const type of ['IFCDOOR', 'IFCWINDOW']) if ((ds.entityIndex.byType.get(type) ?? []).some((id) => ds.entities.getGlobalId(id) === globalId)) return type;
+  return undefined;
+};
 
 interface Run {
   model: OpenedModel;
@@ -170,10 +190,8 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
       });
 
       it.skipIf(c.doors === 0)('cuts the doors and draws them on the plans', () => {
-        const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, 'IfcDoor')]));
         expect(r.plans.reduce((n, p) => n + cutOf(p.drawing, 'IfcDoor'), 0)).toBeGreaterThan(0);
-        expect(drawn.size).toBeGreaterThanOrEqual(Math.ceil(c.doors * c.drawnShare));
-        expect(drawn.size).toBeLessThanOrEqual(c.doors);
+        expect(notDrawnOf(r, c, 'IfcDoor', 'IFCDOOR')).toEqual(c.notDrawn.filter((id) => typeOf(r, id) === 'IFCDOOR').sort());
       });
 
       it.skipIf(c.doors === 0)('draws a symbol for the doors a plan cuts: they are the doors drawn, none is left out and none is invented (#587)', () => {
@@ -194,7 +212,7 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
           for (const s of doors) expect(s.shapes.length + (s.heavy?.length ?? 0), `${view.name}: door ${s.id} symbol`).toBeGreaterThan(0);
         }
         expect(symbolIds.size, 'door symbols').toBeGreaterThan(0);
-        expect(symbolIds.size).toBeGreaterThanOrEqual(Math.ceil(c.doors * c.drawnShare));
+        expect(symbolIds.size, 'every door the plans draw has a symbol').toBeGreaterThanOrEqual(c.doors - c.notDrawn.filter((id) => typeOf(r, id) === 'IFCDOOR').length);
         expect(cutDoors).toBeGreaterThan(0);
         expect(cutAndSymbolled, 'the doors a plan cuts that have a symbol').toBe(cutDoors);
       });
@@ -207,10 +225,8 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
       }, 600_000);
 
       it.skipIf(c.windows === 0)('cuts the windows and draws them on the plans', () => {
-        const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, 'IfcWindow')]));
         expect(r.plans.reduce((n, p) => n + cutOf(p.drawing, 'IfcWindow'), 0)).toBeGreaterThan(0);
-        expect(drawn.size).toBeGreaterThanOrEqual(Math.ceil(c.windows * c.drawnShare));
-        expect(drawn.size).toBeLessThanOrEqual(c.windows);
+        expect(notDrawnOf(r, c, 'IfcWindow', 'IFCWINDOW')).toEqual(c.notDrawn.filter((id) => typeOf(r, id) === 'IFCWINDOW').sort());
       });
 
       it('has sections with cut faces, through the classes that must be cut', () => {
