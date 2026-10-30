@@ -11,12 +11,16 @@
  * The host is found through IfcRelFillsElement (the door or window fills an IfcOpeningElement) and IfcRelVoidsElement (the
  * opening voids a wall). `openingHostsOf` reads that once per model; `hostedInCutWall` is the test `openingSymbols` takes. The
  * engine (`planOpeningSymbols`) and the app (`project/view-symbols.ts`) both build the test here, so they cannot disagree.
+ * The rule applies only to a door or window of the plan's own storey (`storeyMembersOf`, the membership plans are framed and cut
+ * by: `storeyElementIds`, aggregated parts included): a door of another storey whose host wall is cut by this plan too (a
+ * double-height glass wall) is not drawn through it.
  * This is only the host-wall rule: the wider view range (overhead range, reference storey, beyond-cut line styles) is #490's.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
 import { RelationshipType } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { storeyElementIds } from './storey-elements.js';
 
 const OPENING_TYPES = ['IFCDOOR', 'IFCDOORSTANDARDCASE', 'IFCWINDOW', 'IFCWINDOWSTANDARDCASE'];
 const WALL = /^IFCWALL/i;
@@ -43,11 +47,30 @@ export function openingHostsOf(store: IfcDataStore): ReadonlyMap<number, number>
   return hosts;
 }
 
+const membersByStore = new WeakMap<object, Map<string, ReadonlySet<number>>>();
+
+/** The express ids of the elements on the storeys with these GlobalIds (`storeyElementIds`: contained elements and aggregated parts), read once per model and storey set. */
+export function storeyMembersOf(store: IfcDataStore, storeyGlobalIds: readonly string[]): ReadonlySet<number> {
+  const key = [...storeyGlobalIds].sort().join('|');
+  let byKey = membersByStore.get(store);
+  if (!byKey) membersByStore.set(store, (byKey = new Map()));
+  const held = byKey.get(key);
+  if (held) return held;
+  const hierarchy = store.spatialHierarchy;
+  const wanted = new Set(storeyGlobalIds);
+  const storeys = hierarchy ? new Set([...hierarchy.byStorey.keys(), ...hierarchy.elementToStorey.values()]) : new Set<number>();
+  const found = [...storeys].filter((id) => wanted.has(store.entities.getGlobalId(id) ?? ''));
+  const members = new Set(hierarchy ? storeyElementIds(hierarchy, found, (id) => store.entities.getTypeEnum(id)) : []);
+  byKey.set(key, members);
+  return members;
+}
+
 /**
  * Whether element `id` is hosted in a wall the plan at height `cut` passes through: `hostOf` names the host wall's mesh id, and the
- * wall's meshes (any IfcWall class among `meshes`) span `cut`. False for an element with no host, or one hosted in something that is not a wall.
+ * wall's meshes (any IfcWall class among `meshes`) span `cut`, and `onPlan` says the element belongs to the plan's own storey. False for an
+ * element with no host, one hosted in something that is not a wall, or one of another storey.
  */
-export function hostedInCutWall(meshes: readonly MeshData[], hostOf: (id: number) => number | undefined): (id: number, cut: number) => boolean {
+export function hostedInCutWall(meshes: readonly MeshData[], hostOf: (id: number) => number | undefined, onPlan: (id: number) => boolean): (id: number, cut: number) => boolean {
   let spans: Map<number, { min: number; max: number }> | undefined;
   const wallSpans = () => {
     if (spans) return spans;
@@ -65,6 +88,7 @@ export function hostedInCutWall(meshes: readonly MeshData[], hostOf: (id: number
     return spans;
   };
   return (id, cut) => {
+    if (!onPlan(id)) return false;
     const wall = hostOf(id);
     const span = wall === undefined ? undefined : wallSpans().get(wall);
     return span !== undefined && cut >= span.min && cut <= span.max;

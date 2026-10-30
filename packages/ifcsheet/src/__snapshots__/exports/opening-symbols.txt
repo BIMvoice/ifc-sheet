@@ -37,6 +37,7 @@ planSymbol: value
 sectionSymbol: value
 simplifyOpeningSymbol: value
 statedDoorElevationSymbol: value
+storeyMembersOf: value
 strokeBounds: value
 symbolShapes: value
 typedElevationSymbol: value

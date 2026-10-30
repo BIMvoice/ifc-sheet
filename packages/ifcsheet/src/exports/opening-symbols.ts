@@ -10,7 +10,7 @@ export {
   type OpeningRect, type OpeningSymbol,
 } from '../opening-symbols.js';
 // The host-wall rule: a door or window whose host wall the plan cuts is drawn on it (#586)
-export { hostedInCutWall, openingHostsOf } from '../opening-hosts.js';
+export { hostedInCutWall, openingHostsOf, storeyMembersOf } from '../opening-hosts.js';
 // A configured type's strokes in plan, elevation and section, and its plan symbol put where the element is
 export {
   elevationSymbol, openingMarks, planSymbol, sectionSymbol, strokeBounds,

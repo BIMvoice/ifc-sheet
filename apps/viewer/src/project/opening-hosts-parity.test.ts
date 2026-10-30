@@ -14,7 +14,7 @@ import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { generateDefaultSet, planOpeningSymbols } from '@bimvoice/ifcsheet';
+import { generateDefaultSet, planOpeningSymbols, type PlanProjectView, type ProjectLevel } from '@bimvoice/ifcsheet';
 import { openModel, sectionConfigFor, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
@@ -28,6 +28,7 @@ const HOSTED = 75, FREE = 83;
 describe('the app and the engine draw a window in a wall the plan cuts, and not a free one above the cut (#586)', { skip: planModelMissing(FIXTURE) }, () => {
   let engine: OpenedModel;
   let plane: SectionPlaneConfig;
+  let level: ProjectLevel;
 
   before(async () => {
     resetProject();
@@ -38,13 +39,14 @@ describe('the app and the engine draw a window in a wall the plan cuts, and not 
     const view = set.document.views.find((v) => v.kind === 'plan' && v.name === 'Level 0');
     assert.ok(view, 'a plan for Level 0');
     plane = sectionConfigFor(view, set.levels, engine.extent)!.plane;
+    level = (view as PlanProjectView).level;
   });
 
   const appMeshes = () => [...useViewerStore.getState().models.values()].flatMap((m) => m.geometryResult?.meshes ?? []);
-  const app = () => viewOpeningSymbols(appMeshes(), plane, useProjectStore.getState().symbolFlips, new Set(), 'fine');
+  const app = () => viewOpeningSymbols(appMeshes(), plane, useProjectStore.getState().symbolFlips, new Set(), 'fine', level);
   const eng = () => {
     const { joineryTypes, joineryMapping, symbolFlips } = useProjectStore.getState();
-    return planOpeningSymbols(engine.buildingMeshes, plane, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips } }, undefined);
+    return planOpeningSymbols(engine.buildingMeshes, plane, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips } }, undefined, level);
   };
   const shapes = (list: ReturnType<typeof app>) => JSON.parse(JSON.stringify([...list].sort((a, b) => a.id - b.id), (_k, x) => (typeof x === 'number' ? Math.round(x * 1e6) / 1e6 : x)));
 
@@ -60,5 +62,44 @@ describe('the app and the engine draw a window in a wall the plan cuts, and not 
     assert.ok(!app().some((s) => s.id === FREE), 'the app leaves it out');
     assert.ok(!eng().some((s) => s.id === FREE), 'the engine leaves it out');
     assert.deepEqual(app().map((s) => s.id), [HOSTED]);
+  });
+});
+
+const TWO = fileURLToPath(new URL('../../../../packages/ifcsheet/src/__fixtures__/host-wall-two-storeys.ifc', import.meta.url));
+const LOWER_DOOR = 75, UPPER_WINDOW = 93;
+
+describe('the app and the engine draw a door on its own storey only, though the wall also crosses the other plan (#586)', { skip: planModelMissing(TWO) }, () => {
+  let engine: OpenedModel;
+  const planes = new Map<string, { plane: SectionPlaneConfig; level: ProjectLevel }>();
+
+  before(async () => {
+    resetProject();
+    await loadPlanModel(TWO);
+    engine = await openModel(new Uint8Array(readFileSync(TWO)));
+    const set = generateDefaultSet(engine);
+    assert.ok(set && engine.extent, 'the engine lays out a set');
+    for (const name of ['Level 0', 'Level 1']) {
+      const view: PlanProjectView | undefined = set.document.views.find((v): v is PlanProjectView => v.kind === 'plan' && v.name === name);
+      assert.ok(view, `a plan for ${name}`);
+      planes.set(name, { plane: sectionConfigFor(view, set.levels, engine.extent)!.plane, level: view.level });
+    }
+  });
+
+  const appMeshes = () => [...useViewerStore.getState().models.values()].flatMap((m) => m.geometryResult?.meshes ?? []);
+  const app = (name: string) => { const { plane, level } = planes.get(name)!; return viewOpeningSymbols(appMeshes(), plane, undefined, new Set(), 'fine', level); };
+  const eng = (name: string) => {
+    const { plane, level } = planes.get(name)!;
+    const { joineryTypes, joineryMapping, symbolFlips } = useProjectStore.getState();
+    return planOpeningSymbols(engine.buildingMeshes, plane, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips } }, undefined, level);
+  };
+
+  it('Level 0 draws the lower door only, in both', () => {
+    assert.deepEqual(eng('Level 0').map((s) => s.id), [LOWER_DOOR]);
+    assert.deepEqual(app('Level 0').map((s) => s.id), [LOWER_DOOR]);
+  });
+
+  it('Level 1 draws the upper window only, and never the lower door, in both', () => {
+    assert.deepEqual(eng('Level 1').map((s) => s.id), [UPPER_WINDOW]);
+    assert.deepEqual(app('Level 1').map((s) => s.id), [UPPER_WINDOW]);
   });
 });
