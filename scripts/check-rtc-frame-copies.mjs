@@ -76,7 +76,7 @@ export const CANONICAL_CALL_EXPRESSIONS = [
     text: 'const rtcYup = ifcToViewerAxes(coordinateInfo.wasmRtcOffset ?? { x: 0, y: 0, z: 0 });',
   },
   {
-    file: 'apps/viewer/src/lib/geo/map-absolute.ts',
+    file: 'packages/ifcsheet/src/georef/map-absolute.ts',
     text: 'const rtcYup = ifcToViewerAxes(coordinateInfo.wasmRtcOffset ?? { x: 0, y: 0, z: 0 });',
   },
   {
