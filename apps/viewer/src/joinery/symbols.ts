@@ -33,6 +33,7 @@ import {
   type CellRect, type JoineryBox, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
 import { archPoints, headArch, type HeadArch } from './head-shape';
+import { glazingBarStrokes } from './glazing-bars';
 
 export interface P2 { x: number; y: number }
 
@@ -296,6 +297,12 @@ export function elevationSymbol(spec: JoinerySpec, options: ElevationOptions = {
       const sashed = sash ? archedRect(arch, inner, f + spec.sash.width, a, 'thin') : null;
       if (sashed) out.push(sashed);
       out.push(...marks.map((m) => ({ ...m, pts: m.pts.map((q) => intoArch(arch, q, r, f, a)) })));
+    }
+    // Glazing bars divide the glass; a door leaf's slab has none unless it is glazed, a fixed pane is all glass.
+    if (spec.glazingBars && (spec.kind === 'window' || p.glazed || p.operation === 'fixed')) {
+      const inset = f + (sash ? spec.sash.width : 0);
+      const clip = arch && arched ? { top: (x: number) => arch.z(x, inset), half: (z: number) => archHalfWidth(arch, z, inset, a) } : undefined;
+      out.push(...glazingBarStrokes(spec.glazingBars, inner, clip));
     }
     if (options.hardware) out.push(...hardware(spec, p, r));
   }

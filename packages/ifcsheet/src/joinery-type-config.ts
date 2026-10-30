@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The opening configuration of a door or window TYPE (#448): how many leaves it has (1 to 3), how each one opens, and whether a fixed
- * fanlight sits over them. For models from other tools, whose types carry only an overall size.
+ * The opening configuration of a door or window TYPE (#448): how many leaves it has (1 to 6), how each one opens, whether a second row
+ * (a transom) sits over them, fixed or opening, and the glazing bars dividing each pane. For models from other tools, whose types carry only an overall size.
  *
  * It is not a store of its own. Configuring a type writes one entry of the project's joinery catalogue (`JoinerySpec`: columns are the
  * leaves, the panels carry the operations) and maps the type's GlobalId to it (`JoineryMapping.types`), so everything that already
@@ -17,12 +17,15 @@
 
 import {
   defaultDoorSpec, defaultWindowSpec,
-  type JoineryCustomProp, type JoineryHead, type JoineryKind, type JoinerySpec, type PanelOperation,
+  type JoineryCustomProp, type JoineryGlazingBars, type JoineryHead, type JoineryKind, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
 import { cleanCustomProps } from './joinery-custom-props.js';
 import { TYPE_ENTRY_PREFIX, type JoineryMapping } from './joinery-mapping.js';
 
-export const MAX_LEAVES = 3;
+export const MAX_LEAVES = 6;
+
+/** The most glazing bars across, and up and down, a pane. */
+export const MAX_BARS = 5;
 
 /** The fanlight's share of the opening's height. */
 export const FANLIGHT_SHARE = 0.25;
@@ -30,8 +33,20 @@ export const FANLIGHT_SHARE = 0.25;
 export interface TypeOpening {
   /** One operation per leaf, left to right as seen from the interior; 1 to `MAX_LEAVES` of them. */
   operations: PanelOperation[];
-  /** A fixed light over all the leaves. */
+  /** A second row, the transom, over all the leaves: fixed, one light across, unless `fanlightOpens`. */
   fanlight: boolean;
+  /** A window's transom row opens: one top-hung light over each leaf (the common practice for a row of opening lights). Absent: fixed. */
+  fanlightOpens?: true;
+  /** Glazing bars dividing the glass of every pane in elevation. Absent: none. */
+  bars?: JoineryGlazingBars;
+}
+
+/** `bars` made valid: whole counts of 0 to `MAX_BARS`; none at all is no bars (undefined). */
+export function cleanBars(bars: JoineryGlazingBars | undefined): JoineryGlazingBars | undefined {
+  if (!bars) return undefined;
+  const count = (n: number) => (Number.isFinite(n) ? Math.min(MAX_BARS, Math.max(0, Math.round(n))) : 0);
+  const horizontal = count(bars.horizontal), vertical = count(bars.vertical);
+  return horizontal || vertical ? { horizontal, vertical } : undefined;
 }
 
 const WINDOW_LEAF: readonly PanelOperation[] = ['fixed', 'side-left', 'side-right', 'tilt-turn-left', 'tilt-turn-right', 'top-hung', 'bottom-hung', 'sliding-left', 'sliding-right'];
@@ -42,11 +57,18 @@ export function leafOperations(kind: JoineryKind): readonly PanelOperation[] {
   return kind === 'door' ? DOOR_LEAF : WINDOW_LEAF;
 }
 
-/** `opening` made valid for `kind`: 1 to 3 leaves, each an operation `kind` offers (an unknown one is fixed). */
+/** `opening` made valid for `kind`: 1 to `MAX_LEAVES` leaves, each an operation `kind` offers (an unknown one is fixed). */
 export function cleanOpening(kind: JoineryKind, opening: TypeOpening): TypeOpening {
   const allowed = new Set<PanelOperation>(leafOperations(kind));
   const operations = opening.operations.slice(0, MAX_LEAVES).map((o) => (allowed.has(o) ? o : 'fixed' as const));
-  return { operations: operations.length ? operations : ['fixed'], fanlight: opening.fanlight === true };
+  const fanlight = opening.fanlight === true;
+  const bars = cleanBars(opening.bars);
+  return {
+    operations: operations.length ? operations : ['fixed'], fanlight,
+    // Only a window has a top-hung light to put in the transom row.
+    ...(fanlight && kind === 'window' && opening.fanlightOpens === true ? { fanlightOpens: true as const } : {}),
+    ...(bars ? { bars } : {}),
+  };
 }
 
 /** The catalogue entry for `opening` at `size` (metres, the IFC's overall size), on the kind's default frame and sash. */
@@ -60,18 +82,21 @@ export function specFromOpening(kind: JoineryKind, size: { width: number; height
     kind,
     width: size.width, height: size.height,
     columns: Array.from({ length: leaves }, () => 1),
-    // Rows run bottom to top: the leaves, then the fanlight.
+    // Rows run bottom to top: the leaves, then the transom row.
     rows: clean.fanlight ? [1 - FANLIGHT_SHARE, FANLIGHT_SHARE] : [1],
     panels: [
       ...clean.operations.map((operation, col) => ({ col, row: 0, operation })),
-      ...(clean.fanlight ? [{ col: 0, row: 1, colSpan: leaves, operation: 'fixed' as const }] : []),
+      ...(clean.fanlight && clean.fanlightOpens
+        ? Array.from({ length: leaves }, (_, col) => ({ col, row: 1, operation: 'top-hung' as const }))
+        : clean.fanlight ? [{ col: 0, row: 1, colSpan: leaves, operation: 'fixed' as const }] : []),
     ],
+    ...(clean.bars ? { glazingBars: clean.bars } : {}),
     // The IFC gives no thermal value, and the defaults' is not the model's: a type configured from its size claims none.
     props: { isExternal: d.props.isExternal },
   };
 }
 
-/** The opening a catalogue entry has, or null for an entry that is not of this shape (more than 3 leaves, several rows of leaves, a panel spanning leaves). */
+/** The opening a catalogue entry has, or null for an entry that is not of this shape (more than `MAX_LEAVES` leaves, more than two rows, a panel spanning leaves). */
 export function openingOfSpec(spec: JoinerySpec): TypeOpening | null {
   const leaves = spec.columns.length;
   if (leaves < 1 || leaves > MAX_LEAVES || spec.rows.length > 2) return null;
@@ -82,7 +107,12 @@ export function openingOfSpec(spec: JoinerySpec): TypeOpening | null {
     if (!p) return null;
     operations.push(p.operation);
   }
-  return { operations, fanlight };
+  // The transom row opens when it is one top-hung light over each leaf; any other second row reads as a fixed one.
+  const upper = spec.panels.filter((x) => x.row === 1);
+  const opens = fanlight && upper.length === leaves && upper.every((x) => x.operation === 'top-hung' && (x.colSpan ?? 1) === 1 && (x.rowSpan ?? 1) === 1)
+    && upper.every((x) => x.col >= 0 && x.col < leaves) && new Set(upper.map((x) => x.col)).size === leaves;
+  const bars = cleanBars(spec.glazingBars);
+  return { operations, fanlight, ...(opens ? { fanlightOpens: true as const } : {}), ...(bars ? { bars } : {}) };
 }
 
 /** The id of the entry configured for a type: the type's GlobalId, so configuring it again edits the same entry. */
@@ -132,6 +162,12 @@ function nextMark(kind: JoineryKind, list: readonly JoinerySpec[]): string {
   for (let n = 1; ; n++) if (!used.has(`${prefix}${n}`)) return `${prefix}${n}`;
 }
 
+/** The entry without its glazing bars: the configuration sets them afresh, so an opening without any clears them. */
+function kept(entry: JoinerySpec): Omit<JoinerySpec, 'glazingBars'> {
+  const { glazingBars: _g, ...rest } = entry;
+  return rest;
+}
+
 /**
  * The project's catalogue and mapping with the type configured: its entry added (or, when the type was configured before, its leaves,
  * divisions and size replaced, keeping its mark, name and whatever the user edited besides) and the type mapped to it. Every element
@@ -144,7 +180,7 @@ export function configureTypeOpening(project: ProjectJoinery, input: ConfigureTy
   const previous = at >= 0 ? list[at] : null;
   const fresh = specFromOpening(input.kind, input.size, input.opening, { id, name: input.name || (input.kind === 'door' ? 'Door' : 'Window'), mark: previous?.mark ?? nextMark(input.kind, list) });
   const base: JoinerySpec = previous
-    ? { ...previous, width: fresh.width, height: fresh.height, columns: fresh.columns, rows: fresh.rows, panels: fresh.panels }
+    ? { ...kept(previous), width: fresh.width, height: fresh.height, columns: fresh.columns, rows: fresh.rows, panels: fresh.panels, ...(fresh.glazingBars ? { glazingBars: fresh.glazingBars } : {}) }
     : fresh;
   // Head and custom properties: what the input says, else what the entry had; none is no field at all.
   const head = input.head !== undefined ? cleanHead(input.head) : base.head;

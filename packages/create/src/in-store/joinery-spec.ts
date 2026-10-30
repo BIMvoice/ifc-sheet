@@ -123,6 +123,12 @@ export interface JoineryHead {
   rise?: number;
 }
 
+/** Glazing bars (#448): how many divide each panel's glass, horizontal (across) and vertical (up and down). */
+export interface JoineryGlazingBars {
+  horizontal: number;
+  vertical: number;
+}
+
 /**
  * A property the user typed in for a type, shown in the schedule like a model's (#448); kept in the project, never written to the IFC.
  * `key` marks a suggested one the schedule's own U value and fire rating rows read.
@@ -179,6 +185,8 @@ export interface JoinerySpec {
   view?: JoineryViewChoice;
   /** The shape of the head in elevation. Absent: square. */
   head?: JoineryHead;
+  /** Glazing bars dividing the glass of every panel in elevation. Absent: none (the panes are plain). */
+  glazingBars?: JoineryGlazingBars;
   /** Properties typed in by hand for this type. Absent: none. */
   custom?: JoineryCustomProp[];
 }

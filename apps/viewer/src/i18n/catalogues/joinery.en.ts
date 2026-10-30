@@ -150,7 +150,7 @@ export const joineryEn = {
   'joinery.type.hint': 'Leaves and how each opens, for every element of its IFC type. The size stays the model\'s.',
   'joinery.type.leaves': 'Leaves',
   'joinery.type.leaf': 'Leaf {n}',
-  'joinery.type.fanlight': 'Fixed light above the leaves',
+  'joinery.type.fanlight': 'Second row (transom) above the leaves',
   'joinery.type.apply': 'Apply to the type',
   'joinerySymbol.title': 'Drawn as',
   'joinerySymbol.drawnAs': '{name} — {how}',

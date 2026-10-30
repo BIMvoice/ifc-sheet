@@ -3,13 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The opening configuration of an element's IFC type (#448), in the joinery symbol card: how many leaves (1 to 3), how each opens, a fixed
- * light above them. Applying it draws every element of the type with it in the schedule's elevation and in the plan; the size is the IFC's.
+ * The opening configuration of an element's IFC type (#448), in the joinery symbol card: how many leaves (1 to 6), how each opens, a second row
+ * (transom) above them, fixed or opening, and glazing bars dividing the panes. Applying it draws every element of the type with it in the schedule's elevation and in the plan; the size is the IFC's.
  */
 
 import { useState } from 'react';
 import { cleanCustomProps, MAX_CUSTOM_PROPS } from '@bimvoice/ifcsheet';
-import { cleanHead, cleanOpening, leafOperations, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
+import { cleanHead, cleanOpening, leafOperations, MAX_BARS, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
 import { type JoineryCustomProp, type JoineryHead, type JoineryHeadShape, type PanelOperation } from '@ifc-lite/create';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,9 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
   const setLeaves = (n: number) => setOpening((o) => ({
     ...o, operations: Array.from({ length: n }, (_, i) => o.operations[i] ?? 'fixed'),
   }));
+  const setBars = (k: 'horizontal' | 'vertical', n: number) => setOpening((o) => ({
+    ...o, bars: { horizontal: 0, vertical: 0, ...o.bars, [k]: Number.isFinite(n) ? Math.min(MAX_BARS, Math.max(0, Math.round(n))) : 0 },
+  }));
   const setOperation = (i: number, op: PanelOperation) => setOpening((o) => ({ ...o, operations: o.operations.map((x, j) => (j === i ? op : x)) }));
   return (
     <div data-type-opening className="mt-2 space-y-1 border-t border-overlay-accent/30 pt-1.5">
@@ -61,6 +64,21 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
         </Select>
       ))}
       <Checkbox label={t('joinery.type.fanlight')} checked={opening.fanlight} onCheckedChange={(fanlight) => setOpening((o) => ({ ...o, fanlight }))} />
+      {opening.fanlight && facts.kind === 'window' ? (
+        <Checkbox
+          label={t('joinery.type.fanlightOpens')} checked={opening.fanlightOpens === true}
+          onCheckedChange={(on) => setOpening(({ fanlightOpens: _f, ...o }) => (on ? { ...o, fanlightOpens: true as const } : o))}
+        />
+      ) : null}
+      <div className="flex items-center gap-1">
+        {(['horizontal', 'vertical'] as const).map((k) => (
+          <Input
+            key={k} type="number" min={0} max={MAX_BARS} step={1} data-type-bars={k} aria-label={t(`joinery.type.bars.${k}` as TranslationKey)}
+            placeholder={t(`joinery.type.bars.${k}` as TranslationKey)} className="h-7 text-xs" value={opening.bars?.[k] ?? 0}
+            onChange={(e) => setBars(k, Number(e.target.value))}
+          />
+        ))}
+      </div>
       <SegmentedControl
         size="sm" label={t('joinery.head.title')} value={head.shape}
         options={HEADS.map((h) => ({ value: h, label: t(`joinery.head.${h}` as TranslationKey) }))}
