@@ -29,8 +29,11 @@ A figure an empty drawing would also give (zero windows in a model with none) is
 | ISSUE_068 skolebygg (ara3d) | not committed (56 MB). `pnpm fixtures` fetches `tests/models/ara3d/ISSUE_068_ARK_NUS_skolebygg.ifc`, or set `IFCSHEET_ACCEPTANCE_SKOLEBYGG` to a copy | no redistribution licence stated in the source, so it is only read from disk, never committed or published | 310 / 266 / 307 | the suite skips it with a message when the file is absent |
 
 The school is the one model where the plans do not yet draw every door and window: 295 of 310 doors and 264 of 266 windows (measured
-2026-10-30), and the roof storey's plan cuts nothing. Its `drawnShare` is 0.9; raise it when that is fixed, never lower it. It also found
+2026-10-30), and the roof storey's plan cuts nothing. Its `drawnShare` is 0.9; raise it to 1 when #586 is fixed, never lower it. It also found
 that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
+
+The suite checks that doors and windows are cut and drawn on the plans, not their swing or opening symbols: the headless engine does not draw
+those yet (#587). Add a symbol check here when #587 lands.
 
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read

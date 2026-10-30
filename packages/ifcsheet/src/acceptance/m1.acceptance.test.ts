@@ -79,7 +79,7 @@ const CASES: Case[] = [
     storeys: ['Plan 00U', 'Plan 01', 'Plan 02', 'Plan 03', 'Plan 04'], doors: 310, windows: 266, rooms: 307,
     sheets: [['A-101', 'Floor plans 1'], ['A-102', 'Floor plans 2'], ['A-103', 'Floor plans 3'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
     // Plan 04 cuts nothing (roof storey). Measured 2026-10-30: the plans draw 295 of 310 doors and 264 of 266 windows; the rest sit
-    // where no plan's cut reaches them. Raise the share when that is fixed, never lower it.
+    // where no plan's cut reaches them. Raise the share to 1 when #586 is fixed, never lower it.
     emptyPlans: ['Plan 04'], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], drawnShare: 0.9,
   },
 ];
