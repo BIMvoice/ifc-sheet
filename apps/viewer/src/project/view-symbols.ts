@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import type { DetailLevel } from '@bimvoice/ifcsheet';
+import { drawnBySymbol as drawnByOpeningSymbol, simplifyOpeningSymbol, type DetailLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
 import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
@@ -20,18 +20,7 @@ import { statedDoorElevationSymbol, typedElevationSymbol } from '@/joinery/eleva
 import { doorOperationOfRenderId } from '@/joinery/door-operation-read';
 import { openingConvention } from '@/joinery/opening-convention';
 
-/**
- * A symbol at a detail level (#444). Fine is the symbol as it is. Coarse and medium simplify the opening: a window keeps its frame
- * and loses the glazing lines across it (when a closed frame is left), and the dashed parts (what lies above the cut) go. A door
- * keeps its leaf and its swing.
- */
-export function simplifyOpeningSymbol(s: OpeningSymbol, detail: DetailLevel): OpeningSymbol {
-  if (detail === 'fine') return s;
-  const framed = [...s.shapes, ...(s.heavy ?? [])].some((x) => x.type === 'polyline' && x.closed);
-  const shapes = s.kind === 'window' && framed ? s.shapes.filter((x) => x.type !== 'line') : s.shapes;
-  const { dashed: _dashed, ...rest } = s;
-  return { ...rest, shapes };
-}
+export { simplifyOpeningSymbol };
 
 export function viewOpeningSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine',
@@ -52,7 +41,7 @@ export function viewOpeningSymbols(
  * glazing) — so the closed leaf the model holds never shows across the gap.
  */
 export function drawnBySymbol(_id: number, ifcType: string | undefined): boolean {
-  return /^IFC(DOOR|WINDOW)/i.test(ifcType ?? '');
+  return drawnByOpeningSymbol(ifcType);
 }
 
 /** Door and window classes, by the mesh's IFC type. */

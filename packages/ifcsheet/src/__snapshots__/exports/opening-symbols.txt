@@ -5,7 +5,9 @@ ElevationOptions: type (type-only)
 HeadArch: type (type-only)
 JoineryStroke: type (type-only)
 OpeningConvention: type (type-only)
+OpeningPen: type (type-only)
 OpeningRect: type (type-only)
+OpeningSources: type (type-only)
 OpeningSymbol: type (type-only)
 P2: type (type-only)
 PlanOptions: type (type-only)
@@ -14,16 +16,23 @@ StrokeWeight: type (type-only)
 TypedPlanSymbol: type (type-only)
 archPoints: value
 doorSymbol: value
+drawnBySymbol: value
 elevationSymbol: value
 glazingBarStrokes: value
 headArch: value
 hullCandidates: value
 minAreaRect: value
 openingMarks: value
+openingPens: value
+openingReads: value
+openingSheetPens: value
 openingSymbols: value
+planOpeningSymbols: value
 planSymbol: value
 sectionSymbol: value
+simplifyOpeningSymbol: value
 strokeBounds: value
 symbolShapes: value
 typedPlanSymbol: value
 windowSymbol: value
+withoutOpeningBodies: value

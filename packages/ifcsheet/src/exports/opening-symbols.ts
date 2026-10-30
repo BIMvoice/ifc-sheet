@@ -17,3 +17,8 @@ export {
 export { typedPlanSymbol, type TypedPlanSymbol } from '../joinery-plan-placement.js';
 export { DEFAULT_SEGMENTAL_RISE, archPoints, headArch, type HeadArch } from '../joinery-head-shape.js';
 export { glazingBarStrokes, type BarClip } from '../joinery-glazing-bars.js';
+// What a plan draws of its doors and windows: the symbols of a view, by pen, with the bodies they replace left out
+export {
+  drawnBySymbol, openingPens, openingReads, openingSheetPens, planOpeningSymbols, simplifyOpeningSymbol, withoutOpeningBodies,
+  type OpeningPen, type OpeningSources,
+} from '../plan-openings.js';
