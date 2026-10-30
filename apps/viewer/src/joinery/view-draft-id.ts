@@ -14,6 +14,9 @@ const PREFIX = 'joinery:';
 
 export const joineryDraftViewId = (typeId: string, view: JoineryViewName): string => `${PREFIX}${typeId}:${view}`;
 
+/** The working copy of a type's plan symbol being drawn (#448): its own id, so a type's drawn plan view and its symbol never share entities. */
+export const joinerySymbolViewId = (typeId: string): string => `${PREFIX}${typeId}:symbol`;
+
 export const isJoineryDraftViewId = (viewId: string): boolean => viewId.startsWith(PREFIX);
 
 export function parseJoineryDraftViewId(viewId: string): { typeId: string; view: JoineryViewName } | null {
@@ -38,3 +41,9 @@ export const JOINERY_VIEW_COMMANDS: ReadonlySet<string> = new Set([
   'line', 'polyline', 'rectangle', 'circle', 'arc', 'text', 'hatch',
   'erase', 'move', 'copy', 'rotate', 'mirror', 'offset', 'trim', 'extend', 'fillet',
 ]);
+
+/** What a symbol is made of: the strokes of a block. Text and hatches have no place in one, so the symbol's view refuses them. */
+export const JOINERY_SYMBOL_COMMANDS: ReadonlySet<string> = new Set([...JOINERY_VIEW_COMMANDS].filter((id) => id !== 'text' && id !== 'hatch'));
+
+/** Whether drafting command `id` may run on the joinery drafting view `viewId` (a type's view, or its plan symbol). */
+export const joineryCommandAllowed = (viewId: string, id: string): boolean => (viewId.endsWith(':symbol') ? JOINERY_SYMBOL_COMMANDS : JOINERY_VIEW_COMMANDS).has(id);

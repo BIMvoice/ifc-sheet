@@ -268,6 +268,17 @@ export function redoDrafts(): boolean {
   return true;
 }
 
+/**
+ * Sets the undo and redo history aside and leaves an empty one in its place, for a canvas of its own (the plan symbol editor, #448):
+ * what is drawn meanwhile is undone on that canvas only. The returned function drops that history and puts the first one back, step
+ * for step, with the grouping state it had.
+ */
+export function parkDraftHistory(): () => void {
+  const kept = { past, future, pastAt, futureAt, grouping };
+  past = []; future = []; pastAt = []; futureAt = []; grouping = false;
+  return () => ({ past, future, pastAt, futureAt, grouping } = kept);
+}
+
 /** Forget the history (another project was loaded). */
 export function clearDraftHistory(): void {
   pastAt = [];

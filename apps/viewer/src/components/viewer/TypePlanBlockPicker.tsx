@@ -8,16 +8,18 @@
  */
 
 import { useState } from 'react';
-import { listDxfBlocks, readDxfBlock, type DxfBlockReport } from '@bimvoice/ifcsheet/project';
-import type { JoineryBlockSymbol } from '@ifc-lite/create';
+import { isDrawnSymbol, listDxfBlocks, readDxfBlock, type DxfBlockReport } from '@bimvoice/ifcsheet/project';
+import type { JoineryBlockSymbol, JoinerySpec } from '@ifc-lite/create';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
+import { JoinerySymbolEditor } from './joinery/JoinerySymbolEditor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const list = (counts: Record<string, number>): string => Object.entries(counts).map(([kind, n]) => `${kind.toUpperCase()} × ${n}`).join(', ');
 
-export function TypePlanBlockPicker({ block, onChange }: { block: JoineryBlockSymbol | null; onChange: (block: JoineryBlockSymbol | null) => void }) {
+export function TypePlanBlockPicker({ block, entry, onChange, onDrawn }: { block: JoineryBlockSymbol | null; entry: JoinerySpec | null; onChange: (block: JoineryBlockSymbol | null) => void; onDrawn: (block: JoineryBlockSymbol | null) => void }) {
   const { t } = useTranslation();
+  const [drawing, setDrawing] = useState(false);
   const [text, setText] = useState<string | null>(null);
   const [names, setNames] = useState<string[]>([]);
   const [report, setReport] = useState<DxfBlockReport | null>(null);
@@ -72,9 +74,11 @@ export function TypePlanBlockPicker({ block, onChange }: { block: JoineryBlockSy
       {Object.keys(report?.unsupported ?? {}).length ? <p data-type-plan-block-unsupported className="text-2xs text-muted-foreground">{t('joinery.block.unsupported', { list: list(report!.unsupported) })}</p> : null}
       {Object.keys(report?.skippedInFile ?? {}).length ? <p className="text-2xs text-muted-foreground">{t('joinery.block.skipped', { list: list(report!.skippedInFile) })}</p> : null}
       {report?.truncated ? <p className="text-2xs text-muted-foreground">{t('joinery.block.truncated')}</p> : null}
+      <Button size="sm" variant="outline" data-type-plan-block-edit disabled={!entry?.id} title={entry?.id ? undefined : t('joinery.symbol.needsType')} onClick={() => setDrawing(true)}>{t('joinery.symbol.edit')}</Button>
+      {drawing && entry?.id ? <JoinerySymbolEditor spec={entry} block={block} onSave={onDrawn} onClose={() => setDrawing(false)} /> : null}
       {block ? (
         <div className="flex items-center gap-1">
-          <span data-type-plan-block-name className="flex-1 truncate text-2xs text-foreground">{t('joinery.block.current', { name: block.name })}</span>
+          <span data-type-plan-block-name className="flex-1 truncate text-2xs text-foreground">{isDrawnSymbol(block) ? t('joinery.symbol.drawn') : t('joinery.block.current', { name: block.name })}</span>
           <Button size="sm" variant="ghost" data-type-plan-block-clear aria-label={t('joinery.block.remove')} onClick={() => onChange(null)}>×</Button>
         </div>
       ) : null}
