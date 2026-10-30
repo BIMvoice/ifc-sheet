@@ -12,11 +12,10 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { takeoffRows, type TakeoffElement } from './material-takeoff';
-import { layoutMaterialTakeoff, takeoffTable } from './material-takeoff-layout';
 import { typeQuantities, type TypeElement } from './type-quantities';
 import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from './type-quantities-layout';
 import type { ScheduleLayout } from './schedule-layout';
+import { takeoffRows, type TakeoffElement, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 
 const measured = { note: 'NOTE', unmeasured: (n: number) => `UNMEASURED ${n}`, column: 'Measured', volume: 'volume', area: 'area' };
 const TAKEOFF = { locale: 'en' as const, title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total', measured };

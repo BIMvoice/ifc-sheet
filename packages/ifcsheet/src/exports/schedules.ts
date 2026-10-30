@@ -92,3 +92,11 @@ export {
 } from '../room-finishes.js';
 export { finishHeader, finishRows, finishTable, layoutRoomFinishes, type RoomFinishLabels } from '../room-finishes-layout.js';
 export { FINISHES_WORDS_EN, FINISHES_WORDS_RO, finishLabelsOf, finishesSayFor, type FinishesSay, type FinishesWordKey } from '../finishes-words.js';
+// The material takeoff (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  elementQuantities, materialShares, takeoffRows,
+  type MaterialShare, type TakeoffElement, type TakeoffRow,
+} from '../material-takeoff.js';
+export { layoutMaterialTakeoff, takeoffTable, type TakeoffLabels } from '../material-takeoff-layout.js';
+export { MEASURED_MARK, marked, measuredCell, measuredNoteItems, type MeasuredWords } from '../measured-marks.js';
+export { TAKEOFF_WORDS_EN, TAKEOFF_WORDS_RO, measuredWordsOf, takeoffLabelsOf, takeoffSayFor, type PluralForms, type TakeoffSay, type TakeoffWordKey } from '../takeoff-words.js';

@@ -15,9 +15,8 @@
 import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ScheduleLayout } from './schedule-layout';
 import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from '@bimvoice/ifcsheet';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, marked, measuredCell, measuredNoteItems, type MeasuredWords } from '@bimvoice/ifcsheet';
 import type { Totals, TypeQuantities } from './type-quantities';
-import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks';
 
 export interface TypeQuantityLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

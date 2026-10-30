@@ -28,6 +28,7 @@ export {
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';
 export { roomInputsOf } from './room-finishes-read.js';
+export { takeoffElementsOf } from './material-takeoff-read.js';
 export { scheduleModelsOf, type OpenedScheduleSource } from './schedule-models.js';
 export { discoverModelRows, mergeFound, readModelRowCells, readModelRowValues, type ModelRowCells, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
 export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';

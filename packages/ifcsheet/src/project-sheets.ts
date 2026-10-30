@@ -4,7 +4,7 @@
 
 /**
  * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
- * sheets (the lists, the rooms schedule, the finishes schedule, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -27,6 +27,10 @@ import { layoutRoomSchedule } from './room-schedule-layout.js';
 import { roomFinishes } from './room-finishes.js';
 import { layoutRoomFinishes } from './room-finishes-layout.js';
 import { roomInputsOf } from './room-finishes-read.js';
+import { takeoffRows } from './material-takeoff.js';
+import { layoutMaterialTakeoff } from './material-takeoff-layout.js';
+import { takeoffElementsOf } from './material-takeoff-read.js';
+import { takeoffLabelsOf, takeoffSayFor } from './takeoff-words.js';
 import { layoutTableOnSheet } from './schedule-place.js';
 import { scheduleModelsOf } from './schedule-models.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
@@ -79,6 +83,8 @@ export function projectSheetOptions(
   let boq: ReturnType<typeof boqResult> | undefined;
   // The finishes schedule's rooms: read once, and only when a sheet shows one.
   let finishRooms: ReturnType<typeof roomFinishes> | undefined;
+  // The material takeoff's rows: read once, and only when a sheet shows one (materials are parsed on demand).
+  let takeoff: ReturnType<typeof takeoffRows> | undefined;
   const registerId = project.schedules.find((s) => s.kind === 'register')?.id;
   const registerRows = (): ReturnType<typeof drawingRegisterRows> => drawingRegisterRows({
     sheets: set.sheets, titleBlock: project.titleBlock, issues: set.issues, asIndicated: say('sheets.asIndicated'), schedules: project.schedules, revisions: set.revisions, drafts: set.drafts,
@@ -114,6 +120,14 @@ export function projectSheetOptions(
         if (read.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the finishes schedule "${schedule.name}" (the model has no room)`); continue; }
         const finishSay = finishesSayFor(language);
         pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutRoomFinishes(read, finishLabelsOf(finishSay, format, schedule.name), paging)));
+        continue;
+      }
+      if (schedule.kind === 'materials') {
+        takeoff ??= takeoffRows(takeoffElementsOf(scheduleModelsOf(model, modelName)));
+        const read = takeoff;
+        if (read.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the materials schedule "${schedule.name}" (no element of the model has a material)`); continue; }
+        const takeoffSay = takeoffSayFor(language);
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutMaterialTakeoff(read, takeoffLabelsOf(takeoffSay, format, schedule.name), paging)));
         continue;
       }
       if (schedule.kind !== 'list' || !schedule.list) {

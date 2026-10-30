@@ -174,6 +174,20 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(err).not.toContain('finishes schedule');
   }, 240_000);
 
+  it('prints the material takeoff where it was placed, with a row for each material, and no longer names it as left out (#581)', async () => {
+    const base = arranged();
+    const project = {
+      ...base,
+      sheets: [...(base.sheets as unknown[]), { id: 's-mat', number: 'X-902', name: 'Materials', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp-mat', viewId: 'mat', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] }],
+      schedules: [...(base.schedules as unknown[]), { id: 'mat', name: 'Materials', kind: 'materials', createdAt: 0 }],
+    };
+    const { code, err, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages).toHaveLength(3);
+    expect(pages[2]).toEqual(expect.arrayContaining(['Materials', 'Material', 'Elements', 'Total', 'Leichtbeton 102890359']));
+    expect(err).not.toContain('materials schedule');
+  }, 240_000);
+
   it('words the room and register headings in the run\'s one language: a Romanian project prints Romanian with no flags, a project recording none prints English, --locale ro words that one', async () => {
     const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
     const base = arranged();
