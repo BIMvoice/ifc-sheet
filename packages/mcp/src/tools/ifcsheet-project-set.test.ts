@@ -187,16 +187,16 @@ describe.skipIf(missing !== null)('a hand-arranged project prints the same throu
     const saved = join(tmp, 'saved-left-out.ifclite-project.json');
     await ok('ifcsheet_save_project', { document_id, file_path: saved });
     const doc = JSON.parse(await readFile(saved, 'utf8'));
-    // A door schedule (a joinery list, which the engine does not print) placed on a sheet of its own.
-    doc.schedules = [{ id: 'doors', name: 'Doors', kind: 'door', createdAt: 0 }];
+    // A door schedule that keeps only windows (so the model has no row for it, and the engine leaves it out) placed on a sheet of its own.
+    doc.schedules = [{ id: 'doors', name: 'Doors', kind: 'door', createdAt: 0, sub: { parent: 'parent', filter: { kinds: ['window'] } } }];
     doc.sheets.push({ id: 'sheet-doors', number: 'X-903', name: 'Doors', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp-doors', viewId: 'doors', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
     const project = join(tmp, 'left-out.ifclite-project.json');
     await writeFile(project, JSON.stringify(doc));
 
     const built = await cli('build', FZK, '--project', project, '--out', join(tmp, 'left-out-cli.pdf'));
-    expect(built.stderr).toContain('X-903 Doors: the door schedule "Doors" not printed yet.');
+    expect(built.stderr).toContain('X-903 Doors: the door schedule "Doors" (the model has no door) not printed yet.');
     const loaded = await ok('ifcsheet_load_project', { model_id: modelId, project_path: project });
-    const note = 'X-903 Doors: the door schedule "Doors" not printed yet.';
+    const note = 'X-903 Doors: the door schedule "Doors" (the model has no door) not printed yet.';
     const exported = await ok('ifcsheet_export_pdf', { document_id: loaded.document_id, file_path: join(tmp, 'left-out-mcp.pdf') });
     expect(exported.notes).toEqual([note]);
     const reply = (await call('tools/call', { name: 'ifcsheet_export_pdf', arguments: { document_id: loaded.document_id, file_path: join(tmp, 'left-out-mcp2.pdf') } })).result!;
