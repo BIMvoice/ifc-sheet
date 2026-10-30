@@ -11,6 +11,7 @@ import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import type { MeshData } from '@ifc-lite/geometry';
 import { elementViews } from './element-views';
 import { PAD } from '@bimvoice/ifcsheet';
+import { typeEntryId } from '@bimvoice/ifcsheet/project';
 
 const labels: ScheduleLabels = {
   locale: 'en', title: 'Joinery', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Opening', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire',
@@ -58,6 +59,17 @@ describe('joinery schedule layout', () => {
     assert.equal(csv[0], 'Mark,Name,Width (mm),Height (mm),Opening,Sill,Ground,Level 1,Total,U,Fire');
     assert.equal(csv[1], 'W1,W,1200,1500,tilt-turn-left + side-right,900,3,2,5,1.1,');
     assert.equal(csv[3].split(',')[0], '—');
+  });
+
+  it('prints a sill typed as 900 on a type entry, and none for an entry whose sill was never stated (#448)', () => {
+    const typed = { ...defaultWindowSpec('W'), id: typeEntryId('T-1'), sillHeight: 0.9, sillTyped: true as const };
+    const unstated = { ...typed, sillTyped: undefined };
+    const sillOnly = (spec: typeof typed | typeof unstated) => {
+      const d: ScheduleData = { levels: [], entries: [entry({ key: 's', spec, mark: 'W9' })] };
+      return { csv: csvLines(joineryCsv(d, labels))[1].split(',')[5], drawn: texts(layoutSchedule(d, labels)).includes('900') };
+    };
+    assert.deepEqual(sillOnly(typed), { csv: '900', drawn: true });
+    assert.deepEqual(sillOnly(unstated), { csv: '', drawn: false });
   });
 
   it('quotes a cell holding the delimiter, so a European-locale Excel (which splits on `;`) keeps the row together', () => {

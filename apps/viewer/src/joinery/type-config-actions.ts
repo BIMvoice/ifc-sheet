@@ -9,7 +9,7 @@
  */
 
 import { DEFAULT_JOINERY_MAPPING } from '@bimvoice/ifcsheet';
-import { configureTypeOpening, openingOfSpec, typeEntryId, type TypeOpening } from '@bimvoice/ifcsheet/project';
+import { configureTypeOpening, openingOfSpec, typeEntryId, typedSillOf, type TypeOpening } from '@bimvoice/ifcsheet/project';
 import { defaultDoorSpec, defaultWindowSpec, type JoineryCustomProp, type JoineryHead, type JoinerySpec } from '@ifc-lite/create';
 import { useProjectStore } from '@/project/project-store';
 import type { ElementFacts } from './symbol-mapping';
@@ -30,18 +30,24 @@ export function typeEntryOf(facts: Pick<ElementFacts, 'typeGlobalId'>): JoineryS
 /** The head of the element's configured type (square when it has none). */
 export const typeHeadOf = (facts: Pick<ElementFacts, 'typeGlobalId'>): JoineryHead => typeEntryOf(facts)?.head ?? { shape: 'square' };
 
+/** The sill typed in for the element's configured type, metres, or null unless none was stated (a typed 900, the default, is still typed). */
+export function typeSillOf(facts: Pick<ElementFacts, 'typeGlobalId'>): number | null {
+  const entry = typeEntryOf(facts);
+  return entry ? typedSillOf(entry) : null;
+}
+
 /** The properties typed in for the element's configured type. */
 export const typeCustomOf = (facts: Pick<ElementFacts, 'typeGlobalId'>): JoineryCustomProp[] => typeEntryOf(facts)?.custom ?? [];
 
 /** Configure the element's IFC type. Returns the entry's id, or null for an element whose type is not known (nothing to configure). */
-export function configureElementType(facts: ElementFacts, opening: TypeOpening, extra: { head?: JoineryHead; custom?: readonly JoineryCustomProp[] } = {}): string | null {
+export function configureElementType(facts: ElementFacts, opening: TypeOpening, extra: { head?: JoineryHead; custom?: readonly JoineryCustomProp[]; sillHeight?: number | null } = {}): string | null {
   if (!facts.typeGlobalId) return null;
   const s = useProjectStore.getState();
   const fallback = facts.kind === 'door' ? defaultDoorSpec() : defaultWindowSpec();
   const out = configureTypeOpening(
     { joineryTypes: s.joineryTypes ?? [], joineryMapping: s.joineryMapping ?? DEFAULT_JOINERY_MAPPING },
     {
-      typeGlobalId: facts.typeGlobalId, kind: facts.kind, name: facts.names[0] ?? '', opening, head: extra.head, custom: extra.custom,
+      typeGlobalId: facts.typeGlobalId, kind: facts.kind, name: facts.names[0] ?? '', opening, head: extra.head, custom: extra.custom, sillHeight: extra.sillHeight,
       // The overall size is the IFC's; an element that gives none keeps the kind's default size.
       size: { width: facts.width ?? fallback.width, height: facts.height ?? fallback.height },
     },

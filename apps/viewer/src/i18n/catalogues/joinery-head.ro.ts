@@ -14,6 +14,8 @@ export const joineryHeadRo: Record<keyof typeof joineryHeadEn, TranslationValue>
   'joinery.head.pointed': 'Ogivală',
   'joinery.head.rise': 'Săgeata arcului (mm)',
   'joinery.head.riseDefault': 'Săgeată (mm), goală pentru valoarea implicită',
+  'joinery.type.sill': 'Înălțimea parapetului tipului (mm)',
+  'joinery.type.sillDefault': 'Parapet (mm), goală dacă nu e precizat',
   'joinery.props.title': 'Proprietăți adăugate manual',
   'joinery.props.hint': 'Rămân în proiect, nu se scriu în IFC. Un tabel o arată ca rând: «Adăugați o coloană» pe cartela lui, setul «Typed for the type».',
   'joinery.props.name': 'Nume',
