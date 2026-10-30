@@ -13,7 +13,8 @@ import { warnUnknownGraphicStandard } from '@/project/graphic-standard-notice';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { commitStandards } from '@/project/drafting-standards';
 import { useProjectStore, type ProjectState } from '@/project/project-store';
-import { CATALOGUE_FILE_SUFFIX, emptyCatalogue, parseCatalogue, selectKinds, serializeCatalogue, type Catalogue, type CatalogueKind } from './catalogue-file';
+import { CATALOGUE_FILE_SUFFIX, REGISTERED_CATALOGUE_KINDS, emptyCatalogue, parseCatalogue, selectKinds, serializeCatalogue, type Catalogue, type CatalogueKind } from './catalogue-file';
+import type { RegisteredCatalogueData } from './registered-kinds';
 import { mergeCatalogues, type ClashPolicy, type MergeReport } from './catalogue-merge';
 
 /** The reusable definitions the project holds right now. */
@@ -22,7 +23,8 @@ export function projectCatalogue(s: ProjectState = useProjectStore.getState()): 
     layers: s.draftLayers, layerGroups: s.layerGroups ?? [],
     textStyles: s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE], dimStyles: s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE],
     hatchPatterns: s.hatchPatterns ?? '', materials: s.materials ?? [],
-    annotationTypes: s.annotationTypes ?? [], symbols: s.symbols ?? [], legends: s.legends ?? [], cadLayers: s.cadLayers ?? [], details: s.details ?? [], sheetTemplates: s.sheetTemplates ?? [], boqArticles: s.boqArticles ?? [], viewTemplates: s.viewTemplates ?? [], classificationMappings: s.classificationMappings ?? [],
+    annotationTypes: s.annotationTypes ?? [], symbols: s.symbols ?? [], legends: s.legends ?? [], cadLayers: s.cadLayers ?? [], details: s.details ?? [], sheetTemplates: s.sheetTemplates ?? [], boqArticles: s.boqArticles ?? [], viewTemplates: s.viewTemplates ?? [],
+    ...(Object.fromEntries(REGISTERED_CATALOGUE_KINDS.map((d) => [d.key, d.fromProject(s)])) as unknown as RegisteredCatalogueData),
     ...(s.tagFields ? { tagFields: s.tagFields } : {}),
   };
 }
@@ -39,7 +41,11 @@ export function applyCatalogue(c: Catalogue): void {
   if (c.boqArticles !== (useProjectStore.getState().boqArticles ?? [])) useProjectStore.setState({ boqArticles: c.boqArticles, dirty: true });
   // Only the list: no view is moved onto a template by an import, they are there to choose from.
   if (c.viewTemplates !== (useProjectStore.getState().viewTemplates ?? [])) useProjectStore.setState({ viewTemplates: c.viewTemplates, dirty: true });
-  if (c.classificationMappings !== (useProjectStore.getState().classificationMappings ?? [])) useProjectStore.setState({ classificationMappings: c.classificationMappings, dirty: true });
+  // The kinds a file of their own registers (`./registered-kinds.ts`), each written back as its own list.
+  for (const d of REGISTERED_CATALOGUE_KINDS) {
+    const patch = d.applyToProject(useProjectStore.getState(), (c as unknown as Record<string, unknown>)[d.key]);
+    if (patch) useProjectStore.setState({ ...patch, dirty: true });
+  }
 }
 
 export function exportCatalogue(kinds: ReadonlySet<CatalogueKind>, name = useProjectStore.getState().name): void {

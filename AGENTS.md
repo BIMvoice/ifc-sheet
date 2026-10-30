@@ -226,6 +226,11 @@ Entity references come from the file, so a recursive walk over a self-referentia
 **A new drafting command**
 - Add `apps/viewer/src/drafting/commands/<name>.command.ts` exporting `draftCommands: readonly DraftCommandDef[]` (see `underlay.command.ts`). `registry.ts` finds every `*.command.ts`; its list is frozen, never edit it. A command id or typed name already taken throws when the registry loads.
 
+**A new library (`.bvlib`) kind** (`apps/viewer/src/catalogue/`; the header of `registered-kinds.ts` has the steps)
+- Add `kinds/<key>.ts` exporting `registeredCatalogueKinds = [defineCatalogueKind({ key, empty, read, merge, fromProject, applyToProject })]` and `declare module '../registered-kinds' { interface RegisteredCatalogueData { myKey: MyItem[] } }` (see `kinds/classification-mappings.ts`). `registered-kinds.ts` finds the file; edit no list in `catalogue-file.ts`, `catalogue-merge.ts` or `catalogue-store.ts`. `FROZEN_CATALOGUE_KINDS` is frozen and `registered-kinds.test.ts` pins the assembled order. Registered kinds come after the frozen ones, by key.
+- A registered kind is counted by its list's length, exported whole, and merged on its own. One that needs a count of its own, a cut-down export or references to another kind is not supported yet: extend the registry first. Its dialog label `library.kind.<key>` goes in its own i18n catalogue file, and the project file needs its own field (above).
+- Not registries, on purpose: schedule kinds (the kind is a union in the engine's reader, and the dispatch, layout hooks and exports are five differently shaped chains, not one list) and the viewport content kinds in `SheetPaper.tsx` and `useSheetContent.ts` (four kinds, the last added 2026-10-19, and each is a typed field of `ViewportContent`).
+
 **A new drawer section**
 - Add a file in `apps/viewer/src/components/viewer/wall/drawer-sections/` and one import plus one entry in its `index.ts` (alphabetical). Do not edit `ProjectDrawer.tsx`.
 
