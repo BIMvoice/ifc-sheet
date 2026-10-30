@@ -184,6 +184,22 @@
      "regions": 0,
      "points": 3248,
      "hash": "4449644ea1b3c912"
+    },
+    "SYMBOLS stroke=#000000 fill=- #1": {
+     "width": 0.13,
+     "dash": "",
+     "paths": 4,
+     "regions": 0,
+     "points": 10,
+     "hash": "02a67ead2b4073dc"
+    },
+    "SYMBOLS stroke=#000000 fill=- #2": {
+     "width": 0.13,
+     "dash": "",
+     "paths": 6,
+     "regions": 0,
+     "points": 16,
+     "hash": "6c45f84ce7c66490"
     }
    },
    "texts": [
@@ -260,6 +276,14 @@
      "regions": 0,
      "points": 4516,
      "hash": "4301dc6b2a102a7b"
+    },
+    "SYMBOLS stroke=#000000 fill=- #1": {
+     "width": 0.13,
+     "dash": "",
+     "paths": 1,
+     "regions": 0,
+     "points": 3,
+     "hash": "416d826b19a8a38d"
     }
    },
    "texts": [

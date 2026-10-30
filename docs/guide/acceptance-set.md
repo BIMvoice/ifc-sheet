@@ -36,8 +36,11 @@ never add one. It also found that the DXF writer overflowed the stack on its ele
 
 The suite checks that doors and windows are cut and drawn on the plans, and (#587) that the plans carry their symbols: per model, the door symbols
 the engine draws (`planOpeningSymbols`, the code the app calls) number more than none, are symbols of doors the plan draws, and cover every door
-the plan cuts; and the printed sheets carry a `SYMBOLS` pen. The swing and opening symbols of doors and windows are drawn by the engine on plans only;
-the elevations' and sections' door and window symbols are the app's still. The nine listed above are to be drawn by the host-wall rule decided on #586 (with #490).
+the plan cuts; and the printed sheets carry a `SYMBOLS` pen. The swing and opening symbols of doors and windows are drawn by the engine on plans, and (since the elevations' share of #587) on elevations and
+sections: a second check per model counts the door symbols the four elevations draw (`elevationDoorSymbols`, the least the model gave when it was written),
+requires each to be of a door the elevation shows, and requires the elevation sheets to carry a `SYMBOLS` pen exactly when there are some. A window has no symbol
+on an elevation until it has a configured or mapped type, in the app and here, so these models (none maps its windows) show door symbols only; the window, glazing bar,
+arched head and transom symbols are checked by the parity test on FZK. The skolebygg model is optional and absent here, so its count is 0 until someone with the file sets it. The nine listed above are to be drawn by the host-wall rule decided on #586 (with #490).
 
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read

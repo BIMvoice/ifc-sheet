@@ -9,7 +9,7 @@
  */
 
 import type { NumberingScheme } from './document.js';
-import { graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
+import { conventionOfDirection, graphicStandardOf, type GraphicStandard } from './graphic-standard.js';
 import type { DefaultSet } from './default-set.js';
 import type { ProjectFacts } from './project-read.js';
 import type { ProjectMaterial } from './materials.js';
@@ -31,6 +31,8 @@ export interface BuildStandard {
   unitsAndNumbers?: ProjectFacts['unitsAndNumbers'];
   /** The numbering scheme of the sheets: the pack's (`--standard`); absent: the default one. */
   sheetNumbering?: NumberingScheme;
+  /** The opening-line convention of the elevations' door and window symbols: the pack's (installing a standard sets it), else the project's; absent: `handle`. */
+  openingLines?: 'handle' | 'hinge';
   /** What the build says about the choice (a project from a newer app). */
   notes: string[];
 }
@@ -52,7 +54,9 @@ export function buildStandard(standardId: string | undefined, project: ProjectFa
   const graphic = pack?.graphicStandard !== undefined ? graphicStandardOf(pack.graphicStandard) : project?.graphicStandard;
   const titleBlockTemplate = pack?.titleBlockTemplate ?? project?.titleBlockTemplate;
   const units = pack?.unitsAndNumbers ? { ...project?.unitsAndNumbers, ...pack.unitsAndNumbers } : project?.unitsAndNumbers;
+  const openingLines = pack?.graphicStandard !== undefined && graphic ? conventionOfDirection(graphic.openingLines) : project?.openingLines;
   return {
+    ...(openingLines ? { openingLines } : {}),
     ...(graphic ? { pens: pensOf(graphic) } : {}), ...(pack?.sheetNumbering ? { sheetNumbering: pack.sheetNumbering } : {}), ...(titleBlockTemplate ? { titleBlockTemplate } : {}), ...(units ? { unitsAndNumbers: units } : {}),
     ...(project?.titleBlock ? { titleBlock: project.titleBlock } : {}), ...(project?.titleBlockSources ? { titleBlockSources: project.titleBlockSources } : {}), ...(project?.titleBlockParams ? { titleBlockParams: project.titleBlockParams } : {}),
     notes,

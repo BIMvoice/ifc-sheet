@@ -28,6 +28,7 @@ TITLE_BLOCK_CAPTIONS_DE: value
 TextPlacement: type (type-only)
 TextStyle: type (type-only)
 builtInPacks: value
+conventionOfDirection: value
 germanyPack: value
 graphicStandardOf: value
 hasPackMaterials: value

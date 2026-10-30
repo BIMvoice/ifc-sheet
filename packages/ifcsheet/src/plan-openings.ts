@@ -23,6 +23,7 @@ import { elementShown } from './element-graphics.js';
 import { doorOperationOf, type DoorOperation } from './door-operation.js';
 import { drawnJoineryOf, typeIndex, type DrawnJoinery, type JoineryProject, type Live } from './joinery-schedule.js';
 import { openingSymbols, type OpeningSymbol } from './opening-symbols.js';
+import { elevationOpeningSymbols, visibleEntities } from './elevation-openings.js';
 import { hiddenClassesOf } from './view-templates.js';
 import type { ViewGraphics } from './view-graphics-types.js';
 
@@ -90,6 +91,16 @@ export function planOpeningSymbols(
   const reads = openingReads(sources);
   return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf)
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
+}
+
+/**
+ * The opening symbols of an elevation or section drawn as `drawing`, before the detail level: of the doors and windows the drawing
+ * shows and the classes it leaves visible. Empty for a plan and for a custom plane.
+ */
+export function viewOpeningSymbols(
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, drawing: Pick<Drawing2D, 'lines'>, sources: OpeningSources, graphics: ViewGraphics | undefined,
+): OpeningSymbol[] {
+  return elevationOpeningSymbols(meshes, plane, visibleEntities(drawing), hiddenClassesOf(graphics), openingReads(sources), sources.project.openingLines);
 }
 
 /** One pen of the symbols: its weight, whether it is dashed, and the shapes drawn with it. */
