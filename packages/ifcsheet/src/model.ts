@@ -17,6 +17,7 @@ import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
 import { farElementLabel, frameEntities } from './framing.js';
+import { storeyElementIds } from './storey-elements.js';
 import { storeyFloorY } from './storey-origin.js';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
@@ -49,9 +50,9 @@ export interface OpenedModel {
   storeys: StoreyInput[];
   /** The meshes, in the viewer frame (metres, Y up); empty without geometry. */
   meshes: MeshData[];
-  /** The meshes of what the storeys contain (the building the set is measured on, without the site around it): what the sheets' drawings are cut from. */
+  /** The meshes of the building (`storeyElementIds`: what the storeys contain and the parts aggregated under it, without the site around it): what the sheets' drawings are cut from. */
   buildingMeshes: MeshData[];
-  /** The box of the building (what the storeys contain, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
+  /** The box of the building (the elements of `buildingMeshes`, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
   /** The elements the extent leaves out, farthest first; they are still in `meshes`, `buildingMeshes` and the schedules. Empty with `includeFarElements`. */
   farElements: FarElementInfo[];
@@ -112,16 +113,13 @@ function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | u
   });
 }
 
-/** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same, and frames it through `frameEntities` too). */
+/** The building's elements on `storeys` (`storeyElementIds`): what the storeys contain and the parts aggregated under it. */
 function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
   const hierarchy = ds.spatialHierarchy;
   if (!hierarchy) return [];
   const wanted = new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : [])));
-  const ids: number[] = [];
-  for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''))) {
-    for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) ids.push(id);
-  }
-  return ids;
+  const found = findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''));
+  return storeyElementIds(hierarchy, found.map((n) => n.expressId), (id) => ds.entities.getTypeEnum(id));
 }
 
 /** The rooms and stairs of `level` and the building's footprint (`project/model-rooms.ts` reads the same from the app's stores). */
