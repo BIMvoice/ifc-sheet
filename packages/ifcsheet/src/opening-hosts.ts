@@ -9,7 +9,9 @@
  * does not pass through, is drawn as it always was: only when the cut passes through the opening.
  *
  * The host is found through IfcRelFillsElement (the door or window fills an IfcOpeningElement) and IfcRelVoidsElement (the
- * opening voids a wall). `openingHostsOf` reads that once per model; `hostedInCutWall` is the test `openingSymbols` takes. The
+ * opening voids a wall), or, for a door or window that is an aggregated part of an IfcCurtainWall (IfcRelAggregates), that curtain
+ * wall. A host is an IfcWall class or an IfcCurtainWall, whose extent is its own meshes and its parts' (`curtainPartsOf`: a curtain
+ * wall can be a container with no body). `openingHostsOf` reads that once per model; `hostedInCutWall` is the test `openingSymbols` takes. The
  * engine (`planOpeningSymbols`) and the app (`project/view-symbols.ts`) both build the test here, so they cannot disagree.
  * The rule applies only to a door or window of the plan's own storey (`storeyMembersOf`, the membership plans are framed and cut
  * by: `storeyElementIds`, aggregated parts included): a door of another storey whose host wall is cut by this plan too (a
@@ -23,11 +25,17 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import { storeyElementIds } from './storey-elements.js';
 
 const OPENING_TYPES = ['IFCDOOR', 'IFCDOORSTANDARDCASE', 'IFCWINDOW', 'IFCWINDOWSTANDARDCASE'];
-const WALL = /^IFCWALL/i;
+/** A host: a wall, or a curtain wall (glass walls host doors in real models). */
+const HOST = /^IFC(WALL|CURTAINWALL)/i;
+const CURTAIN_WALL = 'IFCCURTAINWALL';
 
 const hostsByStore = new WeakMap<object, Map<number, number>>();
 
-/** The wall each door and window of `store` is hosted in, by express id: door or window, to the IfcRelFillsElement opening, to the IfcRelVoidsElement wall. */
+/**
+ * The wall each door and window of `store` is hosted in, by express id: door or window, to the IfcRelFillsElement opening, to the
+ * IfcRelVoidsElement wall; or, for a door or window that is an aggregated part of an IfcCurtainWall (IfcRelAggregates, no opening),
+ * that curtain wall. Both are a host in the same way.
+ */
 export function openingHostsOf(store: IfcDataStore): ReadonlyMap<number, number> {
   const held = hostsByStore.get(store);
   if (held) return held;
@@ -40,11 +48,34 @@ export function openingHostsOf(store: IfcDataStore): ReadonlyMap<number, number>
           const wall = graph.getRelated(opening, RelationshipType.VoidsElement, 'inverse')[0];
           if (wall !== undefined) { hosts.set(id, wall); break; }
         }
+        if (hosts.has(id)) continue;
+        const curtain = graph.getRelated(id, RelationshipType.Aggregates, 'inverse').find((parent) => store.entities.getTypeName(parent)?.toUpperCase() === CURTAIN_WALL);
+        if (curtain !== undefined) hosts.set(id, curtain);
       }
     }
   }
   hostsByStore.set(store, hosts);
   return hosts;
+}
+
+const partsByStore = new WeakMap<object, Map<number, readonly number[]>>();
+
+/**
+ * The aggregated parts of each IfcCurtainWall of `store` (doors and windows left out), by express id. A curtain wall that is only a
+ * container has no mesh of its own: the cut test reads its extent off these parts.
+ */
+export function curtainPartsOf(store: IfcDataStore): ReadonlyMap<number, readonly number[]> {
+  const held = partsByStore.get(store);
+  if (held) return held;
+  const parts = new Map<number, readonly number[]>();
+  const graph = store.relationships;
+  if (graph && store.entityIndex?.byType) {
+    for (const wall of store.entityIndex.byType.get(CURTAIN_WALL) ?? []) {
+      parts.set(wall, graph.getRelated(wall, RelationshipType.Aggregates, 'forward').filter((part) => !OPENING_TYPES.includes(store.entities.getTypeName(part)?.toUpperCase() ?? '')));
+    }
+  }
+  partsByStore.set(store, parts);
+  return parts;
 }
 
 const membersByStore = new WeakMap<object, Map<string, ReadonlySet<number>>>();
@@ -66,19 +97,24 @@ export function storeyMembersOf(store: IfcDataStore, storeyGlobalIds: readonly s
 }
 
 /**
- * Whether element `id` is hosted in a wall the plan at height `cut` passes through: `hostOf` names the host wall's mesh id, and the
- * wall's meshes (any IfcWall class among `meshes`) span `cut`, and `onPlan` says the element belongs to the plan's own storey. False for an
- * element with no host, one hosted in something that is not a wall, or one of another storey.
+ * Whether element `id` is hosted in a wall the plan at height `cut` passes through: `hostOf` names the host's mesh id, and the host's
+ * meshes (any IfcWall or IfcCurtainWall class among `meshes`, plus the meshes of the ids `partsOf` names for it: a curtain wall's
+ * parts) span `cut`, and `onPlan` says the element belongs to the plan's own storey. False for an element with no host, one hosted
+ * in something that is not a wall, or one of another storey.
  */
-export function hostedInCutWall(meshes: readonly MeshData[], hostOf: (id: number) => number | undefined, onPlan: (id: number) => boolean): (id: number, cut: number) => boolean {
-  let spans: Map<number, { min: number; max: number }> | undefined;
-  const wallSpans = () => {
+export function hostedInCutWall(
+  meshes: readonly MeshData[], hostOf: (id: number) => number | undefined, onPlan: (id: number) => boolean,
+  partsOf: (host: number) => readonly number[] = () => [],
+): (id: number, cut: number) => boolean {
+  let spans: Map<number, { min: number; max: number; host: boolean }> | undefined;
+  const meshSpans = () => {
     if (spans) return spans;
     spans = new Map();
     for (const mesh of meshes) {
-      if (!WALL.test(mesh.ifcType ?? '') || (mesh.geometryClass ?? 0) === 2) continue;
+      if ((mesh.geometryClass ?? 0) === 2) continue;
       const oy = mesh.origin?.[1] ?? 0;
-      const span = spans.get(mesh.expressId) ?? { min: Infinity, max: -Infinity };
+      const span = spans.get(mesh.expressId) ?? { min: Infinity, max: -Infinity, host: false };
+      span.host ||= HOST.test(mesh.ifcType ?? '');
       for (let i = 1; i < mesh.positions.length; i += 3) {
         span.min = Math.min(span.min, oy + mesh.positions[i]);
         span.max = Math.max(span.max, oy + mesh.positions[i]);
@@ -89,8 +125,12 @@ export function hostedInCutWall(meshes: readonly MeshData[], hostOf: (id: number
   };
   return (id, cut) => {
     if (!onPlan(id)) return false;
-    const wall = hostOf(id);
-    const span = wall === undefined ? undefined : wallSpans().get(wall);
-    return span !== undefined && cut >= span.min && cut <= span.max;
+    const host = hostOf(id);
+    if (host === undefined) return false;
+    const all = meshSpans();
+    const own = all.get(host);
+    const parts = partsOf(host).map((part) => all.get(part)).filter((span) => span !== undefined);
+    const pieces = [...(own?.host ? [own] : []), ...parts];
+    return pieces.length > 0 && cut >= Math.min(...pieces.map((p) => p.min)) && cut <= Math.max(...pieces.map((p) => p.max));
   };
 }
