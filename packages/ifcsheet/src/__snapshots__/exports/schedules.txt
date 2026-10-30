@@ -157,6 +157,9 @@ ScheduleTextCell: type (type-only)
 ScheduleTextRow: type (type-only)
 SheetSay: type (type-only)
 SheetWordKey: type (type-only)
+SiteAreaChoice: type (type-only)
+SiteAreaProject: type (type-only)
+SiteAreaSource: type (type-only)
 SortBy: type (type-only)
 SpaceRole: type (type-only)
 SplitData: type (type-only)
@@ -189,6 +192,13 @@ TypeQuantityLine: type (type-only)
 TypeRow: type (type-only)
 TypesSay: type (type-only)
 TypesWordKey: type (type-only)
+URBAN_NONE: value
+URBAN_WORDS_EN: value
+URBAN_WORDS_RO: value
+UrbanLabelFacts: type (type-only)
+UrbanLabels: type (type-only)
+UrbanSay: type (type-only)
+UrbanWordKey: type (type-only)
 addTextRow: value
 applyContent: value
 boqLineText: value
@@ -257,6 +267,7 @@ layoutRegisterPage: value
 layoutRoomFinishes: value
 layoutRoomSchedule: value
 layoutTypeQuantities: value
+layoutUrban: value
 levelRowId: value
 listColumnKey: value
 listExportTable: value
@@ -300,6 +311,7 @@ picks: value
 placeTypes: value
 placeTypesOf: value
 placedMeshes: value
+plotAreaOf: value
 predefinedTypeText: value
 propertyValueText: value
 quantityDimension: value
@@ -319,6 +331,7 @@ readSchedule: value
 readScheduleClassification: value
 readScheduleContent: value
 readScheduleTextRows: value
+readSiteArea: value
 readSubReport: value
 readSubReportFilter: value
 readUrbanSettings: value
@@ -357,6 +370,9 @@ setTextCell: value
 sharedRegisterRows: value
 sheetSayFor: value
 shownRows: value
+signedLevel: value
+siteAreaOf: value
+siteSourceNote: value
 spaceRole: value
 subReportCheckOf: value
 subReportChecksOf: value
@@ -386,6 +402,9 @@ typeQuantityLines: value
 typeQuantityTable: value
 typesSayFor: value
 unitDimension: value
+urbanLabelsOf: value
+urbanSayFor: value
+urbanTable: value
 withListClassification: value
 withListOverrides: value
 withOfficeClassification: value

@@ -45,6 +45,7 @@ import { projectTitleBlockMisfits, readProjectSheets, type ProjectSheets } from 
 import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
+import { readSiteArea } from './site-area.js';
 import type { StoreyInput } from './view-defaults.js';
 import { readUnderlays } from './underlay-read.js';
 import type { ViewUnderlay } from './underlay.js';
@@ -68,6 +69,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   byggesaksbim: boolean;
   /** The bill of quantities' articles (#75); empty when the file has none. */
   boqArticles: BoqArticle[];
+  /** The site area in m² typed in the app (`siteArea`); absent: the plot drawn on the site plan, else the model's IfcSite. */
+  siteArea?: number;
   /** The office's classification mappings (#89); empty when the file has none. */
   classificationMappings: ClassificationMapping[];
   /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
@@ -136,6 +139,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(readJoineryOverrides(parsed.joineryOverrides) ? { joineryOverrides: readJoineryOverrides(parsed.joineryOverrides) } : {}),
     byggesaksbim: parsed.byggesaksbim === true,
     boqArticles: readBoqArticles(parsed.boqArticles),
+    ...(readSiteArea(parsed.siteArea) !== undefined ? { siteArea: readSiteArea(parsed.siteArea) } : {}),
     classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),

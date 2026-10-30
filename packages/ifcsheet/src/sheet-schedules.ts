@@ -6,9 +6,9 @@
  * A schedule placed on a sheet, as the engine's sheet prints it (#479). A schedule built from the Lists engine is laid out by the
  * app's own code: its table is `listScheduleTable` (the run `ifcsheet list` makes), set on paper by `layoutListSchedule`, paged and
  * placed in its viewport's box by `layoutTableOnSheet`. The primitives are then drawn where the app's `ScheduleViewport` draws them:
- * at the box's top left, clipped to it. The rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the bill of quantities and the drawing register
- * are laid out by the app's own code too (`SchedulePager`, made in `project-sheets.ts`). The other kinds of schedule (doors and windows,
- * urban indicators) are not printed yet and are reported.
+ * at the box's top left, clipped to it. The rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the urban indicators, the bill of quantities and the drawing register
+ * are laid out by the app's own code too (`SchedulePager`, made in `project-sheets.ts`). The other kinds of schedule (doors and windows)
+ * are not printed yet and are reported.
  */
 
 import type { Point2D } from '@ifc-lite/drawing-2d';
@@ -43,7 +43,7 @@ export type SchedulePager = (place: SchedulePlace) => ScheduleLayout;
 /** What the sheets' schedules are drawn with: each list schedule's table by schedule id, the other kinds' pagers by schedule id, and the language of their figures. */
 export interface SheetSchedules {
   tables: ReadonlyMap<string, PlacedTable>;
-  /** The rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the bill of quantities and the register, by schedule id. */
+  /** The rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the urban indicators, the bill of quantities and the register, by schedule id. */
   pages?: ReadonlyMap<string, SchedulePager>;
   locale: SheetLocale;
   /** The word a page after the first says in its title ("continued"); absent: the page counter alone. */

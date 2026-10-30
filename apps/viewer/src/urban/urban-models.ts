@@ -3,184 +3,34 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The loaded models read into `urbanIndicators`' input: one storey per
- * project level (a level spans the models that have it), its footprint from
- * the rendered meshes of what stands on it (`footprint.ts`), every room's
- * floor area, and the site area the model states. Reads the stores; the wasm
- * module must be initialised.
- *
- * - Rooms (Au): every IfcSpace except an EXTERNAL one (balcony, terrace), a
- *   GFA one (an area-scheme space) and a space that aggregates spaces of its
- *   own (only the leaves are rooms, so nothing is counted twice); those are
- *   left out and counted in `spacesLeftOut`. INTERNAL, NOTDEFINED, unset,
- *   SPACE, PARKING and USERDEFINED all count: most tools type an ordinary
- *   room SPACE. The type is the PredefinedType (IFC2X3: InteriorOrExteriorSpace,
- *   in the same slot).
- *   The area is NetFloorArea, else GrossFloorArea, from
- *   `Qto_SpaceBaseQuantities` first and then any quantity set (ArchiCAD
- *   writes them to `BaseQuantities`), in SI like the material takeoff; when
- *   the model states neither, the footprint of the space's geometry. Both
- *   rules are the engine's (`room-areas.ts` in `@bimvoice/ifcsheet`), and
- *   `collectRoomRecords` below is the one read of the rooms: Au and the room
- *   and area schedule both take their rooms from it, so they cannot differ.
- *   The category is the room's ObjectType, else its LongName, else its Name.
- * - Site area: the IfcSite's GrossArea quantity, when positive.
- * - The building's ElevationOfRefHeight, in metres, for finding ±0.00.
- *
- * The attributes read off the source (a space's LongName and PredefinedType,
- * a slab's PredefinedType, the building's reference elevation) are parsed
- * once per model and entity; an edit to them is read from the model's
- * mutation view on top.
+ * The loaded models read into `urbanIndicators`' input (#581): the rule is the engine's (`collectUrbanAreas`, `collectRoomRecords` and
+ * `modelSiteArea`, the ones `ifcsheet build --project` reads with); the app only says which models, with their edit overlay and the live
+ * renderer's instanced pieces (`loadedScheduleModels`), which levels the project holds and which storey an element stands on now
+ * (`storeyOfElement`, after a move). Reads the stores; the wasm module must be initialised.
  */
 
-import { extractAllEntityAttributes, extractProjectUnits, ProjectUnits, type IfcDataStore } from '@ifc-lite/parser';
-import { RelationshipType } from '@ifc-lite/data';
-import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { storeyOfElement } from '@/project/effective-storey';
-import { quantityScales } from '@/joinery/material-takeoff-models';
-import { loadedScheduleModels, providerOf } from '@/joinery/schedule-models';
-import type { ScheduleModel } from '@bimvoice/ifcsheet/project';
-import { estimatedAreas, meshFootprintArea, meshFootprintPerimeter, pickArea, roomArea, spaceRole, type EstimatedAreas, type RoomRecord } from '@bimvoice/ifcsheet';
+import { loadedScheduleModels } from '@/joinery/schedule-models';
+import { collectRoomRecords as roomRecordsOf, collectUrbanAreas as urbanAreasOf, modelSiteArea as siteAreaOfModels, type RoomOfModels, type UrbanAreas } from '@bimvoice/ifcsheet/urban';
+import { pickArea } from '@bimvoice/ifcsheet';
 import type { InstancedMeshes } from '@/joinery/element-meshes';
 import type { ProjectLevel } from '@/project/types';
-import { measureStoreys, URBAN_FOOTPRINT_CLASSES, type UrbanModelRead } from '@bimvoice/ifcsheet/urban';
-import type { PlanMesh } from './footprint';
-import type { SpaceInput, StoreyInput } from './indicators';
 
-export interface UrbanAreas {
-  storeys: StoreyInput[];
-  /** The rooms Au sums. */
-  spaces: SpaceInput[];
-  /** Spaces that are not rooms: EXTERNAL ones, GFA (area-scheme) ones, and spaces split into spaces of their own. */
-  spacesLeftOut: { external: number; gfa: number; parents: number };
-  /** The rooms Au counts with an area measured from their geometry because the model states none; null when there are none (`estimatedAreas`). */
-  estimated: EstimatedAreas | null;
-  /** m² the model states for its site, or null. */
-  modelSiteArea: number | null;
-  /** The first building's ElevationOfRefHeight in metres, or null. */
-  buildingRefElevation: number | null;
-  /** Names of the levels whose holes were all taken as inside (walls, no slab or room). */
-  assumedInterior: string[];
-}
-
-
-type SourceAttrs = ReadonlyMap<string, string | number | boolean>;
-const attrsByStore = new WeakMap<IfcDataStore, Map<number, SourceAttrs>>();
-/** An entity's attributes off the model source, parsed once per model and entity. */
-function sourceAttrs(store: IfcDataStore, id: number): SourceAttrs {
-  let byId = attrsByStore.get(store);
-  if (!byId) attrsByStore.set(store, (byId = new Map()));
-  let attrs = byId.get(id);
-  if (!attrs) {
-    attrs = store.source.length > 0 ? new Map(extractAllEntityAttributes(store, id).map((a) => [a.name, a.value])) : new Map();
-    byId.set(id, attrs);
-  }
-  return attrs;
-}
-
-/** A text attribute as edited, else as the source has it; an enumeration without its dots, upper case. */
-function textAttr(store: IfcDataStore, view: MutablePropertyView | undefined, id: number, name: string): string {
-  const edited = view?.getAttributeMutationsForEntity(id).find((m) => m.name === name);
-  const v = edited ? edited.value : sourceAttrs(store, id).get(name);
-  return typeof v === 'string' ? v : '';
-}
-const enumAttr = (store: IfcDataStore, view: MutablePropertyView | undefined, id: number, name: string) => textAttr(store, view, id, name).replace(/\./g, '').toUpperCase();
+export type { RoomOfModels, UrbanAreas };
 
 /** The engine's: the first of `names` found, preferring the set named `preferred`; in SI. */
 export { pickArea };
 
-const scalesByStore = new WeakMap<IfcDataStore, ReturnType<typeof quantityScales> & { length: number }>();
-/** The SI scales of a model's quantities and lengths, read from its source once (an edit does not change the project's units). */
-function scalesOf(store: IfcDataStore): ReturnType<typeof quantityScales> & { length: number } {
-  let scales = scalesByStore.get(store);
-  if (!scales) {
-    const units = store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty();
-    scales = { ...quantityScales(units), length: units.unitForMeasure('IfcLengthMeasure')?.siScale ?? 1 };
-    scalesByStore.set(store, scales);
-  }
-  return scales;
-}
-
-/** The first visible building's ElevationOfRefHeight, metres; null when no model states one. */
-function buildingRefElevation(models: readonly ScheduleModel[]): number | null {
-  for (const { dataStore: store, view } of models) {
-    for (const { expressId: id } of iterateEffectiveEntityIds(store, view, ['IFCBUILDING'])) {
-      const edited = view?.getAttributeMutationsForEntity(id).find((m) => m.name === 'ElevationOfRefHeight');
-      const v = edited ? edited.value : sourceAttrs(store, id).get('ElevationOfRefHeight');
-      if (typeof v === 'number' && Number.isFinite(v)) return v * scalesOf(store).length;
-    }
-  }
-  return null;
-}
-
 /** The first positive IfcSite GrossArea among the visible models, m²; null when none states one. */
-export function modelSiteArea(models: readonly ScheduleModel[] = loadedScheduleModels()): number | null {
-  for (const model of models) {
-    const { dataStore: store, view } = model;
-    const provider = providerOf(model);
-    const scale = scalesOf(store).area;
-    for (const { expressId: id } of iterateEffectiveEntityIds(store, view, ['IFCSITE'])) {
-      const area = pickArea(provider.getQuantitySets(id), 'Qto_SiteBaseQuantities', ['GrossArea'], scale);
-      if (area !== null && area > 0) return area;
-    }
-  }
-  return null;
+export function modelSiteArea(models = loadedScheduleModels()): number | null {
+  return siteAreaOfModels(models);
 }
 
-/** The project level (index into `levels`) of an element of model `modelId`, by its storey; null when it has none. */
-function levelResolver(modelId: string, store: IfcDataStore, levels: readonly ProjectLevel[]): (id: number) => number | null {
-  const levelOfStorey = new Map<number, number>();
-  for (const storeyId of store.spatialHierarchy?.byStorey.keys() ?? []) {
-    const gid = store.entities.getGlobalId(storeyId);
-    const index = levels.findIndex((l) => l.storeyGlobalIds.includes(gid));
-    if (index >= 0) levelOfStorey.set(storeyId, index);
-  }
-  return (id) => {
-    const storey = storeyOfElement(modelId, id);
-    return storey === null ? null : levelOfStorey.get(storey) ?? null;
-  };
-}
-
-/** A room as every table reads it: the engine's record (`RoomRecord`), and the category Au is split by. */
-export interface RoomOfModels extends RoomRecord {
-  category: string;
-}
-
-/**
- * The rooms of the visible models, the one read behind Au (`collectUrbanAreas`) and the room and area schedule: each
- * room's level (index into `levels`), number (the Name when a LongName names the room), name and area, decided by the
- * engine's rules (`room-areas.ts`: the model's NetFloorArea, else GrossFloorArea, else the footprint of the room's
- * geometry). The spaces that are not rooms are counted in `leftOut`.
- */
-export function collectRoomRecords(levels: readonly ProjectLevel[], models: readonly ScheduleModel[] = loadedScheduleModels()): { rooms: RoomOfModels[]; leftOut: UrbanAreas['spacesLeftOut'] } {
-  const rooms: RoomOfModels[] = [];
-  const leftOut = { external: 0, gfa: 0, parents: 0 };
-  for (const model of models) {
-    const { modelId, dataStore: store } = model;
-    if (!store.spatialHierarchy) continue;
-    const view = model.view ?? undefined;
-    const provider = providerOf(model);
-    const levelOf = levelResolver(modelId, store, levels);
-    const scales = scalesOf(store);
-    const isSpace = (id: number) => !view?.isDeleted(id) && (store.entities.getTypeName(id) ?? '').toUpperCase() === 'IFCSPACE';
-    // The meshes of the spaces: the footprint the perimeter is measured on, and the area when a room states none.
-    const meshesOf = (id: number): readonly PlanMesh[] | undefined => model.meshesOf?.(id);
-    for (const { expressId: id } of iterateEffectiveEntityIds(store, view ?? null, ['IFCSPACE'])) {
-      const role = spaceRole(enumAttr(store, view, id, 'PredefinedType'), store.relationships?.getRelated(id, RelationshipType.Aggregates, 'forward').some(isSpace) ?? false);
-      if (role !== 'room') { leftOut[role === 'external' ? 'external' : role === 'gfa' ? 'gfa' : 'parents']++; continue; }
-      const longName = textAttr(store, view, id, 'LongName');
-      const name = provider.getEntityName(id);
-      const held = meshesOf(id);
-      const { area, source } = roomArea(provider.getQuantitySets(id), scales.area, held?.length ? () => meshFootprintArea(held) : undefined);
-      rooms.push({
-        id: provider.getEntityGlobalId(id) || `${modelId}#${id}`, number: longName ? name : '', name: longName || name || `#${id}`,
-        level: levelOf(id), area, source, perimeter: held?.length ? meshFootprintPerimeter(held) || null : null, category: provider.getEntityObjectType(id) || longName || name || `#${id}`,
-      });
-    }
-  }
-  return { rooms, leftOut };
+/** The rooms of the visible models, the one read behind Au (`collectUrbanAreas`) and the room and area schedule (the engine's `collectRoomRecords`). */
+export function collectRoomRecords(levels: readonly ProjectLevel[], models = loadedScheduleModels()): { rooms: RoomOfModels[]; leftOut: UrbanAreas['spacesLeftOut'] } {
+  return roomRecordsOf(levels, models, storeyOfElement);
 }
 
 /** World-space meshes of a GPU-instanced element, by global id; absent from `geometryResult.meshes`. */
@@ -209,22 +59,5 @@ export function collectUrbanAreas(instanced?: InstancedPieces): UrbanAreas {
 }
 
 function measureUrbanAreas(instanced: InstancedPieces | undefined): UrbanAreas {
-  const levels = useProjectStore.getState().levels;
-  const scheduleModels = loadedScheduleModels({ instanced });
-  // The rule that outlines a level (what stands on it, what counts as unmeasured) is the engine's `measureStoreys`; this reads the loaded models for it.
-  const models: UrbanModelRead[] = [];
-  for (const { modelId, dataStore: store, view, meshesOf } of scheduleModels) {
-    if (!store.spatialHierarchy) continue;
-    const levelOf = levelResolver(modelId, store, levels);
-    models.push({
-      ids: iterateEffectiveEntityIds(store, view, [...URBAN_FOOTPRINT_CLASSES]),
-      levelOf,
-      isRoofSlab: (id) => enumAttr(store, view ?? undefined, id, 'PredefinedType') === 'ROOF',
-      meshesOf: (id) => meshesOf?.(id),
-    });
-  }
-  const { storeys, assumedInterior } = measureStoreys(levels, models);
-  const { rooms, leftOut } = collectRoomRecords(levels, scheduleModels);
-  const spaces: SpaceInput[] = rooms.map((r) => ({ storey: r.level, category: r.category, area: r.area }));
-  return { storeys, spaces, spacesLeftOut: leftOut, estimated: estimatedAreas(rooms), modelSiteArea: modelSiteArea(scheduleModels), buildingRefElevation: buildingRefElevation(scheduleModels), assumedInterior };
+  return urbanAreasOf(useProjectStore.getState().levels, loadedScheduleModels({ instanced }), storeyOfElement);
 }

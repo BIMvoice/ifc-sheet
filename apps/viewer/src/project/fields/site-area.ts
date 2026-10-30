@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { readSiteArea } from '@bimvoice/ifcsheet';
 import { optionalField } from './define';
 
 declare module '../types' {
@@ -11,4 +12,7 @@ declare module '../types' {
   }
 }
 
-export const siteAreaField = optionalField('siteArea', (raw) => (typeof raw.siteArea === 'number' && Number.isFinite(raw.siteArea) && raw.siteArea > 0 ? { siteArea: raw.siteArea } : {}));
+export const siteAreaField = optionalField('siteArea', (raw) => {
+  const siteArea = readSiteArea(raw.siteArea);
+  return siteArea === undefined ? {} : { siteArea };
+});
