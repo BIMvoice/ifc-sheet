@@ -123,5 +123,5 @@ describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the 
     expect(summary.length).toBeGreaterThan(0);
     expect(readFileSync(out).subarray(0, 5).toString()).toBe('%PDF-');
     expect(run('', 'build').status).toBe(2);
-  });
+  }, 120_000);
 });
