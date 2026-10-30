@@ -6,7 +6,7 @@
 
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -99,9 +99,8 @@ describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the 
     const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
     const result = run('--max-old-space-size=40', 'build', FZK, '--out', out);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the model is too large for the memory given to it');
-    expect(result.stderr).toContain('NODE_OPTIONS=--max-old-space-size=');
-    expect(result.stderr).not.toMatch(/FATAL ERROR|Native stack trace|Last few GCs|OOMErrorHandler|node::/);
+    // The user's own heap is set, so no heap number is in the words. The whole of stderr is V8's blank separator line (it comes before the report and passes) and the one line, so no part of the report is in it.
+    expect(result.stderr).toBe(`\n${failureMessage('memory', 'en', undefined, totalmem())}`);
     expect(result.stdout).toBe('');
     expect(existsSync(out)).toBe(false);
   });
@@ -110,14 +109,18 @@ describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the 
     const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
     const result = run('--max-old-space-size=40', 'build', FZK, '--out', out, '--locale', 'ro');
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('prea mare pentru memoria alocată');
+    expect(result.stderr).toBe(`\n${failureMessage('memory', 'ro', undefined, totalmem())}`);
   });
 
   it('builds the same model with the default settings, and passes the child\'s exit code and stdout through', () => {
     const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
     const built = run('', 'build', FZK, '--out', out);
     expect(built.status).toBe(0);
-    expect(built.stdout).toContain(`${out}: `);
+    // The child's stdout is passed through whole: its last line is the one the command prints, `<path>: <summary>`.
+    const lastLine = built.stdout.trimEnd().split('\n').pop() ?? '';
+    const [printedPath, summary] = lastLine.split(/: (.*)/s);
+    expect(printedPath).toBe(out);
+    expect(summary.length).toBeGreaterThan(0);
     expect(readFileSync(out).subarray(0, 5).toString()).toBe('%PDF-');
     expect(run('', 'build').status).toBe(2);
   });
