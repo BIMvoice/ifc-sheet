@@ -35,7 +35,6 @@ export interface TakeoffLabels {
 
 const COLUMNS = [62, 18, 24, 24, 70] as const;
 
-
 export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels, paging: PagedOptions = {}): ScheduleLayout {
   const fixed = (v: number | null, kind: 'volume' | 'area', measured: boolean): string => (v === null ? '–' : marked(sheetNumber(labels.locale, v, 2, { kind }), measured));
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
