@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { EXIT, run } from '../cli.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
-import type { ProjectView } from '../document.js';
+import type { PlanProjectView, ProjectView } from '../document.js';
 import { openingHostsOf } from '../opening-hosts.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from '../headless.js';
 import { planOpeningSymbols, viewOpeningSymbols } from '../plan-openings.js';
@@ -127,7 +127,7 @@ function notDrawnOf(r: Run, c: Case, ifcType: string, type: string): string[] {
   // Drawn by its cut or lines, or by its symbol: a plan draws the symbol of a door or window whose host wall it cuts, though the opening lies above or below the cut (#586).
   const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, ifcType)]));
   const kind = ifcType === 'IfcDoor' ? 'door' : 'window';
-  for (const view of r.set.document.views.filter((v) => v.kind === 'plan')) {
+  for (const view of planViewsOf(r)) {
     for (const s of planSymbolsOf(r, view)) if (s.kind === kind) drawn.add(s.id);
   }
   const ids = r.model.dataStore.entityIndex.byType.get(type) ?? [];
@@ -135,8 +135,10 @@ function notDrawnOf(r: Run, c: Case, ifcType: string, type: string): string[] {
   for (const listed of c.notDrawn) expect(typeOf(r, listed), `${listed} is a door or window of the model`).toBeDefined();
   return ids.filter((id) => !drawn.has(id)).map((id) => r.model.dataStore.entities.getGlobalId(id) ?? `#${id}`).sort();
 }
+/** The plan views of the project: only they carry a level. */
+const planViewsOf = (r: Run): PlanProjectView[] => r.set.document.views.filter((v): v is PlanProjectView => v.kind === 'plan');
 /** The door and window symbols of a plan view, as the sheets and the app make them (the default project: no configured types). */
-function planSymbolsOf(r: Run, view: ProjectView) {
+function planSymbolsOf(r: Run, view: PlanProjectView) {
   const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
   const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
   return planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates), view.level);
@@ -211,7 +213,7 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
       it.skipIf(c.doors === 0)('draws a symbol for the doors a plan cuts: they are the doors drawn, none is left out and none is invented (#587)', () => {
         const symbolIds = new Set<number>();
         let cutDoors = 0, cutAndSymbolled = 0;
-        for (const view of r.set.document.views.filter((v) => v.kind === 'plan')) {
+        for (const view of planViewsOf(r)) {
           const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
           const doors = planSymbolsOf(r, view).filter((s) => s.kind === 'door');
           const seen = shown(drawing, 'IfcDoor');
@@ -244,7 +246,7 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
         let doors = 0;
         for (const view of r.set.document.views.filter((v) => v.kind === 'elevation')) {
           const drawing = r.elevations.find((e) => e.name === view.name)!.drawing;
-          const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates), view.level);
+          const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
           const seen = visibleEntities(drawing);
           // A symbol is the symbol of a door or window the elevation shows, and is strokes, not an empty mark; an untyped window has none.
           for (const s of symbols) {
