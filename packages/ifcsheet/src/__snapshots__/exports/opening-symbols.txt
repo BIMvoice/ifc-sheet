@@ -23,8 +23,10 @@ elevationOpeningSymbols: value
 elevationSymbol: value
 glazingBarStrokes: value
 headArch: value
+hostedInCutWall: value
 hullCandidates: value
 minAreaRect: value
+openingHostsOf: value
 openingMarks: value
 openingPens: value
 openingReads: value

@@ -23,6 +23,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { EXIT, run } from '../cli.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
+import type { ProjectView } from '../document.js';
+import { openingHostsOf } from '../opening-hosts.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from '../headless.js';
 import { planOpeningSymbols, viewOpeningSymbols } from '../plan-openings.js';
 import { visibleEntities } from '../elevation-openings.js';
@@ -84,15 +86,12 @@ const CASES: Case[] = [
     name: 'ISSUE_068 skolebygg (school, optional)', file: process.env.IFCSHEET_ACCEPTANCE_SKOLEBYGG ?? here('../../../../tests/models/ara3d/ISSUE_068_ARK_NUS_skolebygg.ifc'),
     storeys: ['Plan 00U', 'Plan 01', 'Plan 02', 'Plan 03', 'Plan 04'], doors: 310, windows: 266, rooms: 307,
     sheets: [['A-101', 'Floor plans 1'], ['A-102', 'Floor plans 2'], ['A-103', 'Floor plans 3'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    // Plan 04 cuts nothing (roof storey). The 8 curtain wall doors, parts of an IfcCurtainWall, are drawn since #586. Not drawn yet,
-    // because each lies wholly above or below its storey plan's cut and a default plan shows its cut only (#586): seven 0.6 m and 1.0 m
-    // wall hatches ("Luke"), 0.0 to 1.0 m or 2.0 to 2.6 m above their floors, and two 0.7 m windows whose sill is 1.21 m above Plan 01,
-    // 1 cm over its 1.2 m cut. Take an id out when its element is drawn; never add one.
+    // Plan 04 cuts nothing (roof storey). The 8 curtain wall doors, parts of an IfcCurtainWall, are drawn since #586, and the 9 doors and
+    // windows that lie wholly above or below their storey plan's cut (seven wall hatches, two windows whose sill is 1 cm over Plan 01's 1.2 m cut)
+    // are drawn through the host-wall rule: a plan shows the symbol of a door or window whose host wall it cuts (#586, `opening-hosts.ts`).
+    // Take an id out when its element is drawn; never add one.
     emptyPlans: ['Plan 04'], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'],
-    notDrawn: [
-      '3c1awkLoXAxBYHBQ4qGhaL', '36R5E2q5f2TvXJ1UAvvL5k', '3ObdPKQKnADxl0koLMbmvC', '3ObdPKQKnADxl0koLMbn2b', '3ObdPKQKnADxl0koLMbn0A',
-      '3ObdPKQKnADxl0koLMbn0B', '3T0LSRCJr579Hfd5wOgKiJ', '223VDxzbP01Q1$4uieT7Bn', '2QmceMdeT2FxfkNdzVxgpJ',
-    ],
+    notDrawn: [],
   },
 ];
 
@@ -125,11 +124,22 @@ const cutOf = (drawing: Drawing2D, ifcType: string): number => drawing.cutPolygo
 
 /** The GlobalIds of the model's elements of `type` (upper case, as the parser indexes them) that no plan shows, sorted. */
 function notDrawnOf(r: Run, c: Case, ifcType: string, type: string): string[] {
+  // Drawn by its cut or lines, or by its symbol: a plan draws the symbol of a door or window whose host wall it cuts, though the opening lies above or below the cut (#586).
   const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, ifcType)]));
+  const kind = ifcType === 'IfcDoor' ? 'door' : 'window';
+  for (const view of r.set.document.views.filter((v) => v.kind === 'plan')) {
+    for (const s of planSymbolsOf(r, view)) if (s.kind === kind) drawn.add(s.id);
+  }
   const ids = r.model.dataStore.entityIndex.byType.get(type) ?? [];
   expect(ids).toHaveLength(type === 'IFCDOOR' ? c.doors : c.windows);
   for (const listed of c.notDrawn) expect(typeOf(r, listed), `${listed} is a door or window of the model`).toBeDefined();
   return ids.filter((id) => !drawn.has(id)).map((id) => r.model.dataStore.entities.getGlobalId(id) ?? `#${id}`).sort();
+}
+/** The door and window symbols of a plan view, as the sheets and the app make them (the default project: no configured types). */
+function planSymbolsOf(r: Run, view: ProjectView) {
+  const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
+  const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
+  return planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
 }
 const typeOf = (r: Run, globalId: string): string | undefined => {
   const ds = r.model.dataStore;
@@ -199,15 +209,15 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
       });
 
       it.skipIf(c.doors === 0)('draws a symbol for the doors a plan cuts: they are the doors drawn, none is left out and none is invented (#587)', () => {
-        const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
         const symbolIds = new Set<number>();
         let cutDoors = 0, cutAndSymbolled = 0;
         for (const view of r.set.document.views.filter((v) => v.kind === 'plan')) {
           const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
-          const doors = planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates)).filter((s) => s.kind === 'door');
+          const doors = planSymbolsOf(r, view).filter((s) => s.kind === 'door');
           const seen = shown(drawing, 'IfcDoor');
-          // A symbol is the symbol of a door the plan draws, and every door its cut passes through has one.
-          for (const s of doors) { expect(seen.has(s.id), `${view.name}: door ${s.id} has a symbol but the plan does not draw it`).toBe(true); symbolIds.add(s.id); }
+          const hosts = openingHostsOf(r.model.dataStore);
+          // A symbol is the symbol of a door the plan draws, or of one hosted in a wall the plan cuts (#586), and every door its cut passes through has one.
+          for (const s of doors) { expect(seen.has(s.id) || hosts.has(s.id), `${view.name}: door ${s.id} has a symbol but the plan does not draw it`).toBe(true); symbolIds.add(s.id); }
           const have = new Set(doors.map((s) => s.id));
           const cut = new Set(drawing.cutPolygons.filter((p) => p.ifcType === 'IfcDoor').map((p) => p.entityId));
           cutDoors += cut.size;

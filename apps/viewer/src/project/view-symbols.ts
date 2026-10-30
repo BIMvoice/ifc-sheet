@@ -10,8 +10,9 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, simplifyOpeningSymbol, visibleEntities, type DetailLevel } from '@bimvoice/ifcsheet';
+import { drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, openingHostsOf, simplifyOpeningSymbol, visibleEntities, type DetailLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { useViewerStore } from '@/store';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
 import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
 import { renderIdGlobalId } from './element-guid';
@@ -20,6 +21,16 @@ import { openingConvention } from '@/joinery/opening-convention';
 
 export { simplifyOpeningSymbol };
 
+/** The renderer id of the wall a door or window (by renderer id) is hosted in, through its opening (`openingHostsOf`, the engine's read); undefined when it has none. */
+function hostWallRenderId(id: number): number | undefined {
+  const s = useViewerStore.getState();
+  const ref = s.resolveGlobalIdFromModels(id);
+  const model = ref ? s.models.get(ref.modelId) : undefined;
+  if (!ref || !model?.ifcDataStore) return undefined;
+  const wall = openingHostsOf(model.ifcDataStore).get(ref.expressId);
+  return wall === undefined ? undefined : wall + model.idOffset;
+}
+
 export function viewOpeningSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine',
 ): OpeningSymbol[] {
@@ -27,7 +38,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId)
+  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }

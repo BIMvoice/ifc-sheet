@@ -351,19 +351,21 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
 /**
  * The door and window symbols of a plan cut at `plane` (a horizontal plane,
  * world units): every door / window whose meshes the cut height passes
- * through. Meshes of one element are taken together.
+ * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together.
  */
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
   typedOf: (id: number) => { spec: JoinerySpec; flips: number; source?: string } | null = () => null,
   operationOf: (id: number) => DoorOperation | null = () => null,
+  hostedInCutWall: (id: number, cut: number) => boolean = () => false,
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
   const byId = new Map<number, { kind: 'door' | 'window'; meshes: readonly MeshData[]; l2w?: number[] }>();
   // Only the elements the cut passes through are projected, not every door and window of every storey (#154).
   for (const el of joineryElements(meshes)) {
-    if (cut < el.minY || cut > el.maxY) continue;
+    // The cut passes through it, or through the wall it is hosted in (`opening-hosts.ts`, #586).
+    if ((cut < el.minY || cut > el.maxY) && !hostedInCutWall(el.id, cut)) continue;
     let l2w: number[] | undefined;
     for (const mesh of el.meshes) l2w ??= mesh.localToWorld;
     byId.set(el.id, { kind: el.kind, meshes: el.meshes, l2w });

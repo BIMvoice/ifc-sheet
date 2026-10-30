@@ -28,11 +28,10 @@ A figure an empty drawing would also give (zero windows in a model with none) is
 | federated `arch.ifc` | `apps/viewer/src/test/fixtures/federated/` (committed) | hand-written for IfcSheet #96, MPL 2.0 | 1 / 0 / 0 | two levels far from the origin; no rooms or windows, so those checks are left out |
 | ISSUE_068 skolebygg (ara3d) | not committed (56 MB). `pnpm fixtures` fetches `tests/models/ara3d/ISSUE_068_ARK_NUS_skolebygg.ifc`, or set `IFCSHEET_ACCEPTANCE_SKOLEBYGG` to a copy | no redistribution licence stated in the source, so it is only read from disk, never committed or published | 310 / 266 / 307 | the suite skips it with a message when the file is absent |
 
-The school is the one model where the plans do not yet draw every door and window: 303 of 310 doors and 264 of 266 windows, and the
-roof storey's plan cuts nothing. The eight curtain wall doors (parts of an IfcCurtainWall, not contained in the storey themselves) are drawn
-since #586. The nine left lie wholly above or below their storey plan's 1.2 m cut, and a default plan shows its cut only: seven wall
-hatches and two small windows whose sill is 1 cm above the cut. Its `notDrawn` lists them by GlobalId; take one out when it is drawn,
-never add one. It also found that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
+On the school the plans draw every door and window (the roof storey's plan cuts nothing). The eight curtain wall doors (parts of an IfcCurtainWall,
+not contained in the storey themselves) are drawn since #586, and so are the nine that lie wholly above or below their storey plan's 1.2 m cut (seven wall
+hatches and two small windows whose sill is 1 cm above the cut): a plan draws the symbol of a door or window whose host wall it cuts (`opening-hosts.ts`).
+`notDrawn` is empty; it lists by GlobalId any door or window no plan draws, and an id is never added. It also found that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
 
 The suite checks that doors and windows are cut and drawn on the plans, and (#587) that the plans carry their symbols: per model, the door symbols
 the engine draws (`planOpeningSymbols`, the code the app calls) number more than none, are symbols of doors the plan draws, and cover every door
@@ -40,7 +39,7 @@ the plan cuts; and the printed sheets carry a `SYMBOLS` pen. The swing and openi
 sections: a second check per model counts the door symbols the four elevations draw (`elevationDoorSymbols`, the least the model gave when it was written),
 requires each to be of a door the elevation shows, and requires the elevation sheets to carry a `SYMBOLS` pen exactly when there are some. A window has no symbol
 on an elevation until it has a configured or mapped type, in the app and here, so these models (none maps its windows) show door symbols only; the window, glazing bar,
-arched head and transom symbols are checked by the parity test on FZK. The skolebygg model is optional and absent here, so its count is 0 until someone with the file sets it. The nine listed above are to be drawn by the host-wall rule decided on #586 (with #490).
+arched head and transom symbols are checked by the parity test on FZK. The skolebygg model is optional and absent here, so its count is 0 until someone with the file sets it.
 
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read
