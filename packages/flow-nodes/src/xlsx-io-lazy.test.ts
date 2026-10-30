@@ -28,4 +28,6 @@ it('loads exceljs when a workbook is written or read, not when the package is im
   expect(problems).toEqual([]);
   expect(table.rows).toEqual([{ GlobalId: '2O2Fr$t4X7Zf8NOew3FLOH', Name: 'D01' }]);
   expect(loads.count).toBe(1);
-});
+  // Loading exceljs is heavy: 0.6 to 2 s measured under the package suite's parallel
+  // load, and past vitest's 5 s default on a loaded CI runner (PR #576).
+}, 30_000);
