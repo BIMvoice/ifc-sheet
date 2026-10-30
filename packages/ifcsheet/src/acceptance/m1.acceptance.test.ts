@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { EXIT, run } from '../cli.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
-import type { PlanProjectView, ProjectView } from '../document.js';
+import type { PlanProjectView } from '../document.js';
 import { openingHostsOf } from '../opening-hosts.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from '../headless.js';
 import { planOpeningSymbols, viewOpeningSymbols } from '../plan-openings.js';
