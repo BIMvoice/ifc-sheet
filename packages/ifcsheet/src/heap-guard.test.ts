@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createAbortFilter, failureMessage, heapMegabytes, localeOfArgs, userSetHeap } from './heap-guard.js';
+import { createAbortFilter, failureMessage, heapMegabytes, localeOfArgs, needsRoom, userSetHeap } from './heap-guard.js';
 
 const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
@@ -30,7 +30,26 @@ describe('the heap the child runs with', () => {
   });
 });
 
+describe('which commands get the child', () => {
+  it('is build only: the others start without a second Node start', () => {
+    expect(needsRoom(['build', 'm.ifc'])).toBe(true);
+    expect(needsRoom(['--locale', 'ro', 'build', 'm.ifc'])).toBe(true);
+    for (const c of ['check', 'list', 'rooms', 'boq', 'materials', 'classify', '--help']) expect(needsRoom([c, 'm.ifc'])).toBe(false);
+  });
+});
+
 describe('the abort filter', () => {
+  it('bounds the memory of a line that never ends, and still passes it', () => {
+    const filter = createAbortFilter();
+    const piece = 'x'.repeat(256 * 1024);
+    let shown = '';
+    for (let i = 0; i < 40; i++) shown += filter.push(piece);
+    // Most of it is already out before the end: the filter did not keep it all.
+    expect(shown.length).toBeGreaterThan(8 * 1024 * 1024);
+    shown += filter.flush();
+    expect(shown.length).toBe(40 * piece.length);
+    expect(filter.fatal).toBe(false);
+  });
   const abort = '[ifc-lite] note\n<--- Last few GCs --->\n[1:0x1] 5 ms: Mark-Compact 40 (44) -> 38 MB\n\n<--- JS stacktrace --->\n\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n----- Native stack trace -----\n 1: 0x1 node::OOMErrorHandler\n';
   it('shows the lines before V8\'s report and holds the report back, whatever the chunking', () => {
     for (const size of [1, 7, abort.length]) {

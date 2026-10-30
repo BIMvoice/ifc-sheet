@@ -20,6 +20,15 @@ const MB = 1024 * 1024;
 /** Above Node's default heap on a 64-bit machine (about 4 GB), below what a machine without the memory for it would swap on. */
 const DEFAULT_HEAP_MB = 4096;
 const CEILING_MB = 16384;
+const MAX_LINE = 1024 * 1024;
+
+/**
+ * Whether the command needs the child: only `build` puts a whole model into a sheet set, and the child's second Node start
+ * costs about 50 ms on every command (#573 cut the startup to 84 ms), so every other command runs in this process.
+ */
+export function needsRoom(args: readonly string[]): boolean {
+  return args.includes('build');
+}
 
 /** Whether `NODE_OPTIONS` (or the command's own node arguments) already set the heap: the user's setting wins, the guard adds none. */
 export function userSetHeap(nodeOptions: string | undefined, execArgv: readonly string[]): boolean {
@@ -70,14 +79,22 @@ export function createAbortFilter(): { push: (chunk: string) => string; flush: (
     if (fatal || /^<--- (?:Last few GCs|JS stacktrace) --->/.test(line)) held = true;
     return !held;
   };
+  // A line without a newline is held until its end; past this length it is judged as it stands, so memory stays bounded.
+  const overlong = (): string => {
+    if (rest.length <= MAX_LINE) return '';
+    const part = rest;
+    rest = '';
+    return shown(part) ? part : '';
+  };
   const lines = (text: string): string => text.split('\n').filter(shown).map((l) => `${l}\n`).join('');
   return {
     push(chunk) {
       const all = rest + chunk;
       const cut = all.lastIndexOf('\n');
-      if (cut < 0) { rest = all; return ''; }
+      if (cut < 0) { rest = all; return overlong(); }
       rest = all.slice(cut + 1);
-      return lines(all.slice(0, cut));
+      const shownLines = lines(all.slice(0, cut));
+      return shownLines + overlong();
     },
     flush() {
       const last = rest;
