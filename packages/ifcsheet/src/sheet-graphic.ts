@@ -40,6 +40,8 @@ import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
+import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
+import type { OpeningSymbol } from './opening-symbols.js';
 import type { Obstacle } from './free-spot.js';
 import { siteMarks, siteObstacles } from './site-marks.js';
 import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
@@ -209,6 +211,8 @@ export function sheetGraphic(
   project?: { annotations?: SheetAnnotations; schedules?: SheetSchedules },
   /** The coloured surfaces of the elevations and sections that ask for them (#499), by view id: `sheetGraphics` makes them from the meshes. */
   surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
+  /** The door and window symbols of the plans, by view id (`planOpeningSymbols`): a plan listed here draws them in place of its doors' and windows' cut and lines, as the app's plans do. Absent: the bodies are drawn. */
+  openings: ReadonlyMap<string, readonly OpeningSymbol[]> = new Map(),
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
@@ -240,7 +244,11 @@ export function sheetGraphic(
     const k = 1000 / vp.scale;
     const graphics = resolveViewGraphics(view, doc.viewTemplates);
     // The detail level (#444): the viewport's scale decides it unless the view's graphics (or its template's) name one; the app's sheets call the same function.
-    const drawing = made && atDetailLevel(made, resolveDetailLevel(graphics, vp.scale));
+    const detail = resolveDetailLevel(graphics, vp.scale);
+    const symbols = openings.get(vp.viewId);
+    const detailed = made && atDetailLevel(made, detail);
+    // A plan draws its doors and windows from their symbols, not their cut (a roof plan keeps them: its skylights have no symbol).
+    const drawing = detailed && symbols && (view?.kind !== 'plan' || view.discipline !== 'roof') ? withoutOpeningBodies(detailed) : detailed;
     const size = view && extent ? viewExtent(view, extent)
       : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
@@ -274,6 +282,7 @@ export function sheetGraphic(
         const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
+      if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
