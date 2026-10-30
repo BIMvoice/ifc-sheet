@@ -17,12 +17,13 @@ import { before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { generateDefaultSet, viewOpeningSymbols as engineSymbols, visibleEntities, type OpeningSymbol } from '@bimvoice/ifcsheet';
+import { generateDefaultSet, viewOpeningSymbols as engineSymbols, visibleEntities, type OpeningSymbol, type ViewGraphics } from '@bimvoice/ifcsheet';
 import { generateViewDrawings, openModel, sectionConfigFor, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { useViewerStore } from '@/store';
 import { resetProject, useProjectStore } from './project-store';
 import { viewElevationSymbols } from './view-symbols';
+import { hiddenClasses } from './view-graphics';
 import type { ProjectView } from './types';
 import { configureElementType } from '@/joinery/type-config-actions';
 import { elementFacts } from '@/joinery/mapped-joinery';
@@ -61,16 +62,16 @@ describe('the engine draws the door and window symbols of the elevations and sec
   beforeEach(() => { resetProject(); invalidateJoineryReads(); });
 
   const appMeshes = () => [...useViewerStore.getState().models.values()].flatMap((m) => m.geometryResult?.meshes ?? []);
-  const app = (r: Row) => viewElevationSymbols(appMeshes(), r.plane, visibleEntities(r.drawing), new Set(), useProjectStore.getState().symbolFlips, 'fine');
-  const eng = (r: Row) => {
+  const app = (r: Row, graphics?: ViewGraphics) => viewElevationSymbols(appMeshes(), r.plane, visibleEntities(r.drawing), hiddenClasses(graphics), useProjectStore.getState().symbolFlips, 'fine');
+  const eng = (r: Row, graphics?: ViewGraphics) => {
     const { joineryTypes, joineryMapping, symbolFlips, openingLines } = useProjectStore.getState();
-    return engineSymbols(engine.buildingMeshes, r.plane, r.drawing, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips, openingLines } }, undefined);
+    return engineSymbols(engine.buildingMeshes, r.plane, r.drawing, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips, openingLines } }, graphics);
   };
 
   /** The engine's symbols per row, each row's equal to the app's. */
-  function compare(): { row: Row; symbols: OpeningSymbol[] }[] {
+  function compare(graphics?: ViewGraphics): { row: Row; symbols: OpeningSymbol[] }[] {
     return rows.map((row) => {
-      const a = app(row), e = eng(row);
+      const a = app(row, graphics), e = eng(row, graphics);
       for (const k of ['door', 'window'] as const) assert.deepEqual(sorted(e.filter((s) => s.kind === k)), sorted(a.filter((s) => s.kind === k)), `${row.name}: ${k} symbols, engine vs app`);
       return { row, symbols: e };
     });
@@ -167,5 +168,23 @@ describe('the engine draws the door and window symbols of the elevations and sec
     assert.ok(guids.size >= 5);
     useProjectStore.setState({ symbolFlips: Object.fromEntries([...guids].map((g) => [g, 1])) });
     assert.notDeepEqual(sorted(of(compare(), 'door')), sorted(plain), 'the flips changed what is drawn');
+  });
+
+  it('a view that hides IfcDoor draws no door symbol, on either side, and keeps the windows\'', () => {
+    configureWindows();
+    const shown = compare();
+    assert.ok(of(shown, 'door').length > 0 && of(shown, 'window').length > 0, 'both kinds drawn when shown');
+    const rs = compare({ categories: { doors: { visible: false } } });
+    assert.equal(of(rs, 'door').length, 0);
+    assert.equal(of(rs, 'window').length, of(shown, 'window').length);
+  });
+
+  it('a view that hides IfcWindow draws no window symbol, on either side, and keeps the doors\'', () => {
+    configureWindows();
+    const shown = compare();
+    assert.ok(of(shown, 'door').length > 0 && of(shown, 'window').length > 0, 'both kinds drawn when shown');
+    const rs = compare({ categories: { windows: { visible: false } } });
+    assert.equal(of(rs, 'window').length, 0);
+    assert.equal(of(rs, 'door').length, of(shown, 'door').length);
   });
 });

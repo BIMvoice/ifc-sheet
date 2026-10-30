@@ -16,6 +16,8 @@ import { generateDefaultSet, type DefaultSet } from './index.js';
 import { exportDxf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
 import { sheetGraphic } from './sheet-graphic.js';
 import { viewOpeningSymbols } from './plan-openings.js';
+import { defaultWindowSpec } from '@ifc-lite/create';
+import type { ViewGraphics } from './view-graphics-types.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import type { ProjectView, SheetViewport } from './document.js';
 import { PEN_TABLE } from './view-style.js';
@@ -88,4 +90,36 @@ describe.skipIf(missing !== null)('the sheets of AC20-FZK-Haus draw the door and
     const { pens } = await symbolRuns(custom);
     expect(pens, 'the sections the default set proposes are on a custom plane: the app draws no symbols there').toHaveLength(0);
   }, 120_000);
+
+  describe('a class the view hides has no symbol (the app and the engine hide it alike)', () => {
+    const south = section('Section through the south wall', 'front', -0.16);
+    const hiding = (id: 'doors' | 'windows'): ViewGraphics => ({ categories: { [id]: { visible: false } } }) as ViewGraphics;
+    /** Every window of the model mapped to one configured type, so that the windows draw symbols too. */
+    const symbols = async (graphics: ViewGraphics | undefined) => {
+      const type = { ...defaultWindowSpec('Fenster'), id: 'type-T1' };
+      const elements: Record<string, string> = {};
+      for (const m of model.buildingMeshes) {
+        const guid = /^IFCWINDOW/i.test(m.ifcType ?? '') ? model.dataStore.entities?.getGlobalId(m.expressId) : undefined;
+        if (guid) elements[guid] = type.id;
+      }
+      const views = [...set.document.views.filter((v) => v.kind === 'elevation'), south];
+      const drawings = await generateViewDrawings(views, model.buildingMeshes, set.levels, model.extent!);
+      const sources = { live: { dataStore: model.dataStore, view: null }, project: { joineryTypes: [type], joineryMapping: { ...DEFAULT_JOINERY_MAPPING, elements } } };
+      return views.flatMap((v) => viewOpeningSymbols(model.buildingMeshes, drawings.get(v.id)!.config.plane, drawings.get(v.id)!, sources, graphics));
+    };
+
+    it('IfcDoor hidden: no door symbol, the windows keep theirs', async () => {
+      const all = await symbols(undefined), hidden = await symbols(hiding('doors'));
+      expect(all.filter((s) => s.kind === 'door').length, 'doors drawn when shown').toBeGreaterThan(0);
+      expect(hidden.filter((s) => s.kind === 'door')).toHaveLength(0);
+      expect(hidden.filter((s) => s.kind === 'window').length).toBe(all.filter((s) => s.kind === 'window').length);
+    }, 120_000);
+
+    it('IfcWindow hidden: no window symbol, the doors keep theirs', async () => {
+      const all = await symbols(undefined), hidden = await symbols(hiding('windows'));
+      expect(all.filter((s) => s.kind === 'window').length, 'windows drawn when shown').toBeGreaterThan(0);
+      expect(hidden.filter((s) => s.kind === 'window')).toHaveLength(0);
+      expect(hidden.filter((s) => s.kind === 'door').length).toBe(all.filter((s) => s.kind === 'door').length);
+    }, 120_000);
+  });
 });
