@@ -25,7 +25,7 @@ import { WallView } from './WallView';
 
 const MODEL = { id: 'm', name: 'rooms.ifc', visible: true, geometryResult: null } as never;
 const publish = (meshes: unknown[] | null) => publishDrawingRuntime({ geometryResult: meshes ? ({ meshes } as unknown as GeometryResult) : null, sourceCoordinateInfo: undefined, generateDrawing: async () => undefined, isRegenerating: false });
-const status = (ui: HTMLElement) => (ui.querySelector('[role="status"]')?.textContent ?? '').trim();
+const status = (ui: HTMLElement) => (ui.querySelector('output')?.textContent ?? '').trim();
 
 beforeEach(() => {
   resetProject();
@@ -39,11 +39,11 @@ afterEach(() => {
 });
 
 describe('the Wall on a model without geometry', () => {
-  for (const meshes of [[], null] as const) {
+  for (const meshes of [[], null] as Array<unknown[] | null>) {
     it(`says so in English once the load is over (meshes: ${meshes === null ? 'none published' : 'empty'})`, async () => {
       act(() => publish(meshes));
       const ui = render(<WallView />);
-      await waitFor(() => status(ui).length > 0 && !status(ui).includes('Reading'));
+      await waitFor(() => status(ui).length > 0 && !status(ui).includes('Reading'), 'the no-geometry line');
       assert.equal(status(ui), 'rooms.ifc has no geometry to lay a drawing set out on.');
     });
   }
@@ -53,7 +53,7 @@ describe('the Wall on a model without geometry', () => {
     setLocale('ro');
     act(() => publish([]));
     const ui = render(<WallView />);
-    await waitFor(() => status(ui).includes('nu are geometrie'));
+    await waitFor(() => status(ui).includes('nu are geometrie'), 'the Romanian line');
     assert.equal(status(ui), 'rooms.ifc nu are geometrie pe care să se așeze un set de desene.');
   });
 

@@ -86,9 +86,9 @@ export function WallView() {
           <NewFromTemplate />
         </div>
       ) : sheets.length === 0 ? (
-        <div role="status" className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
+        <output className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
           {noGeometry ? t('wall.intro.noGeometry', { name: [...models.values()][0]?.name ?? '' }) : t('wall.intro.waiting')}
-        </div>
+        </output>
       ) : intro && extent ? (
         <WallIntro modelName={modelName} extent={extent} onHang={hang} />
       ) : steppedSheet ? (
