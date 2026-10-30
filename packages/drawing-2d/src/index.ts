@@ -230,7 +230,7 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
 // stay package-private: an unused public export is permanent semver liability.
 export { DXFExporter, exportToDXF } from './dxf-exporter.js';
 export type { DXFExportOptions, DXFPolylineLayer, DXFText, DXFUnderlayOptions } from './dxf-exporter.js';
-export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8
+export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; export { escapeDxfText } from './dxf/text-escape.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8; the DXF TEXT escape
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GPU ACCELERATION
