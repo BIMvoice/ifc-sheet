@@ -9,15 +9,15 @@
  * type while drawing, so closing the editor without saving changes nothing; the working copy itself is never saved with the project
  * (`withoutJoineryDraftViews`). The drafting session, tools, snaps and undo are the plan views' own.
  *
- * The undo history is cleared on opening and on closing, as for a type's views (`view-drafts.ts`): a step recorded before holds the
- * whole list of drafts, and undoing it inside the editor would take the working copy with it.
+ * The editor has an undo history of its own: the one the user's drawing had is set aside on opening (`parkDraftHistory`) and put back,
+ * step for step, on closing, so the symbol's edits are never in it and undoing in the editor cannot reach the user's steps.
  */
 
 import { blockAsShapes, blockFromDrafts } from '@bimvoice/ifcsheet/project';
 import type { JoineryBlockSymbol } from '@ifc-lite/create';
 import { useProjectStore } from '@/project/project-store';
 import { addLayer, updateLayer } from '@/project/drafting-standards';
-import { clearDraftHistory, draftsOfView, newDraft } from '@/drafting/draft-store';
+import { draftsOfView, newDraft, parkDraftHistory } from '@/drafting/draft-store';
 import type { DraftEntity } from '@/drafting/types';
 import { storedOf } from './view-drafts';
 import { joinerySymbolViewId } from './view-draft-id';
@@ -47,11 +47,11 @@ export function openSymbolDrafts(typeId: string, block: JoineryBlockSymbol | nul
   const plain = plainLayerId();
   const dashed = shapes.some((s) => s.dashed) ? dashedLayerId() : plain;
   const loaded: DraftEntity[] = shapes.map((s) => newDraft(viewId, s.dashed ? dashed : plain, s.shape as DraftEntity['shape']));
-  clearDraftHistory();
+  const restoreHistory = parkDraftHistory();
   useProjectStore.setState((s) => ({ drafts: [...s.drafts.filter((d) => d.viewId !== viewId), ...loaded] }));
   return () => {
-    clearDraftHistory();
     useProjectStore.setState((s) => (s.drafts.some((d) => d.viewId === viewId) ? { drafts: s.drafts.filter((d) => d.viewId !== viewId) } : {}));
+    restoreHistory();
   };
 }
 

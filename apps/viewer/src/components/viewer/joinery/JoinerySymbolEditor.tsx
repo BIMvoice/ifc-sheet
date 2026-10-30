@@ -8,8 +8,9 @@
  * editor; the shapes are a working copy of the type's block (`joinery/symbol-drafts.ts`). Save makes the drawing the type's block, Reset
  * takes it away so the generated symbol draws again, Cancel changes nothing.
  *
- * The drafting session is one for the app, so the view the user was in is parked while this one is open and given back after it has
- * closed (`parkDraftingSession`).
+ * The drafting session is one for the app, so it is parked while this one is open and given back whole after it has closed
+ * (`parkDraftingSession`: selection, running command, history lines; `openSymbolDrafts`: the undo history). However the editor ends, by
+ * a button, the overlay or an error unmounting it, the effect's cleanup gives them back.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -82,8 +83,8 @@ export function JoinerySymbolEditor({ spec, block, onSave, onClose }: {
         <div className="min-h-0 flex-1 border border-zinc-200 dark:border-zinc-800">{open ? <DraftingView view={pseudo} bare target={target} /> : null}</div>
         <DialogFooter className="gap-1">
           <Button variant="ghost" data-symbol-cancel onClick={onClose}>{t('joinery.symbol.cancel')}</Button>
-          <Button variant="outline" data-symbol-reset onClick={() => { onSave(null); onClose(); }}>{t('joinery.symbol.reset')}</Button>
-          <Button data-symbol-save onClick={() => { onSave(drawnSymbolOf(typeId)); onClose(); }}>{t('joinery.symbol.save')}</Button>
+          <Button variant="outline" data-symbol-reset onClick={() => { try { onSave(null); } finally { onClose(); } }}>{t('joinery.symbol.reset')}</Button>
+          <Button data-symbol-save onClick={() => { try { onSave(drawnSymbolOf(typeId)); } finally { onClose(); } }}>{t('joinery.symbol.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
