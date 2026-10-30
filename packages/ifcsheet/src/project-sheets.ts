@@ -127,7 +127,7 @@ export function projectSheetOptions(
   const tableFace = tablesFace(set.textStyles);
   return {
     annotations: {
-      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, locale: format,
+      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, patterns: set.hatchPatterns, locale: format,
       onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
     schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
@@ -139,12 +139,7 @@ function kindWords(kind: string): string {
   switch (kind) {
     case 'text': return "a text's frame or leader";
     case 'dimension': return "the leader of a dimension's moved figure";
-    case 'level': return 'level marks';
-    case 'leader': return 'leaders';
-    case 'radial': case 'angular': return `${kind} dimensions`;
-    case 'axis': return 'grid axes';
     case 'symbol': return 'symbols';
-    case 'hatch': return 'hatches';
     default: return `drafted ${kind}s`;
   }
 }
