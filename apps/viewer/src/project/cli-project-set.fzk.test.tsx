@@ -295,6 +295,7 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
     const ours = [...room.children].slice(-(kinds.length + 2));
     assert.equal(ours.length, kinds.length + 2, 'the sheet draws the dimension, the text and one of each other kind');
     const paths = (await pdfCorners(new Uint8Array(readFileSync(join(dir, 'set.pdf')))))[sheets.findIndex((s) => s.id === planSheet.id)];
+    let clippedAway = 0;
     kinds.forEach((kind, i) => {
       const drawn = ours[i + 2];
       const corners = svgCorners(drawn);
@@ -307,8 +308,19 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
         const off = Math.min(...paths.map((p) => Math.max(Math.abs(p.x - corner.x), Math.abs(p.y - corner.y))));
         assert.ok(off < TOLERANCE, `the ${kind.type}: a corner at (${corner.x.toFixed(2)}, ${corner.y.toFixed(2)}) is ${off.toFixed(2)} mm from the nearest path point of the PDF`);
       }
-      at(placedTexts(drawn), planPage, `the ${kind.type}`);
+      // The sheet's clipPath hides a text past the viewport's room (the scale bar's tick figures): the PDF prints the texts inside it,
+      // at the sheet's place, and none outside it.
+      const texts = placedTexts(drawn);
+      const inRoom = (t: Placed, m: number) => t.x > clip.x + m && t.x < clip.x + clip.w - m && t.y > clip.y + m && t.y < clip.y + clip.h - m;
+      const outRoom = (t: Placed) => t.x < clip.x - 0.5 || t.x > clip.x + clip.w + 0.5 || t.y < clip.y - 0.5 || t.y > clip.y + clip.h + 0.5;
+      at(texts.filter((t) => inRoom(t, 0.5)), planPage, `the ${kind.type}`);
+      for (const t of texts.filter(outRoom)) {
+        clippedAway += 1;
+        const hit = nearest(t, planPage);
+        assert.ok(!hit || hit.off >= TOLERANCE, `the ${kind.type}: "${t.text}" is outside the viewport's room (${t.x.toFixed(2)}, ${t.y.toFixed(2)}) but the PDF prints it`);
+      }
     });
+    assert.ok(clippedAway > 0, 'the scale bar\'s tick figures past the room are among the texts the sheet clips away');
     assert.ok(ours.slice(2).some((g) => placedTexts(g).some((t) => t.text === '+2.70')), 'the sheet writes the level mark\'s figure');
     // The symbols' texts (the north arrow's N, the scale bar's ticks, the coordinates, the project symbol's word) were each checked against the PDF with the rest.
     const symbolTexts = ours.slice(2).flatMap((g, i) => (kinds[i].type === 'symbol' ? placedTexts(g).map((t) => t.text) : []));

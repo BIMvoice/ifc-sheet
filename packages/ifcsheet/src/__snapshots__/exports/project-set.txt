@@ -1,7 +1,12 @@
+AXIS_NAME: value
 AnnotationShape: type (type-only)
 ArrowMark: type (type-only)
 AxisEnds: type (type-only)
 AxisShape: type (type-only)
+BUILT_IN_SYMBOLS: value
+COORDINATE_LABELS: value
+COORDINATE_POINT_ID: value
+CoordinateLabeller: type (type-only)
 CustomLineType: type (type-only)
 DEFAULT_TEXT_STYLE: value
 DEFAULT_VIEW_SCALE: value
@@ -12,6 +17,8 @@ DraftEntity: type (type-only)
 DraftLayer: type (type-only)
 DraftParamValue: type (type-only)
 DraftShape: type (type-only)
+DraftSymbol: type (type-only)
+EPS: value
 EntityShape: type (type-only)
 HATCH_UNIT_M: value
 HatchLineFamily: type (type-only)
@@ -26,6 +33,8 @@ LayoutOptions: type (type-only)
 LevelRef: type (type-only)
 LineType: type (type-only)
 ListSheetLabels: type (type-only)
+LiveSymbolContext: type (type-only)
+NORTH_ARROW_ID: value
 PAD: value
 PEN: value
 PEN_OVERRIDES: value
@@ -33,24 +42,35 @@ PHASES: value
 PagedOptions: type (type-only)
 PhaseMapping: type (type-only)
 PhaseSource: type (type-only)
+PlacedSymbol: type (type-only)
+PlanDirection: type (type-only)
 ProjectSet: type (type-only)
 ProjectSetFacts: type (type-only)
 Pt: type (type-only)
 ROW: value
+SCALE_BAR_ID: value
+SCALE_BAR_TARGET_MM: value
 ScheduleCell: type (type-only)
 ScheduleLayout: type (type-only)
 SchedulePrim: type (type-only)
+SectionAxisName: type (type-only)
+SiteFrame: type (type-only)
 SnapHit: type (type-only)
 SnapMode: type (type-only)
 StyleBook: type (type-only)
+SymbolInstance: type (type-only)
 SymbolInstanceShape: type (type-only)
+SymbolShape: type (type-only)
 TABLES_STYLE_ID: value
+TAU: value
 TEXT: value
 TEXT_FRAMES: value
 TEXT_OVERRIDES: value
 TableBlock: type (type-only)
 TableItem: type (type-only)
 TextFrame: type (type-only)
+Vec3: type (type-only)
+allSymbols: value
 angularLayout: value
 annotationAtFactor: value
 annotationFactor: value
@@ -62,14 +82,21 @@ builtInPatterns: value
 dashFor: value
 dashOf: value
 dimStyleOf: value
+drawingPointToLocal: value
+drawingToWorld: value
 entityPen: value
 fail: value
 findPattern: value
+findSymbol: value
+flattenShape: value
 formatDimension: value
 formatLength: value
 formatLevel: value
+gridNorthOf: value
+hasStandardGeoreferencing: value
 hatchSegments: value
 holdsSet: value
+isBuiltInSymbol: value
 isDisciplineId: value
 isGeometry: value
 isNumber: value
@@ -87,11 +114,18 @@ leaderTextRight: value
 levelWitness: value
 linearLayout: value
 listAt: value
+liveSymbol: value
+liveSymbolContext: value
 lookOf: value
+missingSymbolMark: value
 naturalDecimals: value
+normAngle: value
+northArrowRotation: value
 overrideKey: value
 pageTitle: value
 parsePat: value
+placeSymbol: value
+polar: value
 projectSetOf: value
 radialLayout: value
 readDimStyles: value
@@ -106,6 +140,7 @@ readProjectSet: value
 readShape: value
 readSheet: value
 readStandards: value
+readSymbol: value
 readTextStyles: value
 readView: value
 readViewTemplate: value
@@ -114,14 +149,24 @@ readableDeg: value
 registerHolders: value
 resolveDim: value
 resolveText: value
+rotatePt: value
+scaleBarShapes: value
+scaleBarStep: value
+scaleBarTicks: value
 scheduleBox: value
 scheduleHomeBox: value
+screenSigns: value
 serializePat: value
+setSymbolLibrary: value
 sheetDrawingArea: value
+sweepOf: value
+symbolDrawingScale: value
 tablesFace: value
 textStyleOf: value
 textWidth: value
+trueNorthOf: value
 unitFactor: value
 unitVector: value
 viewportPaperUnit: value
+worldToDrawing: value
 wrapNote: value
