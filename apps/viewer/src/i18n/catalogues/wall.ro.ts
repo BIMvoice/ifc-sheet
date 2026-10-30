@@ -20,6 +20,8 @@ export const wallRo = {
   'wall.intro.hang': 'Afișează pe panou',
   'wall.intro.waiting': 'Se citește modelul…',
   'wall.intro.noGeometry': '{name} nu are geometrie pe care să se așeze un set de desene.',
+  'wall.intro.loadFailed': 'Geometria din {name} nu a putut fi citită.',
+  'wall.intro.loadFailedWhy': 'Geometria din {name} nu a putut fi citită: {error}',
   'wall.group.plans': 'Planuri',
   'wall.group.elevations': 'Fațade',
   'wall.group.sections': 'Secțiuni',
