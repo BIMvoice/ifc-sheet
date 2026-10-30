@@ -19,8 +19,11 @@
  *   0.1 of it, the reading the reference gives. Far triangles are bounded in bulk
  *   (below), near ones one by one from their own num and den.
  * Anything unproven (a point on a face, a ray grazing an edge, too few
- * triangles to be worth it, a non-finite coordinate) is answered by S itself,
- * summed exactly as before. So, by these bounds, the reading is the reference's.
+ * triangles to be worth it, a non-finite coordinate, a surface that is not a
+ * closed chain, lengths so large that a product of three can overflow) is
+ * answered by S itself, summed exactly as before. So, by these bounds, the
+ * reading is the reference's. Underflow is not bounded here: the weld keeps
+ * distinct points at least 10 µm apart, so no product of these lengths gets near it.
  *
  * Bounds, u the unit roundoff, a, b, c the corners from the point, L a length
  * no corner of a holding part is farther than, d the point's distance to the
@@ -72,6 +75,8 @@ const FAR_TERM = (NUM_DEN / (4 * Math.SQRT2));
 const FAR_BUDGET = 0.02;
 const MAX_RATIO = 1e4;
 const BUDGET = 0.05;
+/** Past this (L² of 1e60 m) a product of three lengths can overflow a double, and the relative bounds here stop holding. */
+const MAX_FAR2 = 1e120;
 /** Below this many terms the plain sum is used: there is little to save. */
 export const MIN_TERMS = 32;
 /** The ray's size on each axis: no axis, no diagonal, and never zero, so the slab test never divides by zero. */
@@ -91,12 +96,14 @@ export interface WindingInput {
   tol: number;
   /** The largest coordinate of any point, in absolute value. */
   reach: number;
+  /** Every directed edge is matched by as many reversed: off the surface w is whole only then, and a count can stand in for it. */
+  closed: boolean;
 }
 
 /** w at a point as the reference reads it: a whole K when proven, else the reference sum itself. */
 export function windingField(input: WindingInput, minTerms = MIN_TERMS): (x: number, y: number, z: number) => number {
   const { s, ids, byPart, boxes, parts, tol } = input;
-  const finite = s.points.every((v) => Number.isFinite(v)) && Number.isFinite(tol);
+  const provable = input.closed && s.points.every((v) => Number.isFinite(v)) && Number.isFinite(tol);
   const holding: number[] = [];
   return (x, y, z) => {
     holding.length = 0;
@@ -109,7 +116,7 @@ export function windingField(input: WindingInput, minTerms = MIN_TERMS): (x: num
     holding.sort((a, b) => a - b);
     let n = 0;
     for (const j of holding) n += byPart.get(ids[j])!.length;
-    if (finite && n > 0 && n >= minTerms) {
+    if (provable && n > 0 && n >= minTerms) {
       const k = proven(input, holding, x, y, z, n);
       if (k !== null) return k;
     }
@@ -186,8 +193,14 @@ function rayCount(input: WindingInput, part: number, x: number, y: number, z: nu
 /** The last R and the term count it was made for: consecutive points nearly always hold the same parts. */
 let ratioFor = -1, ratioOf = 0;
 
+/** R for n terms: every triangle farther than L/R may be charged in bulk, and all n such charges come to `FAR_BUDGET`. */
+export function farRatio(n: number): number {
+  if (n !== ratioFor) { ratioFor = n; ratioOf = Math.min(MAX_RATIO, Math.cbrt(FAR_BUDGET / (n * FAR_TERM))); }
+  return ratioOf;
+}
+
 /** A bound on |reference sum - exact w| at the point, `start` (the summation term) included; Infinity once past the budget. */
-function errorBound(input: WindingInput, holding: readonly number[], x: number, y: number, z: number, n: number, start: number): number {
+export function errorBound(input: WindingInput, holding: readonly number[], x: number, y: number, z: number, n: number, start: number): number {
   const { s: { points: pts, triangles: tri }, boxes, ids, byPart } = input;
   // The farthest corner of the holding parts' boxes, past rounding.
   let far2 = 0;
@@ -197,8 +210,8 @@ function errorBound(input: WindingInput, holding: readonly number[], x: number, 
     const f = fx * fx + fy * fy + fz * fz;
     if (f > far2) far2 = f;
   }
-  if (n !== ratioFor) { ratioFor = n; ratioOf = Math.min(MAX_RATIO, Math.cbrt(FAR_BUDGET / (n * FAR_TERM))); }
-  const ratio = ratioOf;
+  if (!(far2 < MAX_FAR2)) return Infinity;
+  const ratio = farRatio(n);
   if (!(ratio > 1)) return Infinity;
   // Squared reach of the walk: a little over (L/R)², so a box left out is farther than L/R however the squares round.
   const reach2 = (far2 / (ratio * ratio)) * (1 + 1e-6);

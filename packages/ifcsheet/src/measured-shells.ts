@@ -118,13 +118,16 @@ export function overlapCheck(
     || (six.get(p)! / 6 < -noVolume && sign > 0) || (six.get(p)! / 6 > noVolume && sign < 0)
     || overlapsAny(j, () => true));
   if (suspect.length === 0) return null;
+  // `edgeCheck` refuses an unbalanced surface before this, but the ray's count only stands in for w on a balanced one, so it is read here, not assumed.
+  let closed = true;
+  for (const [key, c] of use) if ((use.get((key % n) * n + Math.floor(key / n)) ?? 0) !== c) closed = false;
 
   const index = new Map(ids.map((p, j) => [p, j] as const));
   const trees: (Bvh | undefined)[] = [];
   const tree = (j: number): Bvh => (trees[j] ??= treeOf(byPart.get(ids[j])!.map((t) => boxOf(s, [t]))));
   if (crosses(s, suspect.map((p) => index.get(p)!), byPart, ids, overlapsAny, parts, tree, tol)) return 'overlapping';
 
-  const windingAt = windingField({ s, ids, byPart, boxes: boxList, parts, tree, tol, reach: s.points.reduce((m, v) => Math.max(m, Math.abs(v)), 0) });
+  const windingAt = windingField({ s, ids, byPart, boxes: boxList, parts, tree, tol, reach: s.points.reduce((m, v) => Math.max(m, Math.abs(v)), 0), closed });
 
   const delta = 10 * tol;
   for (const p of suspect) {
