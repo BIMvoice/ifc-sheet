@@ -7,7 +7,9 @@
  * same way. The app fills it from its stores (`loadedScheduleModels`) over AC20-FZK-Haus as the viewer loaded it; the engine
  * fills it from the model it opened (`scheduleModelsOf`, which `ifcsheet check --project` and `build` use). For every
  * element, the meshes (vertex count and world box) and the list provider's class, name and Qto sets must agree. The table
- * is not empty: FZK has meshes, Qto sets and classes, and each is asserted to have been compared.
+ * is not empty: FZK has meshes, Qto sets and classes, and each is asserted to have been compared. A hidden model is loaded
+ * too: the joinery rows and views list every loaded model (`hidden: true`), the other collectors the visible ones, and the
+ * engine, which has no hiding, lists every model it opened.
  */
 
 import '@/test/setup-dom.js';
@@ -56,6 +58,25 @@ describe('the app and the engine fill ScheduleModel alike, on AC20-FZK-Haus (#58
     assert.equal(app.name, engine.name);
     assert.ok(app.dataStore && engine.dataStore && app.view === null && engine.view === null);
     assert.deepEqual(app.listProvider!().getAllEntityIds!(), engine.listProvider!().getAllEntityIds!());
+  });
+
+  it('includes a hidden model only when asked, and the engine lists it like the app does', async () => {
+    const store = useViewerStore.getState();
+    const visible = store.models.get('m')!;
+    const hiddenModel = { ...visible, id: 'h', name: 'h', visible: false };
+    useViewerStore.setState({ models: new Map([...store.models, ['h', hiddenModel]]) });
+    try {
+      assert.deepEqual(loadedScheduleModels().map((m) => m.modelId), ['m'], 'the default leaves a hidden model out');
+      const all = loadedScheduleModels({ hidden: true });
+      assert.deepEqual(all.map((m) => m.modelId), ['m', 'h'], 'hidden: true lists every loaded model');
+      const opened = await openModel(new Uint8Array(readFileSync(FZK_HAUS)));
+      const [hiddenEngine] = scheduleModelsOf(opened, 'h', 'h');
+      const [hiddenApp] = all.filter((m) => m.modelId === 'h');
+      assert.equal(hiddenApp.name, hiddenEngine.name);
+      assert.deepEqual(hiddenApp.listProvider!().getAllEntityIds!(), hiddenEngine.listProvider!().getAllEntityIds!());
+    } finally {
+      useViewerStore.setState({ models: store.models });
+    }
   });
 
   it('gives every element the same meshes (vertices and world box)', () => {
