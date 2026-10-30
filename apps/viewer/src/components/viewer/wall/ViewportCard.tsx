@@ -108,13 +108,13 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
             </>
           )}
           {view ? <ViewportMarksControls sheet={sheet} slot={slot} view={view} /> : null}
-          {schedule ? <SubReportCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <SubReportCard key={`${schedule.id}:sub`} schedule={schedule} /> : null}
           {schedule ? <BoqCard key={`${schedule.id}:boq`} schedule={schedule} /> : null}
           {schedule ? <TypeClassificationCard key={`${schedule.id}:class`} schedule={schedule} /> : null}
           {schedule ? <ListScheduleCard key={`${schedule.id}:list`} schedule={schedule} /> : null}
-          {schedule ? <ScheduleContentCard key={schedule.id} schedule={schedule} /> : null}
-          {schedule ? <ScheduleFilterSection key={schedule.id} schedule={schedule} /> : null}
-          {schedule ? <ScheduleTextCard key={schedule.id} schedule={schedule} /> : null}
+          {schedule ? <ScheduleContentCard key={`${schedule.id}:content`} schedule={schedule} /> : null}
+          {schedule ? <ScheduleFilterSection key={`${schedule.id}:filter`} schedule={schedule} /> : null}
+          {schedule ? <ScheduleTextCard key={`${schedule.id}:text`} schedule={schedule} /> : null}
           {schedule ? <JoineryCellCard key={`${schedule.id}:cell`} schedule={schedule} /> : null}
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
