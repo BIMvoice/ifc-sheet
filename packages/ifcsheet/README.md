@@ -79,7 +79,7 @@ Exit code 0 on success, 1 when the work failed (unreadable file, a model with no
 ## What the output is today
 
 - **PDF**: one page per sheet at its paper size, vector lines and text in Inter (shipped in `fonts/`, SIL Open Font License; ș and ț print), true to scale. Each drawing is clipped to its viewport. Unstyled: no pens, hatches, symbols or annotation yet.
-- **DXF**: one R12 file per sheet in paper millimetres, with the frame, the title block's lines and each drawing's linework on their own layers. No text yet.
+- **DXF**: one R12 file per sheet in paper millimetres, with the frame, the title block's lines and each drawing's linework on their own layers. The sheet's text (title block, view titles, notes) is TEXT on `SHEET-TEXT`, with ă, ș, ț as `\U+XXXX` escapes; the layers are still the engine's own, not the app's CAD layers (#619).
 
 ## Names
 

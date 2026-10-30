@@ -47,6 +47,7 @@
  */
 
 import { cssToAci } from './aci-colors.js';
+import { encodeDxfCp1252 } from './encoding.js';
 import type { Point2D } from '../types.js';
 
 /** Line style resolved to a DXF linetype. `dashed` maps to the `DASHED` LTYPE. */
@@ -119,7 +120,19 @@ export function sanitizeDxfLayerName(name: string): string {
 
 /** Sanitize a single line of DXF TEXT content: strip control characters (no raw newlines). */
 function sanitizeDxfText(text: string): string {
-  return stripControlChars(text, ' ');
+  return escapeDxfText(stripControlChars(text, ' '));
+}
+
+/**
+ * A TEXT value for a windows-1252 file: a character windows-1252 has no byte for (ă, ș, ț) becomes the `\U+XXXX` escape (one per UTF-16
+ * unit, uppercase hex) that AutoCAD and the readers that follow it decode, where a plain encode would write `?`; a literal `\U+` in the
+ * value is escaped first so it is not read back as one.
+ */
+export function escapeDxfText(value: string): string {
+  return value.replace(/\\U\+/gi, '\\U+005CU+').replace(/[^\x20-\x7e\u00a0-\u00ff]/gu, (ch) => {
+    if (!encodeDxfCp1252(ch).hadUnmappable) return ch;
+    return Array.from({ length: ch.length }, (_, i) => `\\U+${ch.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`).join('');
+  });
 }
 
 /** Sanitize a `999` comment line: no raw newlines/control characters. */
