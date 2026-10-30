@@ -24,7 +24,7 @@ import { elementShown } from './element-graphics.js';
 import { doorOperationOf, type DoorOperation } from './door-operation.js';
 import { drawnJoineryOf, typeIndex, type DrawnJoinery, type JoineryProject, type Live } from './joinery-schedule.js';
 import { openingSymbols, type OpeningSymbol } from './opening-symbols.js';
-import { hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
+import { curtainPartsOf, hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
 import { elevationOpeningSymbols, visibleEntities } from './elevation-openings.js';
 import { hiddenClassesOf } from './view-templates.js';
 import type { ViewGraphics } from './view-graphics-types.js';
@@ -93,8 +93,9 @@ export function planOpeningSymbols(
   const shown = meshes.filter((m) => drawnBySymbol(m.ifcType) && elementShown(graphics, globalIdOf(m.expressId), m.ifcType));
   const reads = openingReads(sources);
   const hosts = openingHostsOf(sources.live.dataStore);
+  const curtainParts = curtainPartsOf(sources.live.dataStore);
   const own = level ? storeyMembersOf(sources.live.dataStore, level.storeyGlobalIds) : new Set<number>();
-  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id)))
+  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
 }
 

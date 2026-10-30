@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, visibleEntities, type DetailLevel, type ProjectLevel } from '@bimvoice/ifcsheet';
+import { curtainPartsOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, visibleEntities, type DetailLevel, type ProjectLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
@@ -29,6 +29,15 @@ function hostWallRenderId(id: number): number | undefined {
   if (!ref || !model?.ifcDataStore) return undefined;
   const wall = openingHostsOf(model.ifcDataStore).get(ref.expressId);
   return wall === undefined ? undefined : wall + model.idOffset;
+}
+
+/** The renderer ids of the parts of a curtain wall (by renderer id; `curtainPartsOf`, the engine's read), whose meshes give its extent when it has none of its own. */
+function curtainPartRenderIds(id: number): readonly number[] {
+  const s = useViewerStore.getState();
+  const ref = s.resolveGlobalIdFromModels(id);
+  const model = ref ? s.models.get(ref.modelId) : undefined;
+  if (!ref || !model?.ifcDataStore) return [];
+  return (curtainPartsOf(model.ifcDataStore).get(ref.expressId) ?? []).map((part) => part + model.idOffset);
 }
 
 /** Whether a door or window (by renderer id) is on the plan's own storey (`storeyMembersOf`, the engine's membership); without a level, none is. */
@@ -50,7 +59,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level)))
+  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }
