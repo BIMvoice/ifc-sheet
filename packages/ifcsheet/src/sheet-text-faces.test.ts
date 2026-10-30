@@ -9,7 +9,7 @@
 
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ProjectView, SheetViewport } from './document.js';
 import { tablesFace } from './draft-look.js';
 import type { DraftEntity } from './draft-types.js';
@@ -21,6 +21,9 @@ import { scheduleGraphics } from './sheet-schedules.js';
 import { viewportAnnotations, type SheetAnnotations } from './sheet-annotations.js';
 import type { SheetGraphic } from './sheet-graphic.js';
 import type { ScheduleLayout } from './schedule-prim.js';
+
+// These tests pass no model: its frame is not what they check.
+vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ frame: { north: null, frameOffset: { x: 0, y: 0, z: 0 } }, georeferenced: false }) }));
 
 const layout: ScheduleLayout = {
   width: 60, height: 20,

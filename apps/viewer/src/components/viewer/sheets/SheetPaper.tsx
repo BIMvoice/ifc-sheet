@@ -39,7 +39,7 @@ import { dxfIgnore, SchemeHatchDxf } from './SchemeHatchDxf';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
-import { resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimvoice/ifcsheet';
+import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -62,8 +62,8 @@ import { SiteBalance } from '../siteplan/SiteBalance';
 import type { SiteContent } from '../siteplan/useSheetSite';
 import type { EntityStyleOf } from '@/project/model-styles';
 
-/** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis. */
-export const AXIS_NAME = { y: 'down', z: 'front', x: 'side' } as const;
+/** The cut axis a drawing is put on paper by (`viewportTransform`), from its plane's axis: the engine's one table. */
+export { AXIS_NAME };
 
 export interface ViewportContent {
   view: ProjectView | undefined;
