@@ -15,7 +15,7 @@ import { defaultDoorSpec, type JoinerySpec } from '@ifc-lite/create';
 import { readDxfBlock } from '@bimvoice/ifcsheet/project';
 import { openingSymbols } from '@/drafting/opening-symbols';
 import { planSymbol } from './symbols';
-import { viewPrims } from './element-views-layout';
+import { planRoom, viewPrims } from './element-views-layout';
 import type { ElementViews } from './element-views';
 
 const DXF = readFileSync(new URL('../../../../packages/ifcsheet/src/__fixtures__/door-window-blocks.dxf', import.meta.url), 'utf8');
@@ -73,3 +73,20 @@ describe('a door type with a DXF block as its plan symbol', () => {
 });
 
 const GENERATED_DOOR: Array<[string, number, boolean, boolean]> = [['cut', 4, true, false], ['cut', 4, true, false], ['outline', 4, true, false], ['thin', 17, false, false]];
+
+describe('the plan view reserves what the block draws', () => {
+  const views = (depth: number) => ({ width: 0.9, depth, height: 2.1, front: { lines: [], min: { x: 0, y: 0 }, max: { x: 0, y: 0 } }, plan: { lines: [], min: { x: -0.45, y: -depth / 2 }, max: { x: 0.45, y: depth / 2 } }, section: { lines: [], min: { x: 0, y: 0 }, max: { x: 0, y: 0 } } } as unknown as ElementViews);
+  for (const op of ['swing-left', 'swing-right'] as const) {
+    it(`keeps the ${op} block, swing arc included, inside the card's plan room at 1:50`, () => {
+      const v = views(0.2);
+      const k = 20;
+      const base = 100;
+      const spec = door(op);
+      const ys = viewPrims(v, spec, { fx: 0, base }, k, 'handle').filter((p) => p.kind === 'path' && p.view === 'plan').flatMap((p) => (p.kind === 'path' ? p.pts.map((q) => q.y) : []));
+      assert.ok(ys.length > 0);
+      assert.ok(Math.min(...ys) >= base + 10 - 1e-6, 'not above the plan\'s top');
+      assert.ok(Math.max(...ys) <= base + planRoom(v, k, spec) + 1e-6, 'not below the room the card reserves');
+      assert.ok(planRoom(v, k, spec) > planRoom(v, k) + 10, 'the swing needs more than the model\'s frame depth');
+    });
+  }
+});

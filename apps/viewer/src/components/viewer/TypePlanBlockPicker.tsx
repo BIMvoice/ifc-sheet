@@ -29,10 +29,24 @@ export function TypePlanBlockPicker({ block, onChange }: { block: JoineryBlockSy
     setNote(read.symbol ? null : 'empty');
     if (read.symbol) onChange(read.symbol);
   };
+  const [failure, setFailure] = useState<string | null>(null);
   const load = async (file: File | undefined) => {
     if (!file) return;
     const content = await file.text();
-    const found = listDxfBlocks(content);
+    let found: string[];
+    try {
+      found = listDxfBlocks(content);
+    } catch (error) {
+      // Not a DXF the reader can parse: say so, offer no blocks of it, and leave the type's symbol as it is.
+      console.warn('DXF plan symbol: the file could not be read', error);
+      setText(null);
+      setNames([]);
+      setReport(null);
+      setNote(null);
+      setFailure(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    setFailure(null);
     setText(content);
     setNames(found);
     setReport(null);
@@ -52,6 +66,7 @@ export function TypePlanBlockPicker({ block, onChange }: { block: JoineryBlockSy
           <SelectContent>{names.map((n) => <SelectItem key={n} value={n} className="text-xs">{n}</SelectItem>)}</SelectContent>
         </Select>
       ) : null}
+      {failure !== null ? <p role="alert" data-type-plan-block-error className="text-2xs text-destructive">{t('joinery.block.unreadable', { reason: failure })}</p> : null}
       {note ? <p data-type-plan-block-note className="text-2xs text-muted-foreground">{t(note === 'none' ? 'joinery.block.none' : 'joinery.block.empty')}</p> : null}
       {report?.assumedMillimetres ? <p className="text-2xs text-muted-foreground">{t('joinery.block.millimetres')}</p> : null}
       {Object.keys(report?.unsupported ?? {}).length ? <p data-type-plan-block-unsupported className="text-2xs text-muted-foreground">{t('joinery.block.unsupported', { list: list(report!.unsupported) })}</p> : null}

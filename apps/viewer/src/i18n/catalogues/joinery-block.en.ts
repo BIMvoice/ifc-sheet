@@ -17,5 +17,6 @@ export const joineryBlockEn = {
   'joinery.block.millimetres': 'The file states no units: read as millimetres.',
   'joinery.block.unsupported': 'Not drawn: {list}.',
   'joinery.block.skipped': 'Skipped elsewhere in the file: {list}.',
+  'joinery.block.unreadable': 'The file could not be read as DXF: {reason}',
   'joinery.block.truncated': 'The block is larger than a symbol keeps; part of it is left out.',
 } satisfies Record<string, TranslationValue>;

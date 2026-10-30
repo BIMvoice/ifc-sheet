@@ -18,5 +18,6 @@ export const joineryBlockRo: Record<keyof typeof joineryBlockEn, TranslationValu
   'joinery.block.millimetres': 'Fișierul nu precizează unitățile: citit în milimetri.',
   'joinery.block.unsupported': 'Nedesenate: {list}.',
   'joinery.block.skipped': 'Omise în altă parte a fișierului: {list}.',
+  'joinery.block.unreadable': 'Fișierul nu a putut fi citit ca DXF: {reason}',
   'joinery.block.truncated': 'Blocul e mai mare decât păstrează un simbol; o parte e lăsată deoparte.',
 };
