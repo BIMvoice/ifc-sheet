@@ -98,6 +98,8 @@ export interface ConfigureTypeInput {
   opening: TypeOpening;
   /** The head's shape. Absent: the type keeps the one it has (square for a type configured now). */
   head?: JoineryHead;
+  /** The window's sill height, metres (the IFC states none). Absent: the type keeps the one it has. Ignored for a door. */
+  sillHeight?: number;
   /** The properties typed in for the type. Absent: the type keeps its own; an empty list removes them. */
   custom?: readonly JoineryCustomProp[];
 }
@@ -138,7 +140,8 @@ export function configureTypeOpening(project: ProjectJoinery, input: ConfigureTy
   const head = input.head !== undefined ? cleanHead(input.head) : base.head;
   const custom = input.custom ? cleanCustomProps(input.custom) : base.custom;
   const { head: _h, custom: _c, ...rest } = base;
-  const entry: JoinerySpec = { ...rest, ...(head ? { head } : {}), ...(custom?.length ? { custom } : {}) };
+  const sill = input.kind === 'window' && input.sillHeight !== undefined && Number.isFinite(input.sillHeight) && input.sillHeight >= 0 ? input.sillHeight : base.sillHeight;
+  const entry: JoinerySpec = { ...rest, sillHeight: sill, ...(head ? { head } : {}), ...(custom?.length ? { custom } : {}) };
   if (at >= 0) list[at] = entry;
   else list.push(entry);
   return {

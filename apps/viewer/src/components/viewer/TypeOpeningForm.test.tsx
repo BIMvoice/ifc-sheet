@@ -68,4 +68,19 @@ describe('TypeOpeningForm', () => {
     assert.deepEqual(entry?.head, { shape: 'segmental', rise: 0.25 });
     assert.deepEqual(entry?.custom, [{ name: 'U (W/m²K)', value: '1,1', key: 'thermalTransmittance' }, { name: 'Sound reduction', value: '32 dB' }]);
   });
+
+  it('a sill typed for a window type is written to it, shown again, and a door type offers none', () => {
+    const root = render(<TypeOpeningForm facts={facts} />);
+    const sill = root.querySelector<HTMLInputElement>('[data-type-sill]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(sill, '1100');
+      sill.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-opening-apply]')!.click(); });
+    assert.equal(typeEntryOf(facts)?.sillHeight, 1.1);
+    cleanup();
+    assert.equal(render(<TypeOpeningForm facts={facts} />).querySelector<HTMLInputElement>('[data-type-sill]')!.value, '1100');
+    cleanup();
+    assert.equal(render(<TypeOpeningForm facts={{ ...facts, kind: 'door', typeGlobalId: 'T-D' }} />).querySelector('[data-type-sill]'), null);
+  });
 });

@@ -115,4 +115,15 @@ describe('configureTypeOpening', () => {
     expect(match?.source).toBe('type');
     expect(openingOfSpec(match!.entry)).toEqual({ operations: ['tilt-turn-left', 'tilt-turn-right'], fanlight: false });
   });
+
+  it('a window\'s sill is the one given, kept when none is given again, and a door has none', () => {
+    const first = configureTypeOpening(empty(), { ...input, sillHeight: 1.1 });
+    expect(first.joineryTypes[0].sillHeight).toBe(1.1);
+    const again = configureTypeOpening({ joineryTypes: first.joineryTypes, joineryMapping: first.joineryMapping }, input);
+    expect(again.joineryTypes[0].sillHeight).toBe(1.1);
+    const bad = configureTypeOpening({ joineryTypes: first.joineryTypes, joineryMapping: first.joineryMapping }, { ...input, sillHeight: -2 });
+    expect(bad.joineryTypes[0].sillHeight).toBe(1.1);
+    const door = configureTypeOpening(empty(), { ...input, typeGlobalId: 'TYPE-D', kind: 'door', opening: { operations: ['swing-left'], fanlight: false }, sillHeight: 1.1 });
+    expect(door.joineryTypes[0].sillHeight).toBe(0);
+  });
 });

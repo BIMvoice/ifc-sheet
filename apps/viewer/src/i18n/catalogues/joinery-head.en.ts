@@ -13,6 +13,8 @@ export const joineryHeadEn = {
   'joinery.head.pointed': 'Pointed',
   'joinery.head.rise': 'Rise of the arch (mm)',
   'joinery.head.riseDefault': 'Rise (mm), blank for the default',
+  'joinery.type.sill': 'Sill height of the type (mm)',
+  'joinery.type.sillDefault': 'Sill (mm), blank for none stated',
   'joinery.props.title': 'Properties added by hand',
   'joinery.props.hint': 'Kept in the project, not written to the IFC. A schedule lists one as a row: "Add a column" on its card, set "Typed for the type".',
   'joinery.props.name': 'Name',
