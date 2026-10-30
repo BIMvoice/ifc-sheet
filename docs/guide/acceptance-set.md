@@ -11,7 +11,7 @@ Each model is opened, its starting set is generated and each view cut. Then the 
 
 - The file is the one the figures were written for: its storeys, door count and window count.
 - A plan exists for each storey and has cut walls (a storey the cut passes above is named in the model's row as empty and must stay empty).
-- Doors and windows are cut on the plans, and the plans draw every one of them (the school: at least 90%, see below).
+- Doors and windows are cut on the plans, and the plans draw every one of them except those the model's row lists by GlobalId (the school: nine, see below).
 - Sections have cut faces, through the classes the model must cut (slabs, walls).
 - The room schedule has the model's room count (models with no room skip this).
 - The drawing register lists the set's sheets in set order, and the register page of the printed PDF names every sheet number and title.
@@ -28,12 +28,14 @@ A figure an empty drawing would also give (zero windows in a model with none) is
 | federated `arch.ifc` | `apps/viewer/src/test/fixtures/federated/` (committed) | hand-written for IfcSheet #96, MPL 2.0 | 1 / 0 / 0 | two levels far from the origin; no rooms or windows, so those checks are left out |
 | ISSUE_068 skolebygg (ara3d) | not committed (56 MB). `pnpm fixtures` fetches `tests/models/ara3d/ISSUE_068_ARK_NUS_skolebygg.ifc`, or set `IFCSHEET_ACCEPTANCE_SKOLEBYGG` to a copy | no redistribution licence stated in the source, so it is only read from disk, never committed or published | 310 / 266 / 307 | the suite skips it with a message when the file is absent |
 
-The school is the one model where the plans do not yet draw every door and window: 295 of 310 doors and 264 of 266 windows (measured
-2026-10-30), and the roof storey's plan cuts nothing. Its `drawnShare` is 0.9; raise it to 1 when #586 is fixed, never lower it. It also found
-that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
+The school is the one model where the plans do not yet draw every door and window: 303 of 310 doors and 264 of 266 windows, and the
+roof storey's plan cuts nothing. The eight curtain wall doors (parts of an IfcCurtainWall, not contained in the storey themselves) are drawn
+since #586. The nine left lie wholly above or below their storey plan's 1.2 m cut, and a default plan shows its cut only: seven wall
+hatches and two small windows whose sill is 1 cm above the cut. Its `notDrawn` lists them by GlobalId; take one out when it is drawn,
+never add one. It also found that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
 
 The suite checks that doors and windows are cut and drawn on the plans, not their swing or opening symbols: the headless engine does not draw
-those yet (#587). Add a symbol check here when #587 lands.
+those yet (#587). Add a symbol check here when #587 lands. The nine listed above are to be drawn by the host-wall rule decided on #586 (with #490).
 
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read
