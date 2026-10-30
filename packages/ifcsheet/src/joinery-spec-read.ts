@@ -16,6 +16,7 @@ import {
 } from '@ifc-lite/create';
 import { readJoineryViewChoice } from './joinery-view-detail.js';
 import { readCustomProps } from './joinery-custom-props.js';
+import { readJoineryBlock } from './joinery-block-symbol.js';
 
 type Raw = Record<string, unknown>;
 const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -104,6 +105,8 @@ export function readJoinerySpec(raw: unknown): JoinerySpec | null {
   if (glazingBars) spec.glazingBars = glazingBars;
   const custom = readCustomProps(raw.custom);
   if (custom.length) spec.custom = custom;
+  const planBlock = readJoineryBlock(raw.planBlock);
+  if (planBlock) spec.planBlock = planBlock;
   
   return spec;
 }

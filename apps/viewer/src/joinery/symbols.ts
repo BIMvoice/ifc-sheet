@@ -32,6 +32,7 @@ import {
   isDoorLeaf, joineryBoxes, normalisedPanels, panelRect, swingsInPlan,
   type CellRect, type JoineryBox, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
+import { blockPlanStrokes } from '@bimvoice/ifcsheet/project';
 import { archPoints, headArch, type HeadArch } from './head-shape';
 import { glazingBarStrokes } from './glazing-bars';
 
@@ -134,6 +135,9 @@ function windowSwingPlan(spec: JoinerySpec, p: JoineryPanel, r: CellRect): Joine
 }
 
 export function planSymbol(spec: JoinerySpec, options: PlanOptions = {}): JoineryStroke[] {
+  // A DXF block the user assigned to the type replaces the generated symbol (#448).
+  const block = blockPlanStrokes(spec);
+  if (block) return block;
   const z = options.cutZ ?? spec.height / 2;
   const boxes = joineryBoxes(spec);
   const out: JoineryStroke[] = [];

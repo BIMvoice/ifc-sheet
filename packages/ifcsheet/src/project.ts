@@ -13,6 +13,10 @@ export {
   type ConfigureTypeInput, type ProjectJoinery, type TypeOpening,
 } from './joinery-type-config.js';
 export {
+  MAX_BLOCK_PATHS, MAX_BLOCK_POINTS, blockPlanStrokes, listDxfBlocks, mirrorsBlock, readDxfBlock, readJoineryBlock, withPlanBlock,
+  type BlockStroke, type DxfBlockRead, type DxfBlockReport,
+} from './joinery-block-symbol.js';
+export {
   JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
   type JoineryViewLineLike, type JoineryViewName,
 } from './joinery-view-detail.js';
@@ -23,6 +27,7 @@ export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';
+export { scheduleModelsOf, type OpenedScheduleSource } from './schedule-models.js';
 export { discoverModelRows, mergeFound, readModelRowCells, readModelRowValues, type ModelRowCells, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
 export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';

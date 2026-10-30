@@ -4,26 +4,18 @@
 
 /**
  * Where a schedule entry's views come from: the first occurrence of its type
- * that has body geometry in a loaded model. Cached per model geometry and
+ * that has body geometry in a loaded model, read through `ScheduleModel.meshesOf`
+ * (flat meshes, else the pieces of a GPU-instanced element). Cached per model geometry and
  * mutation version (an edit rebuilds), shared by the schedule tab and every
  * sheet that places it. An entry with no body geometry is logged once and
  * left out, so its card draws the generated symbol (`schedule-layout.ts`).
  */
 
-import type { MeshData } from '@ifc-lite/geometry';
+import type { ScheduleModel } from '@bimvoice/ifcsheet/project';
 import { useViewerStore } from '@/store';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import { elementViews, type ElementViews } from './element-views';
-
-/** The meshes of occurrence `expressId` (the model's own id) of `modelId`, or none. */
-export type MeshSource = (modelId: string, expressId: number) => readonly MeshData[];
-
-/** The live models' flat meshes: global ids are the model's local ids shifted by `idOffset`. */
-export const liveMeshes: MeshSource = (modelId, expressId) => {
-  const model = useViewerStore.getState().models.get(modelId);
-  const wanted = (model?.idOffset ?? 0) + expressId;
-  return (model?.geometryResult?.meshes ?? []).filter((m) => m.expressId === wanted);
-};
+import { loadedScheduleModels } from './schedule-models';
 
 const warned = new Set<string>();
 
@@ -41,16 +33,18 @@ const memo = new WeakMap<object, Memo>();
 export async function entryViews(
   data: ScheduleData,
   scale: number,
-  source: MeshSource = liveMeshes,
+  models: readonly ScheduleModel[] = loadedScheduleModels({ hidden: true }),
 ): Promise<Map<string, ElementViews>> {
   const s = useViewerStore.getState();
+  const byId = new Map(models.map((m) => [m.modelId, m]));
   const out = new Map<string, ElementViews>();
   await Promise.all(data.entries.map(async (entry) => {
     for (const o of entry.occurrences) {
       const model = s.models.get(o.modelId);
       const geometry = model?.geometryResult;
       if (!model || !geometry) continue;
-      const meshes = source(o.modelId, o.expressId);
+      // The model's own mesh read, as the measured sizes and quantities take it: an instanced window's pieces count.
+      const meshes = byId.get(o.modelId)?.meshesOf?.(o.expressId) ?? [];
       if (meshes.length === 0) continue;
       const stamp = `${s.mutationVersion}`;
       let m = memo.get(geometry);

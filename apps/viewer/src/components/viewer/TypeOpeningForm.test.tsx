@@ -151,3 +151,24 @@ describe('TypeOpeningForm', () => {
     assert.equal(door.querySelectorAll('input[type="checkbox"]').length, 1);
   });
 });
+
+describe('TypeOpeningForm plan symbol picker', () => {
+  it('a file that is not a DXF is named in the form, and the type keeps its symbol', async () => {
+    const root = render(<TypeOpeningForm facts={facts} />);
+    const input = root.querySelector<HTMLInputElement>('[data-type-plan-block-file]')!;
+    const file = new window.File(['this is not a dxf'], 'x.dxf');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })); });
+    } finally {
+      console.warn = warn;
+    }
+    const error = root.querySelector('[data-type-plan-block-error]');
+    assert.ok(error, 'the form says the file could not be read');
+    assert.match(error.textContent ?? '', /DXF/);
+    assert.equal(root.querySelector('[data-type-plan-block-name]'), null, 'no symbol was set');
+    assert.equal(root.querySelector('[data-type-plan-block-pick]'), null, 'no blocks offered');
+  });
+});

@@ -34,6 +34,9 @@ since #586. The nine left lie wholly above or below their storey plan's 1.2 m cu
 hatches and two small windows whose sill is 1 cm above the cut. Its `notDrawn` lists them by GlobalId; take one out when it is drawn,
 never add one. It also found that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
 
+The suite checks that doors and windows are cut and drawn on the plans, not their swing or opening symbols: the headless engine does not draw
+those yet (#587). Add a symbol check here when #587 lands. The nine listed above are to be drawn by the host-wall rule decided on #586 (with #490).
+
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read
 from the file, and a line in the table above.

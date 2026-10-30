@@ -9,8 +9,8 @@
  */
 
 import { DEFAULT_JOINERY_MAPPING } from '@bimvoice/ifcsheet';
-import { configureTypeOpening, openingOfSpec, typeEntryId, typedSillOf, type TypeOpening } from '@bimvoice/ifcsheet/project';
-import { defaultDoorSpec, defaultWindowSpec, type JoineryCustomProp, type JoineryHead, type JoinerySpec } from '@ifc-lite/create';
+import { configureTypeOpening, openingOfSpec, typeEntryId, typedSillOf, withPlanBlock, type TypeOpening } from '@bimvoice/ifcsheet/project';
+import { defaultDoorSpec, defaultWindowSpec, type JoineryBlockSymbol, type JoineryCustomProp, type JoineryHead, type JoinerySpec } from '@ifc-lite/create';
 import { useProjectStore } from '@/project/project-store';
 import type { ElementFacts } from './symbol-mapping';
 
@@ -54,4 +54,14 @@ export function configureElementType(facts: ElementFacts, opening: TypeOpening, 
   );
   useProjectStore.setState({ joineryTypes: out.joineryTypes, joineryMapping: out.joineryMapping, dirty: true });
   return out.entryId;
+}
+
+/** The DXF block assigned as the plan symbol of the element's configured type, or null. */
+export const typePlanBlockOf = (facts: Pick<ElementFacts, 'typeGlobalId'>): JoineryBlockSymbol | null => typeEntryOf(facts)?.planBlock ?? null;
+
+/** Assign `block` as the plan symbol of the element's configured type (null removes it). A type not configured yet has no entry to carry it, so nothing changes. */
+export function setTypePlanBlock(facts: Pick<ElementFacts, 'typeGlobalId'>, block: JoineryBlockSymbol | null): void {
+  if (!facts.typeGlobalId || (typeEntryOf(facts)?.planBlock ?? null) === block) return;
+  const s = useProjectStore.getState();
+  useProjectStore.setState({ joineryTypes: withPlanBlock(s.joineryTypes ?? [], typeEntryId(facts.typeGlobalId), block), dirty: true });
 }
