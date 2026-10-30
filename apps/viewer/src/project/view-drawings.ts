@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { viewProjection } from '@bimvoice/ifcsheet';
 import type { ProjectView } from './types';
 import type { ViewSectionPlane } from './view-plane';
 
@@ -57,19 +58,8 @@ export interface ViewDisplayOverrides {
   constructionProjectionDepth: number | null;
 }
 
-/**
- * Projection follows the view's depth: a plan with no depth of its own sees
- * down to its level's floor (as deep as its cut is high), a section /
- * elevation (and a reflected ceiling plan, which sees all that is above its
- * cut) with no depth projects with the automatic bands, and an
- * explicit depth always projects exactly that far (0: the cut only).
- */
-export function viewDisplayOverrides(view: ProjectView): ViewDisplayOverrides {
-  const depth = typeof view.viewDepth === 'number' && view.viewDepth >= 0 ? view.viewDepth : null;
-  if (depth !== null) return { showConstructionProjection: depth > 0, constructionProjectionDepth: depth };
-  if (view.kind === 'plan' && !view.reflected) return { showConstructionProjection: view.cutHeight > 0, constructionProjectionDepth: view.cutHeight };
-  return { showConstructionProjection: true, constructionProjectionDepth: null };
-}
+/** Projection follows the view's depth (`viewProjection`, the rule the engine's sheets draw by too, #615). */
+export const viewDisplayOverrides = (view: ProjectView): ViewDisplayOverrides => viewProjection(view);
 
 /** A stable key for a resolved plane, so an unchanged view never regenerates. */
 export function planeKey(plane: ViewSectionPlane | null): string {
