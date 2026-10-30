@@ -35,12 +35,17 @@ export {
   type ElementView, type ElementViewOptions, type ElementViews, type V2, type ViewLine, type ViewLineKind,
 } from './joinery-element-views.js';
 export { planFrame, planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from './joinery-element-views-layout.js';
+export {
+  cellTextOf, joineryExport, joineryScheduleLayout, operationText, scheduleMinBox, schedulePages,
+  type JoineryExportLabels, type ScheduleLabels, type ScheduleLayoutOptions,
+} from './joinery-schedule-layout.js';
+export { boxOptions, joineryPages, layoutJoineryOnSheet } from './joinery-schedule-place.js';
 export { entryViews, type EntryViewHooks } from './joinery-entry-views.js';
 export { roomInputsOf } from './room-finishes-read.js';
 export { takeoffElementsOf } from './material-takeoff-read.js';
 export { typeElementsOf, typeQuantitiesOver } from './type-quantities-read.js';
 export { scheduleModelsOf, type OpenedScheduleSource } from './schedule-models.js';
 export { discoverModelRows, mergeFound, readModelRowCells, readModelRowValues, type ModelRowCells, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
-export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
+export { projectSubReportChecks, readProjectFile, readSymbolFlips, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';
 export { modelClassification, storeClassifications } from './classification-read.js';

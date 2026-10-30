@@ -13,7 +13,7 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectLanguage, readProjectSet, readSiteArea, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readJoineryMapping, readJoineryOverrides, readProjectLanguage, readProjectSet, readSiteArea, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
   type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
@@ -95,7 +95,7 @@ export interface DrawnSet {
  * What a loaded project file drew on its sheets (#479): its drafts and the schedules the app placed, read again from the document
  * (a loaded file's other keys are kept on it) by the reader `ifcsheet build --project` uses. Null for a set with neither.
  */
-function projectOf(document: ProjectDocument): ProjectSheetSource | null {
+function projectOf(document: ProjectDocument, headless: Pick<typeof import('@bimvoice/ifcsheet/headless'), 'readJoineryList' | 'readSymbolFlips'>): ProjectSheetSource | null {
   const raw = document as unknown as Record<string, unknown>;
   if (!Array.isArray(raw.drafts) && !Array.isArray(raw.schedules)) return null;
   const schedules = (Array.isArray(raw.schedules) ? raw.schedules : []).flatMap((s) => readSchedule(s) ?? []);
@@ -104,6 +104,12 @@ function projectOf(document: ProjectDocument): ProjectSheetSource | null {
     set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings),
     boqArticles: readBoqArticles(raw.boqArticles), ...(document.titleBlock ? { titleBlock: document.titleBlock } : {}), ...(urbanSettings ? { urbanSettings } : {}),
     ...(readSiteArea(raw.siteArea) !== undefined ? { siteArea: readSiteArea(raw.siteArea) } : {}),
+    // What the joinery schedules read of the project (#581), by the readers `ifcsheet build --project` uses.
+    joineryTypes: headless.readJoineryList(raw.joineryTypes),
+    ...(raw.joineryMapping !== undefined ? { joineryMapping: readJoineryMapping(raw.joineryMapping) } : {}),
+    ...(readJoineryOverrides(raw.joineryOverrides) ? { joineryOverrides: readJoineryOverrides(raw.joineryOverrides) } : {}),
+    ...(raw.openingLines === 'hinge' || raw.openingLines === 'handle' ? { openingLines: raw.openingLines } : {}),
+    ...(typeof raw.symbolFlips === 'object' && raw.symbolFlips !== null && !Array.isArray(raw.symbolFlips) ? { symbolFlips: headless.readSymbolFlips(raw.symbolFlips as Record<string, unknown>) } : {}),
   };
 }
 
@@ -117,11 +123,12 @@ export function drawLanguage(document: ProjectDocument): 'en' | 'ro' {
 
 /** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them, in the project's language (else English). */
 export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Promise<DrawnSet> {
-  const { projectSheetOptions, sheetGraphics } = await import('@bimvoice/ifcsheet/headless');
-  const project = projectOf(entry.set.document);
+  const headless = await import('@bimvoice/ifcsheet/headless');
+  const { projectSheetOptionsWithViews, sheetGraphics } = headless;
+  const project = projectOf(entry.set.document, headless);
   const language = drawLanguage(entry.set.document);
   const notes: string[] = [];
-  const extras = project ? projectSheetOptions(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
+  const extras = project ? await projectSheetOptionsWithViews(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
   const sheets = await sheetGraphics(entry.set, model.model, extras);
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
