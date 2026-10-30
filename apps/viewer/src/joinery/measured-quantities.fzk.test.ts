@@ -19,11 +19,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { collectTakeoffElements } from './material-takeoff-models';
-import { takeoffRows, type TakeoffElement } from './material-takeoff';
-import { layoutMaterialTakeoff } from './material-takeoff-layout';
 import { loadedScheduleModels } from './schedule-models';
 import { collectTypeElements } from './type-quantities-models';
 import { typeQuantities, type TypeElement } from './type-quantities';
+import { takeoffRows, type TakeoffElement, layoutMaterialTakeoff } from '@bimvoice/ifcsheet';
 
 /** The model's text without the links from its elements to their quantity sets. */
 function withoutQto(text: string): string {

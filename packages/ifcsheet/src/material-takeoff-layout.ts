@@ -10,12 +10,13 @@
  * (#74, `measured-marks.ts`).
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from '@bimvoice/ifcsheet';
-import type { TakeoffRow } from './material-takeoff';
-import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import type { ExportTable } from './schedule-csv.js';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table.js';
+import type { TakeoffRow } from './material-takeoff.js';
+import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks.js';
 
 export interface TakeoffLabels {
   title: string;

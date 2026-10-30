@@ -10,11 +10,11 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
-import { layoutMaterialTakeoff } from '@/joinery/material-takeoff-layout';
 import type { ProjectSchedule } from '@/project/types';
 import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
 import { TAB_EXPORT } from '../wall/wall-type';
 import { ScheduleGraphic, useTakeoffLabels, useTakeoffRows } from './ScheduleGraphic';
+import { layoutMaterialTakeoff } from '@bimvoice/ifcsheet';
 
 const MARGIN = 10;
 const ZOOM = 3;

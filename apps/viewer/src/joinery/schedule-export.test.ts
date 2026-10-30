@@ -12,13 +12,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultDoorSpec, defaultWindowSpec } from '@ifc-lite/create';
-import { addTextRow, setTextCell, type ScheduleContent, type ScheduleTextRow } from '@bimvoice/ifcsheet';
+import { addTextRow, setTextCell, type ScheduleContent, type ScheduleTextRow, takeoffRows, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 import { sheetNumber } from '@bimvoice/ifcsheet/names';
 import { csvDelimiter, exportCsv, exportXlsx, scheduleFileName, type ExportCell, type ExportTable } from './schedule-export';
 import { joineryExport, layoutSchedule, type ScheduleLabels } from './schedule-layout';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
-import { takeoffRows } from './material-takeoff';
-import { layoutMaterialTakeoff, takeoffTable } from './material-takeoff-layout';
 import { roomFinishes, type RoomInput, finishTable, layoutRoomFinishes } from '@bimvoice/ifcsheet';
 import { typeQuantities, type TypeElement } from './type-quantities';
 import { layoutTypeQuantities, typeQuantityTable } from './type-quantities-layout';

@@ -18,7 +18,6 @@ import { WallIntro } from '@/components/viewer/wall/WallIntro';
 import { CutHeightControl } from '@/components/viewer/wall/ViewControls';
 import { useWallNav } from '@/components/viewer/wall/wall-nav';
 import { DxfR2000 } from '@/components/viewer/sheets/dxf-r2000';
-import { layoutMaterialTakeoff, takeoffTable } from '@/joinery/material-takeoff-layout';
 import { tableCsv } from '@/joinery/export-test-util';
 import { checkCatalogue } from './catalogue-problems';
 import { chooseLocale, provideLocaleActivator } from './locale-service';
@@ -26,6 +25,7 @@ import { LOCALE_STORAGE_KEY, activateStartupLocale, createLocaleActivator } from
 import { formatLocaleFixed } from './intlFormat';
 import { getLocale, registerLocale, resolve, setLocale } from './registry';
 import ro from './locales/ro';
+import { layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 
 /**
  * Switching the IfcSheet face to Romanian (#53): the Wall, the drawer, the

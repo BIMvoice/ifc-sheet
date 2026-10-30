@@ -10,13 +10,13 @@
  * several materials shares its quantity out: a layer set by layer thickness, a
  * constituent set by its fractions, anything else evenly.
  *
- * Pure: elements in, rows out. `collectTakeoffElements` reads the loaded
- * models into that input.
+ * Pure: elements in, rows out. `takeoffElementsOf` (`material-takeoff-read.ts`) reads
+ * the models into that input.
  */
 
 import type { MaterialInfo } from '@ifc-lite/parser';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import type { MeasureRefusal, QuantitySource } from '@bimvoice/ifcsheet';
+import type { MeasureRefusal, QuantitySource } from './measured-quantities.js';
 
 export interface MaterialShare {
   name: string;

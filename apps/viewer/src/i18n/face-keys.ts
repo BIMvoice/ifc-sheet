@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { FINISHES_WORDS_EN } from '@bimvoice/ifcsheet';
+import { FINISHES_WORDS_EN, TAKEOFF_WORDS_EN } from '@bimvoice/ifcsheet';
 import { en } from './en';
 import { KEY_COMMANDS } from '../lib/commands/keyboard-commands';
 import { shownOnTheWall } from '../lib/commands/wall-key-commands';
@@ -80,6 +80,11 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
   for (const key of Object.keys(FINISHES_WORDS_EN)) {
     if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
     found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/finishes-words.ts'));
+  }
+  // #581: likewise the material takeoff's words (`takeoff.*`, and `measuredQty.*` for the figures measured from geometry).
+  for (const key of Object.keys(TAKEOFF_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/takeoff-words.ts'));
   }
   return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
 }

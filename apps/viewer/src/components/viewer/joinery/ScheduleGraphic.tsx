@@ -19,11 +19,9 @@ import { isJoinerySchedule, layoutJoineryOnSheet, layoutTableOnSheet, syncSchedu
 import type { ScheduleData } from '@/joinery/schedule-data';
 import { scheduleDataOf } from '@/joinery/schedule-split';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
-import { takeoffRows, type TakeoffRow } from '@/joinery/material-takeoff';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
-import { layoutMaterialTakeoff, type TakeoffLabels } from '@/joinery/material-takeoff-layout';
 import { layoutUrban } from '@/urban/urban-layout';
-import { layoutRoomSchedule } from '@bimvoice/ifcsheet';
+import { layoutRoomSchedule, takeoffRows, type TakeoffRow, layoutMaterialTakeoff, type TakeoffLabels, measuredWordsOf, takeoffLabelsOf } from '@bimvoice/ifcsheet';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, registerLabelsOf, type RegisterLabels } from '@bimvoice/ifcsheet';
 import { finishLabelsOf, layoutRoomFinishes, roomFinishes, type RoomFinishes, type RoomFinishLabels } from '@bimvoice/ifcsheet';
@@ -32,7 +30,6 @@ import type { TypeQuantities } from '@/joinery/type-quantities';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import type { ScheduleClassification } from '@bimvoice/ifcsheet';
 import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
-import type { MeasuredWords } from '@/joinery/measured-marks';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
@@ -53,22 +50,11 @@ export function useScheduleLabels(title: string): ScheduleLabels {
   }), [t, locale, title]);
 }
 
-/** The words that explain a figure measured from geometry (#74), shared by the takeoff and the quantities by type. */
-function measuredWords(t: ReturnType<typeof useTranslation>['t']): MeasuredWords {
-  return {
-    note: t('measuredQty.note'), unmeasured: (count: number) => t('measuredQty.unmeasured', { count }),
-    column: t('measuredQty.column'), volume: t('measuredQty.volume'), area: t('measuredQty.area'),
-  };
-}
-
 export function useTakeoffLabels(title: string): TakeoffLabels {
   const { t } = useTranslation();
   const locale = useSheetLocale();
-  return useMemo(() => ({
-    title, material: t('takeoff.material'), elements: t('takeoff.elements'), volume: t('takeoff.volume'),
-    area: t('takeoff.area'), usedIn: t('takeoff.usedIn'), total: t('takeoff.total'),
-    locale, measured: measuredWords(t),
-  }), [t, locale, title]);
+  // The labels are built by the engine's `takeoffLabelsOf`, the build `ifcsheet build --project` prints with.
+  return useMemo(() => takeoffLabelsOf((key, params) => t(key, params), locale, title), [t, locale, title]);
 }
 
 /** The material takeoff's rows, read from the loaded models again only when they change (materials are parsed on demand). */
@@ -131,7 +117,7 @@ export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
     length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
     total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
     classification: t('typeQty.classification'), classificationTitle: t('typeQty.classificationTitle'), unclassified: t('typeQty.unclassified'),
-    measured: measuredWords(t),
+    measured: measuredWordsOf((key, params) => t(key, params)),
   }), [t, locale, title]);
 }
 
