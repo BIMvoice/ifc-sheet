@@ -23,6 +23,7 @@ export const wallEn = {
   'wall.recovery.restore': 'Restore it',
   'wall.recovery.discard': 'Discard',
   'wall.intro.waiting': 'Reading the model…',
+  'wall.intro.noGeometry': '{name} has no geometry to lay a drawing set out on.',
   'wall.group.plans': 'Plans',
   'wall.group.elevations': 'Elevations',
   'wall.group.drafting': 'Drafting views',

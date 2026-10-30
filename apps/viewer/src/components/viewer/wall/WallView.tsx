@@ -40,6 +40,7 @@ export function WallView() {
   // The geometry arrives in batches: the starting set is laid out from the whole model, never from its first batch (#313).
   const streaming = useViewerStore((s) => s.geometryStreamingActive);
   const meshes = streaming ? null : geometryResult?.meshes ?? null;
+  const loading = useViewerStore((s) => s.loading);
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);
@@ -50,6 +51,8 @@ export function WallView() {
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
   const extent = useMemo(() => setExtent(settled.levels, settled.meshes, mergedSectionBounds(settled.models, settled.legacy)).extent, [settled]);
   const settledMeshes = settled.meshes;
+  // A model that has finished loading and brought no geometry never gets a set laid out (#603): say so instead of waiting.
+  const noGeometry = models.size > 0 && !loading && !streaming && (settledMeshes?.length ?? 0) === 0;
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, panel, review } = useWallNav();
 
@@ -83,7 +86,9 @@ export function WallView() {
           <NewFromTemplate />
         </div>
       ) : sheets.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-base text-sky-200/80">{t('wall.intro.waiting')}</div>
+        <div role="status" className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
+          {noGeometry ? t('wall.intro.noGeometry', { name: [...models.values()][0]?.name ?? '' }) : t('wall.intro.waiting')}
+        </div>
       ) : intro && extent ? (
         <WallIntro modelName={modelName} extent={extent} onHang={hang} />
       ) : steppedSheet ? (
