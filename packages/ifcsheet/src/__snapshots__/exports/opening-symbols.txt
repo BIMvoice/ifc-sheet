@@ -1,0 +1,29 @@
+BarClip: type (type-only)
+DEFAULT_SEGMENTAL_RISE: value
+DOUBLE_LEAF_WIDTH: value
+ElevationOptions: type (type-only)
+HeadArch: type (type-only)
+JoineryStroke: type (type-only)
+OpeningConvention: type (type-only)
+OpeningRect: type (type-only)
+OpeningSymbol: type (type-only)
+P2: type (type-only)
+PlanOptions: type (type-only)
+SectionOptions: type (type-only)
+StrokeWeight: type (type-only)
+TypedPlanSymbol: type (type-only)
+archPoints: value
+doorSymbol: value
+elevationSymbol: value
+glazingBarStrokes: value
+headArch: value
+hullCandidates: value
+minAreaRect: value
+openingMarks: value
+openingSymbols: value
+planSymbol: value
+sectionSymbol: value
+strokeBounds: value
+symbolShapes: value
+typedPlanSymbol: value
+windowSymbol: value
