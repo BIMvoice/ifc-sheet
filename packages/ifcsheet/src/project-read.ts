@@ -156,6 +156,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(urbanSettings ? { urbanSettings } : {}),
     set,
     ...(underlays.length > 0 ? { underlays } : {}),
+    ...(parsed.openingLines === 'hinge' || parsed.openingLines === 'handle' ? { openingLines: parsed.openingLines } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
   };
 }

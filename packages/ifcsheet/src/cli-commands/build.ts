@@ -4,6 +4,7 @@
 
 /** `ifcsheet build`: the starting drawing set, or a project's own (#479), as PDF, DXF and handover ZIP (#164). The argument checks and the call, as `run` in `cli.ts` had them before the commands became a registry. */
 
+import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
@@ -108,7 +109,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
   // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
   const extras = own && project ? projectSheetOptions(project, model, language, sheetFormat(language, standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project ? { joinery: project } : {}), ...extras });
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);

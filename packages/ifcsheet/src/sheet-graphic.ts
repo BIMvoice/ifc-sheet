@@ -211,7 +211,7 @@ export function sheetGraphic(
   project?: { annotations?: SheetAnnotations; schedules?: SheetSchedules },
   /** The coloured surfaces of the elevations and sections that ask for them (#499), by view id: `sheetGraphics` makes them from the meshes. */
   surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
-  /** The door and window symbols of the plans, by view id (`planOpeningSymbols`): a plan listed here draws them in place of its doors' and windows' cut and lines, as the app's plans do. Absent: the bodies are drawn. */
+  /** The door and window symbols of the views, by view id (`planOpeningSymbols`, `viewOpeningSymbols`): a plan listed here draws them in place of its doors' and windows' cut and lines, an elevation or section over its drawing, as the app does. Absent: the bodies are drawn. */
   openings: ReadonlyMap<string, readonly OpeningSymbol[]> = new Map(),
 ): SheetGraphic {
   const paper = paperOf(sheet);
@@ -248,7 +248,7 @@ export function sheetGraphic(
     const symbols = openings.get(vp.viewId);
     const detailed = made && atDetailLevel(made, detail);
     // A plan draws its doors and windows from their symbols, not their cut (a roof plan keeps them: its skylights have no symbol).
-    const drawing = detailed && symbols && (view?.kind !== 'plan' || view.discipline !== 'roof') ? withoutOpeningBodies(detailed) : detailed;
+    const drawing = detailed && symbols && view?.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
     const size = view && extent ? viewExtent(view, extent)
       : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;

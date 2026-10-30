@@ -18,7 +18,7 @@ import { projectTitleFields } from './title-block-sources.js';
 import { northOfStore } from './true-north.js';
 import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 import { generateViewDrawings } from './view-drawings.js';
-import { planOpeningSymbols } from './plan-openings.js';
+import { planOpeningSymbols, viewOpeningSymbols } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.js';
@@ -80,14 +80,16 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
     const drawing = drawings.get(view.id);
     if (drawing && view.kind === 'plan' && planSymbolsOn(resolveViewGraphics(view, doc.viewTemplates))) drawings.set(view.id, withPlanSymbols(drawing, symbols!));
   }
-  // A plan draws its doors and windows from their symbols (swing, operation, configured type, custom block), as the app's plans do (`plan-openings.ts`).
+  // A plan draws its doors and windows from their symbols (swing, operation, configured type, custom block), as the app's plans do (`plan-openings.ts`); an elevation or section draws its opening lines over them.
   const openings = new Map<string, readonly OpeningSymbol[]>();
   const dataStore = model.dataStore;
   for (const view of dataStore ? doc.views : []) {
     const drawing = drawings.get(view.id);
-    if (!drawing || view.kind !== 'plan') continue;
+    if (!drawing || (view.kind !== 'plan' && view.kind !== 'elevation' && view.kind !== 'section')) continue;
     const sources = { live: { dataStore: dataStore!, view: null }, project: options.joinery ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
-    openings.set(view.id, planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, resolveViewGraphics(view, doc.viewTemplates)));
+    const graphics = resolveViewGraphics(view, doc.viewTemplates);
+    // An elevation or section keeps its drawing, cut included, and the symbols go over it (`elevation-openings.ts`).
+    openings.set(view.id, view.kind === 'plan' ? planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, graphics) : viewOpeningSymbols(model.buildingMeshes, drawing.config.plane, drawing, sources, graphics));
   }
   // The views coloured by a property (#92): what each paints, from the same rules the app uses (`colour-fills.ts`).
   const schemes = new Map<string, SchemeResult>();
