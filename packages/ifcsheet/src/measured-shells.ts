@@ -30,17 +30,21 @@
  *    bars crossing where their face diagonals meet, say).
  *
  * Cost: O(T) when one manifold shell (every directed edge once) is all there
- * is, which is every FZK wall and slab. Otherwise O(T_s · T) for the T_s
- * triangles of the suspect shells, boxes rejecting most pairs first.
+ * is, which is every FZK wall and slab. Otherwise boxes of parts and of
+ * triangles are put in hierarchies (`shell-bvh.ts`), so an edge meets only the
+ * triangles whose box touches its own and a sample point reads w by a ray per
+ * part and a bound (`shell-winding.ts`), falling back to the full sum whenever
+ * they cannot prove the same reading (#611).
  */
+
+import { anyOverlap, treeOf, type Box, type Bvh } from './shell-bvh.js';
+import { windingField } from './shell-winding.js';
 
 /** An element's surface after welding: points relative to its anchor, xyz; triangles as point ids, three each. */
 export interface Surface {
   points: number[];
   triangles: number[];
 }
-
-type Box = [number, number, number, number, number, number];
 
 const boxOf = (s: Surface, tris: readonly number[]): Box => {
   const b: Box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
@@ -61,9 +65,6 @@ const boxOf = (s: Surface, tris: readonly number[]): Box => {
 const overlapping = (a: Box, b: Box, tol: number): boolean =>
   [0, 1, 2].every((d) => Math.min(a[d + 3], b[d + 3]) - Math.max(a[d], b[d]) > tol);
 
-const holds = (b: Box, x: number, y: number, z: number, tol: number): boolean =>
-  x >= b[0] - tol && x <= b[3] + tol && y >= b[1] - tol && y <= b[4] + tol && z >= b[2] - tol && z <= b[5] + tol;
-
 const vec = (s: Surface, id: number): [number, number, number] => [s.points[id * 3], s.points[id * 3 + 1], s.points[id * 3 + 2]];
 const sub = (a: readonly number[], b: readonly number[]): [number, number, number] => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a: readonly number[], b: readonly number[]): [number, number, number] =>
@@ -80,20 +81,6 @@ const normalOf = (s: Surface, t: number): [number, number, number] | null => {
   return unit(cross(sub(vec(s, s.triangles[t + 1]), a), sub(vec(s, s.triangles[t + 2]), a)));
 };
 
-/** The solid angle of triangle t seen from p, over 4π: positive from behind its winding (Van Oosterom and Strackee). */
-function windingOf(s: Surface, t: number, p: readonly number[]): number {
-  const pts = s.points, tri = s.triangles;
-  const i = tri[t] * 3, j = tri[t + 1] * 3, k = tri[t + 2] * 3;
-  const ax = pts[i] - p[0], ay = pts[i + 1] - p[1], az = pts[i + 2] - p[2];
-  const bx = pts[j] - p[0], by = pts[j + 1] - p[1], bz = pts[j + 2] - p[2];
-  const cx = pts[k] - p[0], cy = pts[k + 1] - p[1], cz = pts[k + 2] - p[2];
-  const la = Math.hypot(ax, ay, az), lb = Math.hypot(bx, by, bz), lc = Math.hypot(cx, cy, cz);
-  // a . (b x c), spelled as `dot(a, cross(b, c))` was, so every float is the one it was.
-  const num = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
-  const den = la * lb * lc + (ax * bx + ay * by + az * bz) * lc + (bx * cx + by * cy + bz * cz) * la + (cx * ax + cy * ay + cz * az) * lb;
-  return Math.atan2(num, den) / (2 * Math.PI);
-}
-
 /**
  * Why the element's shells may not be summed, or null when they may.
  * `part` is each triangle's connected part (shared points); `six` six times
@@ -107,7 +94,13 @@ export function overlapCheck(
   const byPart = new Map<number, number[]>();
   for (let i = 0; i < part.length; i++) (byPart.get(part[i]) ?? byPart.set(part[i], []).get(part[i])!).push(i * 3);
   const ids = [...byPart.keys()];
-  const boxes = new Map(ids.map((p) => [p, boxOf(s, byPart.get(p)!)] as const));
+  const boxList = ids.map((p) => boxOf(s, byPart.get(p)!));
+  const parts = treeOf(boxList);
+  /** Offers `accept` each other part whose box overlaps part j's (the exact test, on the hierarchy's candidates); true once it answers true. */
+  const overlapsAny = (j: number, accept: (k: number) => boolean): boolean => {
+    const b = boxList[j];
+    return anyOverlap(parts, b[0], b[1], b[2], b[3], b[4], b[5], (k) => k !== j && overlapping(b, boxList[k], tol) && accept(k));
+  };
 
   // Directed edge use: more than once is a non-manifold edge (a doubled face, shells sharing an edge).
   const n = s.points.length / 3;
@@ -121,12 +114,17 @@ export function overlapCheck(
       if (c > 1) nonManifold.add(part[t / 3]);
     }
   }
-  const suspect = ids.filter((p) => nonManifold.has(p)
+  const suspect = ids.filter((p, j) => nonManifold.has(p)
     || (six.get(p)! / 6 < -noVolume && sign > 0) || (six.get(p)! / 6 > noVolume && sign < 0)
-    || ids.some((q) => q !== p && overlapping(boxes.get(p)!, boxes.get(q)!, tol)));
+    || overlapsAny(j, () => true));
   if (suspect.length === 0) return null;
 
-  if (crosses(s, suspect, byPart, boxes, ids, tol)) return 'overlapping';
+  const index = new Map(ids.map((p, j) => [p, j] as const));
+  const trees: (Bvh | undefined)[] = [];
+  const tree = (j: number): Bvh => (trees[j] ??= treeOf(byPart.get(ids[j])!.map((t) => boxOf(s, [t]))));
+  if (crosses(s, suspect.map((p) => index.get(p)!), byPart, ids, overlapsAny, parts, tree, tol)) return 'overlapping';
+
+  const windingAt = windingField({ s, ids, byPart, boxes: boxList, parts, tree, tol, reach: s.points.reduce((m, v) => Math.max(m, Math.abs(v)), 0) });
 
   const delta = 10 * tol;
   for (const p of suspect) {
@@ -138,12 +136,7 @@ export function overlapCheck(
       for (const q of [at(1 / 3, 1 / 3, 1 / 3), at(0.6, 0.2, 0.2), at(0.2, 0.6, 0.2), at(0.2, 0.2, 0.6)]) {
         for (const side of [1, -1]) {
           const x = q[0] + side * delta * nrm[0], y = q[1] + side * delta * nrm[1], z = q[2] + side * delta * nrm[2];
-          const at3 = [x, y, z];
-          let w = 0;
-          for (const r of ids) {
-            if (!holds(boxes.get(r)!, x, y, z, tol)) continue;
-            for (const u of byPart.get(r)!) w += windingOf(s, u, at3);
-          }
+          const w = windingAt(x, y, z);
           const whole = Math.round(w);
           // Not cleanly whole: the point lies on (or within rounding of) a surface; it decides nothing.
           if (Math.abs(w - whole) > 0.1) continue;
@@ -159,53 +152,71 @@ export function overlapCheck(
 
 type Target = { a: number; b: number; c: number; box: Box; nrm: [number, number, number] };
 
-/** An edge of a suspect part's triangle passing strictly through a triangle it shares no point with. */
+/**
+ * An edge of a suspect part's triangle passing strictly through a triangle it shares no point with. The targets of a
+ * suspect part are the triangles of every part whose box overlaps its own (and its own); an edge meets only those whose
+ * box it touches, found through the hierarchies (of parts, then of each part's triangles), then tested exactly as each
+ * target was when all were tried in turn. `suspect` holds positions in `ids`.
+ */
 function crosses(
-  s: Surface, suspect: readonly number[], byPart: ReadonlyMap<number, number[]>, boxes: ReadonlyMap<number, Box>,
-  ids: readonly number[], tol: number,
+  s: Surface, suspect: readonly number[], byPart: ReadonlyMap<number, number[]>, ids: readonly number[],
+  overlapsAny: (j: number, accept: (k: number) => boolean) => boolean, parts: Bvh, tree: (j: number) => Bvh, tol: number,
 ): boolean {
   const tri = s.triangles;
-  // Each target's corners, box and normal are read once however many suspects it is near: the loop below visits every edge against every target.
-  const cache = new Map<number, Target | null>();
+  // Each target's corners, box and normal are read once however many edges reach it.
+  const cache: (Target | null | undefined)[] = new Array(tri.length / 3);
   const prepared = (t: number): Target | null => {
-    let g = cache.get(t);
+    let g = cache[t / 3];
     if (g === undefined) {
       const nrm = normalOf(s, t);
       g = nrm ? { a: tri[t], b: tri[t + 1], c: tri[t + 2], box: boxOf(s, [t]), nrm } : null;
-      cache.set(t, g);
+      cache[t / 3] = g;
     }
     return g;
   };
+  // The edge in hand, shared by the two visitors below so neither is made anew per edge.
+  let i = 0, j = 0, list: readonly number[] = [];
+  let P: number[] = [], Q: number[] = [];
+  let lo0 = 0, lo1 = 0, lo2 = 0, hi0 = 0, hi1 = 0, hi2 = 0;
+  const hitsTriangle = (item: number): boolean => {
+    const g = prepared(list[item]);
+    if (!g) return false;
+    if (hi0 < g.box[0] || lo0 > g.box[3] || hi1 < g.box[1] || lo1 > g.box[4] || hi2 < g.box[2] || lo2 > g.box[5]) return false;
+    if (g.a === i || g.b === i || g.c === i || g.a === j || g.b === j || g.c === j) return false;
+    const T = [g.a, g.b, g.c];
+    const A = vec(s, g.a);
+    const dp = dot(g.nrm, sub(P, A)), dq = dot(g.nrm, sub(Q, A));
+    if (!((dp > tol && dq < -tol) || (dp < -tol && dq > tol))) return false;
+    const f = dp / (dp - dq);
+    const X = [P[0] + f * (Q[0] - P[0]), P[1] + f * (Q[1] - P[1]), P[2] + f * (Q[2] - P[2])];
+    // X clear of every rim of the triangle, in its plane: a hit on a rim may be two surfaces touching along a line.
+    for (let m = 0; m < 3; m++) {
+      const U = vec(s, T[m]), e = sub(vec(s, T[(m + 1) % 3]), U);
+      if (!(dot(cross(e, sub(X, U)), g.nrm) / Math.hypot(e[0], e[1], e[2]) > tol)) return false;
+    }
+    return true;
+  };
+  const near = new Uint8Array(ids.length);
+  const hitsPart = (q: number): boolean => {
+    if (!near[q]) return false;
+    list = byPart.get(ids[q])!;
+    return anyOverlap(tree(q), lo0, lo1, lo2, hi0, hi1, hi2, hitsTriangle);
+  };
+  const mark = (q: number): boolean => { near[q] = 1; return false; };
   for (const p of suspect) {
-    const near = ids.filter((q) => q === p || overlapping(boxes.get(p)!, boxes.get(q)!, tol));
-    const targets = near.flatMap((q) => byPart.get(q)!).flatMap((t) => {
-      const g = prepared(t);
-      return g ? [g] : [];
-    });
-    for (const t of byPart.get(p)!) {
+    near.fill(0);
+    near[p] = 1;
+    overlapsAny(p, mark);
+    for (const t of byPart.get(ids[p])!) {
       for (let k = 0; k < 3; k++) {
-        const i = tri[t + k], j = tri[t + ((k + 1) % 3)];
-        const P = vec(s, i), Q = vec(s, j);
-        const lo0 = Math.min(P[0], Q[0]), hi0 = Math.max(P[0], Q[0]);
-        const lo1 = Math.min(P[1], Q[1]), hi1 = Math.max(P[1], Q[1]);
-        const lo2 = Math.min(P[2], Q[2]), hi2 = Math.max(P[2], Q[2]);
-        for (const g of targets) {
-          if (hi0 < g.box[0] || lo0 > g.box[3] || hi1 < g.box[1] || lo1 > g.box[4] || hi2 < g.box[2] || lo2 > g.box[5]) continue;
-          if (g.a === i || g.b === i || g.c === i || g.a === j || g.b === j || g.c === j) continue;
-          const T = [g.a, g.b, g.c];
-          const A = vec(s, g.a);
-          const dp = dot(g.nrm, sub(P, A)), dq = dot(g.nrm, sub(Q, A));
-          if (!((dp > tol && dq < -tol) || (dp < -tol && dq > tol))) continue;
-          const f = dp / (dp - dq);
-          const X = [P[0] + f * (Q[0] - P[0]), P[1] + f * (Q[1] - P[1]), P[2] + f * (Q[2] - P[2])];
-          // X clear of every rim of the triangle, in its plane: a hit on a rim may be two surfaces touching along a line.
-          let inside = true;
-          for (let m = 0; m < 3 && inside; m++) {
-            const U = vec(s, T[m]), e = sub(vec(s, T[(m + 1) % 3]), U);
-            inside = dot(cross(e, sub(X, U)), g.nrm) / Math.hypot(e[0], e[1], e[2]) > tol;
-          }
-          if (inside) return true;
-        }
+        i = tri[t + k];
+        j = tri[t + ((k + 1) % 3)];
+        P = vec(s, i);
+        Q = vec(s, j);
+        lo0 = Math.min(P[0], Q[0]); hi0 = Math.max(P[0], Q[0]);
+        lo1 = Math.min(P[1], Q[1]); hi1 = Math.max(P[1], Q[1]);
+        lo2 = Math.min(P[2], Q[2]); hi2 = Math.max(P[2], Q[2]);
+        if (anyOverlap(parts, lo0, lo1, lo2, hi0, hi1, hi2, hitsPart)) return true;
       }
     }
   }

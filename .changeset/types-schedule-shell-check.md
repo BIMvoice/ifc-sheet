@@ -2,4 +2,4 @@
 "@bimvoice/ifcsheet": patch
 ---
 
-The shell check behind measured quantities (`measureElement`) no longer allocates per triangle pair, so the types schedule measures a model about three times faster on FZK (1.5 s to 0.5 s) with identical quantities (#611).
+The shell check behind measured quantities (`measureElement`) finds its candidates through bounding-box hierarchies and reads the winding number by a ray and an error bound, falling back to the full sum when they cannot prove the same reading. The types schedule takes about 0.13 s on FZK and 8 s on a large school model, with `typeQuantitiesOver` output byte-identical on both and on every IFC in the repo (#611).

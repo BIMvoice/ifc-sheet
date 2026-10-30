@@ -36,6 +36,8 @@ const cube = ([x, y, z]: V): MeasureMesh => solid([
   [[x, y, z], [x, y + 1, z], [x + 1, y + 1, z], [x + 1, y, z]],
 ]);
 
+const backwards = (f: V[]): V[] => [...f].reverse();
+
 /** The unit cube at (0, y, 0) cut on its diagonal into two closed wedges whose boxes both fill the cube: touching, never overlapping. */
 function cutCube(y: number): MeasureMesh[] {
   const lowerFaces: V[][] = [
@@ -44,9 +46,9 @@ function cutCube(y: number): MeasureMesh[] {
     [[1, y, 0], [0, y, 1], [0, y + 1, 1], [1, y + 1, 0]],
   ];
   const upperFaces: V[][] = [
-    [[1, y, 1], [1, y, 0], [0, y, 1]].reverse(), [[1, y + 1, 1], [1, y + 1, 0], [0, y + 1, 1]],
-    [[1, y, 1], [1, y, 0], [1, y + 1, 0], [1, y + 1, 1]].reverse(), [[1, y, 1], [0, y, 1], [0, y + 1, 1], [1, y + 1, 1]].reverse(),
-    [[1, y, 0], [0, y, 1], [0, y + 1, 1], [1, y + 1, 0]].reverse(),
+    backwards([[1, y, 1], [1, y, 0], [0, y, 1]]), [[1, y + 1, 1], [1, y + 1, 0], [0, y + 1, 1]],
+    backwards([[1, y, 1], [1, y, 0], [1, y + 1, 0], [1, y + 1, 1]]), backwards([[1, y, 1], [0, y, 1], [0, y + 1, 1], [1, y + 1, 1]]),
+    backwards([[1, y, 0], [0, y, 1], [0, y + 1, 1], [1, y + 1, 0]]),
   ];
   return [solid(orient(lowerFaces)), solid(orient(upperFaces))];
 }
