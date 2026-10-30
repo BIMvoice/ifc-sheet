@@ -75,13 +75,34 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
   }
 }
 
+/** Whether a drawing holds nothing at all: no line, no cut face, no projected face. */
+export const isEmptyDrawing = (d: Drawing2D): boolean => d.lines.length === 0 && d.cutPolygons.length === 0 && d.projectionPolygons.length === 0;
+
+/**
+ * How the app draws a plan whose cut, with its own depth, shows nothing, when the model has fewer than two levels (the
+ * app scopes the bands to the storey from two up, `useDrawingGeneration.ts`): the floor side as deep as the cut is high
+ * (`constructionProjectionDepth` of a plan with no depth, `project/view-drawings.ts`), and the overhead side over the whole
+ * extent, because with one level there is no other floor to keep out. A bridge deck above a storey at 0 is seen
+ * from there: its cut at 1.2 m meets nothing, and the deck above it is what the app draws. `null` for a view that is not a
+ * plan, or a model with two levels or more (a cut with nothing in its storey is empty there, in the app too).
+ */
+export function overheadPlanConfig(view: ProjectView, config: SectionConfig, levels: readonly ProjectLevel[], extent: ModelExtent): SectionConfig | null {
+  if (view.kind !== 'plan' || levels.length >= 2) return null;
+  const below = planDepthBelowCut(view.cutHeight > 0 ? view.cutHeight : 0, config.plane.position, extent.max.y);
+  const above = Math.max(extent.max.y - extent.min.y, 1e-3);
+  return { ...config, projectionDepth: below, clipProjectionBands: true, projectionBelowDepth: below, projectionAboveDepth: above };
+}
+
 /**
  * The drawing of every view in `views` that has a plane, by view id. Views
- * whose drawing fails are left out and reported through `onError`.
+ * whose drawing fails are left out and reported through `onError`. A plan
+ * whose cut shows nothing is drawn as the app draws it (`overheadPlanConfig`);
+ * one still empty after that is reported through `onEmpty`.
  */
 export async function generateViewDrawings(
   views: readonly ProjectView[], meshes: MeshData[], levels: readonly ProjectLevel[], extent: ModelExtent,
   onError: (view: ProjectView, error: unknown) => void = () => {},
+  onEmpty: (view: ProjectView) => void = () => {},
 ): Promise<Map<string, Drawing2D>> {
   const out = new Map<string, Drawing2D>();
   if (meshes.length === 0) return out;
@@ -103,7 +124,11 @@ export async function generateViewDrawings(
       if (!config) continue;
       try {
         const projection = config.projectionDepth > 0;
-        out.set(view.id, await generator.generate(meshes, config, { includeHiddenLines: false, includeProjection: projection, includeEdges: projection, mergeLines: true }));
+        let drawing = await generator.generate(meshes, config, { includeHiddenLines: false, includeProjection: projection, includeEdges: projection, mergeLines: true });
+        const overhead = view.kind === 'plan' && isEmptyDrawing(drawing) ? overheadPlanConfig(view, config, levels, extent) : null;
+        if (overhead) drawing = await generator.generate(meshes, overhead, { includeHiddenLines: false, includeProjection: true, includeEdges: true, mergeLines: true });
+        if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);
+        out.set(view.id, drawing);
       } catch (err) {
         onError(view, err);
       }
