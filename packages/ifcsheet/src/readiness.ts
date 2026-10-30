@@ -28,6 +28,8 @@ export interface ModelFacts {
   storeys: number;
   spaces: number;
   elements: number;
+  /** Whether the model can be drawn (`hasDrawableGeometry`); absent: not judged, as in the app's per-model counts. */
+  drawable?: boolean;
   elementsWithoutStorey: number;
   elementsWithoutMaterial: number;
   elementsWithoutQuantities: number;
@@ -46,7 +48,7 @@ export interface FarElementFact {
   distance: number;
 }
 
-export type ReadinessKind = 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | 'ruralLevels' | 'ruralArea' | 'ruralAreaAtLeast' | 'titleBlockFit' | ByggesaksbimKind;
+export type ReadinessKind = 'noGeometry' | 'noStoreys' | 'noSpaces' | 'noMaterials' | 'noQuantities' | 'duplicateGlobalIds' | 'noStorey' | 'subReportDuplicates' | 'subReportGaps' | 'farElements' | 'estimatedAreas' | 'boqMissingQuantity' | 'ruralLevels' | 'ruralArea' | 'ruralAreaAtLeast' | 'titleBlockFit' | ByggesaksbimKind;
 
 export interface ReadinessFinding {
   kind: ReadinessKind;
@@ -87,8 +89,9 @@ const finding = (kind: ReadinessKind, params: Record<string, number | string>): 
 export function modelReadiness(f: ModelFacts, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, titleBlock: readonly TitleBlockMisfit[] = [], rural?: RuralScope): ReadinessFinding[] {
   // A value cut short on a sheet is the project's, not the model's: said even when the model is empty.
   const cut = titleBlock.map((m) => finding('titleBlockFit', { field: m.field, sheet: m.sheet }));
-  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return cut;
-  const out: ReadinessFinding[] = [];
+  // A model with nothing to draw is not ready, whatever else it holds (#604): `build` refuses it by the same rule.
+  const out: ReadinessFinding[] = f.drawable === false ? [finding('noGeometry', {})] : [];
+  if (f.elements === 0 && f.spaces === 0 && f.storeys === 0) return [...out, ...cut];
   if (f.storeys === 0) out.push(finding('noStoreys', {}));
   if (f.spaces === 0) out.push(finding('noSpaces', {}));
   if (f.elements > 0) {
@@ -150,6 +153,8 @@ function estimatedAreaParams(e: EstimatedAreas): Record<string, number | string>
 
 /** The English of every finding's two sentences, by catalogue key; the app's English catalogue spreads this, so it is the one copy. */
 export const READINESS_EN = {
+  'ready.noGeometry': 'The model has no geometry to draw.',
+  'ready.noGeometry.effect': 'No drawing set can be laid out (there is nothing to measure the sheets on), and the schedules that read areas and quantities from geometry stay empty.',
   'ready.noStoreys': 'The model has no building storeys.',
   'ready.noStoreys.effect': 'The set starts with no floor plans (one is made per storey) and sections get no level marks.',
   'ready.noSpaces': 'The model has no rooms (IfcSpace).',
@@ -186,6 +191,8 @@ export const READINESS_EN = {
 
 /** The same findings in Romanian (terms: `apps/viewer/src/i18n/ro-glossary.md`); the app's Romanian catalogue spreads this, so it is the one copy, and `ifcsheet check --locale ro` prints it. */
 export const READINESS_RO: Record<keyof typeof READINESS_EN, string> = {
+  'ready.noGeometry': 'Modelul nu are geometrie de desenat.',
+  'ready.noGeometry.effect': 'Nu se poate alcătui niciun set de planșe (nu există ce măsura pentru așezarea foilor), iar listele care citesc suprafețe și cantități din geometrie rămân goale.',
   'ready.noStoreys': 'Modelul nu are niveluri de clădire.',
   'ready.noStoreys.effect': 'Setul pornește fără planuri de nivel (se face unul pe nivel), iar secțiunile nu primesc cote de nivel.',
   'ready.noSpaces': 'Modelul nu are încăperi (IfcSpace).',

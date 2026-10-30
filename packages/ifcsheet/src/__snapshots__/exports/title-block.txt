@@ -38,6 +38,7 @@ RoOnlyCaption: type (type-only)
 SILENT_FACTS: value
 SOFT_BUILTINS: value
 STANDARD_CAPTIONS_EN: value
+STANDARD_CAPTIONS_RO: value
 StandardCaption: type (type-only)
 TEXT_FIT_MIN: value
 TITLE_BLOCK_CAPTIONS_RO: value
@@ -95,9 +96,11 @@ sheetScaleLine: value
 sheetScaleText: value
 sourceText: value
 sourcesOf: value
+standardCaptionsFor: value
 standardTitleBlock: value
 textWidthEm: value
 titleBlockMisfits: value
 titleBlockOf: value
 truncateToWidth: value
 withSources: value
+withTypedProjectName: value

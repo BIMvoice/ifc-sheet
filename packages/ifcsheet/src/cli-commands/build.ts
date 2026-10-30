@@ -12,6 +12,7 @@ import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { exportDxf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { withTypedProjectName } from '../title-block-fields.js';
 import { projectSetOf } from '../project-set.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
 import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from '../pac-set.js';
@@ -104,7 +105,10 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   // The project's underlays (#457) are printed on the sheets they name. The set built here has its own ids, so one that names a view or sheet this set does not have cannot print: say so.
   const underlays = project?.underlays ?? [];
-  const document = underlays.length > 0 ? { ...set.document, underlays } : set.document;
+  // --name is the project's name in the title blocks too (#614): typed, so it wins over the model's.
+  const typedTitleBlock = withTypedProjectName(set.document.titleBlock, args.name);
+  const named = typedTitleBlock ? { ...set.document, titleBlock: typedTitleBlock } : set.document;
+  const document = underlays.length > 0 ? { ...named, underlays } : named;
   const underlayWarnings = underlayNotes(document, { dxf: Boolean(args.dxf || args.handover) });
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
   // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
