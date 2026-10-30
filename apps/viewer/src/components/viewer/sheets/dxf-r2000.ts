@@ -76,7 +76,7 @@ const trueColor = (css: string) => {
  * the readers that follow it decode; a literal `\U+` in the value is escaped first so it is not read back as one.
  */
 export const escapeDxfText = (value: string): string =>
-  value.replace(/\\U\+/gi, '\\U+005CU+').replace(/[^\u0000-\u007f\u00a0-\u00ff]/gu, (ch) => {
+  value.replace(/\\U\+/gi, '\\U+005CU+').replace(/[^\x20-\x7e\u00a0-\u00ff]/gu, (ch) => {
     if (!encodeDxfCp1252(ch).hadUnmappable) return ch;
     return Array.from({ length: ch.length }, (_, i) => `\\U+${ch.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`).join('');
   });
