@@ -4,7 +4,7 @@
 
 /**
  * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
- * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the urban indicators, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the urban indicators, the joinery schedules, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -36,6 +36,9 @@ import { layoutTypeQuantities } from './type-quantities-layout.js';
 import { typeQuantitiesOver } from './type-quantities-read.js';
 import { typeLabelsOf, typesSayFor } from './type-quantities-words.js';
 import { layoutTableOnSheet } from './schedule-place.js';
+import { joineryLabelsOf, joinerySayFor } from './joinery-words.js';
+import { layoutJoineryOnSheet } from './joinery-schedule-place.js';
+import { isJoineryKind, joineryReads, joineryScaleOf, joineryViewsOf, type JoineryProjectSource, type JoineryReads, type JoineryViews } from './project-sheets-joinery.js';
 import { scheduleModelsOf } from './schedule-models.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
 import { sheetRoomsOf } from './sheet-rooms.js';
@@ -49,9 +52,11 @@ import { layoutUrban } from './urban-layout.js';
 import { urbanLabelsOf, urbanSayFor } from './urban-words.js';
 
 /** What of a project the sheets draw: its set, its schedules and the classification mappings a list may group by. */
-export interface ProjectSheetSource {
+export interface ProjectSheetSource extends Omit<JoineryProjectSource, 'set' | 'schedules'> {
   set: ProjectSet;
   schedules: readonly ProjectSchedule[];
+  /** The project's opening-line convention, which the joinery cards' opening symbols draw by; absent: `handle`. */
+  openingLines?: 'handle' | 'hinge';
   classificationMappings?: readonly ClassificationMapping[];
   /** The bill of quantities' articles (`boq` schedules sum them). */
   boqArticles?: readonly BoqArticle[];
@@ -76,6 +81,7 @@ export interface LeftOut {
 export function projectSheetOptions(
   project: ProjectSheetSource, model: OpenedModel, language: string, format: SheetLocale, modelName: string,
   onLeftOut: (left: LeftOut) => void = () => {},
+  joinery: { reads?: JoineryReads; views?: JoineryViews } = {},
 ): Pick<SheetGraphicsOptions, 'annotations' | 'schedules'> {
   const { set } = project;
   const said = new Set<string>();
@@ -100,6 +106,8 @@ export function projectSheetOptions(
   let takeoff: ReturnType<typeof takeoffRows> | undefined;
   // The quantities by type, once per classification choice: two types schedules on a sheet may choose differently.
   const byTypeCache = new Map<string, TypeQuantities>();
+  // The joinery schedules' rows: read once per kind, and only when a sheet shows one. Their cards' views are cut by the caller (`projectSheetOptionsWithViews`).
+  let joineryRead: JoineryReads | undefined;
   const registerId = project.schedules.find((s) => s.kind === 'register')?.id;
   const registerRows = (): ReturnType<typeof drawingRegisterRows> => drawingRegisterRows({
     sheets: set.sheets, titleBlock: project.titleBlock, issues: set.issues, asIndicated: say('sheets.asIndicated'), schedules: project.schedules, revisions: set.revisions, drafts: set.drafts,
@@ -164,6 +172,15 @@ export function projectSheetOptions(
         pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutTypeQuantities(data, typeLabelsOf(typesSay, format, schedule.name), paging)));
         continue;
       }
+      if (isJoineryKind(schedule.kind)) {
+        joineryRead ??= joinery.reads ?? joineryReads(project, model, modelName);
+        const data = joineryRead.dataOf(schedule);
+        if (data.entries.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the ${schedule.kind} schedule "${schedule.name}" (the model has no ${schedule.kind === 'all' ? 'door or window' : schedule.kind})`); continue; }
+        const labels = joineryLabelsOf(joinerySayFor(language), format, schedule.name);
+        const views = joinery.views?.get(schedule.id);
+        pages.set(schedule.id, (place) => layoutJoineryOnSheet({ ...place, data, labels, scale: joineryScaleOf(schedule), views, convention: project.openingLines }));
+        continue;
+      }
       if (schedule.kind !== 'list' || !schedule.list) {
         leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the ${schedule.kind} schedule "${schedule.name}"`);
         continue;
@@ -193,4 +210,17 @@ export function projectSheetOptions(
     },
     schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
   };
+}
+
+/**
+ * `projectSheetOptions` with the element views the joinery schedules' cards draw, cut from the model's meshes first (the cut is
+ * asynchronous): what `ifcsheet build --project` and the MCP server's export call, so the two print the same cards.
+ */
+export async function projectSheetOptionsWithViews(
+  project: ProjectSheetSource, model: OpenedModel, language: string, format: SheetLocale, modelName: string,
+  onLeftOut: (left: LeftOut) => void = () => {},
+): Promise<Pick<SheetGraphicsOptions, 'annotations' | 'schedules'>> {
+  const reads = joineryReads(project, model, modelName);
+  const views = reads.placed().length > 0 ? await joineryViewsOf(reads, model) : undefined;
+  return projectSheetOptions(project, model, language, format, modelName, onLeftOut, { reads, views });
 }
