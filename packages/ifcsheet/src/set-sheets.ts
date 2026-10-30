@@ -18,8 +18,11 @@ import { projectTitleFields } from './title-block-sources.js';
 import { northOfStore } from './true-north.js';
 import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 import { generateViewDrawings } from './view-drawings.js';
+import { planOpeningSymbols } from './plan-openings.js';
+import type { OpeningSymbol } from './opening-symbols.js';
+import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.js';
-import { propertySetsOf } from './joinery-schedule.js';
+import { propertySetsOf, type JoineryProject } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties, viewStyler, type PenTable } from './view-style.js';
 import { surfaceFills, type SurfaceFill } from './surface-fills.js';
 import { resolveViewGraphics } from './view-templates.js';
@@ -43,6 +46,8 @@ export interface SheetGraphicsOptions {
   annotations?: SheetAnnotations;
   /** A saved project's list schedules, drawn where they are placed (#479, `projectSheetOptions`). */
   schedules?: SheetSchedules;
+  /** The project's joinery catalogue, mapping and flips, which decide the symbol a door or window gets in a plan; default: none, so only what the model itself configures. */
+  joinery?: JoineryProject;
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -75,6 +80,15 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
     const drawing = drawings.get(view.id);
     if (drawing && view.kind === 'plan' && planSymbolsOn(resolveViewGraphics(view, doc.viewTemplates))) drawings.set(view.id, withPlanSymbols(drawing, symbols!));
   }
+  // A plan draws its doors and windows from their symbols (swing, operation, configured type, custom block), as the app's plans do (`plan-openings.ts`).
+  const openings = new Map<string, readonly OpeningSymbol[]>();
+  const dataStore = model.dataStore;
+  for (const view of dataStore ? doc.views : []) {
+    const drawing = drawings.get(view.id);
+    if (!drawing || view.kind !== 'plan') continue;
+    const sources = { live: { dataStore: dataStore!, view: null }, project: options.joinery ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
+    openings.set(view.id, planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, resolveViewGraphics(view, doc.viewTemplates)));
+  }
   // The views coloured by a property (#92): what each paints, from the same rules the app uses (`colour-fills.ts`).
   const schemes = new Map<string, SchemeResult>();
   for (const view of doc.views) {
@@ -102,5 +116,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
   const project = options.annotations || options.schedules ? { annotations: options.annotations, schedules: options.schedules } : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces, openings));
 }

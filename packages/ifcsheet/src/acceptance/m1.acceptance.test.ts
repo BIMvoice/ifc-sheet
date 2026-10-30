@@ -23,7 +23,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { EXIT, run } from '../cli.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
-import { generateViewDrawings, openModel, type OpenedModel } from '../headless.js';
+import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from '../headless.js';
+import { planOpeningSymbols } from '../plan-openings.js';
+import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
+import { resolveViewGraphics } from '../view-templates.js';
 import { readRooms } from '../room-read.js';
 import { roomSchedule } from '../room-schedule.js';
 import { drawingRegisterRows } from '../drawing-register.js';
@@ -172,6 +175,36 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
         expect(drawn.size).toBeGreaterThanOrEqual(Math.ceil(c.doors * c.drawnShare));
         expect(drawn.size).toBeLessThanOrEqual(c.doors);
       });
+
+      it.skipIf(c.doors === 0)('draws a symbol for the doors a plan cuts: they are the doors drawn, none is left out and none is invented (#587)', () => {
+        const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
+        const symbolIds = new Set<number>();
+        let cutDoors = 0, cutAndSymbolled = 0;
+        for (const view of r.set.document.views.filter((v) => v.kind === 'plan')) {
+          const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
+          const doors = planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates)).filter((s) => s.kind === 'door');
+          const seen = shown(drawing, 'IfcDoor');
+          // A symbol is the symbol of a door the plan draws, and every door its cut passes through has one.
+          for (const s of doors) { expect(seen.has(s.id), `${view.name}: door ${s.id} has a symbol but the plan does not draw it`).toBe(true); symbolIds.add(s.id); }
+          const have = new Set(doors.map((s) => s.id));
+          const cut = new Set(drawing.cutPolygons.filter((p) => p.ifcType === 'IfcDoor').map((p) => p.entityId));
+          cutDoors += cut.size;
+          cutAndSymbolled += [...cut].filter((id) => have.has(id)).length;
+          // A door symbol is its swing and leaf: shapes, not an empty mark.
+          for (const s of doors) expect(s.shapes.length + (s.heavy?.length ?? 0), `${view.name}: door ${s.id} symbol`).toBeGreaterThan(0);
+        }
+        expect(symbolIds.size, 'door symbols').toBeGreaterThan(0);
+        expect(symbolIds.size).toBeGreaterThanOrEqual(Math.ceil(c.doors * c.drawnShare));
+        expect(cutDoors).toBeGreaterThan(0);
+        expect(cutAndSymbolled, 'the doors a plan cuts that have a symbol').toBe(cutDoors);
+      });
+
+      it.skipIf(c.doors + c.windows === 0)('prints the symbols on the sheets in place of the doors\' and windows\' cut: a SYMBOLS pen on the floor plan sheets (#587)', async () => {
+        const sheets = await sheetGraphics(r.set, r.model);
+        const symbolRuns = sheets.flatMap((s) => s.pens.filter((p) => p.layer === 'SYMBOLS')).reduce((n, p) => n + p.runs.length, 0);
+        expect(symbolRuns, 'symbol runs on the sheets').toBeGreaterThan(0);
+        expect(sheets.some((s) => s.pens.some((p) => p.layer === 'SYMBOLS' && p.runs.length > 0 && !p.dash)), 'a solid symbol pen').toBe(true);
+      }, 600_000);
 
       it.skipIf(c.windows === 0)('cuts the windows and draws them on the plans', () => {
         const drawn = new Set(r.plans.flatMap((p) => [...shown(p.drawing, 'IfcWindow')]));

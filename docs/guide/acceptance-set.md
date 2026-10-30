@@ -32,8 +32,10 @@ The school is the one model where the plans do not yet draw every door and windo
 2026-10-30), and the roof storey's plan cuts nothing. Its `drawnShare` is 0.9; raise it to 1 when #586 is fixed, never lower it. It also found
 that the DXF writer overflowed the stack on its elevations, which is fixed with the suite.
 
-The suite checks that doors and windows are cut and drawn on the plans, not their swing or opening symbols: the headless engine does not draw
-those yet (#587). Add a symbol check here when #587 lands.
+The suite checks that doors and windows are cut and drawn on the plans, and (#587) that the plans carry their symbols: per model, the door symbols
+the engine draws (`planOpeningSymbols`, the code the app calls) number more than none, are symbols of doors the plan draws, and cover every door
+the plan cuts; and the printed sheets carry a `SYMBOLS` pen. The swing and opening symbols of doors and windows are drawn by the engine on plans only;
+the elevations' and sections' door and window symbols are the app's still.
 
 Other models in the repository (hello-wall, building-architecture, the Bonsai, Revit and Archicad exports from the user calls) are not in the set:
 their provenance or licence is not recorded, or they need a fixture file nobody has committed. Add one with a row in `CASES`, the counts read
