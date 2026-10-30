@@ -7,7 +7,7 @@ import type { TranslationValue } from '../types';
 export const wallEn = {
   'wall.tab': 'Wall',
   'wall.empty': 'Open an IFC model and its drawing set hangs here.',
-  'wall.demo': 'Or try the demo project: a block of flats, ground floor plus four',
+  'wall.demo': 'Or try the demo project: a block of flats, ground floor plus four storeys',
   'wall.intro.read': '{name} read',
   'wall.intro.titleStart': 'Your drawing set',
   'wall.intro.titleEnd': 'is already drawn.',
