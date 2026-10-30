@@ -13,13 +13,11 @@
 import { RelationshipType } from '@ifc-lite/data';
 import { extractAllMaterialsOnDemand, extractProjectUnits, getInheritanceChainAcrossSchemas, ProjectUnits } from '@ifc-lite/parser';
 import { classificationOf, mappingsFor, withMeasured, type ClassificationMapping, type ClassificationModel, type ScheduleClassification } from '@bimvoice/ifcsheet';
-import { materialNamesOf } from '@bimvoice/ifcsheet/project';
+import { materialNamesOf, type ScheduleModel } from '@bimvoice/ifcsheet/project';
 import { loadedClassificationModel } from '@/classification/classification-model';
-import { createListDataProvider } from '@/lib/lists';
 import { useProjectStore } from '@/project/project-store';
-import { useViewerStore } from '@/store';
 import { quantityScales } from './material-takeoff-models';
-import { elementMeshLookup, type InstancedMeshes } from './element-meshes';
+import { loadedScheduleModels, providerOf } from './schedule-models';
 import { elementTypeQuantities, typeQuantities, type TypeElement, type TypeQuantities } from './type-quantities';
 
 /** Not things a takeoff counts: openings and other features of an element, virtual elements. */
@@ -48,17 +46,13 @@ function isPhysicalElement(className: string): boolean {
  * carries the specific Qto (Qto_SlabBaseQuantities, ...), and the rule is the
  * same whichever parent class it is.
  */
-export function collectTypeElements(classify?: { mappings: readonly ClassificationMapping[]; model: ClassificationModel }, instanced?: InstancedMeshes): TypeElement[] {
-  const s = useViewerStore.getState();
+export function collectTypeElements(classify?: { mappings: readonly ClassificationMapping[]; model: ClassificationModel }, models: readonly ScheduleModel[] = loadedScheduleModels()): TypeElement[] {
   const out: TypeElement[] = [];
-  for (const [modelId, model] of s.models) {
-    const store = model.ifcDataStore;
-    if (!store || model.visible === false) continue;
-    const view = s.mutationViews.get(modelId) ?? undefined;
-    const provider = createListDataProvider(store, model.name, undefined, view);
+  for (const model of models) {
+    const { modelId, dataStore: store } = model;
+    const provider = providerOf(model);
     const scales = quantityScales(store.source.length > 0 ? extractProjectUnits(store.source, store.entityIndex) : ProjectUnits.empty());
     const hierarchy = store.spatialHierarchy;
-    const meshesOf = elementMeshLookup(model, instanced);
     const listed = new Set((provider.getAllEntityIds?.() ?? []).filter((id) => isPhysicalElement(provider.getEntityTypeName(id))));
     for (const id of listed) {
       const className = provider.getEntityTypeName(id);
@@ -68,7 +62,7 @@ export function collectTypeElements(classify?: { mappings: readonly Classificati
       const storey = hierarchy?.elementToStorey.get(id);
       const materials = classify ? [...new Set(extractAllMaterialsOnDemand(store, id).flatMap(materialNamesOf))] : [];
       const declared = elementTypeQuantities(className, provider.getQuantitySets(id), scales);
-      const q = withMeasured(declared, className, () => meshesOf(id));
+      const q = withMeasured(declared, className, () => model.meshesOf?.(id));
       out.push({
         className,
         typeClass: typeId === undefined || !typeName ? null : provider.getEntityTypeName(typeId),

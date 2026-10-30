@@ -21,6 +21,7 @@ import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-pla
 import { collectTakeoffElements } from './material-takeoff-models';
 import { takeoffRows, type TakeoffElement } from './material-takeoff';
 import { layoutMaterialTakeoff } from './material-takeoff-layout';
+import { loadedScheduleModels } from './schedule-models';
 import { collectTypeElements } from './type-quantities-models';
 import { typeQuantities, type TypeElement } from './type-quantities';
 
@@ -47,14 +48,14 @@ describe('takeoffs of FZK-Haus without its Qto sets (#74)', { skip: planModelMis
 
   before(async () => {
     await loadPlanModel(FZK_HAUS);
-    declared = { types: collectTypeElements(undefined, noInstancing), takeoff: collectTakeoffElements(noInstancing) };
+    declared = { types: collectTypeElements(undefined, loadedScheduleModels({ instanced: noInstancing })), takeoff: collectTakeoffElements(loadedScheduleModels({ instanced: noInstancing })) };
     dir = mkdtempSync(join(tmpdir(), 'fzk-no-qto-'));
     const stripped = join(dir, 'AC20-FZK-Haus-no-qto.ifc');
     const text = readFileSync(FZK_HAUS, 'utf8');
     writeFileSync(stripped, withoutQto(text));
     assert.ok(withoutQto(text).length < text.length, 'quantity sets were unlinked');
     await loadPlanModel(stripped);
-    measured = { types: collectTypeElements(undefined, noInstancing), takeoff: collectTakeoffElements(noInstancing) };
+    measured = { types: collectTypeElements(undefined, loadedScheduleModels({ instanced: noInstancing })), takeoff: collectTakeoffElements(loadedScheduleModels({ instanced: noInstancing })) };
   });
   after(() => rmSync(dir, { recursive: true, force: true }));
 
