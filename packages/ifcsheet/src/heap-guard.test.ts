@@ -1,0 +1,105 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** The memory guard of the executable (#616): the pieces, and the real `dist/bin.js` run with a heap too small for the model. */
+
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { createAbortFilter, failureMessage, heapMegabytes, localeOfArgs, userSetHeap } from './heap-guard.js';
+
+const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
+const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
+const GB = 1024 ** 3;
+
+describe('the heap the child runs with', () => {
+  it('is three quarters of the memory up to 16 GB, and none when that is no more than the default', () => {
+    expect(heapMegabytes(8 * GB)).toBe(6144);
+    expect(heapMegabytes(64 * GB)).toBe(16384);
+    expect(heapMegabytes(4 * GB)).toBeUndefined();
+  });
+  it('is the user\'s own when NODE_OPTIONS or the node arguments set one', () => {
+    expect(userSetHeap('--max-old-space-size=512', [])).toBe(true);
+    expect(userSetHeap('--max_old_space_size=512', [])).toBe(true);
+    expect(userSetHeap(undefined, ['--max-old-space-size=512'])).toBe(true);
+    expect(userSetHeap('--trace-warnings', ['--no-warnings'])).toBe(false);
+  });
+});
+
+describe('the abort filter', () => {
+  const abort = '[ifc-lite] note\n<--- Last few GCs --->\n[1:0x1] 5 ms: Mark-Compact 40 (44) -> 38 MB\n\n<--- JS stacktrace --->\n\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n----- Native stack trace -----\n 1: 0x1 node::OOMErrorHandler\n';
+  it('shows the lines before V8\'s report and holds the report back, whatever the chunking', () => {
+    for (const size of [1, 7, abort.length]) {
+      const filter = createAbortFilter();
+      let shown = '';
+      for (let i = 0; i < abort.length; i += size) shown += filter.push(abort.slice(i, i + size));
+      shown += filter.flush();
+      expect(shown).toBe('[ifc-lite] note\n');
+      expect(filter.fatal).toBe(true);
+    }
+  });
+  it('passes everything else, a last line without its newline included', () => {
+    const filter = createAbortFilter();
+    expect(filter.push('ifcsheet: a\nifcsheet: b')).toBe('ifcsheet: a\n');
+    expect(filter.flush()).toBe('ifcsheet: b');
+    expect(filter.fatal).toBe(false);
+  });
+});
+
+describe('the words', () => {
+  it('say the model is too large and what to set, in English and Romanian', () => {
+    expect(failureMessage('memory', 'en', 4096, 16 * GB)).toBe('ifcsheet: the model is too large for the memory given to it (4096 MB). Run again with NODE_OPTIONS=--max-old-space-size=14592.\n');
+    expect(failureMessage('memory', 'ro', 4096, 16 * GB)).toContain('prea mare pentru memoria alocată (4096 MB)');
+    expect(failureMessage('memory', 'ro', 4096, 16 * GB)).toContain('NODE_OPTIONS=--max-old-space-size=14592');
+  });
+  it('say there is no more memory when the computer has no more, and never suggest a smaller setting', () => {
+    expect(failureMessage('memory', 'en', 4096, 4 * GB)).toContain('no more to give');
+    expect(failureMessage('memory', 'ro', 4096, 4 * GB)).toContain('nu are mai multă');
+  });
+  it('word an abort that is not a memory one', () => {
+    expect(failureMessage('abort', 'en', undefined, 8 * GB)).toContain('stopped abruptly');
+    expect(failureMessage('abort', 'ro', undefined, 8 * GB)).toContain('s-a oprit brusc');
+  });
+  it('take the language from --locale, English otherwise', () => {
+    expect(localeOfArgs(['build', 'm.ifc', '--locale', 'ro'])).toBe('ro');
+    expect(localeOfArgs(['build', '--locale=ro'])).toBe('ro');
+    expect(localeOfArgs(['build', '--locale=xx'])).toBe('en');
+    expect(localeOfArgs(['build'])).toBe('en');
+  });
+});
+
+describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the model', () => {
+  const run = (nodeOptions: string, ...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: nodeOptions }, timeout: 120_000 });
+
+  it('exits 1 in words, with no V8 abort report on stderr and nothing on stdout', () => {
+    expect(existsSync(BIN), 'dist/bin.js is built (pnpm --filter @bimvoice/ifcsheet build)').toBe(true);
+    const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
+    const result = run('--max-old-space-size=40', 'build', FZK, '--out', out);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('the model is too large for the memory given to it');
+    expect(result.stderr).toContain('NODE_OPTIONS=--max-old-space-size=');
+    expect(result.stderr).not.toMatch(/FATAL ERROR|Native stack trace|Last few GCs|OOMErrorHandler|node::/);
+    expect(result.stdout).toBe('');
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it('words it in Romanian with --locale ro', () => {
+    const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
+    const result = run('--max-old-space-size=40', 'build', FZK, '--out', out, '--locale', 'ro');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('prea mare pentru memoria alocată');
+  });
+
+  it('builds the same model with the default settings, and passes the child\'s exit code and stdout through', () => {
+    const out = join(mkdtempSync(join(tmpdir(), 'ifcsheet-heap-')), 's.pdf');
+    const built = run('', 'build', FZK, '--out', out);
+    expect(built.status).toBe(0);
+    expect(built.stdout).toContain(`${out}: `);
+    expect(readFileSync(out).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(run('', 'build').status).toBe(2);
+  });
+});

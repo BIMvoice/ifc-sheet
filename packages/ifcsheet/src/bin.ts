@@ -5,6 +5,8 @@
 
 /** The `ifcsheet` executable: see `cli.ts`. */
 
-import { run } from './cli.js';
+import { fileURLToPath } from 'node:url';
+import { CHILD_MARK, runGuarded } from './heap-guard.js';
 
-process.exitCode = await run(process.argv.slice(2));
+// The command runs in a child with room for a large model, and a memory abort there is worded and exit 1 here (#616).
+process.exitCode = process.env[CHILD_MARK] ? await (await import('./cli.js')).run(process.argv.slice(2)) : await runGuarded(fileURLToPath(import.meta.url), process.argv.slice(2));
