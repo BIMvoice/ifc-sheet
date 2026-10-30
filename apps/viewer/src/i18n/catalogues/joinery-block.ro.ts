@@ -20,4 +20,12 @@ export const joineryBlockRo: Record<keyof typeof joineryBlockEn, TranslationValu
   'joinery.block.skipped': 'Omise în altă parte a fișierului: {list}.',
   'joinery.block.unreadable': 'Fișierul nu a putut fi citit ca DXF: {reason}',
   'joinery.block.truncated': 'Blocul e mai mare decât păstrează un simbol; o parte e lăsată deoparte.',
+  'joinery.symbol.edit': 'Editează simbolul',
+  'joinery.symbol.title': 'Simbolul în plan al {mark} {name}',
+  'joinery.symbol.hint': 'Desenează cu linii, polilinii, cercuri și arce. Cadrul punctat este golul, {width} × {depth} mm; simbolul se potrivește lățimii lui și se oglindește pentru un tip cu deschidere dreapta, cu exteriorul în sus. O formă închisă se desenează la grosimea tăieturii, o formă de pe un strat punctat, punctată. Textul și hașurile nu se păstrează.',
+  'joinery.symbol.save': 'Salvează simbolul',
+  'joinery.symbol.reset': 'Revino la cel generat',
+  'joinery.symbol.cancel': 'Renunță',
+  'joinery.symbol.needsType': 'Aplică mai întâi tipul: simbolul se păstrează pe tip.',
+  'joinery.symbol.drawn': 'Simbol: desenat aici',
 };

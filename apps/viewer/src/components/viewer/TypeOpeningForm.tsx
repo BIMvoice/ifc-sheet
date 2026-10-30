@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TypePlanBlockPicker } from './TypePlanBlockPicker';
-import { configureElementType, setTypePlanBlock, typeCustomOf, typeHeadOf, typeOpeningOf, typePlanBlockOf, typeSillOf } from '@/joinery/type-config-actions';
+import { configureElementType, setTypePlanBlock, typeCustomOf, typeHeadOf, typeOpeningOf, typePlanBlockOf, typeSillOf, typeEntryOf } from '@/joinery/type-config-actions';
 import type { ElementFacts } from '@/joinery/symbol-mapping';
 
 const DEFAULT_OPENING: TypeOpening = { operations: ['fixed'], fanlight: false };
@@ -98,7 +98,11 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
           className="h-7 text-xs" value={sill} onChange={(e) => setSill(e.target.value)}
         />
       ) : null}
-      <TypePlanBlockPicker block={block} onChange={setBlock} />
+      <TypePlanBlockPicker
+        block={block} entry={typeEntryOf(facts)} onChange={setBlock}
+        // A symbol saved from the canvas is its own explicit save: it is on the type now, not waiting for Apply.
+        onDrawn={(next) => { setBlock(next); setTypePlanBlock(facts, next); }}
+      />
       <p className="pt-1 text-2xs font-semibold uppercase tracking-wide text-foreground">{t('joinery.props.title')}</p>
       <p className="text-2xs text-muted-foreground">{t('joinery.props.hint')}</p>
       {custom.map((p, i) => (

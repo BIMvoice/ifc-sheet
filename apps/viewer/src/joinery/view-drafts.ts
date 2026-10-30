@@ -40,7 +40,7 @@ function entityOf(viewId: string, d: JoineryViewDraft): DraftEntity | null {
 }
 
 /** A working-copy entity as the type keeps it: its shape, its layer and the pen the layer gives it. Only what a schedule prints is kept. */
-function storedOf(e: DraftEntity, layers: readonly DraftLayer[]): JoineryViewDraft[] {
+export function storedOf(e: DraftEntity, layers: readonly DraftLayer[]): JoineryViewDraft[] {
   if (!isJoineryDraftType(e.shape.type)) return [];
   const layer = layers.find((l) => l.id === e.layerId);
   const pen = layerPen(layer);

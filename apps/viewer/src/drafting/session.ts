@@ -12,19 +12,19 @@
  * and command-line keywords, and drives the command state machine.
  */
 
-import { isJoineryDraftViewId, JOINERY_VIEW_COMMANDS } from '@/joinery/view-draft-id';
+import { isJoineryDraftViewId, joineryCommandAllowed } from '@/joinery/view-draft-id';
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById } from './commands/registry';
 import { namedCommand } from './command-name';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
-import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
+import { entityBounds, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyTypedLine } from './command-line';
 import { applyOrtho } from './input';
 import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
-import { draftsOfView } from './draft-store';
+import { nearestEntity, visibleEntities } from './session-entities';
 import { withSectionParts } from './section-symbol';
 import { markWitnessPoint } from './witness-point';
 import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
@@ -115,12 +115,7 @@ export function echoLine(key: TranslationKey, params?: Record<string, string | n
   say({ key, params });
 }
 
-/** The view's drafted entities on visible, unlocked layers: what a command sees as already there. */
-export function visibleEntities(viewId: string): DraftEntity[] {
-  const { drafts, draftLayers } = useProjectStore.getState();
-  const usable = new Set(draftLayers.filter((l) => l.visible && !l.locked).map((l) => l.id));
-  return draftsOfView(viewId, drafts).filter((d) => usable.has(d.layerId));
-}
+export { visibleEntities };
 
 function context(viewId: string): DraftContext {
   return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt, elementBoxesAt }, {
@@ -156,7 +151,19 @@ function finish(result: StepResult): void {
   refresh();
 }
 
-/** Point the session at the view in front (or none). A running command is cancelled on a view change. */
+/**
+ * The session as it is now, all of it (state, running command and what it was waiting for, settings, layer, origin, size scale); the
+ * returned function puts it back exactly, whatever the session was used for meanwhile (the plan symbol editor, #448).
+ */
+export function parkSession(): () => void {
+  const kept = { state: get(), command, pending, endedByUser, activeLayerId, sizeScale, userOrigin, settings: { ...settings } };
+  return () => {
+    ({ command, pending, endedByUser, activeLayerId, sizeScale, userOrigin } = kept);
+    Object.assign(settings, kept.settings);
+    useDraftingSession.setState(kept.state, true);
+  };
+}
+
 /**
  * Annotation sizes (text height, hatch scale) are model metres on a view; a
  * sheet drafts in paper millimetres, where the same settings read ×10
@@ -172,6 +179,7 @@ const scaledSettings = scaledDraftSettings(settings, () => sizeScale, () => set(
 
 /** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
 let userOrigin: Pt = { x: 0, y: 0 };
+/** Point the session at the view in front (or none). A running command is cancelled on a view change. */
 export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1, origin: Pt = { x: 0, y: 0 }): void {
   userOrigin = origin;
   setReferenceProvider(references);
@@ -195,7 +203,7 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
   // A joinery type's view keeps only some shapes: a command that would make another is refused, not drawn and lost (#492).
-  if (isJoineryDraftViewId(viewId) && !JOINERY_VIEW_COMMANDS.has(def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
+  if (isJoineryDraftViewId(viewId) && !joineryCommandAllowed(viewId, def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
   cancelCommand();
   endedByUser = false;
   say({ key: def.labelKey });
@@ -232,16 +240,7 @@ export function cancelCommand(): void {
 export function pickEntity(p: Pt, tolerance: number): DraftEntity | null {
   const { viewId } = get();
   if (!viewId) return null;
-  let best: DraftEntity | null = null;
-  let bestDist = tolerance;
-  for (const entity of visibleEntities(viewId)) {
-    const d = nearestOnEntity(entity.shape, p).dist;
-    if (d <= bestDist) {
-      best = entity;
-      bestDist = d;
-    }
-  }
-  return best;
+  return nearestEntity(visibleEntities(viewId), p, tolerance);
 }
 
 /** Ortho constrains a point against the command's base point, while its toggle is on or Ctrl is held. */
