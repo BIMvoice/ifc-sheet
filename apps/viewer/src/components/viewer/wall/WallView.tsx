@@ -77,7 +77,7 @@ export function WallView() {
       {models.size === 0 && !legacy ? (
         <div className="flex h-full flex-col items-center justify-center gap-5 text-base text-sky-200/80">
           <p className="m-0">{t('wall.empty')}</p>
-          <button type="button" className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
+          <button type="button" className="max-w-md rounded-md bg-sky-600 px-4 py-2 text-center text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
             {t('wall.demo')}
           </button>
           <NewFromTemplate />
