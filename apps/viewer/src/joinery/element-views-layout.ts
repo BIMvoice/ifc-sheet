@@ -11,7 +11,7 @@
 import { normalisedPanels, panelRect, type JoinerySpec } from '@ifc-lite/create';
 import type { ElementView, ElementViews, ViewLine } from './element-views';
 import { openingMarks, type OpeningConvention } from './symbols';
-import { joineryViewDraftPrims, joineryViewDrafts, joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
+import { blockPlanStrokes, joineryViewDraftPrims, joineryViewDrafts, joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
 import type { SchedulePrim } from './schedule-layout';
 
 type ViewName = 'front' | 'plan' | 'section';
@@ -23,7 +23,24 @@ const penOf = (l: ViewLine) => (l.kind === 'cut' ? PEN.cut : l.kind === 'seen' ?
 /** Paper millimetres a card needs beside the front view for the section. */
 export const sectionRoom = (v: ElementViews, k: number): number => v.depth * k + 8;
 /** Paper millimetres a card needs under the front view's dimension line for the plan. */
-export const planRoom = (v: ElementViews, k: number): number => v.depth * k + 10;
+export const planRoom = (v: ElementViews, k: number, spec: JoinerySpec | null = null): number => planFrame(v, spec, k).room;
+
+/**
+ * Where the plan stands under the front view's floor line, in paper millimetres: `mid` is the plan's origin below it and `room` what the
+ * card reserves from the floor line. The model's plan is the frame depth, centred. A type's DXF block (#448) is the extent of its own
+ * strokes, scaled and mirrored as they print (`blockPlanStrokes`), swing arc included, so the card reserves what the symbol draws.
+ */
+export function planFrame(v: ElementViews, spec: JoinerySpec | null, k: number): { mid: number; room: number } {
+  let up = v.depth / 2;
+  let down = v.depth / 2;
+  for (const s of (spec ? blockPlanStrokes(spec) : null) ?? []) {
+    for (const q of s.pts) {
+      up = Math.max(up, q.y);
+      down = Math.max(down, -q.y);
+    }
+  }
+  return { mid: 10 + up * k, room: 10 + (up + down) * k };
+}
 
 /**
  * A view's lines as primitives, after the type's detail level and hidden lines (`joineryViewLines`, the engine's). Each line that can
@@ -34,6 +51,12 @@ function linesOf(view: ElementView, name: ViewName, at: (x: number, y: number) =
     kind: 'path', pts: [at(l.a.x, l.a.y), at(l.b.x, l.b.y)], w: penOf(l), dashed: l.kind === 'hidden', view: name,
     ...(spec?.id && l.kind !== 'hatch' ? { pick: { type: spec.id, line: joineryViewLineId(name, l.a, l.b) } } : {}),
   }));
+}
+
+/** The type's imported plan block (#448) as primitives in place of the plan cut from the model, in the type frame; null when the type has none. */
+function planBlockPrims(spec: JoinerySpec | null, at: (x: number, y: number) => { x: number; y: number }): SchedulePrim[] | null {
+  const strokes = spec ? blockPlanStrokes(spec) : null;
+  return strokes?.map((s): SchedulePrim => ({ kind: 'path', pts: s.pts.map((q) => at(q.x, q.y)), closed: s.closed, w: s.weight === 'cut' ? PEN.cut : PEN.outline, dashed: s.dashed, view: 'plan' })) ?? null;
 }
 
 /**
@@ -58,7 +81,7 @@ export interface ViewRegion { type: string; view: ViewName; box: { x: number; y:
 export function viewRegions(v: ElementViews, spec: JoinerySpec | null, at: { fx: number; base: number }, k: number): ViewRegion[] {
   if (!spec?.id) return [];
   const { fx, base } = at;
-  const planMid = base + 10 + (v.depth * k) / 2;
+  const planMid = base + planFrame(v, spec, k).mid;
   const sectionMid = fx + (v.width * k) / 2 + 8 + (v.depth * k) / 2;
   const pad = 4;
   const region = (view: ViewName, e: ElementView, ox: number, oy: number): ViewRegion => ({
@@ -81,11 +104,11 @@ export function viewPrims(
   convention: OpeningConvention,
 ): SchedulePrim[] {
   const { fx, base } = at;
-  const planMid = base + 10 + (v.depth * k) / 2;
+  const planMid = base + planFrame(v, spec, k).mid;
   const sectionMid = fx + (v.width * k) / 2 + 8 + (v.depth * k) / 2;
   const out: SchedulePrim[] = [
     ...linesOf(v.front, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), spec),
-    ...linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec),
+    ...(planBlockPrims(spec, (x, y) => ({ x: fx + x * k, y: planMid - y * k })) ?? linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec)),
     ...linesOf(v.section, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k }), spec),
     // What the user drew on the type's views goes over them.
     ...draftsOf(spec, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), k),

@@ -27,6 +27,7 @@ import { landXmlEn } from '../catalogues/landxml.en';
 import { layersPanelEn } from '../catalogues/layers-panel.en';
 import { lensPanelEn } from '../catalogues/lens-panel.en';
 import { joineryCellEn } from '../catalogues/joinery-cell.en';
+import { joineryBlockEn } from '../catalogues/joinery-block.en';
 import { joineryHeadEn } from '../catalogues/joinery-head.en';
 import { listScheduleEn } from '../catalogues/list-schedule.en';
 import { listsEn } from '../catalogues/lists.en';
@@ -59,6 +60,7 @@ export const enFL = {
   ...lensPanelEn,
   ...joineryCellEn,
   ...joineryHeadEn,
+  ...joineryBlockEn,
   ...listScheduleEn,
   ...listsEn,
 } as const;
