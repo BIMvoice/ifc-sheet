@@ -17,7 +17,6 @@ import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
 import { farElementLabel, frameEntities } from './framing.js';
-import { withEngineLogOnStderr } from './engine-log.js';
 import { storeyElementIds } from './storey-elements.js';
 import { storeyFloorY } from './storey-origin.js';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
@@ -192,11 +191,7 @@ async function readIfcx(buffer: ArrayBuffer): Promise<{ ds: IfcDataStore; meshes
  * for IFC unless asked not to, mesh it with the wasm geometry engine. An IFCX model brings its meshes. In Node the
  * engine reads its `.wasm` from the `@ifc-lite/wasm` package on disk.
  */
-export function openModel(bytes: Uint8Array, options: OpenModelOptions = {}): Promise<OpenedModel> {
-  return withEngineLogOnStderr(() => openModelUnguarded(bytes, options));
-}
-
-async function openModelUnguarded(bytes: Uint8Array, options: OpenModelOptions): Promise<OpenedModel> {
+export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {}): Promise<OpenedModel> {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   let ds: IfcDataStore;
   let meshes: MeshData[] = [];

@@ -7,7 +7,7 @@
  * `generateDefaultSet` (so `build`) and `readinessOfModel` (so `check`, and the MCP tool) both ask.
  */
 
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,5 +52,17 @@ describe.skipIf(missing !== null)('check and build on a model with no geometry',
   it('a model with geometry raises no such finding', async () => {
     const report = JSON.parse((await go(['check', FZK, '--json'])).out) as Report;
     expect(report.findings.map((f) => f.kind)).not.toContain('noGeometry');
+  }, 120_000);
+
+  it('check exits 0 on a model that has geometry and lacks nothing: FZK with the four doors and windows given a material', async () => {
+    const text = readFileSync(FZK, 'utf8');
+    // The only finding FZK has is 4 elements without a material: the two doors and the two windows.
+    const rel = "#99999001= IFCRELASSOCIATESMATERIAL('1viJCZMGQN1RwVmEd$KW99',#12,$,$,(#27013,#31079,#66459,#74280),#14521);\n";
+    const file = join(dir, 'fzk-complete.ifc');
+    const at = text.lastIndexOf('ENDSEC;');
+    writeFileSync(file, text.slice(0, at) + rel + text.slice(at));
+    const check = await go(['check', file, '--json']);
+    expect(JSON.parse(check.out)).toEqual({ file, ready: true, findings: [] });
+    expect(check.code).toBe(EXIT.ok);
   }, 120_000);
 });
