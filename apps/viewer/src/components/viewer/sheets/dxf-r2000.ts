@@ -11,7 +11,8 @@
  * what strict readers expect) is kept as a skeleton file; this writer adds
  * line types to its LTYPE table, layers to its LAYER table and entities to
  * ENTITIES, with handles above the skeleton's, and sets $HANDSEED. Text is
- * written as windows-1252 (`encodeDxfCp1252`), declared in the header.
+ * written as windows-1252 (`encodeDxfCp1252`), declared in the header; a TEXT letter outside windows-1252 (ă, ș, ț) is written as the
+ * `\U+XXXX` escape that R2000 readers decode (#617), where a plain encode would have made it `?`.
  */
 
 import { encodeDxfCp1252 } from '@ifc-lite/drawing-2d';
@@ -69,6 +70,16 @@ const trueColor = (css: string) => {
   const [r, g, b] = rgbOf(css);
   return (r << 16) | (g << 8) | b;
 };
+
+/**
+ * A TEXT value for a windows-1252 file: a character windows-1252 has no byte for becomes `\U+XXXX` (one per UTF-16 unit, uppercase hex), which AutoCAD and
+ * the readers that follow it decode; a literal `\U+` in the value is escaped first so it is not read back as one.
+ */
+export const escapeDxfText = (value: string): string =>
+  value.replace(/\\U\+/gi, '\\U+005CU+').replace(/[^\x20-\x7e\u00a0-\u00ff]/gu, (ch) => {
+    if (!encodeDxfCp1252(ch).hadUnmappable) return ch;
+    return Array.from({ length: ch.length }, (_, i) => `\\U+${ch.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`).join('');
+  });
 
 const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString() : '0');
 const safeName = (s: string) => s.replace(/[<>/\\":;?*|=`]/g, '_').trim().slice(0, 255) || '0';
@@ -210,7 +221,7 @@ export class DxfR2000 {
     const clean = value.replace(/[\r\n]+/g, ' ').trim();
     if (!clean || !(height > 0)) return;
     const h = options.align === 'center' ? 1 : options.align === 'right' ? 2 : 0;
-    this.out.push(...this.head('TEXT', layer, options.pen), '100', 'AcDbText', '10', fmt(at.x), '20', fmt(at.y), '30', '0', '40', fmt(height), '1', clean,
+    this.out.push(...this.head('TEXT', layer, options.pen), '100', 'AcDbText', '10', fmt(at.x), '20', fmt(at.y), '30', '0', '40', fmt(height), '1', escapeDxfText(clean),
       '50', fmt(options.rotationDeg ?? 0), '7', options.tablesFace ? TABLES_DXF_STYLE : 'Standard');
     if (options.tablesFace) this.tablesFace = options.tablesFace;
     if (h) this.out.push('72', String(h), '11', fmt(at.x), '21', fmt(at.y), '31', '0');
