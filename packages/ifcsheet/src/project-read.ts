@@ -178,7 +178,7 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; extent?: unknown; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; extent?: unknown; geometryRead?: boolean; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, scheduleModelsOf(model, '', modelId)) : [];
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];

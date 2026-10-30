@@ -83,11 +83,14 @@ export function readModelFacts(sources: Iterable<FactSource>): ModelFacts {
   return facts;
 }
 
-/** The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report. */
-export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; extent?: unknown; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, titleBlock: readonly TitleBlockMisfit[] = [], rural?: RuralScope): ReadinessFinding[] {
+/**
+ * The readiness findings of one opened model (`openModel`'s result), counted and judged: what the command line and the MCP tool report.
+ * Whether the model can be drawn is judged only when its geometry was read: a model opened with `geometry: false` says nothing about it.
+ */
+export function readinessOfModel(model: { dataStore: IfcDataStore; storeys: readonly unknown[]; extent?: unknown; geometryRead?: boolean; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, subReports: readonly SubReportCheck[] = [], boq?: BoqMissing, titleBlock: readonly TitleBlockMisfit[] = [], rural?: RuralScope): ReadinessFinding[] {
   const facts = readModelFacts([{ store: model.dataStore, storeys: model.storeys.length }]);
   const far = (model.farElements ?? []).map(({ label, distance }) => ({ label, distance }));
   // The rooms measured from geometry, through the same helper the app asks (`room-estimates.ts`).
   const estimated = estimatedAreas(readRooms(model.dataStore, model.meshes ?? []).rooms);
-  return modelReadiness({ ...facts, ...('extent' in model ? { drawable: hasDrawableGeometry({ extent: model.extent }) } : {}), ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq, titleBlock, rural);
+  return modelReadiness({ ...facts, ...('extent' in model && model.geometryRead !== false ? { drawable: hasDrawableGeometry({ extent: model.extent }) } : {}), ...(far.length > 0 ? { farElements: far } : {}), ...(estimated ? { estimatedAreas: estimated } : {}) }, subReports, boq, titleBlock, rural);
 }
