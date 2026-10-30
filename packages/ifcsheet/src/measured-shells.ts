@@ -82,10 +82,15 @@ const normalOf = (s: Surface, t: number): [number, number, number] | null => {
 
 /** The solid angle of triangle t seen from p, over 4π: positive from behind its winding (Van Oosterom and Strackee). */
 function windingOf(s: Surface, t: number, p: readonly number[]): number {
-  const a = sub(vec(s, s.triangles[t]), p), b = sub(vec(s, s.triangles[t + 1]), p), c = sub(vec(s, s.triangles[t + 2]), p);
-  const la = Math.hypot(...a), lb = Math.hypot(...b), lc = Math.hypot(...c);
-  const num = dot(a, cross(b, c));
-  const den = la * lb * lc + dot(a, b) * lc + dot(b, c) * la + dot(c, a) * lb;
+  const pts = s.points, tri = s.triangles;
+  const i = tri[t] * 3, j = tri[t + 1] * 3, k = tri[t + 2] * 3;
+  const ax = pts[i] - p[0], ay = pts[i + 1] - p[1], az = pts[i + 2] - p[2];
+  const bx = pts[j] - p[0], by = pts[j + 1] - p[1], bz = pts[j + 2] - p[2];
+  const cx = pts[k] - p[0], cy = pts[k + 1] - p[1], cz = pts[k + 2] - p[2];
+  const la = Math.hypot(ax, ay, az), lb = Math.hypot(bx, by, bz), lc = Math.hypot(cx, cy, cz);
+  // a . (b x c), spelled as `dot(a, cross(b, c))` was, so every float is the one it was.
+  const num = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
+  const den = la * lb * lc + (ax * bx + ay * by + az * bz) * lc + (bx * cx + by * cy + bz * cz) * la + (cx * ax + cy * ay + cz * az) * lb;
   return Math.atan2(num, den) / (2 * Math.PI);
 }
 
@@ -133,10 +138,11 @@ export function overlapCheck(
       for (const q of [at(1 / 3, 1 / 3, 1 / 3), at(0.6, 0.2, 0.2), at(0.2, 0.6, 0.2), at(0.2, 0.2, 0.6)]) {
         for (const side of [1, -1]) {
           const x = q[0] + side * delta * nrm[0], y = q[1] + side * delta * nrm[1], z = q[2] + side * delta * nrm[2];
+          const at3 = [x, y, z];
           let w = 0;
           for (const r of ids) {
             if (!holds(boxes.get(r)!, x, y, z, tol)) continue;
-            for (const u of byPart.get(r)!) w += windingOf(s, u, [x, y, z]);
+            for (const u of byPart.get(r)!) w += windingOf(s, u, at3);
           }
           const whole = Math.round(w);
           // Not cleanly whole: the point lies on (or within rounding of) a surface; it decides nothing.
@@ -151,27 +157,43 @@ export function overlapCheck(
   return null;
 }
 
+type Target = { a: number; b: number; c: number; box: Box; nrm: [number, number, number] };
+
 /** An edge of a suspect part's triangle passing strictly through a triangle it shares no point with. */
 function crosses(
   s: Surface, suspect: readonly number[], byPart: ReadonlyMap<number, number[]>, boxes: ReadonlyMap<number, Box>,
   ids: readonly number[], tol: number,
 ): boolean {
-  const triBox = (t: number) => boxOf(s, [t]);
+  const tri = s.triangles;
+  // Each target's corners, box and normal are read once however many suspects it is near: the loop below visits every edge against every target.
+  const cache = new Map<number, Target | null>();
+  const prepared = (t: number): Target | null => {
+    let g = cache.get(t);
+    if (g === undefined) {
+      const nrm = normalOf(s, t);
+      g = nrm ? { a: tri[t], b: tri[t + 1], c: tri[t + 2], box: boxOf(s, [t]), nrm } : null;
+      cache.set(t, g);
+    }
+    return g;
+  };
   for (const p of suspect) {
     const near = ids.filter((q) => q === p || overlapping(boxes.get(p)!, boxes.get(q)!, tol));
-    const targets = near.flatMap((q) => byPart.get(q)!).map((t) => ({ t, box: triBox(t), nrm: normalOf(s, t) }));
+    const targets = near.flatMap((q) => byPart.get(q)!).flatMap((t) => {
+      const g = prepared(t);
+      return g ? [g] : [];
+    });
     for (const t of byPart.get(p)!) {
       for (let k = 0; k < 3; k++) {
-        const i = s.triangles[t + k], j = s.triangles[t + ((k + 1) % 3)];
+        const i = tri[t + k], j = tri[t + ((k + 1) % 3)];
         const P = vec(s, i), Q = vec(s, j);
+        const lo0 = Math.min(P[0], Q[0]), hi0 = Math.max(P[0], Q[0]);
+        const lo1 = Math.min(P[1], Q[1]), hi1 = Math.max(P[1], Q[1]);
+        const lo2 = Math.min(P[2], Q[2]), hi2 = Math.max(P[2], Q[2]);
         for (const g of targets) {
-          if (!g.nrm) continue;
-          const T = [0, 1, 2].map((m) => s.triangles[g.t + m]);
-          if (T.includes(i) || T.includes(j)) continue;
-          if (Math.max(P[0], Q[0]) < g.box[0] || Math.min(P[0], Q[0]) > g.box[3]
-            || Math.max(P[1], Q[1]) < g.box[1] || Math.min(P[1], Q[1]) > g.box[4]
-            || Math.max(P[2], Q[2]) < g.box[2] || Math.min(P[2], Q[2]) > g.box[5]) continue;
-          const A = vec(s, T[0]);
+          if (hi0 < g.box[0] || lo0 > g.box[3] || hi1 < g.box[1] || lo1 > g.box[4] || hi2 < g.box[2] || lo2 > g.box[5]) continue;
+          if (g.a === i || g.b === i || g.c === i || g.a === j || g.b === j || g.c === j) continue;
+          const T = [g.a, g.b, g.c];
+          const A = vec(s, g.a);
           const dp = dot(g.nrm, sub(P, A)), dq = dot(g.nrm, sub(Q, A));
           if (!((dp > tol && dq < -tol) || (dp < -tol && dq > tol))) continue;
           const f = dp / (dp - dq);
@@ -180,7 +202,7 @@ function crosses(
           let inside = true;
           for (let m = 0; m < 3 && inside; m++) {
             const U = vec(s, T[m]), e = sub(vec(s, T[(m + 1) % 3]), U);
-            inside = dot(cross(e, sub(X, U)), g.nrm) / Math.hypot(...e) > tol;
+            inside = dot(cross(e, sub(X, U)), g.nrm) / Math.hypot(e[0], e[1], e[2]) > tol;
           }
           if (inside) return true;
         }
