@@ -9,7 +9,8 @@
  */
 
 import type { Pt } from '@/drafting/types';
-import { clampToRect, nearestOnRing, rectCentre, rectRingGap, type Rect } from './label-geometry';
+import { leaderStart } from '@bimvoice/ifcsheet';
+import { nearestOnRing, rectCentre, rectRingGap, type Rect } from './label-geometry';
 
 export const LEADER_MODES = ['never', 'displaced', 'always'] as const;
 /** never: no leader; displaced: one once the label is further than the threshold from its element; always: always. */
@@ -33,17 +34,8 @@ export function leaderTip(mode: LeaderMode, label: Rect, ring: readonly Pt[], th
   return nearestOnRing(ring, rectCentre(label));
 }
 
-/** Where a leader to `tip` leaves a label's outer box: on its edge towards the tip (on the ellipse for a bubble); undefined when the tip is inside. */
-export function leaderStart(outer: Rect, bubble: boolean, tip: Pt): Pt | undefined {
-  const c = rectCentre(outer);
-  const edge = clampToRect(outer, tip);
-  if (edge.x === tip.x && edge.y === tip.y) return undefined;
-  if (!bubble) return edge;
-  const rx = (outer.x1 - outer.x0) / 2, ry = (outer.y1 - outer.y0) / 2;
-  const dx = tip.x - c.x, dy = tip.y - c.y;
-  const k = 1 / Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
-  return k >= 1 ? undefined : { x: c.x + dx * k, y: c.y + dy * k };
-}
+// Where a leader leaves a label's box is the engine's (`text-leader.ts`): the PDF of `ifcsheet build` starts a text's leader there too.
+export { leaderStart };
 
 /** An element outline kept with its label as text: `x,y` pairs in millimetres, at most 24 points. */
 export function ringToRef(ring: readonly Pt[]): string {

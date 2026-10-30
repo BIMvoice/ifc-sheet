@@ -66,8 +66,6 @@ export function projectSheetOptions(
     said.add(`${sheet}\n${what}`);
     onLeftOut({ sheet, what });
   };
-  // The sheet each view hangs on, for saying where a draft was left out.
-  const sheetOfView = new Map(set.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => [vp.viewId, `${s.number} ${s.name}`.trim()] as const)));
   const tables = new Map<string, PlacedTable>();
   const pages = new Map<string, SchedulePager>();
   const say = sheetSayFor(language);
@@ -129,18 +127,7 @@ export function projectSheetOptions(
   return {
     annotations: {
       drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, patterns: set.hatchPatterns, symbols: set.symbols, site: siteFrameOf(model), locale: format,
-      onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
     schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
   };
-}
-
-/** What a skipped draft is, in the words the build says it in. */
-function kindWords(kind: string): string {
-  switch (kind) {
-    case 'text': return "a text's frame or leader";
-    case 'dimension': return "the leader of a dimension's moved figure";
-    case 'symbol': return 'a coordinate point on a georeferenced model';
-    default: return `drafted ${kind}s`;
-  }
 }

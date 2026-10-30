@@ -8,33 +8,14 @@ import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
 import { findClampAnchorY } from './clamp-anchor';
 import { computeModelCenterInIfcMeters } from './reproject';
 import { effectiveMapConversionForGeometry } from './map-absolute';
-import { getEffectiveAxisScales, resolveMapUnitToMetreScale } from './geo-scale';
+import { getEffectiveAxisScales } from './geo-scale';
 import { divideByAxisScale, viewerUpScaleForGeometry } from './viewer-up-scale';
 import { ifcToViewerAxes } from './coordinate-frame';
 import { refusedAxisDelta, resolveMapAxisDirection } from './map-axis-direction';
+import { getMapUnitScale, mapUnitsToMeters, metersToMapUnits, viewerDeltaToProjectedDelta } from '@bimvoice/ifcsheet/georef';
+// The map unit and the viewer-to-map delta are shared with the engine's PDF (`packages/ifcsheet/src/georef/map-units.ts`).
+export { getMapUnitScale, mapUnitsToMeters, metersToMapUnits, viewerDeltaToProjectedDelta };
 
-export function getMapUnitScale(
-  projectedCRS: Pick<ProjectedCRS, 'mapUnitScale'> | undefined,
-  lengthUnitScale: number,
-): number {
-  return resolveMapUnitToMetreScale(projectedCRS?.mapUnitScale, lengthUnitScale);
-}
-
-export function mapUnitsToMeters(
-  value: number,
-  projectedCRS: Pick<ProjectedCRS, 'mapUnitScale'> | undefined,
-  lengthUnitScale: number,
-): number {
-  return value * getMapUnitScale(projectedCRS, lengthUnitScale);
-}
-
-export function metersToMapUnits(
-  value: number,
-  projectedCRS: Pick<ProjectedCRS, 'mapUnitScale'> | undefined,
-  lengthUnitScale: number,
-): number {
-  return value / getMapUnitScale(projectedCRS, lengthUnitScale);
-}
 
 /**
  * Whether to REORDER terrain sampling to prefer an orthometric source
@@ -217,30 +198,6 @@ export function computeIfcOriginHeight(
     + scaleZ * computeModelCenterInIfcMeters(coordinateInfo).ifcZ;
 }
 
-export function viewerDeltaToProjectedDelta(
-  deltaX: number,
-  deltaZ: number,
-  mapConversion: Pick<MapConversion, 'xAxisAbscissa' | 'xAxisOrdinate' | 'scale' | 'factorX' | 'factorY'>,
-  projectedCRS: Pick<ProjectedCRS, 'mapUnitScale'> | undefined,
-  lengthUnitScale: number,
-): { eastings: number; northings: number } {
-  const mapScale = getMapUnitScale(projectedCRS, lengthUnitScale);
-  const { x: scaleX, y: scaleY } = getEffectiveAxisScales(mapConversion, mapScale, lengthUnitScale);
-  // The axis is a DIRECTION: its length is not a second scale (#6700).
-  const axis = resolveMapAxisDirection(mapConversion.xAxisAbscissa, mapConversion.xAxisOrdinate);
-  if (!axis) {
-    const refused = refusedAxisDelta(mapConversion.xAxisAbscissa, mapConversion.xAxisOrdinate);
-    return { eastings: refused, northings: refused };
-  }
-  const { a: abscissa, b: ordinate } = axis;
-  const eastMeters = abscissa * scaleX * deltaX + ordinate * scaleY * deltaZ;
-  const northMeters = ordinate * scaleX * deltaX - abscissa * scaleY * deltaZ;
-
-  return {
-    eastings: metersToMapUnits(eastMeters, projectedCRS, lengthUnitScale),
-    northings: metersToMapUnits(northMeters, projectedCRS, lengthUnitScale),
-  };
-}
 
 export interface Ray3 {
   origin: { x: number; y: number; z: number };

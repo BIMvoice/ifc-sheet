@@ -16,7 +16,7 @@ import { readProjectSet } from './project-set.js';
 import { projectSheetOptions, type LeftOut } from './project-sheets.js';
 
 // These tests pass no model: its frame is not what they check.
-vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ frame: { north: null, frameOffset: { x: 0, y: 0, z: 0 } }, georeferenced: false }) }));
+vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ north: null, frameOffset: { x: 0, y: 0, z: 0 } }) }));
 
 const line = (id: string, viewId: string): DraftEntity => ({ id, viewId, layerId: '0', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, params: {} });
 const detail: ProjectView = { id: 'detail', name: 'Eaves detail', kind: 'drafting', createdAt: 0 } as ProjectView;

@@ -13,7 +13,7 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { sheetFormat, type ProjectDocument } from '@bimvoice/ifcsheet';
+import { COORDINATE_POINT_ID, sheetFormat, siteFrameOf, type ProjectDocument } from '@bimvoice/ifcsheet';
 import { sheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { northOfStore } from '@bimvoice/ifcsheet/true-north';
 import { cleanup, render } from '@/test/render.js';
@@ -55,7 +55,7 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   const units = useProjectStore.getState().unitsAndNumbers;
   const doc = { name: 'House', models: [], views: [v], sheets: [sheet] } as unknown as ProjectDocument;
   const layout = sheetGraphic(sheet, doc, new Map([['v', shown.drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) },
-    shown.drafts.length ? { annotations: { drafts: shown.drafts, layers: [], groups: [], book: {} as never, locale: sheetFormat('en', units) } } : undefined);
+    shown.drafts.length ? { annotations: { drafts: shown.drafts, layers: [], groups: [], book: { textStyles: [], dimStyles: [] }, site: siteFrameOf({ dataStore: store, coordinateInfo: undefined as never }), locale: sheetFormat('en', units) } } : undefined);
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
   return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
 }
@@ -164,6 +164,33 @@ describe('a site plan viewport: one placement on the screen, in the PDF layout a
     const { marks, layout } = await bothSides(viewport({ northArrow: false, scaleBar: false }), SITE_VIEW, site, shown);
     assert.equal(marks, null);
     assert.deepEqual(layout.symbols, { strokes: [], solids: [] });
+  });
+});
+
+describe('a coordinate point on a georeferenced model (#479): the screen and the layout write the same Easting and Northing', () => {
+  beforeEach(() => resetProject());
+  afterEach(() => { cleanup(); useViewerStore.setState({ ifcDataStore: null } as never); });
+  const point = (p: { x: number; y: number }): DraftEntity => ({ id: `cp${p.x}`, viewId: 'v', layerId: '0', shape: { type: 'symbol', symbolId: COORDINATE_POINT_ID, p, scale: 0.1, rotation: 0 }, params: {} } as DraftEntity);
+  /** The coordinate lines the screen writes (its `E ...` and `N ...` texts) and the layout's, for points drawn on the fixture. */
+  async function lines(points: { x: number; y: number }[]) {
+    const { layout } = await bothSides(viewport({}), view, undefined, { drawing, drafts: points.map(point) });
+    return layout.texts.map((t) => t.text).filter((t) => /^[EN] /.test(t));
+  }
+  const screenLines = async (points: { x: number; y: number }[]) => {
+    const store = await parseSiteFixture();
+    useViewerStore.setState({ ifcDataStore: store } as never);
+    const ui = render(<SheetPaper sheet={sheetOf(viewport({}))} projectName="House" content={() => ({ view, drawing, drafts: points.map(point) })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />);
+    return [...ui.querySelectorAll('text')].map((t) => t.textContent ?? '').filter((t) => /^[EN] /.test(t));
+  };
+
+  it('for points over the fixture\'s plan, the figures are the same and are map coordinates, not local ones', async () => {
+    const points = [{ x: 2, y: 3 }, { x: 14.5, y: 7.25 }];
+    const engine = await lines(points);
+    const screen = await screenLines(points);
+    assert.equal(engine.length, 4, `two lines a point: ${engine.join('|')}`);
+    assert.deepEqual(engine, screen);
+    // Stereo 70 eastings of the fixture are around 588 km: a local X would be a few metres.
+    assert.ok(Number(engine[0].slice(2)) > 500_000, engine[0]);
   });
 });
 

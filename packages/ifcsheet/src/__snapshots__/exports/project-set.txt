@@ -20,6 +20,13 @@ DraftShape: type (type-only)
 DraftSymbol: type (type-only)
 EPS: value
 EntityShape: type (type-only)
+FacadeString: type (type-only)
+FigureBox: type (type-only)
+FigureOptions: type (type-only)
+FigurePlace: type (type-only)
+FrameShape: type (type-only)
+GLYPH_ASCENT: value
+GLYPH_DESCENT: value
 HATCH_UNIT_M: value
 HatchLineFamily: type (type-only)
 HatchOptions: type (type-only)
@@ -27,9 +34,13 @@ HatchPattern: type (type-only)
 HatchResult: type (type-only)
 HatchSegment: type (type-only)
 Json: type (type-only)
+LIFT_DOWN: value
+LIFT_UP: value
+LINE_PITCH: value
 LayerGroup: type (type-only)
 LayerVisibilityScope: type (type-only)
 LayoutOptions: type (type-only)
+LeaderRect: type (type-only)
 LevelRef: type (type-only)
 LineType: type (type-only)
 ListSheetLabels: type (type-only)
@@ -53,6 +64,7 @@ SCALE_BAR_TARGET_MM: value
 ScheduleCell: type (type-only)
 ScheduleLayout: type (type-only)
 SchedulePrim: type (type-only)
+ScreenFrame: type (type-only)
 SectionAxisName: type (type-only)
 SiteFrame: type (type-only)
 SnapHit: type (type-only)
@@ -68,6 +80,8 @@ TEXT_FRAMES: value
 TEXT_OVERRIDES: value
 TableBlock: type (type-only)
 TableItem: type (type-only)
+TextBlock: type (type-only)
+TextFace: type (type-only)
 TextFrame: type (type-only)
 Vec3: type (type-only)
 allSymbols: value
@@ -79,13 +93,16 @@ arrowMark: value
 asTextFrame: value
 axisLayout: value
 builtInPatterns: value
+clampToRect: value
 dashFor: value
 dashOf: value
 dimStyleOf: value
+dimensionLayout: value
 drawingPointToLocal: value
 drawingToWorld: value
 entityPen: value
 fail: value
+figureUp: value
 findPattern: value
 findSymbol: value
 flattenShape: value
@@ -106,10 +123,13 @@ layerLocked: value
 layerPen: value
 layerPrints: value
 layerShows: value
+layoutFacade: value
 layoutListSchedule: value
 layoutOnSheet: value
 layoutPagedTable: value
 layoutTableOnSheet: value
+leaderOf: value
+leaderStart: value
 leaderTextRight: value
 levelWitness: value
 linearLayout: value
@@ -146,6 +166,7 @@ readView: value
 readViewTemplate: value
 readViewTemplates: value
 readableDeg: value
+rectCentre: value
 registerHolders: value
 resolveDim: value
 resolveText: value
@@ -159,9 +180,15 @@ screenSigns: value
 serializePat: value
 setSymbolLibrary: value
 sheetDrawingArea: value
+siteFrameOf: value
 sweepOf: value
 symbolDrawingScale: value
+tableWidthEm: value
 tablesFace: value
+textBlock: value
+textBoxOf: value
+textLeaderOf: value
+textLines: value
 textStyleOf: value
 textWidth: value
 trueNorthOf: value

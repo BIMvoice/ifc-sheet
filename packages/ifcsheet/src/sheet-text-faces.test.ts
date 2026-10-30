@@ -23,7 +23,7 @@ import type { SheetGraphic } from './sheet-graphic.js';
 import type { ScheduleLayout } from './schedule-prim.js';
 
 // These tests pass no model: its frame is not what they check.
-vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ frame: { north: null, frameOffset: { x: 0, y: 0, z: 0 } }, georeferenced: false }) }));
+vi.mock('./site-frame.js', async (original) => ({ ...(await original<typeof import('./site-frame.js')>()), siteFrameOf: () => ({ north: null, frameOffset: { x: 0, y: 0, z: 0 } }) }));
 
 const layout: ScheduleLayout = {
   width: 60, height: 20,

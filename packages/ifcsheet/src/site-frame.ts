@@ -6,13 +6,16 @@
  * The model's frame as a drawing's live symbols need it (true north, the render frame's shift, the map) and the per-drawing context
  * built from it (`LiveSymbolContext`, `live-symbols.ts`). The app's sheet and the engine's PDF both build the context here; they
  * differ only in how they read the frame (the app from its stores, `siteplan/site-frame.ts`; the engine from the opened model,
- * `siteFrameOf`).
+ * `siteFrameOf`, which gives a model with a map conversion the `mapPoint` the app's anchor georeference gives).
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { totalYupOffset } from '@ifc-lite/geometry/world-frame';
 import { extractGeoreferencingOnDemand } from '@ifc-lite/parser';
 import { hasStandardGeoreferencing } from './georef-gate.js';
+import { getEffectiveGeoreference } from './georef/effective-georef.js';
+import { drawingPointToMap, type MapAnchor } from './georef/map-coordinates.js';
+import { hasUsableMapGeoref } from './georef/pick-to-geo.js';
 import { drawingToWorld, type SectionAxisName, type Vec3 } from './drawing-frame.js';
 import type { Pt } from './draft-types.js';
 import type { LiveSymbolContext } from './live-symbols.js';
@@ -72,13 +75,20 @@ export function liveSymbolContext(
 
 /**
  * What the engine reads of the opened model's frame: true north, else grid north of its map conversion, as the app's `useSiteFrame`
- * does. A model with a usable map conversion (`hasStandardGeoreferencing`) is `georeferenced`: the app places its coordinates
- * through the anchor georeference (`lib/geo`), which the engine does not read, so a coordinate point on such a model is left out
- * rather than printed differently.
+ * does. A model with a usable map conversion (`hasUsableMapGeoref`) places a drawing point on the map the way the app's anchor
+ * georeference does (`drawingPointToMap`: the model is its own anchor, as with a single model open), so a coordinate point on it
+ * prints Easting and Northing, not local X and Y. The engine reads the model's own map conversion; the app's edits to it (the
+ * georeference panel) are not in a project file the engine reads.
  */
-export function siteFrameOf(model: Pick<OpenedModel, 'dataStore' | 'coordinateInfo'>): { frame: SiteFrame; georeferenced: boolean } {
+export function siteFrameOf(model: Pick<OpenedModel, 'dataStore' | 'coordinateInfo'>): SiteFrame {
   const georef = extractGeoreferencingOnDemand(model.dataStore);
-  const georeferenced = hasStandardGeoreferencing(georef);
-  const grid = georeferenced && georef?.mapConversion ? gridNorthOf(georef.mapConversion.xAxisAbscissa, georef.mapConversion.xAxisOrdinate) : null;
-  return { frame: { north: trueNorthOf(model.dataStore) ?? grid, frameOffset: totalYupOffset(model.coordinateInfo) }, georeferenced };
+  const eff = getEffectiveGeoreference(model.dataStore, model.coordinateInfo);
+  const grid = hasStandardGeoreferencing(georef) && georef?.mapConversion ? gridNorthOf(georef.mapConversion.xAxisAbscissa, georef.mapConversion.xAxisOrdinate) : null;
+  const frameOffset = totalYupOffset(model.coordinateInfo);
+  const anchor: MapAnchor | null = hasUsableMapGeoref(eff) ? { eff, originViewer: { x: -frameOffset.x, y: -frameOffset.y, z: -frameOffset.z } } : null;
+  return {
+    north: trueNorthOf(model.dataStore) ?? grid,
+    frameOffset,
+    ...(anchor ? { mapPoint: (plane: SectionPlaneConfig, p: Pt) => { const m = drawingPointToMap(plane, p, anchor); return { e: m.e, n: m.n }; } } : {}),
+  };
 }
