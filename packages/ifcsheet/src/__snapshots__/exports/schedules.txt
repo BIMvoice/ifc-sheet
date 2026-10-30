@@ -31,6 +31,7 @@ CheckOccurrence: type (type-only)
 CheckPart: type (type-only)
 ClassifiableListProvider: type (type-only)
 ContentEntry: type (type-only)
+CoveringInput: type (type-only)
 DEFAULT_JOINERY_MAPPING: value
 Dir2: type (type-only)
 DoorOperation: type (type-only)
@@ -41,6 +42,13 @@ ElementRef: type (type-only)
 EstimatedAreas: type (type-only)
 ExportCell: type (type-only)
 ExportTable: type (type-only)
+FINISHES_WORDS_EN: value
+FINISHES_WORDS_RO: value
+Finish: type (type-only)
+FinishLine: type (type-only)
+FinishSource: type (type-only)
+FinishesSay: type (type-only)
+FinishesWordKey: type (type-only)
 FootprintFit: type (type-only)
 FootprintMesh: type (type-only)
 GapType: type (type-only)
@@ -112,6 +120,9 @@ ReviewFilter: type (type-only)
 ReviewStatus: type (type-only)
 ReviewType: type (type-only)
 RoomArea: type (type-only)
+RoomFinishLabels: type (type-only)
+RoomFinishes: type (type-only)
+RoomInput: type (type-only)
 RoomRecord: type (type-only)
 RoomSchedule: type (type-only)
 RoomScheduleData: type (type-only)
@@ -127,6 +138,7 @@ SET_ORDER: value
 SHEET_WORDS_EN: value
 SHEET_WORDS_RO: value
 SORTS: value
+SURFACES: value
 ScheduleClassification: type (type-only)
 ScheduleContent: type (type-only)
 ScheduleExport: type (type-only)
@@ -148,6 +160,7 @@ SubReport: type (type-only)
 SubReportCheck: type (type-only)
 SubReportFilter: type (type-only)
 SubReportFix: type (type-only)
+Surface: type (type-only)
 TYPE_ENTRY_PREFIX: value
 TagWrite: type (type-only)
 TaggedEntry: type (type-only)
@@ -172,6 +185,8 @@ clearJoineryOverride: value
 clearListOverride: value
 computeBoq: value
 contentOf: value
+coveringArea: value
+coveringPredefinedType: value
 csvDelimiter: value
 customPropNames: value
 customValueOf: value
@@ -188,11 +203,18 @@ exportCsv: value
 fillTemplate: value
 filterPropertyNames: value
 filterReview: value
+finishHeader: value
+finishLabelsOf: value
+finishLines: value
+finishRows: value
+finishTable: value
+finishesSayFor: value
 fireOf: value
 fitFootprint: value
 fitToElement: value
 followedTags: value
 hasSelector: value
+hasSharedFinish: value
 holdsRegister: value
 inSetOrder: value
 isClean: value
@@ -206,6 +228,7 @@ keepId: value
 layoutBoq: value
 layoutRegister: value
 layoutRegisterPage: value
+layoutRoomFinishes: value
 layoutRoomSchedule: value
 levelRowId: value
 listColumnKey: value
@@ -283,6 +306,7 @@ resumeChecking: value
 reviewCounts: value
 reviewTypes: value
 roomArea: value
+roomFinishes: value
 roomSchedule: value
 roomScheduleCells: value
 roomScheduleCsv: value
@@ -309,6 +333,7 @@ subReportParams: value
 subReportsOf: value
 summaryItems: value
 summaryTable: value
+surfaceOf: value
 symbolsShown: value
 textCellText: value
 textOwner: value

@@ -19,8 +19,7 @@ import { joineryExport, layoutSchedule, type ScheduleLabels } from './schedule-l
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import { takeoffRows } from './material-takeoff';
 import { layoutMaterialTakeoff, takeoffTable } from './material-takeoff-layout';
-import { roomFinishes, type RoomInput } from './room-finishes';
-import { finishTable, layoutRoomFinishes } from './room-finishes-layout';
+import { roomFinishes, type RoomInput, finishTable, layoutRoomFinishes } from '@bimvoice/ifcsheet';
 import { typeQuantities, type TypeElement } from './type-quantities';
 import { layoutTypeQuantities, typeQuantityTable } from './type-quantities-layout';
 import { layoutRegister, registerTable } from '@bimvoice/ifcsheet';

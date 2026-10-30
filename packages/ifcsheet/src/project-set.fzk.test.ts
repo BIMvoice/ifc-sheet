@@ -159,6 +159,21 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(err).toContain('X-905 X-905: the door schedule "Doors" not printed yet');
   }, 240_000);
 
+  it('prints the finishes schedule where it was placed, with a line for each room, and no longer names it as left out (#581)', async () => {
+    const base = arranged();
+    const project = {
+      ...base,
+      sheets: [...(base.sheets as unknown[]), { id: 's-fin', number: 'X-903', name: 'Finishes', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp-fin', viewId: 'fin', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] }],
+      schedules: [...(base.schedules as unknown[]), { id: 'fin', name: 'Room finishes', kind: 'finishes', createdAt: 0 }],
+    };
+    const { code, err, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages).toHaveLength(3);
+    // AC20-FZK-Haus has no IfcCovering: its seven rooms print with empty finishes (the covered case is project-sheets-finishes.test.ts).
+    expect(pages[2]).toEqual(expect.arrayContaining(['Room finishes', 'Floor', 'Wall', 'Ceiling', 'Schlafzimmer']));
+    expect(err).not.toContain('finishes schedule');
+  }, 240_000);
+
   it('words the room and register headings in the run\'s one language: a Romanian project prints Romanian with no flags, a project recording none prints English, --locale ro words that one', async () => {
     const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
     const base = arranged();

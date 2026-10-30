@@ -26,9 +26,8 @@ import { layoutUrban } from '@/urban/urban-layout';
 import { layoutRoomSchedule } from '@bimvoice/ifcsheet';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, registerLabelsOf, type RegisterLabels } from '@bimvoice/ifcsheet';
-import { roomFinishes, type RoomFinishes } from '@/joinery/room-finishes';
+import { finishLabelsOf, layoutRoomFinishes, roomFinishes, type RoomFinishes, type RoomFinishLabels } from '@bimvoice/ifcsheet';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
-import { layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
 import type { TypeQuantities } from '@/joinery/type-quantities';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import type { ScheduleClassification } from '@bimvoice/ifcsheet';
@@ -112,11 +111,8 @@ export function useRegisterRows(wanted = true): RegisterRow[] {
 export function useRoomFinishLabels(title: string): RoomFinishLabels {
   const { t } = useTranslation();
   const locale = useSheetLocale();
-  return useMemo(() => ({
-    locale, title, number: t('finishes.number'), room: t('finishes.room'), level: t('finishes.level'),
-    floor: t('finishes.floor'), wall: t('finishes.wall'), ceiling: t('finishes.ceiling'), area: t('finishes.area'),
-    sharedNote: t('finishes.sharedNote'),
-  }), [t, locale, title]);
+  // The labels are built by the engine's `finishLabelsOf`, the build `ifcsheet build --project` prints with.
+  return useMemo(() => finishLabelsOf((key) => t(key), locale, title), [t, locale, title]);
 }
 
 /** The rooms with their finishes, read from the loaded models again only when they change. */

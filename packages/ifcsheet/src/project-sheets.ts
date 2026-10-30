@@ -4,7 +4,7 @@
 
 /**
  * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
- * sheets (the lists, the rooms schedule, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * sheets (the lists, the rooms schedule, the finishes schedule, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -21,9 +21,14 @@ import { siteFrameOf } from './site-frame.js';
 import { listScheduleTableOn } from './list-headless.js';
 import type { OpenedModel } from './model.js';
 import { layoutRegisterPage } from './register-layout.js';
+import { finishLabelsOf, finishesSayFor } from './finishes-words.js';
 import { roomScheduleWords } from './room-schedule.js';
 import { layoutRoomSchedule } from './room-schedule-layout.js';
+import { roomFinishes } from './room-finishes.js';
+import { layoutRoomFinishes } from './room-finishes-layout.js';
+import { roomInputsOf } from './room-finishes-read.js';
 import { layoutTableOnSheet } from './schedule-place.js';
+import { scheduleModelsOf } from './schedule-models.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
 import { sheetRoomsOf } from './sheet-rooms.js';
 import { SCHEDULE_CONTINUED, type PlacedTable, type SchedulePager } from './sheet-schedules.js';
@@ -72,6 +77,8 @@ export function projectSheetOptions(
   // What the rooms schedule reads of the model: only when a sheet shows one (the footprints are measured for its area summary).
   let rooms: ReturnType<typeof sheetRoomsOf> | undefined;
   let boq: ReturnType<typeof boqResult> | undefined;
+  // The finishes schedule's rooms: read once, and only when a sheet shows one.
+  let finishRooms: ReturnType<typeof roomFinishes> | undefined;
   const registerId = project.schedules.find((s) => s.kind === 'register')?.id;
   const registerRows = (): ReturnType<typeof drawingRegisterRows> => drawingRegisterRows({
     sheets: set.sheets, titleBlock: project.titleBlock, issues: set.issues, asIndicated: say('sheets.asIndicated'), schedules: project.schedules, revisions: set.revisions, drafts: set.drafts,
@@ -99,6 +106,14 @@ export function projectSheetOptions(
         const result = boq;
         const boqSay = boqSayFor(language);
         pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutBoq(result, { locale: format, title: schedule.name, say: boqSay, detail: schedule.detail === true }, paging)));
+        continue;
+      }
+      if (schedule.kind === 'finishes') {
+        finishRooms ??= roomFinishes(roomInputsOf(scheduleModelsOf(model, modelName)));
+        const read = finishRooms;
+        if (read.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the finishes schedule "${schedule.name}" (the model has no room)`); continue; }
+        const finishSay = finishesSayFor(language);
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutRoomFinishes(read, finishLabelsOf(finishSay, format, schedule.name), paging)));
         continue;
       }
       if (schedule.kind !== 'list' || !schedule.list) {
