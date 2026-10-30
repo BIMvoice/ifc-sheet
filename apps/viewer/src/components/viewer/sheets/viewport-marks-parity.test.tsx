@@ -22,7 +22,7 @@ import type { DraftEntity } from '@/drafting/types';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
-import { northArrowRotation } from '@/siteplan/true-north';
+import { northArrowRotation } from '@bimvoice/ifcsheet';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
 import { exportDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';

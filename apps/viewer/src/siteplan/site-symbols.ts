@@ -13,7 +13,7 @@ import type { Box } from '@bimvoice/ifcsheet/site-marks';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { annotationAtFactor } from '@/project/viewport-annotation';
 import type { DraftEntity, Pt, SymbolInstanceShape } from '@/drafting/types';
-import { COORDINATE_POINT_ID, type LiveSymbolContext } from './live-symbols';
+import { COORDINATE_POINT_ID, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 
 /**
  * The paper box a coordinate point and its label take (`live-symbols.ts`

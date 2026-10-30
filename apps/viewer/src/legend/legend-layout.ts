@@ -15,7 +15,7 @@ import type { AnnotationType, DraftSymbol, LegendConfig } from '@/catalogue/type
 import { hatchSegments } from '@/drafting/hatch/fill';
 import { findPattern } from '@/drafting/hatch/library';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
-import { flattenShape, placeSymbol } from '@/drafting/symbols';
+import { flattenShape, placeSymbol } from '@bimvoice/ifcsheet';
 import type { FontKind, TextStyle } from '@/drafting/styles';
 import type { Pt } from '@/drafting/types';
 import type { LegendEntry, LegendGroup } from './legend-data';

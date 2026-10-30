@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_LEGEND, type LegendConfig } from '@/catalogue/types';
 import { DEFAULT_TEXT_STYLE } from '@/drafting/styles';
-import { BUILT_IN_SYMBOLS } from '@/drafting/symbols';
+import { BUILT_IN_SYMBOLS } from '@bimvoice/ifcsheet';
 import type { LegendGroup } from './legend-data.js';
 import { layoutLegend, type LegendLabels, type LegendLayoutContext, type LegendPrim } from './legend-layout.js';
 

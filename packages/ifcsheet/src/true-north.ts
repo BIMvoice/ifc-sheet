@@ -15,7 +15,9 @@
  * WorldCoordinateSystem, so it is taken as identity).
  */
 
+import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { EntityExtractor, type IfcDataStore } from '@ifc-lite/parser';
+import { screenSigns, worldToDrawing, type SectionAxisName } from './drawing-frame.js';
 
 /** A direction in the IFC project's XY plane, unit length. */
 export interface PlanDirection {
@@ -99,4 +101,21 @@ export function siteNorth(
 /** `siteNorth` for a model as stated in its file. */
 export function northOfStore(store: IfcDataStore | null | undefined): PlanDirection | null {
   return siteNorth(trueNorthOf(store), mapConversionAxisOf(store)).north;
+}
+
+/**
+ * The rotation a north arrow takes on a plan drawing: radians, counter-clockwise as the user sees the screen or the paper, from the
+ * drawing's up to `north` (the convention `placeSymbol` turns a symbol by). `null` on anything but a cardinal plan (a section or
+ * elevation has no north to point to).
+ */
+export function northArrowRotation(plane: SectionPlaneConfig, axis: SectionAxisName, north: PlanDirection): number | null {
+  if (axis !== 'down' || plane.axis !== 'y' || plane.customPlane) return null;
+  // Project XY -> viewer (x, ., -y) -> drawing -> screen (y down).
+  const o = worldToDrawing(plane, { x: 0, y: 0, z: 0 });
+  const tip = worldToDrawing(plane, { x: north.x, y: 0, z: -north.y });
+  const { kx, ky } = screenSigns(axis);
+  const sx = (tip.x - o.x) * kx;
+  const sy = (tip.y - o.y) * ky;
+  // On screen with y up the direction is (sx, -sy); turning up (0, 1) by theta counter-clockwise gives (-sin theta, cos theta).
+  return Math.atan2(-sx, -sy);
 }

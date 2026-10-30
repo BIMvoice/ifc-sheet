@@ -14,7 +14,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { drawingToScreen, worldToDrawing } from '@/drafting/frame';
-import { flattenShape, placeSymbol } from '@/drafting/symbols';
+import { sitePlanEn } from '@/i18n/catalogues/site-plan.en';
+import { sheetTablesRo } from '@/i18n/catalogues/sheet-tables.ro';
+import { flattenShape, placeSymbol, liveSymbol, COORDINATE_LABELS, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, gridNorthOf, trueNorthOf } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt, SymbolInstanceShape } from '@/drafting/types';
 import { selectAnchorGeoref } from '@/lib/geo/select-anchor-georef';
 import { annotationAtFactor } from '@/project/viewport-annotation';
@@ -22,9 +24,7 @@ import type { ProjectView, SheetViewport } from '@/project/types';
 import { viewportTransform } from '@/components/viewer/sheets/SheetPaper';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { drawingPointToMap, type MapAnchor } from './map-coordinates';
-import { liveSymbol, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID } from './live-symbols';
 import { liveSymbolContext, siteNorth, type SiteFrame } from './site-frame';
-import { gridNorthOf, trueNorthOf } from './true-north';
 import { northOfStore } from '@bimvoice/ifcsheet/true-north';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
 import { IfcParser } from '@ifc-lite/parser';
@@ -322,5 +322,15 @@ describe('footprint from the ground storey cut (#48)', () => {
     const rings = footprintRings([wallRing, furniture], (r) => r);
     assert.equal(rings.length, 1);
     assert.ok(Math.abs(ringArea(rings[0]) - 60) < 1e-9);
+  });
+});
+
+describe('the coordinate labels the engine prints (#479)', () => {
+  it('read as the app\'s catalogues word them, in both languages', () => {
+    const word = (catalogue: Record<string, string>, key: string, value: string) => catalogue[key].replace('{value}', value);
+    for (const catalogue of [sitePlanEn, sheetTablesRo] as Record<string, string>[]) {
+      assert.deepEqual(COORDINATE_LABELS('map', '1', '2'), [word(catalogue, 'site.coordinates.e', '1'), word(catalogue, 'site.coordinates.n', '2')]);
+      assert.deepEqual(COORDINATE_LABELS('local', '1', '2'), [word(catalogue, 'site.coordinates.x', '1'), word(catalogue, 'site.coordinates.y', '2')]);
+    }
   });
 });

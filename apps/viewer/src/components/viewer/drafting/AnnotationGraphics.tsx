@@ -16,11 +16,9 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { arrowMark } from '@bimvoice/ifcsheet';
+import { arrowMark, flattenShape, missingSymbolMark, placeSymbol, liveSymbol, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
-import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
-import { liveSymbol, type LiveSymbolContext } from '@/siteplan/live-symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';

@@ -5,8 +5,8 @@
 /**
  * #479: `ifcsheet build --project` prints the drawing set the app saved, as the app's sheets show it. On AC20-FZK-Haus the Wall lays
  * out its set; a plan's viewport is moved by hand, a dimension and a text are drawn on that plan together with one of each other
- * kind the command line prints (a level mark, a leader, a radial and an angular dimension, a grid axis, two hatches, a circle
- * and an arc), and a list schedule is placed on a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
+ * kind the command line prints (a level mark, a leader, a radial and an angular dimension, a grid axis, two hatches, a circle,
+ * an arc, and four symbols: the north arrow, the scale bar, a coordinate point and one the project holds itself), and a list schedule is placed on a sheet. The project is saved as the app saves it and built with the command line. Then, against the app's sheet SVG (the one
  * the issue captures, `captureSheets`):
  *   - the PDF has a page per sheet, in the set's order, each printing its sheet's number;
  *   - the dimension's figure and the text are printed at the paper point where the sheet draws them (so the moved viewport is where
@@ -32,6 +32,7 @@ import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from 
 import { setExtent } from '@/draft-set/body';
 import { clearDraftHistory, commitDrafts, newDraft } from '@/drafting/draft-store';
 import type { EntityShape } from '@/drafting/types';
+import type { DraftSymbol } from '@/catalogue/types';
 import { captureSheets } from '@/issue/capture';
 import { addBoqArticle, updateBoqArticle } from '@/boq/boq-actions';
 import { addListScheduleToSet } from '@/joinery/list-schedule-actions';
@@ -183,7 +184,22 @@ const KINDS = (c: { x: number; y: number }): EntityShape[] => {
     { type: 'hatch', loops: [square(c.x + 1, c.y - 3, 1)], pattern: 'SOLID', scale: 1, angle: 0 },
     { type: 'circle', c: { x: c.x, y: c.y + 0.2 }, r: 0.6 },
     { type: 'arc', c: { x: c.x + 0.5, y: c.y - 1.5 }, r: 0.7, start: 0.3, end: 2.2 },
+    // The symbols: paper ones at the viewport's 1:100 (0.1 m a millimetre), the scale bar in metres, and one the project holds itself.
+    { type: 'symbol', symbolId: 'builtin:north-arrow', p: { x: c.x - 4, y: c.y + 3.2 }, scale: 0.1, rotation: 0, followsNorth: true },
+    { type: 'symbol', symbolId: 'builtin:scale-bar', p: { x: c.x + 0.5, y: c.y + 3.5 }, scale: 1, rotation: 0 },
+    { type: 'symbol', symbolId: 'builtin:coordinate-point', p: { x: c.x + 1.5, y: c.y + 1.2 }, scale: 0.1, rotation: 0 },
+    { type: 'symbol', symbolId: PROJECT_SYMBOL.id, p: { x: c.x - 1.5, y: c.y + 1.5 }, scale: 0.1, rotation: 0.4 },
   ];
+};
+
+/** A symbol only this project holds: a frame, a diagonal and a word, in paper millimetres. */
+const PROJECT_SYMBOL: DraftSymbol = {
+  id: 'project:bay-mark', name: 'Bay mark', unit: 'paper',
+  shapes: [
+    { type: 'polyline', pts: [{ x: -6, y: -3 }, { x: 6, y: -3 }, { x: 6, y: 3 }, { x: -6, y: 3 }], closed: true },
+    { type: 'line', a: { x: -6, y: -3 }, b: { x: 6, y: 3 } },
+    { type: 'text', p: { x: -4, y: 4.5 }, text: 'BAY', height: 2.5, rotation: 0 },
+  ],
 };
 
 const dirs: string[] = [];
@@ -228,6 +244,7 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
       newDraft(plan.id, '0', { type: 'text', p: { x: c.x, y: c.y - 2 }, text: 'Hand note', height: 0.25, rotation: 0 }),
       ...KINDS(c).map((shape) => newDraft(plan.id, '0', shape)),
     ]);
+    useProjectStore.setState({ symbols: [PROJECT_SYMBOL] });
     const scheduleSheetId = addListScheduleToSet('Walls by type', WALLS_BY_TYPE);
     // The other kinds the engine prints: the rooms schedule, the bill of quantities and the drawing register, each on a sheet of its own.
     const roomsSheetId = addScheduleToSet('rooms', 'Room schedule');
@@ -272,21 +289,45 @@ describe('ifcsheet build --project prints the sheets the app saved, as the app d
     // drafts in order, each in a group of its own (a line or arc as a bare path), after the drawing: they are its last children.
     const room = svgOf(planSheet.id).querySelector(`[data-viewport-id="${vp.id}"] > g`)!;
     const kinds = KINDS(c);
+    const clipRect = svgOf(planSheet.id).querySelector(`[data-viewport-id="${vp.id}"] clipPath rect`)!;
+    const [cx, cy, cw, ch] = ['x', 'y', 'width', 'height'].map((a) => Number(clipRect.getAttribute(a)));
+    const clip = { x: cx, y: cy, w: cw, h: ch };
     const ours = [...room.children].slice(-(kinds.length + 2));
     assert.equal(ours.length, kinds.length + 2, 'the sheet draws the dimension, the text and one of each other kind');
     const paths = (await pdfCorners(new Uint8Array(readFileSync(join(dir, 'set.pdf')))))[sheets.findIndex((s) => s.id === planSheet.id)];
+    let clippedAway = 0;
     kinds.forEach((kind, i) => {
       const drawn = ours[i + 2];
       const corners = svgCorners(drawn);
       assert.ok(corners.length > 0, `the sheet strokes something for the ${kind.type}`);
-      for (const corner of corners) {
+      // The sheet clips the viewport to its room, so a stroke past it (the scale bar is 100 mm of paper, wider than this room) has no
+      // corner there in the PDF, which clips its lines to the room as well.
+      const inside = corners.filter((q) => q.x > clip.x + 0.5 && q.x < clip.x + clip.w - 0.5 && q.y > clip.y + 0.5 && q.y < clip.y + clip.h - 0.5);
+      assert.ok(inside.length > 0, `part of the ${kind.type} is in the viewport's room`);
+      for (const corner of inside) {
         const off = Math.min(...paths.map((p) => Math.max(Math.abs(p.x - corner.x), Math.abs(p.y - corner.y))));
         assert.ok(off < TOLERANCE, `the ${kind.type}: a corner at (${corner.x.toFixed(2)}, ${corner.y.toFixed(2)}) is ${off.toFixed(2)} mm from the nearest path point of the PDF`);
       }
-      at(placedTexts(drawn), planPage, `the ${kind.type}`);
+      // The sheet's clipPath hides a text past the viewport's room (the scale bar's tick figures): the PDF prints the texts inside it,
+      // at the sheet's place, and none outside it.
+      const texts = placedTexts(drawn);
+      const inRoom = (t: Placed, m: number) => t.x > clip.x + m && t.x < clip.x + clip.w - m && t.y > clip.y + m && t.y < clip.y + clip.h - m;
+      const outRoom = (t: Placed) => t.x < clip.x - 0.5 || t.x > clip.x + clip.w + 0.5 || t.y < clip.y - 0.5 || t.y > clip.y + clip.h + 0.5;
+      at(texts.filter((t) => inRoom(t, 0.5)), planPage, `the ${kind.type}`);
+      for (const t of texts.filter(outRoom)) {
+        clippedAway += 1;
+        const hit = nearest(t, planPage);
+        assert.ok(!hit || hit.off >= TOLERANCE, `the ${kind.type}: "${t.text}" is outside the viewport's room (${t.x.toFixed(2)}, ${t.y.toFixed(2)}) but the PDF prints it`);
+      }
     });
+    assert.ok(clippedAway > 0, 'the scale bar\'s tick figures past the room are among the texts the sheet clips away');
     assert.ok(ours.slice(2).some((g) => placedTexts(g).some((t) => t.text === '+2.70')), 'the sheet writes the level mark\'s figure');
-    for (const word of ['level marks', 'leaders', 'radial', 'angular', 'grid axes', 'hatches', 'circles', 'arcs']) assert.ok(!stderr.includes(word), `stderr no longer names ${word} as left out: ${stderr}`);
+    // The symbols' texts (the north arrow's N, the scale bar's ticks, the coordinates, the project symbol's word) were each checked against the PDF with the rest.
+    const symbolTexts = ours.slice(2).flatMap((g, i) => (kinds[i].type === 'symbol' ? placedTexts(g).map((t) => t.text) : []));
+    assert.deepEqual(['N', 'BAY'].filter((want) => !symbolTexts.some((t) => t === want)), [], `the sheet writes the arrow's N and the project symbol's word: ${symbolTexts.join('|')}`);
+    const coordinatePoint = ours[2 + kinds.findIndex((k) => k.type === 'symbol' && k.symbolId === 'builtin:coordinate-point')];
+    assert.equal(placedTexts(coordinatePoint).length, 2, 'the sheet writes two lines of coordinates (each is checked against the PDF above)');
+    for (const word of ['symbols', 'level marks', 'leaders', 'radial', 'angular', 'grid axes', 'hatches', 'circles', 'arcs']) assert.ok(!stderr.includes(word), `stderr no longer names ${word} as left out: ${stderr}`);
 
     // Every text of the placed schedule: title, header, rows and totals.
     const scheduleSheet = sheets.find((s) => s.id === scheduleSheetId)!;

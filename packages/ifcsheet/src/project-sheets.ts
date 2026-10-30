@@ -17,6 +17,7 @@ import { boqResult } from './cli-boq.js';
 import { boqSayFor } from './boq-words.js';
 import { layoutBoq } from './boq-layout.js';
 import { drawingRegisterRows, registerFitOn, registerPaper } from './drawing-register.js';
+import { siteFrameOf } from './site-frame.js';
 import { listScheduleTableOn } from './list-headless.js';
 import type { OpenedModel } from './model.js';
 import { layoutRegisterPage } from './register-layout.js';
@@ -127,7 +128,7 @@ export function projectSheetOptions(
   const tableFace = tablesFace(set.textStyles);
   return {
     annotations: {
-      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, patterns: set.hatchPatterns, locale: format,
+      drafts: set.drafts, layers: set.draftLayers, groups: set.layerGroups, lineTypes: set.lineTypes, book: { textStyles: set.textStyles, dimStyles: set.dimStyles }, patterns: set.hatchPatterns, symbols: set.symbols, site: siteFrameOf(model), locale: format,
       onSkipped: (kind, view) => { if (view) leaveOut(sheetOfView.get(view.id) ?? view.name, kindWords(kind)); },
     },
     schedules: { tables, pages, locale: format, ...(tableFace.styled ? { face: { font: tableFace.font, italic: tableFace.italic } } : {}), ...(SCHEDULE_CONTINUED[language] ? { continued: SCHEDULE_CONTINUED[language] } : {}) },
@@ -139,7 +140,7 @@ function kindWords(kind: string): string {
   switch (kind) {
     case 'text': return "a text's frame or leader";
     case 'dimension': return "the leader of a dimension's moved figure";
-    case 'symbol': return 'symbols';
+    case 'symbol': return 'a coordinate point on a georeferenced model';
     default: return `drafted ${kind}s`;
   }
 }

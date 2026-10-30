@@ -12,7 +12,7 @@ import { draftingViewOf } from '@/drafting/drafting-view';
 import { addDetail, addDraftingMark } from '@/drafting/commands/detail';
 import { detailLink } from '@/drafting/detail-mark';
 import { settleDetailMarks } from '@/drafting/detail-mark';
-import { allSymbols, placeSymbol } from '@/drafting/symbols';
+import { allSymbols, placeSymbol } from '@bimvoice/ifcsheet';
 import type { DraftEntity, EntityShape } from '@/drafting/types';
 import { addProjectSheet, addProjectView, duplicateProjectView, resetProject, setSheetNumber, useProjectStore } from '@/project/project-store';
 import { detailNumberOf } from '@/project/detail';
