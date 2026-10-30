@@ -22,3 +22,8 @@ export function storeClassifications(stores: ReadonlyMap<string, IfcDataStore> |
     },
   };
 }
+
+/** The model's own references (#89) as a `ScheduleModel` carries them: the one fill both the app and `scheduleModelsOf` use, and the default of a model that sets none. */
+export function modelClassification(model: { modelId: string; dataStore: IfcDataStore }): ClassificationModel {
+  return storeClassifications(new Map([[model.modelId, model.dataStore]]));
+}

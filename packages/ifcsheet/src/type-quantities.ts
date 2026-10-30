@@ -13,12 +13,13 @@
  * element with no figure at all is counted, left out of the sums and noted in
  * `noQto`.
  *
- * Pure: elements in, rows out. `collectTypeElements` reads the loaded models
+ * Pure: elements in, rows out. `typeElementsOf` (`type-quantities-read.ts`) reads models
  * into that input.
  */
 
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import type { ClassificationResult, MeasureRefusal, QuantitySource } from '@bimvoice/ifcsheet';
+import type { ClassificationResult } from './classification.js';
+import type { MeasureRefusal, QuantitySource } from './measured-quantities.js';
 
 export interface TypeElement {
   /** IFC class, `IfcWall`. */

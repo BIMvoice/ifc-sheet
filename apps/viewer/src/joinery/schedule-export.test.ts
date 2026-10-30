@@ -18,8 +18,8 @@ import { csvDelimiter, exportCsv, exportXlsx, scheduleFileName, type ExportCell,
 import { joineryExport, layoutSchedule, type ScheduleLabels } from './schedule-layout';
 import type { ScheduleData, ScheduleEntry } from './schedule-data';
 import { roomFinishes, type RoomInput, finishTable, layoutRoomFinishes } from '@bimvoice/ifcsheet';
-import { typeQuantities, type TypeElement } from './type-quantities';
-import { layoutTypeQuantities, typeQuantityTable } from './type-quantities-layout';
+import { typeQuantities, type TypeElement } from '@bimvoice/ifcsheet';
+import { layoutTypeQuantities, typeQuantityTable } from '@bimvoice/ifcsheet';
 import { layoutRegister, registerTable } from '@bimvoice/ifcsheet';
 import { layoutUrban, urbanTable, type UrbanLabels } from '@/urban/urban-layout';
 import type { UrbanIndicators } from '@/urban/indicators';

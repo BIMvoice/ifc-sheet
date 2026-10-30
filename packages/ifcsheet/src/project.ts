@@ -29,8 +29,9 @@ export {
 } from './joinery-schedule.js';
 export { roomInputsOf } from './room-finishes-read.js';
 export { takeoffElementsOf } from './material-takeoff-read.js';
+export { typeElementsOf, typeQuantitiesOver } from './type-quantities-read.js';
 export { scheduleModelsOf, type OpenedScheduleSource } from './schedule-models.js';
 export { discoverModelRows, mergeFound, readModelRowCells, readModelRowValues, type ModelRowCells, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
 export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';
-export { storeClassifications } from './classification-read.js';
+export { modelClassification, storeClassifications } from './classification-read.js';

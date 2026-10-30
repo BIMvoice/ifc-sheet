@@ -12,11 +12,13 @@
  * explained under the table (#74, `measured-marks.ts`).
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
-import type { ScheduleLayout } from './schedule-layout';
-import type { ExportTable } from './schedule-export';
-import { layoutPagedTable, PEN, type PagedOptions, type TableBlock, marked, measuredCell, measuredNoteItems, type MeasuredWords } from '@bimvoice/ifcsheet';
-import type { Totals, TypeQuantities } from './type-quantities';
+import { sheetNumber } from './sheet-number.js';
+import type { SheetLocale } from './units-and-numbers.js';
+import type { ScheduleLayout } from './schedule-prim.js';
+import type { ExportTable } from './schedule-csv.js';
+import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table.js';
+import { marked, measuredCell, measuredNoteItems, type MeasuredWords } from './measured-marks.js';
+import type { Totals, TypeQuantities } from './type-quantities.js';
 
 export interface TypeQuantityLabels {
   /** The language the figures on paper are written in ("12,50" in Romanian); the CSV and XLSX never use it. */

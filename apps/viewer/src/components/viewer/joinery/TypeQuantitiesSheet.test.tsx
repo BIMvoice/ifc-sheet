@@ -16,7 +16,7 @@ import { useViewerStore } from '@/store';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { startDrawingSet, addScheduleToSet } from '@/project/drawing-set-actions';
 import { updateViewport } from '@/project/sheets';
-import { typeQuantities } from '@/joinery/type-quantities';
+import { typeQuantities } from '@bimvoice/ifcsheet';
 import { collectTypeElements } from '@/joinery/type-quantities-models';
 import { WallSheet } from '../wall/WallSheet';
 import { sheetSvgText } from '../sheets/sheet-export';

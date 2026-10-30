@@ -19,7 +19,7 @@ import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { roomFinishes, finishTable, type RoomFinishLabels, takeoffRows, takeoffTable, type TakeoffLabels } from '@bimvoice/ifcsheet';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
-import { typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import { typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { registerTable, type RegisterLabels } from '@bimvoice/ifcsheet';
 import { urbanTable, type UrbanLabels } from '@/urban/urban-layout';
 import type { UrbanAreas } from '@/urban/urban-models';

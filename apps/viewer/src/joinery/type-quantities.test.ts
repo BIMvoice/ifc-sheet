@@ -10,9 +10,9 @@ import { QuantityType, RelationshipType, type QuantitySet } from '@ifc-lite/data
 import { extractQuantitiesOnDemand } from '@ifc-lite/parser';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
-import { elementTypeQuantities, typeQuantities, type TypeElement } from './type-quantities';
+import { elementTypeQuantities, typeQuantities, type TypeElement } from '@bimvoice/ifcsheet';
 import { collectTypeElements } from './type-quantities-models';
-import { typeQuantityLines, typeQuantityTable, type TypeQuantityLabels } from './type-quantities-layout';
+import { typeQuantityLines, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { csvLines, tableCsv } from './export-test-util';
 
 const LABELS: TypeQuantityLabels = {

@@ -29,6 +29,7 @@ ChangedSheet: type (type-only)
 CheckEntry: type (type-only)
 CheckOccurrence: type (type-only)
 CheckPart: type (type-only)
+ClassTotal: type (type-only)
 ClassifiableListProvider: type (type-only)
 ContentEntry: type (type-only)
 CoveringInput: type (type-only)
@@ -167,6 +168,8 @@ SubReportFix: type (type-only)
 Surface: type (type-only)
 TAKEOFF_WORDS_EN: value
 TAKEOFF_WORDS_RO: value
+TYPES_WORDS_EN: value
+TYPES_WORDS_RO: value
 TYPE_ENTRY_PREFIX: value
 TagWrite: type (type-only)
 TaggedEntry: type (type-only)
@@ -176,7 +179,16 @@ TakeoffRow: type (type-only)
 TakeoffSay: type (type-only)
 TakeoffWordKey: type (type-only)
 TextHolder: type (type-only)
+Totals: type (type-only)
+TypeElement: type (type-only)
 TypeFacts: type (type-only)
+TypeQuantities: type (type-only)
+TypeQuantitiesOptions: type (type-only)
+TypeQuantityLabels: type (type-only)
+TypeQuantityLine: type (type-only)
+TypeRow: type (type-only)
+TypesSay: type (type-only)
+TypesWordKey: type (type-only)
 addTextRow: value
 applyContent: value
 boqLineText: value
@@ -210,6 +222,7 @@ drawingRegisterRows: value
 dropJoineryOverrides: value
 elementCount: value
 elementQuantities: value
+elementTypeQuantities: value
 estimatedAreas: value
 exportCsv: value
 fillTemplate: value
@@ -243,6 +256,7 @@ layoutRegister: value
 layoutRegisterPage: value
 layoutRoomFinishes: value
 layoutRoomSchedule: value
+layoutTypeQuantities: value
 levelRowId: value
 listColumnKey: value
 listExportTable: value
@@ -363,8 +377,14 @@ textRowId: value
 textRowsOf: value
 thermalOf: value
 tidy: value
+totalClassOf: value
 typeIdentityOf: value
 typeLabel: value
+typeLabelsOf: value
+typeQuantities: value
+typeQuantityLines: value
+typeQuantityTable: value
+typesSayFor: value
 unitDimension: value
 withListClassification: value
 withListOverrides: value
