@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HatchPattern } from '@bimvoice/ifcsheet/hatch';
-import { aciOf, DxfR2000, dxfLineWeight, ltypeName } from './dxf-r2000';
+import { aciOf, DxfR2000, dxfLineWeight, escapeDxfText, ltypeName } from './dxf-r2000';
 
 const read = (w: DxfR2000) => new TextDecoder('windows-1252').decode(w.bytes('test'));
 
@@ -96,5 +96,32 @@ describe('DxfR2000', () => {
         assert.ok(Math.abs(Math.abs(-f.dx * Math.sin(a) + f.dy * Math.cos(a)) - 3) < 1e-3, `${angles[i]} degrees (mirrored ${mirrored}): 3 mm between the lines`);
       });
     }
+  });
+});
+
+/** What an R2000 reader makes of a TEXT value: each `\U+XXXX` becomes its character. */
+const decodeDxfText = (v: string) => v.replace(/\\U\+([0-9A-Fa-f]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+/** The TEXT values (group 1) of a document. */
+const textValues = (dxf: string): string[] => {
+  const lines = dxf.split('\n').map((l) => l.replace(/\r$/, ''));
+  const out: string[] = [];
+  for (let i = 0; i + 1 < lines.length; i += 2) if (lines[i].trim() === '1') out.push(lines[i + 1]);
+  return out;
+};
+
+describe('TEXT outside windows-1252 (#617)', () => {
+  const TITLE = 'Planșeu țiglă ă Î â';
+  it('writes ș ț ă as \\U+XXXX escapes and keeps Î and â as bytes, and the text reads back whole', () => {
+    const w = new DxfR2000();
+    w.text({ x: 0, y: 0 }, TITLE, 3, '0');
+    const dxf = read(w);
+    assert.ok(!dxf.includes('?'), 'no replacement character');
+    const [value] = textValues(dxf).filter((v) => v.startsWith('Plan'));
+    assert.equal(value, 'Plan\\U+0219eu \\U+021Bigl\\U+0103 \\U+0103 Î â');
+    assert.equal(decodeDxfText(value), TITLE);
+  });
+
+  it('escapes a literal \\U+ so it reads back as typed', () => {
+    assert.equal(decodeDxfText(escapeDxfText('a\\U+0103b ș')), 'a\\U+0103b ș');
   });
 });
