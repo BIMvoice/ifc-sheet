@@ -1,3 +1,4 @@
+AXIS_CODE: value
 Arrangement: type (type-only)
 BUILT_IN_TEMPLATES: value
 BoundedBandsInput: type (type-only)
@@ -25,6 +26,10 @@ FramingOptions: type (type-only)
 ISO_PAPERS: value
 LEVEL_MATCH_TOLERANCE_M: value
 MARGIN_MM: value
+MeshOutline2dFn: type (type-only)
+MeshOutlineHandle: type (type-only)
+MeshOutlineInput: type (type-only)
+MeshOutlineProvider: type (type-only)
 ModelExtent: type (type-only)
 NEXT_FLOOR_CLEARANCE_M: value
 NUMBER_GROUPS: value
@@ -33,6 +38,8 @@ PAPER_MM: value
 PER_SHEET: value
 PROJECT_FILE_FORMAT: value
 PROJECT_FILE_VERSION: value
+PlanBandOptions: type (type-only)
+PlanBandsInput: type (type-only)
 Point3: type (type-only)
 Point3D: type (type-only)
 ProjectionBands: type (type-only)
@@ -68,6 +75,7 @@ boxGap: value
 buildDrawingSet: value
 choosePaper: value
 createEntityBoundsLookup: value
+createMeshOutlineProvider: value
 customPlaneCenter: value
 declaredVersion: value
 defaultPlanCutHeight: value
@@ -116,6 +124,7 @@ paperSigns: value
 placeViewports: value
 placer: value
 planDepthBelowCut: value
+planProjectionBands: value
 planRenumber: value
 planViewFor: value
 proposalDepth: value
@@ -143,6 +152,7 @@ sheetSeries: value
 steppedUpNote: value
 storeyElementIds: value
 storeyFloorY: value
+storeyFloorsOf: value
 syncDefaultViews: value
 templateFields: value
 templateFromSheet: value

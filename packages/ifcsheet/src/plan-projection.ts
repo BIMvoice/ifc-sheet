@@ -9,6 +9,7 @@
  * engine left blank because each kept its own copy of it.
  */
 
+import { currentFloorBands, storeyFloorsFromMeshes, type StoreyFloorMesh } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from './document.js';
 import { planDepthBelowCut } from './view-defaults.js';
 
@@ -62,4 +63,68 @@ export interface BoundedBandsInput {
 export function boundedProjectionBands(base: ProjectionBands, input: BoundedBandsInput): ProjectionBands {
   const below = input.plainPlan ? planDepthBelowCut(input.depth, input.position, input.axisMax) : input.depth;
   return { below, above: input.depth === 0 || !input.down ? 0 : base.above };
+}
+
+/**
+ * The floors of a model's storeys along the cut axis, ascending, for `scopedBands`; `null` when the model cannot be
+ * scoped to one storey: more than one building (their staggered storeys would cap a cut with another building's
+ * floor) or no hierarchy. The app and the engine both read the floors here.
+ */
+export function storeyFloorsOf(meshes: ReadonlyArray<StoreyFloorMesh>, hierarchy: { byBuilding: ReadonlyMap<unknown, unknown>; elementToStorey: ReadonlyMap<number, number> } | null | undefined): number[] | null {
+  if (!hierarchy || hierarchy.byBuilding.size > 1) return null;
+  return storeyFloorsFromMeshes(meshes, hierarchy.elementToStorey);
+}
+
+export interface PlanBandsInput {
+  /** The view's bounded depth (`viewProjection`), or `null` for the automatic bands. */
+  depth: number | null;
+  /** Whether the view projects at all (not a bounded depth of 0, not switched off). */
+  projectionOn: boolean;
+  /** The storeys' floors (`storeyFloorsOf`), or `null` to leave the bands over the whole extent; with fewer than two there is no other floor to keep out. */
+  floors: readonly number[] | null;
+  position: number;
+  axisMin: number;
+  axisMax: number;
+  /** The cut looks down (a plan). */
+  down: boolean;
+  custom: boolean;
+  flipped: boolean;
+  reflected: boolean;
+  /** The automatic depth a section / elevation projects (the app reads it from its plane); read only off a plan. */
+  automaticDepth?: number | null;
+}
+
+/** What `createSectionConfig` takes from the bands: spread it into the config. */
+export interface PlanBandOptions {
+  projectionDepth: number;
+  clipProjectionBands: boolean;
+  projectionBelowDepth: number;
+  projectionAboveDepth: number;
+}
+
+/**
+ * The projection bands of a cut, the one computation the app's drawing hook and the engine's sheets share (#623):
+ * the whole extent on both sides of the cut, scoped to the storey the cut sits in from two floors up (a roof two
+ * levels up stays off the plan), then the view's own depth (`boundedProjectionBands`), then the one-sided band of a
+ * reflected plan. `currentFloorBands` speaks geometric depths (`below` toward the floor) and the band classifier
+ * speaks flip-adjusted ones, so a plane that looks up (flipped, reflected) swaps the two.
+ */
+export function planProjectionBands(i: PlanBandsInput): PlanBandOptions {
+  const fullExtent = Math.max(i.axisMax - i.axisMin, 1e-3);
+  let below = fullExtent;
+  let above = fullExtent;
+  if (i.projectionOn && i.down && !i.custom && i.floors && i.floors.length >= 2) {
+    const bands = currentFloorBands([...i.floors], i.position, i.axisMin, i.axisMax);
+    const up = i.flipped || i.reflected;
+    below = up ? bands.above : bands.below;
+    above = up ? bands.below : bands.above;
+  }
+  if (i.projectionOn && (i.custom || !i.down)) {
+    below = i.automaticDepth ?? 1e-3;
+    above = 1e-3;
+  }
+  const bounded = i.depth !== null && Number.isFinite(i.depth) && i.depth >= 0;
+  if (bounded) ({ below, above } = boundedProjectionBands({ below, above }, { depth: i.depth as number, position: i.position, axisMax: i.axisMax, down: i.down, plainPlan: i.down && !i.custom && !i.flipped && !i.reflected }));
+  if (i.reflected) above = 1e-3; // a reflected ceiling plan sees only above its cut
+  return { projectionDepth: bounded ? below : (i.axisMax - i.axisMin) * 0.5, clipProjectionBands: bounded, projectionBelowDepth: below, projectionAboveDepth: above };
 }
