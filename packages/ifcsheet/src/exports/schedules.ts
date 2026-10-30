@@ -106,4 +106,8 @@ export {
   type ClassTotal, type Totals, type TypeElement, type TypeQuantities, type TypeQuantitiesOptions, type TypeRow,
 } from '../type-quantities.js';
 export { layoutTypeQuantities, typeQuantityLines, typeQuantityTable, type TypeQuantityLabels, type TypeQuantityLine } from '../type-quantities-layout.js';
+// The urban indicators (#581): the layout, the words and the site area they are measured on. Measuring them from models is `/urban`.
+export { layoutUrban, signedLevel, urbanTable, NONE as URBAN_NONE, type UrbanLabels } from '../urban-layout.js';
+export { URBAN_WORDS_EN, URBAN_WORDS_RO, siteSourceNote, urbanLabelsOf, urbanSayFor, type UrbanLabelFacts, type UrbanSay, type UrbanWordKey } from '../urban-words.js';
+export { plotAreaOf, readSiteArea, siteAreaOf, type SiteAreaChoice, type SiteAreaProject, type SiteAreaSource } from '../site-area.js';
 export { TYPES_WORDS_EN, TYPES_WORDS_RO, typeLabelsOf, typesSayFor, type TypesSay, type TypesWordKey } from '../type-quantities-words.js';

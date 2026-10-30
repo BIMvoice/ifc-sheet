@@ -4,7 +4,7 @@
 
 /**
  * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
- * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the urban indicators, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -39,11 +39,14 @@ import { layoutTableOnSheet } from './schedule-place.js';
 import { scheduleModelsOf } from './schedule-models.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
 import { sheetRoomsOf } from './sheet-rooms.js';
+import { sheetUrbanOf, urbanResultOf } from './sheet-urban.js';
 import { SCHEDULE_CONTINUED, type PlacedTable, type SchedulePager } from './sheet-schedules.js';
 import { registerLabelsOf, roomScheduleLabelsOf, sheetSayFor } from './sheet-words.js';
 import type { ProjectSchedule } from './sub-reports.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import type { UrbanSettings } from './urban-indicators.js';
+import { layoutUrban } from './urban-layout.js';
+import { urbanLabelsOf, urbanSayFor } from './urban-words.js';
 
 /** What of a project the sheets draw: its set, its schedules and the classification mappings a list may group by. */
 export interface ProjectSheetSource {
@@ -54,8 +57,10 @@ export interface ProjectSheetSource {
   boqArticles?: readonly BoqArticle[];
   /** The project's title block values, the register's revision and date read them with the set's issues and revisions. */
   titleBlock?: Record<string, string>;
-  /** The urban indicators' settings the room schedule's area summary is measured with. */
+  /** The urban indicators' settings the room schedule's area summary and the urban schedule are measured with. */
   urbanSettings?: UrbanSettings;
+  /** The site area typed in the project, m² (`siteArea`): the urban schedule's POT and CUT are measured on it before the plot drawn on a site plan and the model's IfcSite. */
+  siteArea?: number;
 }
 
 /** Something a sheet of the project holds that the engine does not print yet, said once per kind and sheet. */
@@ -84,6 +89,10 @@ export function projectSheetOptions(
   const say = sheetSayFor(language);
   // What the rooms schedule reads of the model: only when a sheet shows one (the footprints are measured for its area summary).
   let rooms: ReturnType<typeof sheetRoomsOf> | undefined;
+  // The levels, rooms and footprints, measured once and shared by the rooms schedule and the urban schedule; and the indicators on the site area.
+  let measured: ReturnType<typeof sheetUrbanOf> | undefined;
+  const measure = () => (measured ??= sheetUrbanOf(model, modelName));
+  let urban: ReturnType<typeof urbanResultOf> | undefined;
   let boq: ReturnType<typeof boqResult> | undefined;
   // The finishes schedule's rooms: read once, and only when a sheet shows one.
   let finishRooms: ReturnType<typeof roomFinishes> | undefined;
@@ -106,11 +115,19 @@ export function projectSheetOptions(
         continue;
       }
       if (schedule.kind === 'rooms') {
-        rooms ??= sheetRoomsOf(model, project.urbanSettings);
+        rooms ??= sheetRoomsOf(measure(), project.urbanSettings);
         const read = rooms;
         if (!read.data) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the rooms schedule "${schedule.name}" (the model has no room)`); continue; }
         const data = read.data;
         pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutRoomSchedule(data.schedule, roomScheduleLabelsOf(say, roomScheduleWords(language), format, schedule.name, data, read.summary), paging)));
+        continue;
+      }
+      if (schedule.kind === 'urban') {
+        urban ??= urbanResultOf(measure().areas, { siteArea: project.siteArea, views: set.views, drafts: set.drafts, urbanSettings: project.urbanSettings });
+        const read = urban;
+        if (!read.result.storeys.some((s) => s.builtArea !== null)) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the urban schedule "${schedule.name}" (no storey of the model has a wall, column or slab to measure)`); continue; }
+        const urbanSay = urbanSayFor(language);
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutUrban(read.result, urbanLabelsOf(urbanSay, format, schedule.name, read.areas, read.site), paging)));
         continue;
       }
       if (schedule.kind === 'boq') {

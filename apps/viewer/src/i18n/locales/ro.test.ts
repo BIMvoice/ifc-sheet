@@ -118,7 +118,7 @@ describe('Romanian catalogue (#53)', () => {
       'site.balance.title (components/viewer/siteplan/SiteBalance.tsx)',
       'takeoff.material (packages/ifcsheet/src/takeoff-words.ts)',
       'typeQty.type (packages/ifcsheet/src/type-quantities-words.ts)',
-      'urban.ac (components/viewer/urban/useUrban.ts)',
+      'urban.ac (packages/ifcsheet/src/urban-words.ts)',
     ]);
   });
 

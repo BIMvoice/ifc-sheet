@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { FINISHES_WORDS_EN, TAKEOFF_WORDS_EN, TYPES_WORDS_EN } from '@bimvoice/ifcsheet';
+import { FINISHES_WORDS_EN, TAKEOFF_WORDS_EN, TYPES_WORDS_EN, URBAN_WORDS_EN } from '@bimvoice/ifcsheet';
 import { en } from './en';
 import { KEY_COMMANDS } from '../lib/commands/keyboard-commands';
 import { shownOnTheWall } from '../lib/commands/wall-key-commands';
@@ -90,6 +90,11 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
   for (const key of Object.keys(TYPES_WORDS_EN)) {
     if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
     found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/type-quantities-words.ts'));
+  }
+  // #581: and the urban indicators' words (`urban.*`), which the engine words for `ifcsheet build`.
+  for (const key of Object.keys(URBAN_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/urban-words.ts'));
   }
   return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
 }

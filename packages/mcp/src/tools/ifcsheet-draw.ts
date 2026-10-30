@@ -13,7 +13,7 @@
  */
 
 import {
-  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectLanguage, readProjectSet, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
+  boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readProjectLanguage, readProjectSet, readSiteArea, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
   type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
@@ -103,6 +103,7 @@ function projectOf(document: ProjectDocument): ProjectSheetSource | null {
   return {
     set: readProjectSet(raw), schedules, classificationMappings: readClassificationMappings(raw.classificationMappings),
     boqArticles: readBoqArticles(raw.boqArticles), ...(document.titleBlock ? { titleBlock: document.titleBlock } : {}), ...(urbanSettings ? { urbanSettings } : {}),
+    ...(readSiteArea(raw.siteArea) !== undefined ? { siteArea: readSiteArea(raw.siteArea) } : {}),
   };
 }
 

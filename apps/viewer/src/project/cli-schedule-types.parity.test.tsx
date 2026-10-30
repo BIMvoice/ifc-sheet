@@ -10,6 +10,8 @@
  *   - the rows are equal, are not empty, hold a measured figure, and the classified and grouped reads carry the mapping's codes and the model's;
  *   - the CSV tables and the texts of the table the app puts on a sheet and the engine's pager prints are equal, in English and in Romanian;
  *   - the engine's table of words is the app's catalogues', key by key, in both languages.
+ * Two more models cover what the first cannot: an element that carries references of two classification systems (the schedule's mapping
+ * picks the one it speaks for, not the first), and a model with no reference at all (the codes are the mapping's alone).
  */
 
 import '@/test/setup-dom.js';
@@ -31,6 +33,7 @@ import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-pla
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
+import { extractClassificationsOnDemand } from '@ifc-lite/parser';
 
 const TYPE_240 = 'Leichtbeton 102890359 240';
 const MAPPING: ClassificationMapping = {
@@ -40,6 +43,7 @@ const MAPPING: ClassificationMapping = {
     { by: 'type', match: 'Eingangstür', code: 'EXAMPLE-Ss_32', title: 'EXAMPLE: door systems' },
   ],
 };
+const MAPPING_OTHER: ClassificationMapping = { id: 'm2', system: { name: 'Other system', edition: '1' }, rules: [] };
 const CHOICES: Record<string, ScheduleClassification | undefined> = { plain: undefined, classified: { mapping: 'm1' }, grouped: { mapping: 'm1', group: true } };
 
 const sheet = ({ id: 's1', number: 'X-903', name: 'Types', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp', viewId: 'ty', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] }) as unknown as ProjectSheet;
@@ -143,4 +147,67 @@ describe('the quantities by type of the build are the app\'s, on AC20-FZK-Haus (
       assert.equal(typesSayFor(language)('typeQty.total'), 'Total');
     });
   }
+});
+
+/** The model's text with its first wall unlinked from its quantity sets (as above) and the references `kind` names on it. */
+function firstWallWith(text: string, kind: 'none' | 'two-systems'): string {
+  const unlinked = firstWallUnlinkedAndClassified(text).replace(/\n#900001= [\s\S]*?\nENDSEC;/, '\nENDSEC;');
+  if (kind === 'none') return unlinked;
+  const wall = [...text.matchAll(/^#(\d+)=\s*IFCWALLSTANDARDCASE\(/gm)].map((m) => m[1])[0];
+  // The other system's reference is related first, so reading the first reference of the element would give its code.
+  return unlinked.replace(/\nENDSEC;\s*\nEND-ISO-10303-21;\s*$/, `\n#900001= IFCCLASSIFICATION('OTHER','1',$,'Other system',$,$,$);\n#900002= IFCCLASSIFICATIONREFERENCE($,'OTHER-1','EXAMPLE: the other system',#900001,$,$);\n#900003= IFCRELASSOCIATESCLASSIFICATION('0EXAMPLEclassificationA',#12,$,$,(#${wall}),#900002);\n#900004= IFCCLASSIFICATION('EXAMPLE','2015',$,'Uniclass 2015',$,$,$);\n#900005= IFCCLASSIFICATIONREFERENCE($,'EXAMPLE-OWN','EXAMPLE: the model says',#900004,$,$);\n#900006= IFCRELASSOCIATESCLASSIFICATION('0EXAMPLEclassificationB',#12,$,$,(#${wall}),#900005);\nENDSEC;\nEND-ISO-10303-21;\n`);
+}
+
+describe('the classification of the types of the build is the app\'s with two systems on an element, and with none in the model (#581)', { skip: planModelMissing(FZK_HAUS) }, () => {
+  const CASES = { ...CHOICES, other: { mapping: 'm2' } } as Record<string, ScheduleClassification | undefined>;
+  const read = async (kind: 'none' | 'two-systems') => {
+    const dir = mkdtempSync(join(tmpdir(), `fzk-types-${kind}-`));
+    try {
+      const path = join(dir, 'AC20-FZK-Haus.ifc');
+      writeFileSync(path, firstWallWith(readFileSync(FZK_HAUS, 'utf8'), kind));
+      await loadPlanModel(path);
+      useProjectStore.setState({ classificationMappings: [MAPPING, MAPPING_OTHER] } as never);
+      const model = useViewerStore.getState().models.get('m')!;
+      const opened = { dataStore: model.ifcDataStore, meshes: model.geometryResult!.meshes } as never;
+      const app: Record<string, TypeQuantities> = {};
+      const engine: Record<string, TypeQuantities> = {};
+      for (const [name, choice] of Object.entries(CASES)) {
+        app[name] = typeQuantitiesOf(choice);
+        engine[name] = typeQuantitiesOver(scheduleModelsOf(opened, 'm', 'm'), [MAPPING, MAPPING_OTHER], choice);
+      }
+      const wall = Number([...readFileSync(path, 'utf8').matchAll(/^#(\d+)=\s*IFCWALLSTANDARDCASE\(/gm)][0][1]);
+      return { app, engine, wallReferences: extractClassificationsOnDemand(model.ifcDataStore as never, wall).map((r) => r.identification) };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const codes = (q: TypeQuantities) => q.rows.map((r) => `${r.typeName ?? ''}|${r.classification?.code ?? ''}|${r.classification?.source ?? ''}`);
+  after(() => useProjectStore.setState({ classificationMappings: [] } as never));
+
+  it('an element with references of two systems takes the code of the system the schedule speaks for, in the app and in the build', async () => {
+    const { app, engine, wallReferences } = await read('two-systems');
+    for (const name of Object.keys(CASES)) {
+      assert.ok(app[name].rows.length >= 5, `${name}: rows`);
+      assert.deepEqual(engine[name], app[name], name);
+    }
+    // The wall carries both references, the other system's first: the first reference is not the answer.
+    assert.deepEqual(wallReferences, ['OTHER-1', 'EXAMPLE-OWN']);
+    assert.ok(codes(app.classified).some((c) => c.endsWith('|EXAMPLE-OWN|model')), 'the mapping of Uniclass takes the Uniclass reference');
+    assert.ok(!codes(app.classified).some((c) => c.includes('OTHER-1')), 'and not the other system\'s');
+    assert.ok(codes(app.other).some((c) => c.endsWith('|OTHER-1|model')), 'the mapping of the other system takes its reference');
+    assert.ok(!codes(app.other).some((c) => c.includes('EXAMPLE-OWN')), 'and not Uniclass\'s');
+    assert.equal(app.grouped.grouped, true);
+  });
+
+  it('a model with no reference at all has the mapping\'s codes alone, in the app and in the build', async () => {
+    const { app, engine } = await read('none');
+    for (const name of Object.keys(CASES)) {
+      assert.ok(app[name].rows.length >= 5, `${name}: rows`);
+      assert.deepEqual(engine[name], app[name], name);
+    }
+    const classified = codes(app.classified);
+    assert.ok(classified.some((c) => c.startsWith(`${TYPE_240}|EXAMPLE-Ss_25|mapping`)), 'the mapping classifies the 240 type');
+    assert.ok(!classified.some((c) => c.endsWith('|model')), 'no code is the model\'s');
+    assert.ok(!codes(app.other).some((c) => c.endsWith('|model')) && codes(app.other).every((c) => c.split('|')[1] === ''), 'a mapping with no rule gives no code');
+  });
 });

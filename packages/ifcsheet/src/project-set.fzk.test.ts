@@ -202,6 +202,22 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(err).not.toContain('types schedule');
   }, 240_000);
 
+  it('prints the urban indicators where they were placed, on the site area the project types, and no longer names them as left out (#581)', async () => {
+    const base = arranged();
+    const project = {
+      ...base,
+      siteArea: 600,
+      sheets: [...(base.sheets as unknown[]), { id: 's-ur', number: 'X-904', name: 'Urban', createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: 'vp-ur', viewId: 'ur', x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] }],
+      schedules: [...(base.schedules as unknown[]), { id: 'ur', name: 'Urban', kind: 'urban', createdAt: 0 }],
+    };
+    const { code, err, pages } = await build(writeProject(project));
+    expect(code).toBe(EXIT.ok);
+    expect(pages).toHaveLength(3);
+    // Ac 120 m² on the typed 600 m² is a POT of 20.00 %; Ad is 240 m² over the two storeys.
+    expect(pages[2]).toEqual(expect.arrayContaining(['Urban', 'Ac (built area)', 'POT (Ac / site)', '120.00', '240.00', '600.00', '20.00 %']));
+    expect(err).not.toContain('urban schedule');
+  }, 240_000);
+
   it('words the room and register headings in the run\'s one language: a Romanian project prints Romanian with no flags, a project recording none prints English, --locale ro words that one', async () => {
     const onSheet = (id: string, number: string, scheduleId: string) => ({ id, number, name: number, createdAt: 0, paper: 'A3', orientation: 'landscape', viewports: [{ id: `vp-${id}`, viewId: scheduleId, x: 200, y: 140, scale: 50, width: 0, height: 0, center: null }] });
     const base = arranged();
