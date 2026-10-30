@@ -114,7 +114,7 @@ describe('Romanian catalogue (#53)', () => {
   it('the face check reaches the site plan, the urban indicators and the schedules a sheet prints (#258)', () => {
     const { 'site.balance.title': _a, 'urban.ac': _b, 'finishes.room': _c, ...without } = catalogue;
     assert.deepEqual(untranslatedFaceKeys(without), [
-      'finishes.room (components/viewer/joinery/ScheduleGraphic.tsx)',
+      'finishes.room (packages/ifcsheet/src/finishes-words.ts)',
       'site.balance.title (components/viewer/siteplan/SiteBalance.tsx)',
       'urban.ac (components/viewer/urban/useUrban.ts)',
     ]);
