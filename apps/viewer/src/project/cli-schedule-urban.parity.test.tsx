@@ -82,8 +82,8 @@ describe('the urban indicators of the build are the app\'s, on AC20-FZK-Haus (#5
       assert.equal(site.source, scenario.source);
       assert.ok(result.ac !== null && result.ac > 100 && result.ad !== null && result.au !== null && result.au > 100, 'Ac, Ad and Au have figures');
       assert.equal(result.pot !== null, scenario.source !== null, 'POT follows the site area chosen');
-      if (scenario.siteArea) assert.equal(site.area, scenario.siteArea);
-      else if (scenario.plot) assert.equal(site.area, 600);
+      // Every scenario asserts: a typed area wins, a drawn plot measures 600 m², and with neither there is no area.
+      assert.equal(site.area ?? null, scenario.siteArea ?? (scenario.plot ? 600 : null));
     });
   }
 
