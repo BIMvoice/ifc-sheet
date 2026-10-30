@@ -134,11 +134,12 @@ describe('the engine draws the door and window symbols of the elevations and sec
   it('an arched head rises over the window (#572)', () => {
     configureWindows();
     const plain = of(compare(), 'window');
+    assert.ok(plain.length >= 4, 'the windows the rows see');
     assert.ok(plain.every((s) => s.shapes.every((p) => p.type !== 'polyline' || p.pts.length < 40)), 'a square head has no arch');
     configureWindows({ head: { shape: 'round' } });
     const arched = of(compare(), 'window');
     assert.equal(arched.length, plain.length);
-    assert.ok(arched.every((s) => s.shapes.some((p) => p.type === 'polyline' && p.pts.length >= 40)), 'every window outline follows the arch');
+    assert.ok(arched.length >= 4 && arched.every((s) => s.shapes.some((p) => p.type === 'polyline' && p.pts.length >= 40)), 'every window outline follows the arch');
   });
 
   it('a transom row sits over the leaves', () => {
@@ -155,6 +156,7 @@ describe('the engine draws the door and window symbols of the elevations and sec
     const handle = of(compare(), 'window');
     useProjectStore.setState({ openingLines: 'hinge' });
     const hinge = of(compare(), 'window');
+    assert.ok(handle.length >= 4, 'the windows the rows see');
     assert.equal(hinge.length, handle.length);
     assert.notDeepEqual(sorted(hinge), sorted(handle), 'the lines point the other way');
   });
