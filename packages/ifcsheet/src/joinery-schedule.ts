@@ -127,6 +127,8 @@ export interface JoineryProject {
   joineryMapping: JoineryMapping;
   /** Flips per element GlobalId, for the app's drawings; absent in a headless read. */
   symbolFlips?: Record<string, number>;
+  /** The project's opening-line convention in elevation (`handle`: apex at the handle; `hinge`: at the hinges); absent: `handle`. */
+  openingLines?: 'handle' | 'hinge';
 }
 
 export { attributes, propertySetsOf, readPropertyFacts, storedName, typeIndex } from './joinery-live-reads.js';

@@ -74,6 +74,9 @@ export interface GraphicStandard extends PenTable {
 /** See `GraphicStandard.openingLines`. */
 export type OpeningLineDirection = 'towardsHandle' | 'towardsHinge';
 
+/** The convention the project stores for a standard's opening lines: `towardsHandle` is `handle` (apex at the handle, base on the hinges), `towardsHinge` is `hinge` (the lines meet at the hinges). */
+export const conventionOfDirection = (direction: OpeningLineDirection): 'handle' | 'hinge' => (direction === 'towardsHinge' ? 'hinge' : 'handle');
+
 /** What IfcSheet drew before standards existed. Choosing it restores exactly that. */
 export const DEFAULT_GRAPHIC_STANDARD: GraphicStandard = {
   id: 'default',

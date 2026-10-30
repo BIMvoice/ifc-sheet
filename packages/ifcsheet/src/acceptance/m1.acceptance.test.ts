@@ -24,7 +24,8 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { EXIT, run } from '../cli.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from '../headless.js';
-import { planOpeningSymbols } from '../plan-openings.js';
+import { planOpeningSymbols, viewOpeningSymbols } from '../plan-openings.js';
+import { visibleEntities } from '../elevation-openings.js';
 import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
 import { resolveViewGraphics } from '../view-templates.js';
 import { readRooms } from '../room-read.js';
@@ -50,6 +51,8 @@ interface Case {
   /** Plans whose cut passes through nothing (the storey is above or below what the model has there). */
   emptyPlans: string[];
   sections: number;
+  /** The least door symbols the four elevations draw (a door that states its operation, facing the elevation); the count the model gave when written. */
+  elevationDoorSymbols: number;
   /** Classes that some section must cut. */
   sectionCuts: string[];
   /** The GlobalIds of the doors and windows no plan draws, each for a reason given where it is listed; every other one must be drawn. */
@@ -61,19 +64,19 @@ const CASES: Case[] = [
     name: 'AC20-FZK-Haus (ArchiCAD 20, KIT)', file: here('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'),
     storeys: ['Erdgeschoss', 'Dachgeschoss'], doors: 5, windows: 11, rooms: 7,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 8, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
   },
   {
     name: 'bloc-p4 (residential block, five storeys)', file: here('../../../../apps/viewer/public/samples/bloc-p4.ifc'),
     storeys: ['Parter', 'Etaj 1', 'Etaj 2', 'Etaj 3', 'Etaj 4'], doors: 86, windows: 89, rooms: 90,
     sheets: [['A-101', 'Floor plans 1'], ['A-102', 'Floor plans 2'], ['A-103', 'Floor plans 3'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, sectionCuts: ['IfcSlab', 'IfcWall'], notDrawn: [],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'], notDrawn: [],
   },
   {
     name: 'federated arch.ifc (hand-written, two levels)', file: here('../../../../apps/viewer/src/test/fixtures/federated/arch.ifc'),
     storeys: ['Level 0', 'Level 1'], doors: 1, windows: 0, rooms: 0,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 1, sectionCuts: ['IfcWall'], notDrawn: [],
+    emptyPlans: [], sections: 1, elevationDoorSymbols: 2, sectionCuts: ['IfcWall'], notDrawn: [],
   },
   {
     // ara3d ISSUE_068, a Norwegian school (ARK NUS skolebygg): 56 MB, no redistribution licence stated, so it is never committed.
@@ -85,7 +88,7 @@ const CASES: Case[] = [
     // because each lies wholly above or below its storey plan's cut and a default plan shows its cut only (#586): seven 0.6 m and 1.0 m
     // wall hatches ("Luke"), 0.0 to 1.0 m or 2.0 to 2.6 m above their floors, and two 0.7 m windows whose sill is 1.21 m above Plan 01,
     // 1 cm over its 1.2 m cut. Take an id out when its element is drawn; never add one.
-    emptyPlans: ['Plan 04'], sections: 2, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'],
+    emptyPlans: ['Plan 04'], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'],
     notDrawn: [
       '3c1awkLoXAxBYHBQ4qGhaL', '36R5E2q5f2TvXJ1UAvvL5k', '3ObdPKQKnADxl0koLMbmvC', '3ObdPKQKnADxl0koLMbn2b', '3ObdPKQKnADxl0koLMbn0A',
       '3ObdPKQKnADxl0koLMbn0B', '3T0LSRCJr579Hfd5wOgKiJ', '223VDxzbP01Q1$4uieT7Bn', '2QmceMdeT2FxfkNdzVxgpJ',
@@ -139,6 +142,7 @@ interface Run {
   set: DefaultSet;
   plans: { name: string; drawing: Drawing2D }[];
   sections: { name: string; drawing: Drawing2D }[];
+  elevations: { name: string; drawing: Drawing2D }[];
   pdf: string;
   dxfDir: string;
   stderr: string;
@@ -164,7 +168,7 @@ async function runCase(c: Case): Promise<Run> {
   const out = scratch();
   const err: string[] = [];
   const code = await run(['build', c.file, '--project', project, '--out', join(out, 'set.pdf'), '--dxf', join(out, 'dxf')], { stdout: () => {}, stderr: (t) => void err.push(t) });
-  return { model, set, plans: of('plan'), sections: of('section'), pdf: join(out, 'set.pdf'), dxfDir: join(out, 'dxf'), stderr: err.join(''), code };
+  return { model, set, plans: of('plan'), sections: of('section'), elevations: of('elevation'), pdf: join(out, 'set.pdf'), dxfDir: join(out, 'dxf'), stderr: err.join(''), code };
 }
 
 describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
@@ -222,6 +226,29 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
         const symbolRuns = sheets.flatMap((s) => s.pens.filter((p) => p.layer === 'SYMBOLS')).reduce((n, p) => n + p.runs.length, 0);
         expect(symbolRuns, 'symbol runs on the sheets').toBeGreaterThan(0);
         expect(sheets.some((s) => s.pens.some((p) => p.layer === 'SYMBOLS' && p.runs.length > 0 && !p.dash)), 'a solid symbol pen').toBe(true);
+      }, 600_000);
+
+      it.skipIf(c.doors === 0)('draws the opening lines of the doors the elevations see, over the drawing (#587)', async () => {
+        const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
+        expect(r.elevations.length, 'elevations').toBe(4);
+        let doors = 0;
+        for (const view of r.set.document.views.filter((v) => v.kind === 'elevation')) {
+          const drawing = r.elevations.find((e) => e.name === view.name)!.drawing;
+          const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
+          const seen = visibleEntities(drawing);
+          // A symbol is the symbol of a door or window the elevation shows, and is strokes, not an empty mark; an untyped window has none.
+          for (const s of symbols) {
+            expect(seen.has(s.id), `${view.name}: ${s.kind} ${s.id} has a symbol but the elevation does not show it`).toBe(true);
+            expect(s.shapes.length + (s.dashed?.length ?? 0) + (s.heavy?.length ?? 0), `${view.name}: ${s.kind} ${s.id} symbol`).toBeGreaterThan(0);
+            expect(s.kind, `${view.name}: ${s.id} is an untyped door, as no type is configured here`).toBe('door');
+          }
+          doors += symbols.length;
+        }
+        expect(doors, 'door symbols on the elevations').toBeGreaterThanOrEqual(c.elevationDoorSymbols);
+        // The sheets carry them: the elevation sheets (A-2xx) have a SYMBOLS pen exactly when the elevations have symbols.
+        const sheets = await sheetGraphics(r.set, r.model);
+        const onElevations = sheets.filter((sh) => /^A-20/.test(sh.number)).reduce((n, sh) => n + sh.pens.filter((p) => p.layer === 'SYMBOLS').reduce((m, p) => m + p.runs.length, 0), 0);
+        expect(onElevations > 0, 'symbol runs on the elevation sheets').toBe(doors > 0);
       }, 600_000);
 
       it.skipIf(c.windows === 0)('cuts the windows and draws them on the plans', () => {
