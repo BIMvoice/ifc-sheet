@@ -12,7 +12,7 @@
  * and command-line keywords, and drives the command state machine.
  */
 
-import { isJoineryDraftViewId, JOINERY_VIEW_COMMANDS } from '@/joinery/view-draft-id';
+import { isJoineryDraftViewId, joineryCommandAllowed } from '@/joinery/view-draft-id';
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
@@ -195,7 +195,7 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
   // A joinery type's view keeps only some shapes: a command that would make another is refused, not drawn and lost (#492).
-  if (isJoineryDraftViewId(viewId) && !JOINERY_VIEW_COMMANDS.has(def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
+  if (isJoineryDraftViewId(viewId) && !joineryCommandAllowed(viewId, def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
   cancelCommand();
   endedByUser = false;
   say({ key: def.labelKey });

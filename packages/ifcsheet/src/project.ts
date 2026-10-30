@@ -17,6 +17,9 @@ export {
   type BlockStroke, type DxfBlockRead, type DxfBlockReport,
 } from './joinery-block-symbol.js';
 export {
+  DRAWN_SYMBOL_NAME, blockAsShapes, blockFromDrafts, isDrawnSymbol, symbolCanvas, type SymbolCanvas,
+} from './joinery-drawn-symbol.js';
+export {
   JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
   type JoineryViewLineLike, type JoineryViewName,
 } from './joinery-view-detail.js';
