@@ -27,6 +27,12 @@ export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';
+export {
+  elementFrame, elementViews,
+  type ElementView, type ElementViewOptions, type ElementViews, type V2, type ViewLine, type ViewLineKind,
+} from './joinery-element-views.js';
+export { planFrame, planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from './joinery-element-views-layout.js';
+export { entryViews, type EntryViewHooks } from './joinery-entry-views.js';
 export { roomInputsOf } from './room-finishes-read.js';
 export { takeoffElementsOf } from './material-takeoff-read.js';
 export { typeElementsOf, typeQuantitiesOver } from './type-quantities-read.js';
