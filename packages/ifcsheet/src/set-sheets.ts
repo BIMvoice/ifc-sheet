@@ -89,7 +89,7 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
     const sources = { live: { dataStore: dataStore!, view: null }, project: options.joinery ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
     const graphics = resolveViewGraphics(view, doc.viewTemplates);
     // An elevation or section keeps its drawing, cut included, and the symbols go over it (`elevation-openings.ts`).
-    openings.set(view.id, view.kind === 'plan' ? planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, graphics) : viewOpeningSymbols(model.buildingMeshes, drawing.config.plane, drawing, sources, graphics));
+    openings.set(view.id, view.kind === 'plan' ? planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, graphics, view.level) : viewOpeningSymbols(model.buildingMeshes, drawing.config.plane, drawing, sources, graphics));
   }
   // The views coloured by a property (#92): what each paints, from the same rules the app uses (`colour-fills.ts`).
   const schemes = new Map<string, SchemeResult>();
