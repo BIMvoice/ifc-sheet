@@ -86,6 +86,16 @@ export function openingOfSpec(spec: JoinerySpec): TypeOpening | null {
 }
 
 /** The id of the entry configured for a type: the type's GlobalId, so configuring it again edits the same entry. */
+/**
+ * The sill typed in for a window type entry, metres, or null when none was stated (the entry then holds the kind's default, which the
+ * model never gave and nothing prints). Typed is what `sillTyped` says; an entry saved before the flag existed is typed when its sill
+ * differs from the default, since those were the only ones a user could have set.
+ */
+export function typedSillOf(entry: Pick<JoinerySpec, 'kind' | 'sillHeight' | 'sillTyped'>): number | null {
+  if (entry.kind !== 'window') return null;
+  return entry.sillTyped === true || Math.abs(entry.sillHeight - defaultWindowSpec().sillHeight) >= 1e-9 ? entry.sillHeight : null;
+}
+
 export const typeEntryId = (typeGlobalId: string): string => `${TYPE_ENTRY_PREFIX}${typeGlobalId}`;
 
 export interface ConfigureTypeInput {
@@ -98,8 +108,8 @@ export interface ConfigureTypeInput {
   opening: TypeOpening;
   /** The head's shape. Absent: the type keeps the one it has (square for a type configured now). */
   head?: JoineryHead;
-  /** The window's sill height, metres (the IFC states none). Absent: the type keeps the one it has. Ignored for a door. */
-  sillHeight?: number;
+  /** The window's sill height, metres (the IFC states none). Absent: the type keeps the one it has; `null`: not stated (the default, unprinted). Ignored for a door. */
+  sillHeight?: number | null;
   /** The properties typed in for the type. Absent: the type keeps its own; an empty list removes them. */
   custom?: readonly JoineryCustomProp[];
 }
@@ -140,8 +150,13 @@ export function configureTypeOpening(project: ProjectJoinery, input: ConfigureTy
   const head = input.head !== undefined ? cleanHead(input.head) : base.head;
   const custom = input.custom ? cleanCustomProps(input.custom) : base.custom;
   const { head: _h, custom: _c, ...rest } = base;
-  const sill = input.kind === 'window' && input.sillHeight !== undefined && Number.isFinite(input.sillHeight) && input.sillHeight >= 0 ? input.sillHeight : base.sillHeight;
-  const entry: JoinerySpec = { ...rest, sillHeight: sill, ...(head ? { head } : {}), ...(custom?.length ? { custom } : {}) };
+  const { sillTyped: _s, ...restNoSill } = rest;
+  const given = input.sillHeight;
+  const typedNow = input.kind === 'window' && typeof given === 'number' && Number.isFinite(given) && given >= 0;
+  const cleared = input.kind === 'window' && given === null;
+  const keepsTyped = !typedNow && !cleared && typedSillOf(base) !== null;
+  const sill = typedNow ? given : cleared ? defaultWindowSpec().sillHeight : base.sillHeight;
+  const entry: JoinerySpec = { ...restNoSill, sillHeight: sill, ...(typedNow || keepsTyped ? { sillTyped: true as const } : {}), ...(head ? { head } : {}), ...(custom?.length ? { custom } : {}) };
   if (at >= 0) list[at] = entry;
   else list.push(entry);
   return {

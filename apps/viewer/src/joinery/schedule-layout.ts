@@ -15,7 +15,7 @@
  * width. Pure: the screen tab, sheets, SVG and DXF all draw these primitives.
  */
 
-import { defaultWindowSpec, normalisedPanels, type PanelOperation } from '@ifc-lite/create';
+import { normalisedPanels, type PanelOperation } from '@ifc-lite/create';
 import { openingConvention } from './opening-convention';
 import { elevationSymbol, strokeBounds } from './symbols';
 import { occurrenceMark, type ScheduleData, type ScheduleEntry } from './schedule-data';
@@ -24,7 +24,7 @@ import { planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from '
 import { fitText } from '@/project/title-block-template';
 import type { ExportCell, ExportTable } from './schedule-export';
 import { PAD, fireOf, thermalOf, pageTitle, isOverridableRow, joineryCellText, levelRowId, modelRowLabel, modelRowNumber, modelRowText, overrideNumbers, joineryOverrideOf, shownRows, symbolsShown, textCellText, textRowId, typeIdentityOf, type JoineryCellOverride, type TypeFacts, type ScheduleCell, type ScheduleLayout, type SchedulePrim } from '@bimvoice/ifcsheet';
-import { typeEntryId } from '@bimvoice/ifcsheet/project';
+import { typeEntryId, typedSillOf } from '@bimvoice/ifcsheet/project';
 
 // What every schedule draws is the engine's (`schedule-prim.ts`), so the command line prints a placed schedule with the same primitives.
 export type { ScheduleCell, ScheduleLayout, SchedulePrim };
@@ -102,12 +102,12 @@ const mm = (m: number): number => Math.round(m * 1000);
 
 /**
  * The sill height a window's row prints, metres, or null. An entry configured from an IFC type (#448) starts with the kind's default
- * sill, which the model never stated, so it prints none until the user sets a different one in the joinery dialog.
+ * sill, which the model never stated, so it prints none until the user types one (900 included).
  */
 const sillOf = (e: ScheduleEntry): number | null => {
   if (e.kind !== 'window' || !e.spec) return null;
   if (!e.spec.id?.startsWith(typeEntryId(''))) return e.spec.sillHeight;
-  return Math.abs(e.spec.sillHeight - defaultWindowSpec().sillHeight) < 1e-9 ? null : e.spec.sillHeight;
+  return typedSillOf(e.spec);
 };
 
 /**

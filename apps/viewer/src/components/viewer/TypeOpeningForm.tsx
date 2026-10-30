@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { cleanCustomProps, MAX_CUSTOM_PROPS } from '@bimvoice/ifcsheet';
 import { cleanHead, cleanOpening, leafOperations, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
-import { defaultWindowSpec, type JoineryCustomProp, type JoineryHead, type JoineryHeadShape, type PanelOperation } from '@ifc-lite/create';
+import { type JoineryCustomProp, type JoineryHead, type JoineryHeadShape, type PanelOperation } from '@ifc-lite/create';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -110,7 +110,7 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
           const mm = Number(rise);
           const shaped = cleanHead({ ...head, rise: rise.trim() !== '' && Number.isFinite(mm) && mm > 0 ? mm / 1000 : undefined }) ?? { shape: 'square' as const };
           const sillMm = Number(sill);
-          const sillMetres = sill.trim() !== '' && Number.isFinite(sillMm) && sillMm >= 0 ? sillMm / 1000 : defaultWindowSpec().sillHeight;
+          const sillMetres = sill.trim() !== '' && Number.isFinite(sillMm) && sillMm >= 0 ? sillMm / 1000 : null;
           configureElementType(facts, cleanOpening(facts.kind, opening), { head: shaped, custom: cleanCustomProps(custom), sillHeight: sillMetres });
         }}
       >

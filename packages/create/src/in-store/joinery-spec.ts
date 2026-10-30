@@ -162,6 +162,8 @@ export interface JoinerySpec {
   height: number;
   /** Windows: default sill height above the floor for a new placement. */
   sillHeight: number;
+  /** A type entry (#448): `true` when the user typed the sill (even one equal to the default). Absent: not stated, the default stands unprinted. */
+  sillTyped?: true;
   frame: JoineryFrame;
   sash: JoinerySash;
   /** Column widths and row heights as proportions; normalised to the inside of the frame. */

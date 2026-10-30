@@ -10,8 +10,9 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { cleanup, render } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
-import { typeOpeningOf, typeEntryOf } from '@/joinery/type-config-actions';
+import { typeOpeningOf, typeEntryOf, typeSillOf } from '@/joinery/type-config-actions';
 import type { ElementFacts } from '@/joinery/symbol-mapping';
+import { readJoineryList, typedSillOf } from '@bimvoice/ifcsheet/project';
 import { TypeOpeningForm } from './TypeOpeningForm';
 
 const facts: ElementFacts = { kind: 'window', globalId: 'W-1', typeGlobalId: 'T-1', names: ['Zwei Panele'], width: 1.76, height: 1.01 };
@@ -82,5 +83,36 @@ describe('TypeOpeningForm', () => {
     assert.equal(render(<TypeOpeningForm facts={facts} />).querySelector<HTMLInputElement>('[data-type-sill]')!.value, '1100');
     cleanup();
     assert.equal(render(<TypeOpeningForm facts={{ ...facts, kind: 'door', typeGlobalId: 'T-D' }} />).querySelector('[data-type-sill]'), null);
+  });
+
+  const typeSill = (root: ReturnType<typeof render>, mm: string) => {
+    const sill = root.querySelector<HTMLInputElement>('[data-type-sill]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(sill, mm);
+      sill.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-opening-apply]')!.click(); });
+  };
+
+  it('a sill typed as 900, the default, is kept: the form reopens with it, a blank one is not stated, and it survives save and reopen', () => {
+    typeSill(render(<TypeOpeningForm facts={facts} />), '900');
+    assert.equal(typeSillOf(facts), 0.9);
+    cleanup();
+    const reopened = render(<TypeOpeningForm facts={facts} />);
+    assert.equal(reopened.querySelector<HTMLInputElement>('[data-type-sill]')!.value, '900');
+    // Saved and read back, the project still holds it.
+    const saved = readJoineryList(JSON.parse(JSON.stringify(useProjectStore.getState().joineryTypes)));
+    assert.equal(typedSillOf(saved[0]), 0.9);
+    // Blanking it and applying: not stated again.
+    typeSill(reopened, '');
+    assert.equal(typeSillOf(facts), null);
+    cleanup();
+    assert.equal(render(<TypeOpeningForm facts={facts} />).querySelector<HTMLInputElement>('[data-type-sill]')!.value, '');
+  });
+
+  it('a type applied with a blank sill stays not stated', () => {
+    typeSill(render(<TypeOpeningForm facts={facts} />), '');
+    assert.equal(typeSillOf(facts), null);
+    assert.equal(typeEntryOf(facts)?.sillTyped, undefined);
   });
 });

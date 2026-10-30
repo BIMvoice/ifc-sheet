@@ -87,6 +87,7 @@ export function readJoinerySpec(raw: unknown): JoinerySpec | null {
     },
   };
   if (typeof raw.id === 'string' && raw.id) spec.id = raw.id;
+  if (raw.sillTyped === true && raw.kind === 'window') spec.sillTyped = true;
   const view = readJoineryViewChoice(raw.view);
   if (view) spec.view = view;
   const h = head(raw.head);

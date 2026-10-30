@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_JOINERY_MAPPING, fitToElement, readJoineryMapping, resolveMapping, type ElementFacts } from './joinery-mapping.js';
 import { readJoineryList } from './joinery-spec-read.js';
 import {
-  FANLIGHT_SHARE, cleanOpening, configureTypeOpening, openingOfSpec, specFromOpening, typeEntryId, type ProjectJoinery,
+  FANLIGHT_SHARE, cleanOpening, configureTypeOpening, openingOfSpec, specFromOpening, typeEntryId, typedSillOf, type ProjectJoinery,
 } from './joinery-type-config.js';
 
 const DOUBLE_TILT_TURN = { operations: ['tilt-turn-left', 'tilt-turn-right'] as const, fanlight: false };
@@ -125,5 +125,18 @@ describe('configureTypeOpening', () => {
     expect(bad.joineryTypes[0].sillHeight).toBe(1.1);
     const door = configureTypeOpening(empty(), { ...input, typeGlobalId: 'TYPE-D', kind: 'door', opening: { operations: ['swing-left'], fanlight: false }, sillHeight: 1.1 });
     expect(door.joineryTypes[0].sillHeight).toBe(0);
+  });
+
+  it('a sill typed as the default is typed; null makes it not stated; an entry saved without the flag reads typed only off the default', () => {
+    const at900 = configureTypeOpening(empty(), { ...input, sillHeight: 0.9 });
+    expect(typedSillOf(at900.joineryTypes[0])).toBe(0.9);
+    const kept = configureTypeOpening({ joineryTypes: at900.joineryTypes, joineryMapping: at900.joineryMapping }, input);
+    expect(typedSillOf(kept.joineryTypes[0])).toBe(0.9);
+    const blank = configureTypeOpening({ joineryTypes: at900.joineryTypes, joineryMapping: at900.joineryMapping }, { ...input, sillHeight: null });
+    expect(typedSillOf(blank.joineryTypes[0])).toBeNull();
+    expect(blank.joineryTypes[0].sillTyped).toBeUndefined();
+    const { sillTyped: _t, ...legacy } = at900.joineryTypes[0];
+    expect(typedSillOf(legacy)).toBeNull();
+    expect(typedSillOf({ ...legacy, sillHeight: 1.1 })).toBe(1.1);
   });
 });
