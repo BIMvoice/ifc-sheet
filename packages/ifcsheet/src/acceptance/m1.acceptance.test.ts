@@ -139,7 +139,7 @@ function notDrawnOf(r: Run, c: Case, ifcType: string, type: string): string[] {
 function planSymbolsOf(r: Run, view: ProjectView) {
   const drawing = r.plans.find((p) => p.name === view.name)!.drawing;
   const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
-  return planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
+  return planOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates), view.level);
 }
 const typeOf = (r: Run, globalId: string): string | undefined => {
   const ds = r.model.dataStore;
@@ -244,7 +244,7 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
         let doors = 0;
         for (const view of r.set.document.views.filter((v) => v.kind === 'elevation')) {
           const drawing = r.elevations.find((e) => e.name === view.name)!.drawing;
-          const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
+          const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates), view.level);
           const seen = visibleEntities(drawing);
           // A symbol is the symbol of a door or window the elevation shows, and is strokes, not an empty mark; an untyped window has none.
           for (const s of symbols) {

@@ -81,11 +81,11 @@ export function openingReads(sources: OpeningSources): { typedOf: (id: number) =
 
 /**
  * The opening symbols of a plan cut at `plane`, before the detail level: of the meshes the view shows (an element it hides one by one
- * has no swing) and the classes it leaves visible. Empty for any plane but a horizontal one. `level` is the plan's own storey: the
- * host-wall rule (#586) draws only its doors and windows, and without it the rule is off.
+ * has no swing) and the classes it leaves visible. Empty for any plane but a horizontal one. `level` is the plan's own storey (`view.level`), required so a caller can't leave it out by accident: the
+ * host-wall rule (#586) draws only its doors and windows, and without one the rule is off.
  */
 export function planOpeningSymbols(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, sources: OpeningSources, graphics: ViewGraphics | undefined, level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, sources: OpeningSources, graphics: ViewGraphics | undefined, level: Pick<ProjectLevel, 'storeyGlobalIds'> | undefined,
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const hidden = hiddenClassesOf(graphics);
