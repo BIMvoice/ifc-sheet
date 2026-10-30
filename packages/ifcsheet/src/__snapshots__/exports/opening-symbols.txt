@@ -2,6 +2,8 @@ BarClip: type (type-only)
 DEFAULT_SEGMENTAL_RISE: value
 DOUBLE_LEAF_WIDTH: value
 ElevationOptions: type (type-only)
+ElevationPlacementOptions: type (type-only)
+ElevationReads: type (type-only)
 HeadArch: type (type-only)
 JoineryStroke: type (type-only)
 OpeningConvention: type (type-only)
@@ -17,6 +19,7 @@ TypedPlanSymbol: type (type-only)
 archPoints: value
 doorSymbol: value
 drawnBySymbol: value
+elevationOpeningSymbols: value
 elevationSymbol: value
 glazingBarStrokes: value
 headArch: value
@@ -31,8 +34,12 @@ planOpeningSymbols: value
 planSymbol: value
 sectionSymbol: value
 simplifyOpeningSymbol: value
+statedDoorElevationSymbol: value
 strokeBounds: value
 symbolShapes: value
+typedElevationSymbol: value
 typedPlanSymbol: value
+viewOpeningSymbols: value
+visibleEntities: value
 windowSymbol: value
 withoutOpeningBodies: value
