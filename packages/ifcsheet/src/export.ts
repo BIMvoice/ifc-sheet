@@ -14,7 +14,7 @@
  * (with layers, embedded fonts and archival metadata, `issue/pdf-build.ts`)
  * and writes R2000 DXF with CAD layers and text (`sheet-dxf.ts`). Both need
  * the sheet SVG, which only the browser renders today. The DXF here carries
- * linework only; its text is written once the app's DXF writer moves here.
+ * linework and the sheet's text (`SHEET-TEXT`, #619); its layers are still its own (`VIEW-CUT-050`, not the app's `CUT`/`SEEN`/`TITLEBLOCK`).
  *
  * The underlays a sheet prints (#457) are drawn under its drawings, as the app's sheet draws them; the DXF leaves them out.
  *
@@ -279,6 +279,8 @@ export function exportDxf(sheet: SheetGraphic): string {
   return exportToDXF(emptyDrawing(sheet.paper), {
     metadataComment: `IfcSheet ${sheet.number} ${sheet.name}; units: paper millimetres`,
     coordinateTransform: flip,
+    // Titles, dimensions, the title block's captions and the sheet number, as TEXT; a letter windows-1252 lacks (ă, ș, ț) is a `\U+XXXX` escape.
+    texts: sheet.texts.map((t) => ({ text: t.text, at: t.at, height: t.size, layer: 'SHEET-TEXT', ...(t.align ? { align: t.align } : {}), ...(t.angle ? { angle: t.angle } : {}) })),
     polylineLayers: [
       { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
       ...penLayers(sheet),

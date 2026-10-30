@@ -60,6 +60,22 @@ export interface DXFExportOptions {
    * drawing space and go through `coordinateTransform` like everything else.
    */
   polylineLayers?: DXFPolylineLayer[];
+  /**
+   * Single-line TEXT entities drawn on top, each on the layer it names (the sheet's titles, dimensions and title block, #619). `at` goes
+   * through `coordinateTransform`; `height` is in drawing units; `angle` is degrees counter-clockwise as drawn.
+   */
+  texts?: DXFText[];
+}
+
+/** One TEXT entity to embed. */
+export interface DXFText {
+  text: string;
+  at: Point2D;
+  height: number;
+  /** DXF layer name; the writer creates the layer (black) when no polyline layer made it. */
+  layer: string;
+  align?: 'left' | 'center' | 'right';
+  angle?: number;
 }
 
 /** One named layer of polylines to embed. */
@@ -103,6 +119,7 @@ export class DXFExporter {
       coordinateTransform = (p: Point2D) => p,
       metadataComment,
       polylineLayers = [],
+      texts = [],
     } = options;
 
     const writer = new DxfWriter({ headerComment: metadataComment });
@@ -141,6 +158,10 @@ export class DXFExporter {
       for (const polyline of extra.polylines) {
         writer.addPolyline(polyline.map(map), layer, extra.closed ?? true);
       }
+    }
+
+    for (const t of texts) {
+      writer.addText(map(t.at), t.text, t.height, writer.layer(t.layer, '#000000'), { hAlign: t.align ?? 'left', rotationDeg: t.angle ?? 0 });
     }
 
     return writer.toString();
