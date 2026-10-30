@@ -10,14 +10,14 @@
 import { useState } from 'react';
 import { cleanCustomProps, MAX_CUSTOM_PROPS } from '@bimvoice/ifcsheet';
 import { cleanHead, cleanOpening, leafOperations, MAX_LEAVES, type TypeOpening } from '@bimvoice/ifcsheet/project';
-import type { JoineryCustomProp, JoineryHead, JoineryHeadShape, PanelOperation } from '@ifc-lite/create';
+import { type JoineryCustomProp, type JoineryHead, type JoineryHeadShape, type PanelOperation } from '@ifc-lite/create';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { configureElementType, typeCustomOf, typeHeadOf, typeOpeningOf } from '@/joinery/type-config-actions';
+import { configureElementType, typeCustomOf, typeHeadOf, typeOpeningOf, typeSillOf } from '@/joinery/type-config-actions';
 import type { ElementFacts } from '@/joinery/symbol-mapping';
 
 const DEFAULT_OPENING: TypeOpening = { operations: ['fixed'], fanlight: false };
@@ -35,6 +35,8 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
   // The rise is typed in millimetres; empty is the shape's default.
   const [rise, setRise] = useState<string>(() => (head.rise === undefined ? '' : String(Math.round(head.rise * 1000))));
   const [custom, setCustom] = useState<JoineryCustomProp[]>(() => typeCustomOf(facts));
+  // The sill is typed in millimetres; empty is the kind's default, which the schedule does not print.
+  const [sill, setSill] = useState<string>(() => { const v = typeSillOf(facts); return v === null ? '' : String(Math.round(v * 1000)); });
   const allowed = leafOperations(facts.kind);
   const leaves = opening.operations.length;
   const setLeaves = (n: number) => setOpening((o) => ({
@@ -70,6 +72,12 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
           className="h-7 text-xs" value={rise} onChange={(e) => setRise(e.target.value)}
         />
       ) : null}
+      {facts.kind === 'window' ? (
+        <Input
+          type="number" min={0} step={10} data-type-sill aria-label={t('joinery.type.sill')} placeholder={t('joinery.type.sillDefault')}
+          className="h-7 text-xs" value={sill} onChange={(e) => setSill(e.target.value)}
+        />
+      ) : null}
       <p className="pt-1 text-2xs font-semibold uppercase tracking-wide text-foreground">{t('joinery.props.title')}</p>
       <p className="text-2xs text-muted-foreground">{t('joinery.props.hint')}</p>
       {custom.map((p, i) => (
@@ -101,7 +109,9 @@ export function TypeOpeningForm({ facts }: { facts: ElementFacts }) {
         onClick={() => {
           const mm = Number(rise);
           const shaped = cleanHead({ ...head, rise: rise.trim() !== '' && Number.isFinite(mm) && mm > 0 ? mm / 1000 : undefined }) ?? { shape: 'square' as const };
-          configureElementType(facts, cleanOpening(facts.kind, opening), { head: shaped, custom: cleanCustomProps(custom) });
+          const sillMm = Number(sill);
+          const sillMetres = sill.trim() !== '' && Number.isFinite(sillMm) && sillMm >= 0 ? sillMm / 1000 : null;
+          configureElementType(facts, cleanOpening(facts.kind, opening), { head: shaped, custom: cleanCustomProps(custom), sillHeight: sillMetres });
         }}
       >
         {t('joinery.type.apply')}

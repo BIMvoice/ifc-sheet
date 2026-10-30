@@ -9,7 +9,7 @@
 
 export { readJoineryList, readJoinerySpec } from './joinery-spec-read.js';
 export {
-  FANLIGHT_SHARE, MAX_LEAVES, cleanHead, cleanOpening, configureTypeOpening, leafOperations, openingOfSpec, specFromOpening, typeEntryId,
+  FANLIGHT_SHARE, MAX_LEAVES, cleanHead, cleanOpening, configureTypeOpening, leafOperations, openingOfSpec, specFromOpening, typeEntryId, typedSillOf,
   type ConfigureTypeInput, type ProjectJoinery, type TypeOpening,
 } from './joinery-type-config.js';
 export {
