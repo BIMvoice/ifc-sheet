@@ -17,9 +17,10 @@ import { ISO_PAPERS } from './paper';
 import { withContinuationPages } from './continuation-pages';
 import { useProjectStore } from './project-store';
 import { layoutOnSheet, layoutTableOnSheet, registerHolders, scheduleBox, scheduleHomeBox, sheetDrawingArea } from '@bimvoice/ifcsheet';
+import { boxOptions, joineryPages, layoutJoineryOnSheet as layoutOnJoinery } from '@bimvoice/ifcsheet/project';
+import { openingConvention } from '@/joinery/opening-convention';
 import { scheduleScaleOf, withScheduleScale } from './schedule-scale';
-import { layoutSchedule, scheduleMinBox, schedulePages, type ScheduleLabels, type ScheduleLayout, type ScheduleLayoutOptions } from '@/joinery/schedule-layout';
-import type { ElementViews } from '@/joinery/element-views';
+import { scheduleMinBox, schedulePages, type ScheduleLayout } from '@/joinery/schedule-layout';
 import type { ScheduleData } from '@/joinery/schedule-data';
 import type { Rect } from './sheet-frame';
 import type { Paper, ProjectSchedule, ProjectSheet, SheetViewport } from './types';
@@ -37,10 +38,8 @@ export function isJoinerySchedule(schedule: Pick<ProjectSchedule, 'kind'> | unde
   return schedule?.kind === 'door' || schedule?.kind === 'window' || schedule?.kind === 'all';
 }
 
-/** The layout options that wrap a table into `box` at `scale`. */
-export function boxOptions(box: Rect, scale: number): Pick<ScheduleLayoutOptions, 'scale' | 'maxWidth' | 'maxHeight'> {
-  return { scale, maxWidth: box.w, maxHeight: box.h };
-}
+/** The layout options that wrap a table into `box` at `scale`: the engine's (`joinery-schedule-place.ts`), which the sheet's PDF wraps with too. */
+export { boxOptions };
 
 /** Whether one band of `data` at `scale` fits `box` whole. */
 export function bandFits(data: ScheduleData, scale: number, box: Rect): boolean {
@@ -85,28 +84,10 @@ export function pagesIn(data: ScheduleData, scale: number, box: Rect): number {
   return schedulePages(data, boxOptions(box, scale));
 }
 
-/**
- * What a joinery schedule's layout reads, whoever asks: the box of the schedule's first sheet at the schedule's scale, with the
- * element views its cards draw. The sheet's pages (`layoutJoineryOnSheet`) and the count the split offer quotes (`joineryPages`) both
- * take their options from here, so they cannot count differently.
- */
-function joineryOptions(wrap: Rect, scale: number, views: ReadonlyMap<string, ElementViews> | undefined): ScheduleLayoutOptions {
-  return { ...boxOptions(wrap, scale), views };
-}
+/** How many sheets a joinery schedule takes as the Wall lays it out: exactly the `pages` of `layoutJoineryOnSheet` for the same input. The engine's (`joinery-schedule-place.ts`). */
+export { joineryPages };
 
-/** How many sheets a joinery schedule takes as the Wall lays it out: exactly the `pages` of `layoutJoineryOnSheet` for the same input. */
-export function joineryPages(
-  input: { data: ScheduleData; scale: number; views?: ReadonlyMap<string, ElementViews>; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
-): number {
-  const { data, scale, views, sheets, sheet, vp } = input;
-  return schedulePages(data, joineryOptions(scheduleHomeBox(sheets, vp.viewId, sheet, vp), scale, views));
+/** A joinery schedule's page: wrapped to the first sheet's box at its scale (the engine's `layoutJoineryOnSheet`), with the open project's opening-line convention. */
+export function layoutJoineryOnSheet(input: Parameters<typeof layoutOnJoinery>[0]): ScheduleLayout {
+  return layoutOnJoinery({ convention: openingConvention(), ...input });
 }
-
-/** A joinery schedule's page: wrapped to the first sheet's box at its scale (`layoutSchedule`). */
-export function layoutJoineryOnSheet(
-  input: { data: ScheduleData; labels: ScheduleLabels; scale: number; views?: ReadonlyMap<string, ElementViews>; continued?: string; sheets: readonly ProjectSheet[]; sheet: ProjectSheet; vp: SheetViewport },
-): ScheduleLayout {
-  const { data, labels, scale, views, continued, ...place } = input;
-  return layoutOnSheet(place, (wrap, page) => layoutSchedule(data, labels, { ...joineryOptions(wrap, scale, views), page, continued }), scheduleMinBox(data, { scale, views }));
-}
-

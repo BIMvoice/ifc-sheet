@@ -13,7 +13,8 @@
  */
 
 import { sheetNumber } from './sheet-number.js';
-import type { SheetLocale } from './units-and-numbers.js';
+import { languageOf, type SheetLocale } from './units-and-numbers.js';
+import { classLabel } from './class-words.js';
 import type { ScheduleLayout } from './schedule-prim.js';
 import type { ExportTable } from './schedule-csv.js';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table.js';
@@ -65,7 +66,8 @@ export interface TypeQuantityLine {
 
 const HEADING_TOTALS: Totals = { count: 0, noQto: 0, length: null, area: null, volume: null };
 
-const plainClass = (c: string): string => c.replace(/^Ifc/, '');
+/** What a class is called in the language the figures are written in (`class-words.ts`); an unlisted class keeps its IFC name. */
+const plainClass = (c: string, labels: { locale: SheetLocale }): string => classLabel(c, languageOf(labels.locale));
 
 /** The table's lines, in print order. */
 export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabels): TypeQuantityLine[] {
@@ -73,7 +75,7 @@ export function typeQuantityLines(data: TypeQuantities, labels: TypeQuantityLabe
   let group: string | null = null;
   let started = false;
   for (const row of data.rows) {
-    const type = row.typeName ?? `${plainClass(row.className)} ${labels.noType}`;
+    const type = row.typeName ?? `${plainClass(row.className, labels)} ${labels.noType}`;
     const base = { type, className: row.className, ...(data.classified ? { code: row.classification?.code ?? '', codeTitle: row.classification?.title ?? '' } : {}) };
     // Grouped by classification: a heading when the code changes (rows are in code order), the unclassified last under their own.
     if (data.grouped && (!started || (row.classification?.code ?? null) !== group)) {
@@ -110,7 +112,7 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
       cells: l.heading
         ? [l.type, ...headerOf(data, labels).slice(1).map(() => '')]
         : [
-          l.first ? l.type : '', l.first ? plainClass(l.className) : '', ...(data.classified ? [l.first ? l.code ?? '' : '', l.first ? l.codeTitle ?? '' : ''] : []),
+          l.first ? l.type : '', l.first ? plainClass(l.className, labels) : '', ...(data.classified ? [l.first ? l.code ?? '' : '', l.first ? l.codeTitle ?? '' : ''] : []),
           l.level, String(l.totals.count), fixed(labels.locale, l.totals.length, 'length'), fixed(labels.locale, l.totals.area, 'area', (l.totals.measuredArea ?? 0) > 0), fixed(labels.locale, l.totals.volume, 'volume', (l.totals.measuredVolume ?? 0) > 0), l.totals.noQto ? String(l.totals.noQto) : '',
         ],
       bold: l.total || l.heading === true,
@@ -125,7 +127,7 @@ export function layoutTypeQuantities(data: TypeQuantities, labels: TypeQuantityL
 }
 
 /**
- * The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type and class (as printed, without `Ifc`) on
+ * The quantities as the table of its CSV and XLSX: the lines the sheet prints (totals in bold), the type (as printed) and the IFC class (without `Ifc`, in any language: a file for a machine) on
  * every line, figures unformatted. With classification (#89) the code and its title are on every line too, and the grouping headings are left out:
  * a spreadsheet filters by the code column, the rows stay in code order.
  */
@@ -138,7 +140,7 @@ export function typeQuantityTable(data: TypeQuantities, labels: TypeQuantityLabe
   const tail = (t: Totals): (string | null)[] => (column ? [measuredCell((t.measuredVolume ?? 0) > 0, (t.measuredArea ?? 0) > 0, column)] : []);
   return {
     name: labels.title || labels.type, header: [...headerOf(data, labels), ...(column ? [column.column] : [])], numeric: [3, 4, 5, 6, 7].map((c) => c + shift), kinds: { [4 + shift]: 'length', [5 + shift]: 'area', [6 + shift]: 'volume' },
-    rows: lines.map((l) => [l.type, plainClass(l.className), ...(data.classified ? [l.code ?? '', l.codeTitle ?? ''] : []), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null, ...tail(l.totals)]),
+    rows: lines.map((l) => [l.type, l.className.replace(/^Ifc/, ''), ...(data.classified ? [l.code ?? '', l.codeTitle ?? ''] : []), l.level, l.totals.count, l.totals.length, l.totals.area, l.totals.volume, l.totals.noQto || null, ...tail(l.totals)]),
     bold: lines.flatMap((l, i) => (l.total ? [i] : [])),
   };
 }

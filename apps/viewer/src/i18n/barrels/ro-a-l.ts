@@ -38,6 +38,7 @@ import { issueChangesRo } from '../catalogues/issue-changes.ro';
 import { issueRo } from '../catalogues/issue.ro';
 import { joineryRo } from '../catalogues/joinery.ro';
 import { keyboardShortcutsRo } from '../catalogues/keyboard-shortcuts.ro';
+import { ifcClassRo } from '../catalogues/ifc-class.ro';
 import { joineryCellRo } from '../catalogues/joinery-cell.ro';
 import { joineryBlockRo } from '../catalogues/joinery-block.ro';
 import { joineryHeadRo } from '../catalogues/joinery-head.ro';
@@ -72,6 +73,7 @@ export const roAL = {
   ...faceRo,
   ...featuresRo,
   ...feedbackRo,
+  ...ifcClassRo,
   ...geometryExportDialogsRo,
   ...germanyRo,
   ...handoverRo,
