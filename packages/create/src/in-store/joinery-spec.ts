@@ -150,6 +150,15 @@ export interface JoineryViewDraft {
 
 export type JoineryViewDrafts = { front?: JoineryViewDraft[]; plan?: JoineryViewDraft[]; section?: JoineryViewDraft[] };
 
+/** One stroke of an imported plan block: points in metres, relative to the block's base point; closed, or dashed (a non-continuous linetype). */
+export interface JoineryBlockPath { pts: Array<[number, number]>; closed?: true; dashed?: true }
+
+/**
+ * A DXF block the user assigned as the plan symbol of a door or window type (#448): its strokes in the block's own frame (metres,
+ * origin at the block's base point, drawn as a left-hand opening with +Y towards the exterior). Fitted to each opening at draw time.
+ */
+export interface JoineryBlockSymbol { name: string; paths: JoineryBlockPath[] }
+
 export interface JoinerySpec {
   /** The project catalogue entry this type is (one type object per entry per model). */
   id?: string;
@@ -181,6 +190,8 @@ export interface JoinerySpec {
   head?: JoineryHead;
   /** Properties typed in by hand for this type. Absent: none. */
   custom?: JoineryCustomProp[];
+  /** An imported DXF block drawn in plan in place of the generated symbol (#448). Absent: the generated symbol. */
+  planBlock?: JoineryBlockSymbol;
 }
 
 export function defaultWindowSpec(name = 'Window'): JoinerySpec {

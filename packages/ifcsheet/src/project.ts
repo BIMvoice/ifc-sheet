@@ -13,6 +13,10 @@ export {
   type ConfigureTypeInput, type ProjectJoinery, type TypeOpening,
 } from './joinery-type-config.js';
 export {
+  MAX_BLOCK_PATHS, MAX_BLOCK_POINTS, blockPlanStrokes, listDxfBlocks, mirrorsBlock, readDxfBlock, readJoineryBlock, withPlanBlock,
+  type BlockStroke, type DxfBlockRead, type DxfBlockReport,
+} from './joinery-block-symbol.js';
+export {
   JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
   type JoineryViewLineLike, type JoineryViewName,
 } from './joinery-view-detail.js';

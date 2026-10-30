@@ -11,7 +11,7 @@
 import { normalisedPanels, panelRect, type JoinerySpec } from '@ifc-lite/create';
 import type { ElementView, ElementViews, ViewLine } from './element-views';
 import { openingMarks, type OpeningConvention } from './symbols';
-import { joineryViewDraftPrims, joineryViewDrafts, joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
+import { blockPlanStrokes, joineryViewDraftPrims, joineryViewDrafts, joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
 import type { SchedulePrim } from './schedule-layout';
 
 type ViewName = 'front' | 'plan' | 'section';
@@ -34,6 +34,12 @@ function linesOf(view: ElementView, name: ViewName, at: (x: number, y: number) =
     kind: 'path', pts: [at(l.a.x, l.a.y), at(l.b.x, l.b.y)], w: penOf(l), dashed: l.kind === 'hidden', view: name,
     ...(spec?.id && l.kind !== 'hatch' ? { pick: { type: spec.id, line: joineryViewLineId(name, l.a, l.b) } } : {}),
   }));
+}
+
+/** The type's imported plan block (#448) as primitives in place of the plan cut from the model, in the type frame; null when the type has none. */
+function planBlockPrims(spec: JoinerySpec | null, at: (x: number, y: number) => { x: number; y: number }): SchedulePrim[] | null {
+  const strokes = spec ? blockPlanStrokes(spec) : null;
+  return strokes?.map((s): SchedulePrim => ({ kind: 'path', pts: s.pts.map((q) => at(q.x, q.y)), closed: s.closed, w: s.weight === 'cut' ? PEN.cut : PEN.outline, dashed: s.dashed, view: 'plan' })) ?? null;
 }
 
 /**
@@ -85,7 +91,7 @@ export function viewPrims(
   const sectionMid = fx + (v.width * k) / 2 + 8 + (v.depth * k) / 2;
   const out: SchedulePrim[] = [
     ...linesOf(v.front, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), spec),
-    ...linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec),
+    ...(planBlockPrims(spec, (x, y) => ({ x: fx + x * k, y: planMid - y * k })) ?? linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec)),
     ...linesOf(v.section, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k }), spec),
     // What the user drew on the type's views goes over them.
     ...draftsOf(spec, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), k),
