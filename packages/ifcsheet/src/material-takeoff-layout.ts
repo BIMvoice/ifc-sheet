@@ -11,7 +11,8 @@
  */
 
 import { sheetNumber } from './sheet-number.js';
-import type { SheetLocale } from './units-and-numbers.js';
+import { languageOf, type SheetLocale } from './units-and-numbers.js';
+import { classLabel } from './class-words.js';
 import type { ScheduleLayout } from './schedule-prim.js';
 import type { ExportTable } from './schedule-csv.js';
 import { layoutPagedTable, PEN, type PagedOptions, type TableBlock } from './paged-table.js';
@@ -34,15 +35,12 @@ export interface TakeoffLabels {
 
 const COLUMNS = [62, 18, 24, 24, 70] as const;
 
-/** The `IfcWall` style class names, without the prefix, for people. */
-const plainClass = (c: string): string => c.replace(/^Ifc/, '');
-
 export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: TakeoffLabels, paging: PagedOptions = {}): ScheduleLayout {
   const fixed = (v: number | null, kind: 'volume' | 'area', measured: boolean): string => (v === null ? '–' : marked(sheetNumber(labels.locale, v, 2, { kind }), measured));
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
   const anyVolume = rows.some((r) => r.measuredVolume), anyArea = rows.some((r) => r.measuredArea);
   const table: string[][] = [
-    ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume, 'volume', r.measuredVolume === true), fixed(r.area, 'area', r.measuredArea === true), r.classes.map(plainClass).join(', ')]),
+    ...rows.map((r) => [r.material, String(r.elements), fixed(r.volume, 'volume', r.measuredVolume === true), fixed(r.area, 'area', r.measuredArea === true), r.classes.map((c) => classLabel(c, languageOf(labels.locale))).join(', ')]),
     [labels.total, String(rows.reduce((s, r) => s + r.elements, 0)), fixed(sum('volume'), 'volume', anyVolume), fixed(sum('area'), 'area', anyArea), ''],
   ];
   const block: TableBlock = {
@@ -56,7 +54,7 @@ export function layoutMaterialTakeoff(rows: readonly TakeoffRow[], labels: Takeo
 
 /**
  * The takeoff as the table of its CSV and XLSX: the rows and the total line the sheet prints, volumes and areas unformatted, a figure the
- * model does not give left empty. When a figure is measured from geometry, a last column names the measured figures of each row (#74).
+ * model does not give left empty, its classes by their IFC names in any language (a file for a machine). When a figure is measured from geometry, a last column names the measured figures of each row (#74).
  */
 export function takeoffTable(rows: readonly TakeoffRow[], labels: TakeoffLabels): ExportTable {
   const sum = (key: 'volume' | 'area'): number | null => (rows.some((r) => r[key] !== null) ? rows.reduce((s, r) => s + (r[key] ?? 0), 0) : null);
@@ -66,7 +64,7 @@ export function takeoffTable(rows: readonly TakeoffRow[], labels: TakeoffLabels)
   return {
     name: labels.title || labels.material, header: [labels.material, labels.elements, labels.volume, labels.area, labels.usedIn, ...(column ? [column.column] : [])], numeric: [1, 2, 3], kinds: { 2: 'volume', 3: 'area' },
     rows: [
-      ...rows.map((r) => [r.material, r.elements, r.volume, r.area, r.classes.map(plainClass).join(', '), ...tail(r)]),
+      ...rows.map((r) => [r.material, r.elements, r.volume, r.area, r.classes.map((c) => c.replace(/^Ifc/, '')).join(', '), ...tail(r)]),
       [labels.total, rows.reduce((s, r) => s + r.elements, 0), sum('volume'), sum('area'), null, ...tail(null)],
     ],
     bold: [rows.length],

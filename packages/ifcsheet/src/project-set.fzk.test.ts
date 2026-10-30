@@ -156,7 +156,9 @@ describe.skipIf(missing !== null)('ifcsheet build --project prints the project\'
     expect(pages[3]).toEqual(expect.arrayContaining(['Bill of quantities', 'Article code', 'EXAMPLE-001']));
     expect(pages[4]).toEqual(expect.arrayContaining(['Drawing register', 'Sheet', 'Revision', 'X-901', 'X-905']));
     for (const printed of ['rooms schedule', 'boq schedule', 'register schedule']) expect(err).not.toContain(printed);
-    expect(err).toContain('X-905 X-905: the door schedule "Doors" not printed yet');
+    // The door schedule is printed too (#581): its card is on the page of its sheet, and it is no longer named as left out.
+    expect(pages[5]).toEqual(expect.arrayContaining(['Doors', 'Mark', 'Total']));
+    expect(err).not.toContain('door schedule');
   }, 240_000);
 
   it('prints the finishes schedule where it was placed, with a line for each room, and no longer names it as left out (#581)', async () => {
