@@ -26,7 +26,7 @@ const w1: JoinerySpec = { ...defaultWindowSpec('Fereastră 1200'), id: 'w1', mar
 const d1: JoinerySpec = { ...defaultDoorSpec('Ușă 900'), id: 'd1', mark: 'D1', width: 0.9, height: 2.1 };
 
 /** Spelled alike in both languages by design (a unit template, a shared word, a format). */
-const SAME = new Set(['joinery.inMm', 'joinery.section.general', 'joinery.view.plan', 'joinery.view.model', 'joinerySymbol.drawnAs']);
+const SAME = new Set(['joinery.inMm', 'joinery.section.general', 'joinery.view.plan', 'joinery.draft.view.plan', 'joinery.view.model', 'joinerySymbol.drawnAs']);
 
 /** Every visible string of the dialog: text of the elements that hold no other element, plus the labels attributes carry. */
 function shown(): Set<string> {

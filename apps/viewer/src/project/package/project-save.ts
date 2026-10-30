@@ -11,6 +11,7 @@
  * computes when the package is opened again.
  */
 
+import { withoutJoineryDraftViews } from '@/joinery/view-draft-id';
 import { asSourceBytes, type IfcDataStore } from '@ifc-lite/parser';
 import { ParquetExporter } from '@ifc-lite/export';
 import { unzipSync } from 'fflate';
@@ -59,7 +60,8 @@ async function modelTables(dataStore: IfcDataStore, modelId: string): Promise<Ma
 export async function packageCurrentProject(projectId: string, options: { versionInfo?: PackageVersionInfo; onProgress?: (label: string) => void; analytics?: boolean; offMainThread?: boolean } = {}): Promise<PackagedProject> {
   const state = useViewerStore.getState();
   const edited = new Set(collectChangedModels(state).models.map((m) => m.id));
-  const doc = projectDocument();
+  // The working copy of an open joinery view is the type's own data (`joinery/view-drafts.ts`): not written a second time.
+  const doc = withoutJoineryDraftViews(projectDocument());
   const renamed = new Map<string, string>();
   const extras = new Map<string, Uint8Array>();
   const models: ModelInput[] = [];

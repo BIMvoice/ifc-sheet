@@ -12,7 +12,12 @@ export type SchedulePrim =
   | { kind: 'path'; pts: { x: number; y: number }[]; closed?: boolean; w: number; dashed?: boolean; view?: 'front' | 'plan' | 'section' | 'symbol';
       /** A line of a type's real view that can be hidden (#449): the catalogue type's id and the line's id. */
       pick?: { type: string; line: string } }
-  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number };
+  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor: 'start' | 'middle' | 'end'; bold?: boolean; rotate?: number;
+      /** Text the user drew on a type's view (#492): which view it belongs to, so a schedule that shows only the plan or only the elevation leaves it out with the lines. */
+      view?: 'front' | 'plan' | 'section' };
+
+/** A type's view on the paper (a joinery schedule): the box of each (paper mm), for picking one with the pointer (#492). */
+export interface ScheduleViewRegion { type: string; view: 'front' | 'plan' | 'section'; box: { x: number; y: number; w: number; h: number } }
 
 /** A cell of a table that can be picked on the sheet (#446): its box in the layout's millimetres, the element (GlobalId) or, in a joinery schedule, the type (`typeIdentityOf`), and the column (a list's column id, a joinery schedule's row id) it is. */
 export interface ScheduleCell { x: number; y: number; w: number; h: number; guid: string; column: string; /** The cell holds a value typed over the model's: the editor marks it, the print does not. */ overridden?: true }
@@ -21,6 +26,8 @@ export interface ScheduleLayout {
   width: number;
   height: number;
   prims: SchedulePrim[];
+  /** The box of each type's views (paper mm), so a double-click can enter one as a drafting view (#492). */
+  regions?: ScheduleViewRegion[];
   /** How many pages the table runs over (a schedule given a `maxHeight` it does not fit continues on further sheets); absent: one. */
   pages?: number;
   /** The cells of this page a person can pick (a list schedule's element rows, a joinery schedule's typed rows), by the table's row and column. */

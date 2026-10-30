@@ -11,7 +11,7 @@
 import { normalisedPanels, panelRect, type JoinerySpec } from '@ifc-lite/create';
 import type { ElementView, ElementViews, ViewLine } from './element-views';
 import { openingMarks, type OpeningConvention } from './symbols';
-import { joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
+import { joineryViewDraftPrims, joineryViewDrafts, joineryViewLineId, joineryViewLines } from '@bimvoice/ifcsheet/project';
 import type { SchedulePrim } from './schedule-layout';
 
 type ViewName = 'front' | 'plan' | 'section';
@@ -37,6 +37,38 @@ function linesOf(view: ElementView, name: ViewName, at: (x: number, y: number) =
 }
 
 /**
+ * What the user drew on a type's view (#492), as primitives. The strokes and text come from the engine (`joineryViewDraftPrims`), so
+ * a headless build prints the same; `at` puts the view's metres on the paper.
+ */
+function draftsOf(spec: JoinerySpec | null, name: ViewName, at: (x: number, y: number) => { x: number; y: number }, k: number): SchedulePrim[] {
+  return joineryViewDraftPrims(joineryViewDrafts(spec, name), k).map((p): SchedulePrim => {
+    if (p.kind === 'text') {
+      const o = at(p.at.x, p.at.y);
+      // A rotation counts counter-clockwise in the view (y up); the paper's y runs down.
+      return { kind: 'text', x: o.x, y: o.y, text: p.text, size: p.height * k, anchor: 'start', view: name, ...(p.rotation ? { rotate: (-p.rotation * 180) / Math.PI } : {}) };
+    }
+    return { kind: 'path', pts: p.pts.map((q) => at(q.x, q.y)), closed: p.closed, w: p.weight, dashed: p.dashed, view: name };
+  });
+}
+
+/** A card's views on the paper: the box of each (paper millimetres), for picking one with the pointer. */
+export interface ViewRegion { type: string; view: ViewName; box: { x: number; y: number; w: number; h: number } }
+
+/** Where each of a card's views stands, as `viewPrims` places them (the lines' own extent, with a margin to grab the drafts beside it). */
+export function viewRegions(v: ElementViews, spec: JoinerySpec | null, at: { fx: number; base: number }, k: number): ViewRegion[] {
+  if (!spec?.id) return [];
+  const { fx, base } = at;
+  const planMid = base + 10 + (v.depth * k) / 2;
+  const sectionMid = fx + (v.width * k) / 2 + 8 + (v.depth * k) / 2;
+  const pad = 4;
+  const region = (view: ViewName, e: ElementView, ox: number, oy: number): ViewRegion => ({
+    type: spec.id!, view,
+    box: { x: ox + e.min.x * k - pad, y: oy - e.max.y * k - pad, w: (e.max.x - e.min.x) * k + 2 * pad, h: (e.max.y - e.min.y) * k + 2 * pad },
+  });
+  return [region('front', v.front, fx, base), region('plan', v.plan, fx, planMid), region('section', v.section, sectionMid, base)];
+}
+
+/**
  * Where a card puts its views. `fx` is the front view's horizontal middle and
  * `base` its floor line (paper y); the plan hangs under the width dimension
  * (`base + 4.5`), the section stands beside the front, on the same floor line.
@@ -55,6 +87,10 @@ export function viewPrims(
     ...linesOf(v.front, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), spec),
     ...linesOf(v.plan, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), spec),
     ...linesOf(v.section, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k }), spec),
+    // What the user drew on the type's views goes over them.
+    ...draftsOf(spec, 'front', (x, y) => ({ x: fx + x * k, y: base - y * k }), k),
+    ...draftsOf(spec, 'plan', (x, y) => ({ x: fx + x * k, y: planMid - y * k }), k),
+    ...draftsOf(spec, 'section', (x, y) => ({ x: sectionMid + x * k, y: base - y * k }), k),
   ];
   // The opening symbol stays on the real front view: the model has the frame, not the hinge side.
   if (spec) {
