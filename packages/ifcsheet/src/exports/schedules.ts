@@ -100,3 +100,10 @@ export {
 export { layoutMaterialTakeoff, takeoffTable, type TakeoffLabels } from '../material-takeoff-layout.js';
 export { MEASURED_MARK, marked, measuredCell, measuredNoteItems, type MeasuredWords } from '../measured-marks.js';
 export { TAKEOFF_WORDS_EN, TAKEOFF_WORDS_RO, measuredWordsOf, takeoffLabelsOf, takeoffSayFor, type PluralForms, type TakeoffSay, type TakeoffWordKey } from '../takeoff-words.js';
+// The quantities by type (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  elementTypeQuantities, totalClassOf, typeQuantities,
+  type ClassTotal, type Totals, type TypeElement, type TypeQuantities, type TypeQuantitiesOptions, type TypeRow,
+} from '../type-quantities.js';
+export { layoutTypeQuantities, typeQuantityLines, typeQuantityTable, type TypeQuantityLabels, type TypeQuantityLine } from '../type-quantities-layout.js';
+export { TYPES_WORDS_EN, TYPES_WORDS_RO, typeLabelsOf, typesSayFor, type TypesSay, type TypesWordKey } from '../type-quantities-words.js';

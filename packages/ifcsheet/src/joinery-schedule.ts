@@ -32,6 +32,7 @@ import { doorOperationOf } from './door-operation.js';
 import type { JoineryCellOverride } from './joinery-overrides.js';
 import { statedOrMeasuredSize } from './element-size.js';
 import type { MeshData } from '@ifc-lite/geometry';
+import type { ClassificationModel } from './classification.js';
 import { TYPE_ENTRY_PREFIX, fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
 import { attributes, readPropertyFacts, storedName, typeIndex } from './joinery-live-reads.js';
 
@@ -118,6 +119,8 @@ export interface ScheduleModel extends Live {
   listProvider?: () => ListDataProvider;
   /** An element's meshes (viewer frame, metres), for measuring the size of a door or window whose IFC states none (#485); without it such an element has no size. */
   meshesOf?: (expressId: number) => readonly MeshData[] | undefined;
+  /** The model's own classification references (#89), for the quantities by type; default: `modelClassification`, the references of the store. Both hosts fill it that way. */
+  classification?: () => ClassificationModel;
 }
 
 /** What the project contributes to a joinery schedule. */

@@ -21,15 +21,15 @@ import { scheduleDataOf } from '@/joinery/schedule-split';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutUrban } from '@/urban/urban-layout';
-import { layoutRoomSchedule, takeoffRows, type TakeoffRow, layoutMaterialTakeoff, type TakeoffLabels, measuredWordsOf, takeoffLabelsOf } from '@bimvoice/ifcsheet';
+import { layoutRoomSchedule, takeoffRows, type TakeoffRow, layoutMaterialTakeoff, type TakeoffLabels, takeoffLabelsOf, typeLabelsOf } from '@bimvoice/ifcsheet';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, registerLabelsOf, type RegisterLabels } from '@bimvoice/ifcsheet';
 import { finishLabelsOf, layoutRoomFinishes, roomFinishes, type RoomFinishes, type RoomFinishLabels } from '@bimvoice/ifcsheet';
 import { collectRoomInputs } from '@/joinery/room-finishes-models';
-import type { TypeQuantities } from '@/joinery/type-quantities';
+import type { TypeQuantities } from '@bimvoice/ifcsheet';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import type { ScheduleClassification } from '@bimvoice/ifcsheet';
-import { layoutTypeQuantities, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import { layoutTypeQuantities, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { penTags } from '../sheets/dxf-tags';
 import { useUrbanIndicators, useUrbanLabels } from '../urban/useUrban';
 import { useElementViews, type ViewRequest } from './useElementViews';
@@ -112,13 +112,8 @@ export function useRoomFinishes(): RoomFinishes[] {
 export function useTypeQuantityLabels(title: string): TypeQuantityLabels {
   const { t } = useTranslation();
   const locale = useSheetLocale();
-  return useMemo(() => ({
-    locale, title, type: t('typeQty.type'), class: t('typeQty.class'), level: t('typeQty.level'), count: t('typeQty.count'),
-    length: t('typeQty.length'), area: t('typeQty.area'), volume: t('typeQty.volume'), noQto: t('typeQty.noQto'),
-    total: t('typeQty.total'), noType: t('typeQty.noType'), noLevel: t('typeQty.noLevel'),
-    classification: t('typeQty.classification'), classificationTitle: t('typeQty.classificationTitle'), unclassified: t('typeQty.unclassified'),
-    measured: measuredWordsOf((key, params) => t(key, params)),
-  }), [t, locale, title]);
+  // The labels are built by the engine's `typeLabelsOf`, the build `ifcsheet build --project` prints with.
+  return useMemo(() => typeLabelsOf((key, params) => t(key, params), locale, title), [t, locale, title]);
 }
 
 /** The quantities by type, read from the loaded models again only when they change. */

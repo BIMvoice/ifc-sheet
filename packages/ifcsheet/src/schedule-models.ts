@@ -10,6 +10,7 @@
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { modelClassification } from './classification-read.js';
 import { meshesByExpressId } from './element-size.js';
 import type { ScheduleModel } from './joinery-schedule.js';
 import { createHeadlessListProvider } from './list-provider.js';
@@ -27,6 +28,7 @@ export function scheduleModelsOf(model: OpenedScheduleSource, name = '', modelId
   return [{
     modelId, name, dataStore, view: null,
     listProvider: () => createHeadlessListProvider(dataStore, name),
+    classification: () => modelClassification({ modelId, dataStore }),
     ...(meshes ? { meshesOf: meshesByExpressId(meshes) } : {}),
   }];
 }

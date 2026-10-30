@@ -28,7 +28,7 @@ import { WallSheet } from '@/components/viewer/wall/WallSheet';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export';
 import { readScheduleExport, type ExportLabelSet } from '@/components/viewer/wall/schedule-export-read';
 import { exportCsv } from '@/joinery/schedule-export';
-import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { parseTemplate } from '@/labels/label-template';

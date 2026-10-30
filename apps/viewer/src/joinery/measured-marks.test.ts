@@ -12,8 +12,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { typeQuantities, type TypeElement } from './type-quantities';
-import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from './type-quantities-layout';
+import { typeQuantities, type TypeElement } from '@bimvoice/ifcsheet';
+import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import type { ScheduleLayout } from './schedule-layout';
 import { takeoffRows, type TakeoffElement, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 

@@ -9,7 +9,7 @@
  * an opened model (`scheduleModelsOf`), so a schedule reads either host the same way.
  */
 
-import type { ScheduleModel } from '@bimvoice/ifcsheet/project';
+import { modelClassification, type ScheduleModel } from '@bimvoice/ifcsheet/project';
 import { createListDataProvider, type ListDataProvider } from '@/lib/lists';
 import { useViewerStore } from '@/store';
 import { entityName } from '@/lib/commands/modeling/authored-kinds';
@@ -36,6 +36,7 @@ export function loadedScheduleModels({ instanced, hidden = false }: LoadedSchedu
       modelId, name: model.name, dataStore, view,
       nameOf: (id) => entityName({ dataStore, view }, id),
       meshesOf: elementMeshLookup(model, instanced),
+      classification: () => modelClassification({ modelId, dataStore }),
       listProvider: () => (prepared ??= prepareListProviders(s, {})).pairs.find((pair) => pair.modelId === modelId)!.provider,
     });
   }

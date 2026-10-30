@@ -4,7 +4,7 @@
 
 /**
  * What a saved project adds to its sheets besides the views (#479): the drafts on the views and the schedules placed on the
- * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
+ * sheets (the lists, the rooms schedule, the finishes schedule, the material takeoff, the quantities by type, the bill of quantities, the drawing register), as options of `sheetGraphics`. `ifcsheet build --project` and the MCP server's export of a loaded project both take
  * them from here, so the two print the same sheets. What a sheet holds that the engine does not print yet is reported through
  * `onLeftOut`, never dropped silently.
  */
@@ -31,6 +31,10 @@ import { takeoffRows } from './material-takeoff.js';
 import { layoutMaterialTakeoff } from './material-takeoff-layout.js';
 import { takeoffElementsOf } from './material-takeoff-read.js';
 import { takeoffLabelsOf, takeoffSayFor } from './takeoff-words.js';
+import type { TypeQuantities } from './type-quantities.js';
+import { layoutTypeQuantities } from './type-quantities-layout.js';
+import { typeQuantitiesOver } from './type-quantities-read.js';
+import { typeLabelsOf, typesSayFor } from './type-quantities-words.js';
 import { layoutTableOnSheet } from './schedule-place.js';
 import { scheduleModelsOf } from './schedule-models.js';
 import type { SheetGraphicsOptions } from './set-sheets.js';
@@ -85,6 +89,8 @@ export function projectSheetOptions(
   let finishRooms: ReturnType<typeof roomFinishes> | undefined;
   // The material takeoff's rows: read once, and only when a sheet shows one (materials are parsed on demand).
   let takeoff: ReturnType<typeof takeoffRows> | undefined;
+  // The quantities by type, once per classification choice: two types schedules on a sheet may choose differently.
+  const byTypeCache = new Map<string, TypeQuantities>();
   const registerId = project.schedules.find((s) => s.kind === 'register')?.id;
   const registerRows = (): ReturnType<typeof drawingRegisterRows> => drawingRegisterRows({
     sheets: set.sheets, titleBlock: project.titleBlock, issues: set.issues, asIndicated: say('sheets.asIndicated'), schedules: project.schedules, revisions: set.revisions, drafts: set.drafts,
@@ -128,6 +134,17 @@ export function projectSheetOptions(
         if (read.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the materials schedule "${schedule.name}" (no element of the model has a material)`); continue; }
         const takeoffSay = takeoffSayFor(language);
         pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutMaterialTakeoff(read, takeoffLabelsOf(takeoffSay, format, schedule.name), paging)));
+        continue;
+      }
+      if (schedule.kind === 'types') {
+        const choice = schedule.classification;
+        const key = choice ? `${choice.mapping ?? ''}|${choice.group === true}` : '';
+        let read = byTypeCache.get(key);
+        if (!read) byTypeCache.set(key, (read = typeQuantitiesOver(scheduleModelsOf(model, modelName), project.classificationMappings, choice)));
+        const data = read;
+        if (data.rows.length === 0) { leaveOut(`${sheet.number} ${sheet.name}`.trim(), `the types schedule "${schedule.name}" (no element of the model has a quantity set or a type)`); continue; }
+        const typesSay = typesSayFor(language);
+        pages.set(schedule.id, (place) => layoutTableOnSheet(place, (paging) => layoutTypeQuantities(data, typeLabelsOf(typesSay, format, schedule.name), paging)));
         continue;
       }
       if (schedule.kind !== 'list' || !schedule.list) {

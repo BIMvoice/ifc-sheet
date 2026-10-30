@@ -9,7 +9,7 @@
 import { collectTypeElements } from '@/joinery/type-quantities-models';
 import { classNamesInModels } from '@/project/model-classes';
 import { materialNamesInModels } from '@/project/materials';
-import { totalClassOf } from '@/joinery/type-quantities';
+import { totalClassOf } from '@bimvoice/ifcsheet';
 
 /** What the loaded models hold that a rule can name. A type carries the IFC class of its elements, for the bulk assignment by class. */
 export interface ModelItems {
