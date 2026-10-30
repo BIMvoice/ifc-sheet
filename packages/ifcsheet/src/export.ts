@@ -266,7 +266,8 @@ function penLayers(sheet: SheetGraphic): { name: string; color: string; polyline
     const colour = pen.stroke.toLowerCase() === '#000000' ? '' : `-${pen.stroke.slice(1).toUpperCase()}`;
     const name = `VIEW-${pen.layer}-${String(Math.round(pen.width * 100)).padStart(3, '0')}${colour}`;
     const layer = byName.get(name) ?? { name, color: pen.stroke, polylines: [], closed: false };
-    layer.polylines.push(...pen.runs);
+    // A loop, not a spread: a big sheet has more runs than a call can take arguments (a school's elevations overflowed the stack).
+    for (const run of pen.runs) layer.polylines.push(run);
     byName.set(name, layer);
   }
   return [...byName.values()];

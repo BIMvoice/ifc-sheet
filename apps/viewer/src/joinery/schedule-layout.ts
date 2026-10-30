@@ -198,7 +198,7 @@ function plan(data: ScheduleData, options: ScheduleLayoutOptions) {
   // Under the front view and its dimension: the plan, in the room the deepest one needs.
   // The header cells draw the elevation and the plan unless the schedule's content turns one off (`symbolsShown`): the cell is as tall as what it draws.
   const shown = symbolsShown(data.content);
-  const planBlock = shown.plan ? Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k) : 0; })) : 0;
+  const planBlock = shown.plan ? Math.max(0, ...data.entries.map((e) => { const v = viewsOf(e); return v ? planRoom(v, k, e.spec) : 0; })) : 0;
   // Without the elevation the plan alone fills the cell (it starts 2 mm under the mark row); without either the cell is the mark row.
   const drawingH = shown.elevation ? Math.max(30, ...data.entries.map((e) => (viewsOf(e)?.height ?? e.height) * k + 14 + planBlock)) : Math.max(0, planBlock - 6);
   const bandH = MARK_ROW + drawingH + rowCount * ROW;
