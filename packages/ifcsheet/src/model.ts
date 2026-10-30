@@ -17,7 +17,7 @@ import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
 import { farElementLabel, frameEntities } from './framing.js';
-import { storeyElementIds } from './storey-elements.js';
+import { buildingElementIds } from './building-ids.js';
 import { storeyFloorY } from './storey-origin.js';
 import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
@@ -113,13 +113,9 @@ function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | u
   });
 }
 
-/** The building's elements on `storeys` (`storeyElementIds`): what the storeys contain and the parts aggregated under it. */
+/** The building's elements on `storeys` (`buildingElementIds`, the one reading the app's `buildingFraming` shares). */
 function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
-  const hierarchy = ds.spatialHierarchy;
-  if (!hierarchy) return [];
-  const wanted = new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : [])));
-  const found = findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''));
-  return storeyElementIds(hierarchy, found.map((n) => n.expressId), (id) => ds.entities.getTypeEnum(id));
+  return buildingElementIds(ds, new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : []))));
 }
 
 /** The rooms and stairs of `level` and the building's footprint (`project/model-rooms.ts` reads the same from the app's stores). */

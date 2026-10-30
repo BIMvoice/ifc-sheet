@@ -34,4 +34,5 @@ export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from '../storey-
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from '../entity-bounds.js';
 export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from '../framing.js';
 export { storeyElementIds } from '../storey-elements.js';
+export { buildingElementIds } from '../building-ids.js';
 export { relaySheet, sheetIsAsLaid, type SheetRelayout } from '../sheet-relayout.js';
