@@ -40,8 +40,8 @@ describe('a type configured from its overall size', () => {
     expect(spec.panels.at(-1)).toEqual({ col: 0, row: 1, colSpan: 2, operation: 'fixed' });
   });
 
-  it('is made valid: 1 to 3 leaves, only what the kind offers', () => {
-    expect(cleanOpening('window', { operations: ['side-left', 'side-left', 'side-left', 'side-left'], fanlight: false }).operations).toHaveLength(3);
+  it('is made valid: 1 to 6 leaves, only what the kind offers', () => {
+    expect(cleanOpening('window', { operations: Array(8).fill('side-left'), fanlight: false }).operations).toHaveLength(6);
     expect(cleanOpening('window', { operations: [], fanlight: false }).operations).toEqual(['fixed']);
     expect(cleanOpening('door', { operations: ['tilt-turn-left'], fanlight: false }).operations).toEqual(['fixed']);
     expect(cleanOpening('window', { operations: ['swing-left'], fanlight: false }).operations).toEqual(['fixed']);
@@ -59,7 +59,7 @@ describe('a type configured from its overall size', () => {
 
   it('is not read back from an entry of another shape', () => {
     const spec = specFromOpening('window', { width: 2, height: 1.4 }, { operations: ['fixed', 'fixed'], fanlight: false });
-    expect(openingOfSpec({ ...spec, columns: [1, 1, 1, 1] })).toBeNull();
+    expect(openingOfSpec({ ...spec, columns: [1, 1, 1, 1, 1, 1, 1] })).toBeNull();
     expect(openingOfSpec({ ...spec, rows: [1, 1, 1] })).toBeNull();
   });
 });
@@ -138,5 +138,53 @@ describe('configureTypeOpening', () => {
     const { sillTyped: _t, ...legacy } = at900.joineryTypes[0];
     expect(typedSillOf(legacy)).toBeNull();
     expect(typedSillOf({ ...legacy, sillHeight: 1.1 })).toBe(1.1);
+  });
+});
+
+describe('leaves, a second row and glazing bars of a type (#448)', () => {
+  const input = { typeGlobalId: 'TYPE-R', kind: 'window' as const, name: 'Reihe', size: { width: 3, height: 1.5 } };
+
+  it('five leaves and an opening transom row are read back from the entry they made', () => {
+    const opening = { operations: Array(5).fill('side-left') as 'side-left'[], fanlight: true, fanlightOpens: true as const, bars: { horizontal: 1, vertical: 2 } };
+    const out = configureTypeOpening(empty(), { ...input, opening });
+    const entry = out.joineryTypes[0];
+    expect(entry.columns).toHaveLength(5);
+    expect(entry.panels.filter((p) => p.row === 1).map((p) => p.operation)).toEqual(Array(5).fill('top-hung'));
+    expect(openingOfSpec(entry)).toEqual(opening);
+  });
+
+  it('a fixed transom row reads back fixed, an old two-row entry still reads as a fanlight', () => {
+    const fixed = specFromOpening('window', { width: 2, height: 1.4 }, { operations: ['fixed', 'fixed'], fanlight: true });
+    expect(openingOfSpec(fixed)).toEqual({ operations: ['fixed', 'fixed'], fanlight: true });
+    expect(openingOfSpec({ ...fixed, panels: fixed.panels.filter((p) => p.row === 0) })).toEqual({ operations: ['fixed', 'fixed'], fanlight: true });
+  });
+
+  it('the transom row opens only if there is a row, and only in a window', () => {
+    expect(cleanOpening('window', { operations: ['fixed'], fanlight: false, fanlightOpens: true }).fanlightOpens).toBeUndefined();
+    expect(cleanOpening('door', { operations: ['swing-left'], fanlight: true, fanlightOpens: true }).fanlightOpens).toBeUndefined();
+    expect(cleanOpening('window', { operations: ['fixed'], fanlight: true, fanlightOpens: true }).fanlightOpens).toBe(true);
+  });
+
+  it('bars are whole counts of 0 to 5; none at all is no bars', () => {
+    const bars = (b: { horizontal: number; vertical: number }) => cleanOpening('window', { operations: ['fixed'], fanlight: false, bars: b }).bars;
+    expect(bars({ horizontal: 7, vertical: 1.4 })).toEqual({ horizontal: 5, vertical: 1 });
+    expect(bars({ horizontal: -2, vertical: Number.NaN })).toBeUndefined();
+    expect(cleanOpening('window', { operations: ['fixed'], fanlight: false }).bars).toBeUndefined();
+  });
+
+  it('configuring again with no bars removes them; without the field an entry has none', () => {
+    const base = { ...input, opening: { operations: ['fixed' as const], fanlight: false } };
+    const withBars = configureTypeOpening(empty(), { ...base, opening: { ...base.opening, bars: { horizontal: 1, vertical: 1 } } });
+    expect(withBars.joineryTypes[0].glazingBars).toEqual({ horizontal: 1, vertical: 1 });
+    const cleared = configureTypeOpening(withBars, base);
+    expect('glazingBars' in cleared.joineryTypes[0]).toBe(false);
+    expect('glazingBars' in specFromOpening('window', input.size, base.opening)).toBe(false);
+  });
+
+  it('survives the project file', () => {
+    const out = configureTypeOpening(empty(), { ...input, opening: { operations: ['fixed', 'fixed', 'fixed', 'fixed'], fanlight: false, bars: { horizontal: 3, vertical: 0 } } });
+    const read = readJoineryList(JSON.parse(JSON.stringify(out.joineryTypes)))[0];
+    expect(read.columns).toHaveLength(4);
+    expect(read.glazingBars).toEqual({ horizontal: 3, vertical: 0 });
   });
 });

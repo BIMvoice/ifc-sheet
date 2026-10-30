@@ -115,4 +115,39 @@ describe('TypeOpeningForm', () => {
     assert.equal(typeSillOf(facts), null);
     assert.equal(typeEntryOf(facts)?.sillTyped, undefined);
   });
+
+  const typeInto = (input: HTMLInputElement, value: string) => act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+
+  it('five leaves, an opening transom row and glazing bars are written to the type and shown again', () => {
+    const root = render(<TypeOpeningForm facts={facts} />);
+    act(() => { [...root.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find((i) => i.value === '5')!.click(); });
+    assert.equal(root.querySelectorAll('[data-type-leaf]').length, 5);
+    assert.equal(root.querySelectorAll('input[type="checkbox"]').length, 1, 'the transom row opens only once there is a row');
+    act(() => { root.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); });
+    act(() => { root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].click(); });
+    typeInto(root.querySelector<HTMLInputElement>('[data-type-bars="horizontal"]')!, '2');
+    typeInto(root.querySelector<HTMLInputElement>('[data-type-bars="vertical"]')!, '1');
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-opening-apply]')!.click(); });
+    assert.deepEqual(typeOpeningOf(facts), { operations: Array(5).fill('fixed'), fanlight: true, fanlightOpens: true, bars: { horizontal: 2, vertical: 1 } });
+    cleanup();
+    const again = render(<TypeOpeningForm facts={facts} />);
+    assert.equal(again.querySelectorAll('[data-type-leaf]').length, 5);
+    assert.equal(again.querySelector<HTMLInputElement>('[data-type-bars="horizontal"]')!.value, '2');
+    assert.equal(again.querySelector<HTMLInputElement>('[data-type-bars="vertical"]')!.value, '1');
+    assert.equal(again.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].checked, true);
+  });
+
+  it('a type applied with the bars left at 0 has none, and a door type offers no opening transom', () => {
+    const root = render(<TypeOpeningForm facts={facts} />);
+    act(() => { root.querySelector<HTMLButtonElement>('[data-type-opening-apply]')!.click(); });
+    assert.equal(typeEntryOf(facts)?.glazingBars, undefined);
+    assert.deepEqual(typeOpeningOf(facts), { operations: ['fixed'], fanlight: false });
+    cleanup();
+    const door = render(<TypeOpeningForm facts={{ ...facts, kind: 'door', typeGlobalId: 'T-D2' }} />);
+    act(() => { door.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); });
+    assert.equal(door.querySelectorAll('input[type="checkbox"]').length, 1);
+  });
 });

@@ -12,7 +12,7 @@
 
 import {
   DOOR_OPERATIONS, WINDOW_OPERATIONS, defaultDoorSpec, defaultWindowSpec,
-  type JoineryHead, type JoineryPanel, type JoinerySpec, type PanelOperation,
+  type JoineryGlazingBars, type JoineryHead, type JoineryPanel, type JoinerySpec, type PanelOperation,
 } from '@ifc-lite/create';
 import { readJoineryViewChoice } from './joinery-view-detail.js';
 import { readCustomProps } from './joinery-custom-props.js';
@@ -48,6 +48,14 @@ function head(v: unknown): JoineryHead | null {
   const shape = v.shape as JoineryHead['shape'];
   const rise = typeof v.rise === 'number' && Number.isFinite(v.rise) && v.rise > 0 ? v.rise : undefined;
   return shape === 'segmental' || shape === 'pointed' ? (rise === undefined ? { shape } : { shape, rise }) : { shape };
+}
+
+/** Glazing bars as saved: whole counts of 0 to 5 each, and an entry with none at all has no bars (absent). */
+function bars(v: unknown): JoineryGlazingBars | null {
+  if (!isObject(v)) return null;
+  const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 0);
+  const horizontal = count(v.horizontal), vertical = count(v.vertical);
+  return horizontal || vertical ? { horizontal, vertical } : null;
 }
 
 export function readJoinerySpec(raw: unknown): JoinerySpec | null {
@@ -92,6 +100,8 @@ export function readJoinerySpec(raw: unknown): JoinerySpec | null {
   if (view) spec.view = view;
   const h = head(raw.head);
   if (h) spec.head = h;
+  const glazingBars = bars(raw.glazingBars);
+  if (glazingBars) spec.glazingBars = glazingBars;
   const custom = readCustomProps(raw.custom);
   if (custom.length) spec.custom = custom;
   

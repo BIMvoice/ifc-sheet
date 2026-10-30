@@ -60,7 +60,7 @@ export const sheetContentRo = {
   'joinery.type.hint': 'Canatele și felul în care se deschide fiecare, pentru toate elementele tipului IFC. Dimensiunea rămâne cea din model.',
   'joinery.type.leaves': 'Canate',
   'joinery.type.leaf': 'Canat {n}',
-  'joinery.type.fanlight': 'Luminator fix deasupra canatelor',
+  'joinery.type.fanlight': 'Al doilea rând (imposte) deasupra canatelor',
   'joinery.type.apply': 'Aplică tipului',
   'joinery.op.fixed': 'Fix',
   'joinery.op.side-left': 'Cu deschidere laterală, balamale pe stânga',
