@@ -122,12 +122,20 @@ export function setPlanObstaclesProvider(provider: (() => Box[]) | null): void {
 }
 export const planObstaclesOf = (): Box[] => planObstaclesProvider();
 
+/** The lines the plan in front's drawing carries, for the room dimensions of DIMALL. */
+let planLinesProvider: () => { a: Pt; b: Pt }[] = () => [];
+export function setPlanLinesProvider(provider: (() => { a: Pt; b: Pt }[]) | null): void {
+  planLinesProvider = provider ?? (() => []);
+}
+export const planLinesOf = (): { a: Pt; b: Pt }[] => planLinesProvider();
+
 /** The view in front gives the session all it reads from the view and its drawing (`view-inputs.ts`). */
 export function installViewInputs(inputs: ViewInputs): void {
   setViewElementsProvider(inputs.viewElements);
   setPlanPartsProvider(inputs.planParts);
   setPlanObstaclesProvider(inputs.planObstacles);
   setRoomsProvider(inputs.rooms);
+  setPlanLinesProvider(inputs.planLines ?? null);
   setAnnotationProviders(inputs.closedLoops, inputs.levelAt);
   setLevelReferenceProviders(inputs.levelRefAt, inputs.resolveLevel);
   planeProvider = inputs.plane;
@@ -141,6 +149,7 @@ export function clearViewInputs(): void {
   setPlanPartsProvider(null);
   setPlanObstaclesProvider(null);
   setRoomsProvider(null);
+  setPlanLinesProvider(null);
 }
 
 /** The shapes the view in front offers to snap to, as a function (for `parkViewProviders`' caller: `referenceShapesIn` always asks the current one). */
@@ -153,12 +162,12 @@ export const referenceProviderOf = (): ((min: Pt, max: Pt) => DraftShape[]) => r
 export function parkViewProviders(): () => void {
   const kept = {
     referenceProvider, modelPicker, loopProvider, levelProvider, levelRefProvider, levelResolver, planeProvider, viewKindProvider, viewProvider,
-    elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider,
+    elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider, planLinesProvider,
   };
   return () => {
     ({
       referenceProvider, modelPicker, loopProvider, levelProvider, levelRefProvider, levelResolver, planeProvider, viewKindProvider, viewProvider,
-      elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider,
+      elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider, planLinesProvider,
     } = kept);
   };
 }
@@ -168,6 +177,6 @@ export function installedViewInputs(): ViewInputs {
   return {
     closedLoops: closedLoopsOfView, levelAt: levelAtPoint, levelRefAt, resolveLevel: resolveLevelRef,
     plane: () => activeWorkPlane().plane, viewKind: viewKindOf, view: () => activeWorkPlane().view,
-    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf,
+    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf, planLines: planLinesOf,
   };
 }

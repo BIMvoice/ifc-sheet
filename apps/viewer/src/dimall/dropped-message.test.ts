@@ -10,6 +10,7 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { clearDraftHistory } from '@/drafting/draft-store.js';
+import { setRoomsProvider } from '@/drafting/session-providers';
 import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlaneProvider, submitCommandLine, useDraftingSession } from '@/drafting/session.js';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
 import ro from '@/i18n/locales/ro';
@@ -32,6 +33,7 @@ beforeEach(() => {
   resetProject();
   clearDraftHistory();
   useDraftingSession.setState({ selection: new Set(), history: [], lastCommandId: null });
+  setRoomsProvider(null);
   attachDraftingView(null, 'down', () => []);
   attachDraftingView('view-1', 'down', () => []);
   setWorkPlaneProvider(() => null, () => view);
@@ -44,7 +46,7 @@ describe('DIMALL says what it left out', () => {
     const dropped = planDimensions(notched(), { paperUnit: 0.1, textHeight: 0.25 }).droppedStrings;
     assert.ok(dropped > 0, 'the notched plan drops strings');
     const lines = run(notched());
-    assert.deepEqual(lines.map((l) => l.key), ['drafting.msg.dimAllDone', 'drafting.msg.dimAllDropped']);
+    assert.deepEqual(lines.map((l) => l.key), ['drafting.msg.dimAllDone', 'drafting.msg.dimAllDropped', 'drafting.msg.dimAllNoRooms']);
     const line = lines[1];
     assert.deepEqual(line.params, { count: dropped });
     assert.match(resolve(line.key, line.params), new RegExp(`^${dropped} strings? left out`));
@@ -69,7 +71,23 @@ describe('DIMALL says what it left out', () => {
     setLocale('en');
   });
 
-  it('says nothing about dropped strings on a plan that drops none', () => {
-    assert.deepEqual(run(house()).map((l) => l.key), ['drafting.msg.dimAllDone']);
+  it('says nothing about dropped strings on a plan that drops none, and that the model has no rooms', () => {
+    assert.deepEqual(run(house()).map((l) => l.key), ['drafting.msg.dimAllDone', 'drafting.msg.dimAllNoRooms']);
+  });
+
+  it('counts the room chains it left out in the same message, and says when the model has no rooms, in both languages', () => {
+    // One room whose label-sized obstacle fills it: not tested here; a room with no walls on its sides is left out whole (two chains).
+    setRoomsProvider(() => [{ guid: 'r', renderId: 1, at: 'cut', ring: rect(50, 50, 55, 55) }]);
+    const lines = run(house());
+    const said = lines.find((l) => l.key === 'drafting.msg.dimAllDropped');
+    assert.ok(said, lines.map((l) => l.key).join());
+    assert.deepEqual(said.params, { count: 2 });
+    assert.ok(!lines.some((l) => l.key === 'drafting.msg.dimAllNoRooms'));
+    assert.match(resolve(said.key, said.params), /^2 strings left out/);
+    setLocale('ro');
+    assert.match(resolve(said.key, said.params), /^2 șiruri de cote au fost lăsate deoparte/);
+    assert.match(resolve('drafting.msg.dimAllNoRooms'), /^Modelul nu are camere pe acest plan/);
+    setLocale('en');
+    assert.match(resolve('drafting.msg.dimAllNoRooms'), /^This plan has no rooms in the model/);
   });
 });
