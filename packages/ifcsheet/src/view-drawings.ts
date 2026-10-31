@@ -16,8 +16,7 @@
 import { createSectionConfig, Drawing2DGenerator, type Drawing2D, type SectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ModelExtent } from './drawing-set.js';
-import { ELEVATION_PLANES } from './elevation-planes.js';
-import type { PlanProjectView, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
+import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
 import { customPlaneCenter } from './section-plane.js';
 import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
 import * as IfcWasm from '@ifc-lite/wasm';
@@ -25,6 +24,13 @@ import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-
 import { planProjectionBands, viewProjection } from './plan-projection.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 
+/** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
+const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boolean; flipped: boolean }> = {
+  south: { axis: 'z', atMax: true, flipped: false },
+  north: { axis: 'z', atMax: false, flipped: true },
+  east: { axis: 'x', atMax: true, flipped: false },
+  west: { axis: 'x', atMax: false, flipped: true },
+};
 
 /** The Rust outline the app projects non-extruded geometry with; the runtime is initialised once a model is opened. */
 const meshOutline2dFn = (IfcWasm as unknown as { meshOutline2d?: MeshOutline2dFn }).meshOutline2d;

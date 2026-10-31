@@ -183,7 +183,21 @@ function aboveGround(l: DrawingLine, ground: readonly Piece[]): DrawingLine | nu
   return { ...l, line: keepStart ? { start: a, end: p } : { start: p, end: b } };
 }
 
-/** An elevation: the ground's top profile as heavy lines, no ground below it and nothing of the building drawn below it. */
+/** How far the ground line runs past the building on each side, metres: a draughtsman stops it just beyond the walls, and a viewport's box is the drawing plus 10 mm each side, and the layout leaves 25 mm between drawings, so at 1:100 the boxes of two elevations just clear each other (#648). */
+export const GROUND_OVERHANG_M = 0.2;
+
+/** The part of `l` between x = `lo` and x = `hi`; null when none of it is. */
+function clippedToX(l: DrawingLine, lo: number, hi: number): DrawingLine | null {
+  const { start: a, end: b } = l.line;
+  const t = (x: number) => (b.x === a.x ? 0 : (x - a.x) / (b.x - a.x));
+  const [t0, t1] = [Math.max(0, Math.min(t(lo), t(hi))), Math.min(1, Math.max(t(lo), t(hi)))];
+  if (b.x === a.x) return a.x >= lo && a.x <= hi ? l : null;
+  if (t1 - t0 < 1e-9) return null;
+  const at = (u: number) => ({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u });
+  return t0 === 0 && t1 === 1 ? l : { ...l, line: { start: at(t0), end: at(t1) } };
+}
+
+/** An elevation: the ground's top profile as heavy lines, no ground below it and nothing of the building drawn below it. The line stops `GROUND_OVERHANG_M` past the building: a hill 21 m wide must not widen the drawing of a 6 m house (#648). */
 function groundLineOnly(drawing: Drawing2D, groundIds: Set<string>): Drawing2D {
   const isGround = (e: { entityId: number; modelIndex: number }) => groundIds.has(keyOf(e));
   const mine = drawing.lines.filter((l) => isGround(l) && l.visibility !== 'hidden' && l.category !== 'hidden');
@@ -191,9 +205,13 @@ function groundLineOnly(drawing: Drawing2D, groundIds: Set<string>): Drawing2D {
   const heavy = new Set(profile);
   const ground = envelopeOf(profile);
   const lines: DrawingLine[] = [];
+  const building = boundsOf(drawing.lines.filter((l) => !isGround(l)), [...drawing.cutPolygons, ...(drawing.projectionPolygons ?? [])].filter((p) => !isGround(p)), drawing.bounds);
+  const lo = building.min.x - GROUND_OVERHANG_M; const hi = building.max.x + GROUND_OVERHANG_M;
   for (const l of drawing.lines) {
-    if (heavy.has(l)) lines.push({ ...l, category: 'silhouette' as const });
-    else if (!isGround(l)) {
+    if (heavy.has(l)) {
+      const kept = clippedToX(l, lo, hi);
+      if (kept) lines.push({ ...kept, category: 'silhouette' as const });
+    } else if (!isGround(l)) {
       const kept = aboveGround(l, ground);
       if (kept) lines.push(kept);
     }

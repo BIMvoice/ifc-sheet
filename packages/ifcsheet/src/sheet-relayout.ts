@@ -33,7 +33,7 @@ function membersOf(sheet: ProjectSheet, views: readonly ProjectView[]): ProjectV
 
 /**
  * Whether `sheet` stands as the layout rule left it: every viewport is a plain view at one scale, fitted to its drawing
- * (or cut to the room the rule reserved, as an elevation is), at the place `placeViewports` gives it, showing the drawing's own centre. A moved, resized, cropped, panned or
+ * (no crop), at the place `placeViewports` gives it, showing the drawing's own centre. A moved, resized, cropped, panned or
  * differently scaled viewport makes the sheet the person's.
  */
 export function sheetIsAsLaid(sheet: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent): boolean {
@@ -41,13 +41,11 @@ export function sheetIsAsLaid(sheet: ProjectSheet, views: readonly ProjectView[]
   const vps = sheet.viewports ?? [];
   if (!members) return false;
   const scale = vps[0].scale;
-  if (vps.some((vp) => vp.scale !== scale)) return false;
+  if (vps.some((vp) => vp.scale !== scale || vp.width > 0 || vp.height > 0)) return false;
   const laid = placeViewports(members, members.map((v) => viewExtent(v, extent)), scale, sheet, extent);
   return vps.every((vp, i) => {
     const want = laid[i];
     if (!near(vp.x, want.x, SAME_PLACE_MM) || !near(vp.y, want.y, SAME_PLACE_MM)) return false;
-    // Fitted to its drawing (no box) or cut to the room the rule reserved; any other size is a crop the person made.
-    if (!near(vp.width, want.width, SAME_PLACE_MM) || !near(vp.height, want.height, SAME_PLACE_MM)) return false;
     if (vp.center === null || want.center === null) return vp.center === want.center;
     return near(vp.center.x, want.center.x, SAME_CENTRE_M) && near(vp.center.y, want.center.y, SAME_CENTRE_M);
   });
@@ -74,7 +72,7 @@ export function relaySheet(sheet: ProjectSheet, views: readonly ProjectView[], e
   const viewports = placeViewports(members, sizes, scale, sheet, extent).map((vp, i) => {
     const old = (sheet.viewports ?? [])[i];
     // The viewport keeps its identity, and what is about the drawing rather than its place (hidden layers, number).
-    return { ...old, x: vp.x, y: vp.y, scale, width: vp.width, height: vp.height, center: vp.center };
+    return { ...old, x: vp.x, y: vp.y, scale, width: 0, height: 0, center: vp.center };
   });
   const notes = (sheet.notes ?? []).filter((n) => !isRescaledNote(n));
   if (scale !== wanted && typeof sheet.paper === 'string') notes.push(rescaledNote(locale, sheet.paper, wanted, scale));

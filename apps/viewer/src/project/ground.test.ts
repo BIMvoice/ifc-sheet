@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { drawingWithGround, EARTH_TONE } from './ground.js';
+import { drawingWithGround, EARTH_TONE, GROUND_OVERHANG_M } from './ground.js';
 
 const line = (x0: number, y0: number, x1: number, y1: number, ifcType: string, entityId: number, category: DrawingLine['category'] = 'projection'): DrawingLine => ({
   line: { start: { x: x0, y: y0 }, end: { x: x1, y: y1 } }, category, visibility: 'visible', entityId, ifcType, modelIndex: 0, depth: 0,
@@ -16,6 +16,8 @@ const rect = (x0: number, y0: number, x1: number, y1: number, ifcType: string, e
 });
 const box = (ifcType: string, id: number, x0: number, y0: number, x1: number, y1: number, cat: DrawingLine['category'] = 'projection') =>
   [line(x0, y0, x1, y0, ifcType, id, cat), line(x1, y0, x1, y1, ifcType, id, cat), line(x1, y1, x0, y1, ifcType, id, cat), line(x0, y1, x0, y0, ifcType, id, cat)];
+
+const close = (xs: number[]) => xs.map((x) => Math.round(x * 1e9) / 1e9);
 
 /** A 4 x 3 house standing on a 20 wide, 1 deep slab of ground whose top is at y = 0. */
 function scene(groundType = 'IfcSite'): Drawing2D {
@@ -32,6 +34,22 @@ describe('the ground in an elevation', () => {
     assert.deepEqual([ground[0].line.start.y, ground[0].line.end.y], [0, 0]);
     assert.equal(d.cutPolygons.length, 0);
     assert.equal(d.bounds.min.y, 0);
+  });
+
+  it('stops the ground line just past the building, so a wide hill does not widen the drawing (#648)', () => {
+    // The house is 0..4; the scene's ground runs -8..12. The drawing, and so its viewport and the marks beside it, is the house plus the overhang.
+    const d = drawingWithGround(scene(), 'elevation');
+    const ground = d.lines.filter((l) => l.ifcType === 'IfcSite');
+    assert.deepEqual(close([ground[0].line.start.x, ground[0].line.end.x].sort((a, b) => a - b)), [-GROUND_OVERHANG_M, 4 + GROUND_OVERHANG_M]);
+    assert.deepEqual(close([d.bounds.min.x, d.bounds.max.x]), [-GROUND_OVERHANG_M, 4 + GROUND_OVERHANG_M]);
+  });
+
+  it('keeps a ground line that is already narrower than the building, and a sloping line cut at the overhang keeps its slope', () => {
+    const d = scene();
+    d.lines = [...box('IfcWall', 1, 0, 0, 4, 3), line(-8, 0, 12, 4, 'IfcSite', 2)];
+    const [g] = drawingWithGround(d, 'elevation').lines.filter((l) => l.ifcType === 'IfcSite');
+    assert.deepEqual(close([g.line.start.x, g.line.end.x].sort((a, b) => a - b)), [-GROUND_OVERHANG_M, 4 + GROUND_OVERHANG_M]);
+    assert.ok(Math.abs((g.line.end.y - g.line.start.y) / (g.line.end.x - g.line.start.x) - 0.2) < 1e-9);
   });
 
   it('draws nothing of the building below the ground line', () => {
