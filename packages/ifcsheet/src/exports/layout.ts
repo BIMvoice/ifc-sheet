@@ -28,9 +28,10 @@ export { CUT_OVERHANG_M, SAME_CUT_M, SMALLEST_ROOM_M2, proposeSections, type Foo
 export { customPlaneCenter, sectionPlaneThrough, type WorldPoint } from '../section-plane.js';
 export {
   PER_SHEET, SET_PAPER, SET_PAPERS, SET_SCALES, TARGET_SCALE, buildDrawingSet, choosePaper, detailedScaleThatFits, drawingArea, fitsScale, fittingScale,
-  groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetScaleReason, sheetSeries, viewCentre, viewExtent,
-  withViewHung, type Arrangement, type ModelExtent, type Reason, type SetGroup, type SetInput, type SheetLayout,
+  groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetSeries, viewCentre, viewExtent,
+  withViewHung, type Arrangement, type ModelExtent, type SetGroup, type SetInput, type SheetLayout,
 } from '../drawing-set.js';
+export { sheetScaleReason, type Reason } from '../scale-reason.js';
 export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from '../storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from '../entity-bounds.js';
 export { FRAMING_RULE, boxGap, farElementLabel, frameElements, frameEntities, type FarElement, type FramedElement, type Framing, type FramingOptions } from '../framing.js';

@@ -150,6 +150,7 @@ export const wallEn = {
   'wall.add.draftingName': 'Drafting View',
   'wall.add.close': 'Close',
   'wall.reason.fits': '1 : {scale}, the largest that fits {paper}',
+  'wall.reason.shared': '1 : {scale}, the same as the other sheets of its kind',
   'wall.reason.chosen': '1 : {scale}, chosen',
   'wall.reason.noFit': '1 : {scale}, the smallest scale, and still larger than {paper}',
   'wall.shell.sheetsViews': '{sheets} sheets · {views} views',
