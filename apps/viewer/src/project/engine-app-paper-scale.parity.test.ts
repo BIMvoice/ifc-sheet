@@ -50,7 +50,7 @@ function withBoxOfAll(models: ReturnType<typeof useViewerStore.getState>['models
 
 const MODELS = [
   { name: 'AC20-FZK-Haus', path: FZK_HAUS, rows: ['A-101 A3 100 100', 'A-201 A3 100 100', 'A-202 A3 100 100', 'A-301 A3 100 100'] },
-  { name: 'IfcOpenHouse_IFC4', path: OPEN_HOUSE, rows: ['A-101 A3 50', 'A-201 A3 100 100', 'A-202 A3 50 50', 'A-301 A3 50'] },
+  { name: 'IfcOpenHouse_IFC4', path: OPEN_HOUSE, rows: ['A-101 A3 50', 'A-201 A3 100 100', 'A-202 A3 100 100', 'A-301 A3 50'] },
 ] as const;
 
 for (const { name, path, rows } of MODELS) {
