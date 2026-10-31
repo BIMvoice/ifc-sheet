@@ -18,6 +18,7 @@ import {
   DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD, TABLES_STYLE_ID,
   type DimStyle, type LayerGroup, type StyleBook, type TextStyle,
 } from '@/drafting/styles';
+import { commitDrafts } from '@/drafting/draft-store';
 import type { CustomLineType } from '@/drafting/line-types';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from '@/drafting/types';
 import { findSymbol, symbolDrawingScale } from '@bimvoice/ifcsheet';
@@ -260,7 +261,8 @@ function patchParams(ids: ReadonlySet<string>, patch: Record<string, DraftParamV
     }
     return { ...d, params };
   });
-  useProjectStore.setState({ drafts: restyle(s, drafts, (d) => ids.has(d.id)), dirty: true });
+  // One undo step: Undo puts the elements' colour, weight, line type and styles back.
+  commitDrafts(restyle(s, drafts, (d) => ids.has(d.id)));
 }
 
 /** Give elements a text or dimension style. */
