@@ -12,6 +12,7 @@
 
 import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { meshMaterialName } from '@bimvoice/ifcsheet/material-colour';
 import { useViewerStore } from '@/store';
 import { layerSetOf, liveConforms, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { idOf } from '@/joinery/object-id';
@@ -57,6 +58,12 @@ function polygonMaterialName(p: DrawingPolygon, soleToo: boolean): string | null
   if (!m) return null;
   if (p.materialId !== undefined) return materialName(m, p.materialId);
   return soleToo ? soleMaterialName(m, relationsFor(m)) : null;
+}
+
+/** The IfcMaterial a mesh is painted by (`meshMaterialName`, the engine's, which the headless sheets name it with too); null for one with none. */
+export function meshMaterialOf(mesh: { expressId: number; materialId?: number }): string | null {
+  const m = modelOf(mesh.expressId);
+  return m ? meshMaterialName(m.dataStore, m.expressId, mesh.materialId) : null;
 }
 
 /** The distinct IfcMaterial names cut in a drawing (empty when there is none). */

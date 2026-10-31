@@ -28,7 +28,10 @@ export interface ProjectMaterial {
   hatch?: string | null;
   /** 1 = the pattern's own size. */
   hatchScale?: number;
-  /** Cut fill colour; null: none (white), absent: the material's IFC colour. */
+  /**
+   * Cut fill: `#rrggbb`, null (none, white), `'ifc'` (the colour the model gives the material, #633) or absent (not set: the
+   * drawing's plain grey cut, and no fill on an elevation, as before).
+   */
   fill?: string | null;
   /** Pen of the hatch lines. */
   hatchPen?: CategoryLineWeight;
@@ -46,6 +49,8 @@ export const MEMBRANE_THICKNESS_M = 0.002;
 
 const WEIGHTS: ReadonlySet<string> = new Set(['heavy', 'medium', 'light', 'hairline']);
 const HEX = /^#[0-9a-f]{6}$/i;
+/** The stored fill that says "the colour the model gives this material" (#633). */
+export const IFC_FILL = 'ifc';
 
 export const normaliseMaterialName = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -84,7 +89,7 @@ export function readMaterial(raw: unknown): ProjectMaterial[] {
   const out: ProjectMaterial = { id: raw.id, name: raw.name };
   if (raw.hatch === null || typeof raw.hatch === 'string') out.hatch = raw.hatch;
   if (typeof raw.hatchScale === 'number' && Number.isFinite(raw.hatchScale) && raw.hatchScale > 0) out.hatchScale = raw.hatchScale;
-  if (raw.fill === null || (typeof raw.fill === 'string' && HEX.test(raw.fill))) out.fill = raw.fill;
+  if (raw.fill === null || raw.fill === IFC_FILL || (typeof raw.fill === 'string' && HEX.test(raw.fill))) out.fill = raw.fill;
   if (typeof raw.hatchPen === 'string' && WEIGHTS.has(raw.hatchPen)) out.hatchPen = raw.hatchPen as CategoryLineWeight;
   if (raw.membrane === true) out.membrane = true;
   return [out];

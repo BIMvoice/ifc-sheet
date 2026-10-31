@@ -25,7 +25,9 @@ import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
 import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.js';
 import { propertySetsOf, type JoineryProject } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties, viewStyler, type PenTable } from './view-style.js';
-import { surfaceFills, type SurfaceFill } from './surface-fills.js';
+import type { SurfaceFill } from './surface-fills.js';
+import { meshMaterialName, viewSurfaceFills } from './material-colour.js';
+import type { ProjectMaterial } from './materials.js';
 import { resolveViewGraphics } from './view-templates.js';
 import type { SheetAnnotations } from './sheet-annotations.js';
 import type { SheetSchedules } from './sheet-schedules.js';
@@ -51,6 +53,8 @@ export interface SheetGraphicsOptions {
   schedules?: SheetSchedules;
   /** The project's joinery catalogue, mapping and flips, which decide the symbol a door or window gets in a plan; default: none, so only what the model itself configures. */
   joinery?: JoineryProject;
+  /** The project's building materials table (#633): a material whose Fill is the IFC colour or a colour paints the faces of elevations and sections. */
+  materials?: readonly ProjectMaterial[];
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -114,9 +118,13 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   for (const view of doc.views) {
     const drawing = drawings.get(view.id);
     const graphics = resolveViewGraphics(view, doc.viewTemplates);
-    if (!drawing || !graphics?.colouredSurfaces || (view.kind !== 'elevation' && view.kind !== 'section')) continue;
+    if (!drawing || (view.kind !== 'elevation' && view.kind !== 'section')) continue;
     const styler = viewStyler({ graphics, pens: options.pens ?? PEN_TABLE, globalIdOf, propertiesOf, materialOf });
-    surfaces.set(view.id, surfaceFills(model.buildingMeshes, drawing.config, (entityId, ifcType) => styler.face({ entityId, ifcType }).visible));
+    const fills = viewSurfaceFills(model.buildingMeshes, drawing.config, {
+      switch: !!graphics?.colouredSurfaces, table: options.materials ?? [], materialNameOf: (mesh) => (model.dataStore ? meshMaterialName(model.dataStore, mesh.expressId, mesh.materialId) : null),
+      shown: (entityId, ifcType) => styler.face({ entityId, ifcType }).visible,
+    });
+    if (fills.length > 0) surfaces.set(view.id, fills);
   }
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;

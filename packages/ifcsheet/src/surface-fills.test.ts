@@ -28,6 +28,12 @@ describe('the surfaces of a coloured elevation (#499)', () => {
     expect(fills.map((f) => f.entityId)).toEqual([2, 2, 1, 1]);
   });
 
+  it('leaves out the terrain and the type objects: neither stands in the building', () => {
+    const wall = quad(1, 9, [1, 0, 0, 1]);
+    const fills = surfaceFills([wall, quad(2, 8, [0, 1, 0, 1], 'IfcSite'), quad(3, 7, [0, 0, 1, 1], 'IfcWallType'), quad(4, 6, [0, 1, 1, 1], 'IfcDoorType')], south());
+    expect([...new Set(fills.map((f) => f.entityId))]).toEqual([1]);
+  });
+
   it('winds every triangle the same way, so one non-zero path of them cannot cancel itself', () => {
     const flipped = quad(1, 9, [1, 0, 0, 1]);
     flipped.indices = new Uint32Array([0, 2, 1, 0, 3, 2]);
