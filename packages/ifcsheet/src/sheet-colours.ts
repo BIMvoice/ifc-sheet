@@ -45,15 +45,18 @@ export function hatchOf(loops: readonly Polyline[], name: string, patterns: read
 }
 
 /**
- * The coloured surfaces of an elevation or section in one viewport (#499), under the linework and under a colour scheme's fills: one
- * region per triangle in the order given (far to near), because a region's loops are filled even-odd and overlapping triangles would
- * cancel out.
+ * The coloured surfaces of an elevation or section in one viewport (#499), under the linework and under a colour scheme's fills, in the
+ * order given (far to near). A run of one colour is one region of many loops, which the PDF fills non-zero: every triangle is wound the
+ * same way (`surface-fills.ts`), so overlapping triangles of a run do not cancel out, and a large model's faces stay a few paths.
  */
 export function viewportSurfaceFills(surfaces: readonly SurfaceFill[], at: (p: Point2D) => Point2D, box: Rect): SheetFill[] {
   const out: SheetFill[] = [];
   for (const s of surfaces) {
     const ring = clipPolygon(s.polygon.outer.map(at), box);
-    if (ring.length >= 3) out.push({ loops: [closed(ring)], colour: s.surfaceColour, surface: true });
+    if (ring.length < 3) continue;
+    const last = out[out.length - 1];
+    if (last && last.colour === s.surfaceColour) last.loops.push(closed(ring));
+    else out.push({ loops: [closed(ring)], colour: s.surfaceColour, surface: true });
   }
   return out;
 }

@@ -47,6 +47,7 @@ import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
 import { readSiteArea } from './site-area.js';
 import type { StoreyInput } from './view-defaults.js';
+import { readMaterials, type ProjectMaterial } from './materials.js';
 import { readUnderlays } from './underlay-read.js';
 import type { ViewUnderlay } from './underlay.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
@@ -99,6 +100,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   set: ProjectSet;
   /** The pictures laid under views (#457); absent when the file has none. A build prints each on the sheets it names, when the generated set has that view and sheet. */
   underlays?: ViewUnderlay[];
+  /** The project's building materials table (#90); absent when the file has none. A build paints elevations and sections by its fills (#633). */
+  materials?: ProjectMaterial[];
 }
 
 type Json = Record<string, unknown>;
@@ -132,6 +135,7 @@ export function readProjectFile(text: string): ProjectFacts {
   // Before the lenient fields: a view, sheet or draft the app refuses the file for refuses it here first, as in the app.
   const set = readProjectSet(parsed);
   const underlays = readUnderlays(parsed);
+  const materials = readMaterials(parsed.materials);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   const sheets = readProjectSheets(parsed);
   return {
@@ -161,6 +165,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(urbanSettings ? { urbanSettings } : {}),
     set,
     ...(underlays.length > 0 ? { underlays } : {}),
+    ...(materials.length > 0 ? { materials } : {}),
     ...(parsed.openingLines === 'hinge' || parsed.openingLines === 'handle' ? { openingLines: parsed.openingLines } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: readSymbolFlips(parsed.symbolFlips) } : {}),
   };

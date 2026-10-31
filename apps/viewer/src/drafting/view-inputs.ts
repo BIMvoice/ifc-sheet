@@ -50,7 +50,7 @@ export function viewInputs({ view, drawing, entities, plane, levels }: ViewInput
   const resolve = levelResolverFor(view, levels, plane);
   return {
     viewElements: () => (drawing ? viewElements(drawing) : []),
-    planParts: () => planParts(drawing),
+    planParts: () => planParts(drawing, currentDrawingRuntime().geometryResult?.meshes ?? []),
     // The door leaves, swings and window frames this plan draws, which a tag keeps clear of (the same symbols the marks keep clear of).
     planObstacles: () => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips),
     // The rooms of this plan, each space cut at the plan's height (read as the check reads them).

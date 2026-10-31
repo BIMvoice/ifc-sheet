@@ -26,6 +26,7 @@ export const wallMaterialsRo = {
   'materials.penOf': 'Penița hașurii pentru {name}',
   'materials.membraneOf': '{name} se desenează ca membrană',
   'materials.fillModeOf': 'Umplerea pentru {name}',
+  'materials.fill.default': 'Implicit (nesetat)',
   'materials.fill.ifc': 'Culoarea din IFC',
   'materials.fill.none': 'Fără (alb)',
   'materials.fill.own': 'Culoare',
