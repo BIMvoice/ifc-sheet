@@ -25,6 +25,7 @@ import { fitText } from './title-block-template.js';
 import type { ExportCell, ExportTable } from './schedule-csv.js';
 import { PAD, pageTitle } from './paged-table.js';
 import { fireOf, thermalOf } from './joinery-custom-props.js';
+import { markCell, occurrenceMarkFor } from './element-mark.js';
 import { isOverridableRow, joineryCellText, joineryOverrideOf, levelRowId, overrideNumbers, typeIdentityOf, type JoineryCellOverride, type TypeFacts } from './joinery-overrides.js';
 import { modelRowLabel, modelRowNumber, modelRowText } from './joinery-model-rows.js';
 import { shownRows, symbolsShown, textRowId } from './schedule-content.js';
@@ -265,7 +266,8 @@ export function joineryScheduleLayout(data: ScheduleData, labels: ScheduleLabels
       const cw = cardW(e);
       const cx = x + cw / 2;
       prims.push({ kind: 'line', x1: x + cw, y1: top, x2: x + cw, y2: top + bandH, w: PEN.grid });
-      prims.push({ kind: 'text', x: cx, y: top + 7, text: e.mark, size: 4, anchor: 'middle', bold: true });
+      const mark = fitText({ size: 4, fit: cw - 3, bold: true }, markCell(e, data.overrides, groupsOf(data)));
+      prims.push({ kind: 'text', x: cx, y: top + 7, text: mark.text, size: mark.size, anchor: 'middle', bold: true });
       // The elevation, bottom on a baseline that leaves room for the width dimension (and the plan under it).
       const base = shown.elevation ? top + MARK_ROW + drawingH - 7 - planBlock : top + MARK_ROW - 8;
       const v = viewsOf(e);
@@ -330,7 +332,7 @@ export interface JoineryExportLabels extends ScheduleLabels {
 export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): { title: string; tables: ExportTable[] } {
   const specs = rows(data, labels);
   const columns = specs.flatMap((s) => (s.heads ?? [s.label]).map((head) => ({ head, spec: s })));
-  const body = data.entries.map((e): ExportCell[] => [e.mark, ...specs.flatMap((s) => (s.raw ? s.raw(e) : [s.value(e)]))]);
+  const body = data.entries.map((e): ExportCell[] => [markCell(e, data.overrides, groupsOf(data)), ...specs.flatMap((s) => (s.raw ? s.raw(e) : [s.value(e)]))]);
   const at = (pick: (s: TableRowSpec) => boolean | undefined) => columns.flatMap((c, i) => (pick(c.spec) ? [i + 1] : []));
   const sums = at((s) => s.sum);
   const total = sums.length ? [[labels.total, ...columns.map((_, i) => (sums.includes(i + 1) ? body.reduce((n, r) => n + (typeof r[i + 1] === 'number' ? (r[i + 1] as number) : 0), 0) : null))]] : [];
@@ -341,7 +343,7 @@ export function joineryExport(data: ScheduleData, labels: JoineryExportLabels): 
       {
         name: labels.elements, workbookOnly: true, numeric: [3, 4],
         header: [labels.number, labels.mark, labels.name, labels.widthMm, labels.heightMm, labels.level, labels.globalId],
-        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), e.mark, joineryCellText(data.overrides, e, 'name', e.name, groupsOf(data)), mm(e.width), mm(e.height), o.level, o.globalId])),
+        rows: data.entries.flatMap((e) => e.occurrences.map((o): ExportCell[] => [occurrenceMark(e, o), occurrenceMarkFor(e, o, data.overrides, groupsOf(data)) || e.mark, joineryCellText(data.overrides, e, 'name', e.name, groupsOf(data)), mm(e.width), mm(e.height), o.level, o.globalId])),
       },
     ],
   };
