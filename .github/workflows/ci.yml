@@ -259,10 +259,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -325,10 +322,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -365,10 +359,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -450,10 +441,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -495,10 +483,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -625,10 +610,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
