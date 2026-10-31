@@ -38,6 +38,13 @@ function labelOf(renderId: number): string {
   return roomLabel(node?.name ?? (ref ? store?.entities.getName(ref.expressId) : undefined), node?.longName, `Room ${ref?.expressId ?? renderId}`);
 }
 
+/** The rooms (IfcSpace) the drawings can be made from now, each with its render id and its name, in the order the model lists them. */
+export function interiorRooms(): { renderId: number; label: string }[] {
+  const ids = new Set<number>();
+  for (const m of currentDrawingRuntime().geometryResult?.meshes ?? []) if (m.ifcType === 'IfcSpace') ids.add(m.expressId);
+  return [...ids].map((renderId) => ({ renderId, label: labelOf(renderId) }));
+}
+
 /** Make the interior elevations of the room drawn with render id `renderId` and hang them on a new sheet. */
 export function createInteriorElevations(renderId: number): InteriorElevationsResult {
   const guid = renderIdGlobalId(renderId);
