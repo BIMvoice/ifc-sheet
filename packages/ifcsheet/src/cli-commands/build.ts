@@ -20,6 +20,7 @@ import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { underlayNotes } from '../cli-underlays.js';
+import { emptyPlanNote, sheetNumbersOf } from '../empty-plan-note.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
@@ -113,7 +114,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
   // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
   const extras = own && project ? await projectSheetOptionsWithViews(project, model, language, sheetFormat(language, standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras });
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
