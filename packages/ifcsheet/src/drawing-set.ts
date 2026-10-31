@@ -155,15 +155,18 @@ export function choosePaper(rows: readonly (readonly { w: number; h: number }[])
 export function placeViewports(views: readonly (Pick<ProjectView, 'id'> | ProjectView)[], sizes: readonly { w: number; h: number }[], scale: number, layout: SheetLayout = SET_PAPER, extent?: ModelExtent | null): SheetViewport[] {
   const area = drawingArea(layout);
   const k = 1000 / scale;
-  const make = (view: Pick<ProjectView, 'id'> | ProjectView, x: number, y: number): SheetViewport => ({
-    id: freshProjectId('viewport'), viewId: view.id, x, y, scale, width: 0, height: 0, center: extent && 'kind' in view ? viewCentre(view, extent) : null,
-  });
+  const make = (view: Pick<ProjectView, 'id'> | ProjectView, x: number, y: number, size: { w: number; h: number }): SheetViewport => {
+    const center = extent && 'kind' in view ? viewCentre(view, extent) : null;
+    // A facade elevation is drawn with the ground around the building (a hill is wider than the house), so it is cut to the room the layout reserved, true to scale (#648). Other views fit their drawing.
+    const crop = center && 'kind' in view && view.kind === 'elevation' ? fitViewportBox({ min: { x: 0, y: 0 }, max: { x: size.w, y: size.h } }, scale) : { width: 0, height: 0 };
+    return { id: freshProjectId('viewport'), viewId: view.id, x, y, scale, ...crop, center };
+  };
   if (arrangementOf(area) === 'column') {
     const heights = sizes.map((s) => s.h * k + TITLE_ROOM_MM);
     const total = heights.reduce((a, b) => a + b, 0) + GAP_MM * Math.max(0, views.length - 1);
     let top = area.y + (area.h - total) / 2;
     return views.map((view, i) => {
-      const vp = make(view, area.x + area.w / 2, top + (sizes[i].h * k) / 2);
+      const vp = make(view, area.x + area.w / 2, top + (sizes[i].h * k) / 2, sizes[i]);
       top += heights[i] + GAP_MM;
       return vp;
     });
@@ -173,7 +176,7 @@ export function placeViewports(views: readonly (Pick<ProjectView, 'id'> | Projec
   let x = area.x + (area.w - total) / 2;
   const y = area.y + area.h / 2;
   return views.map((view, i) => {
-    const vp = make(view, x + widths[i] / 2, y);
+    const vp = make(view, x + widths[i] / 2, y, sizes[i]);
     x += widths[i] + GAP_MM;
     return vp;
   });

@@ -38,9 +38,8 @@ describe('viewCentre and placeViewports (#279)', () => {
     expect(viewCentre(plan('p'), EXTENT)).toEqual({ x: 15, y: -3 });
   });
 
-  it('elevations, sections and details stay centred on their own drawing', () => {
-    const elevation = { id: 'e', name: 'e', createdAt: 0, kind: 'elevation', direction: 'south' } as ProjectView;
-    expect(viewCentre(elevation, EXTENT)).toBeNull();
+  it('sections and details stay centred on their own drawing (an elevation is centred on the building, #648)', () => {
+    expect(viewCentre({ kind: 'section' }, EXTENT)).toBeNull();
     expect(viewCentre(plan('d', { detail: { min: { x: 0, y: 0 }, max: { x: 1, y: 1 }, sourceViewId: 'p', number: 1 } as never }), EXTENT)).toBeNull();
   });
 

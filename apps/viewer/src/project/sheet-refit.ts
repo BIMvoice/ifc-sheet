@@ -33,7 +33,7 @@ export function relaidOnPaper(sheet: ProjectSheet, views: readonly ProjectView[]
     ...sheet,
     viewports: vps.map((vp) => {
       const p = placed.get(vp.id);
-      return p ? { ...vp, x: p.x, y: p.y, scale, width: 0, height: 0, center: vp.center ?? p.center } : vp;
+      return p ? { ...vp, x: p.x, y: p.y, scale, width: p.width, height: p.height, center: vp.center ?? p.center } : vp;
     }),
   };
 }
