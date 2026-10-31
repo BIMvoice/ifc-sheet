@@ -115,7 +115,6 @@ export {
   projectPointForPlane,
   getViewDirectionForPlane, looksUp,
   outlineToProjectionLines,
-  bandEdgeTolerance,
 } from './projection-bands.js';
 export type { ProjectionBand, ProjectionBandDepths } from './projection-bands.js';
 

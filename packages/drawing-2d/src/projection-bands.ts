@@ -41,7 +41,7 @@
  * cutter and `MeshData.positions` use (WASM applies `unit_scale` upstream).
  */
 
-import type { SectionPlaneConfig, Vec3, DrawingLine, MeshOutline2D } from './types.js';
+import type { SectionConfig, SectionPlaneConfig, Vec3, DrawingLine, MeshOutline2D } from './types.js';
 import { projectTo2D, projectTo2DBasis } from './math.js';
 import type { Point2D } from './types.js';
 
@@ -66,6 +66,18 @@ export type ProjectionBand =
  */
 export function bandEdgeTolerance(position: number): number {
   return 1e-9 + 8 * Number.EPSILON * Math.abs(position);
+}
+
+/**
+ * The depths the band consumers read (the classifier, the edge window, the 3D clip) for `config`: its below and above
+ * depths, each with `bandEdgeTolerance` added once, here. The band edge is `position - depth`, and the app's `position`
+ * carries the rounding of its percentage round trip (1.2000000000000002 for a 1.2 m cut, #628), so geometry lying
+ * exactly on the edge would otherwise fall one rounding error outside it. A side with no depth stays at none.
+ */
+export function bandsWithEdgeTolerance(config: Pick<SectionConfig, 'plane' | 'projectionDepth' | 'projectionBelowDepth' | 'projectionAboveDepth'>): ProjectionBandDepths {
+  const slack = bandEdgeTolerance(config.plane.customPlane?.distance ?? config.plane.position);
+  const widen = (depth: number) => (depth > 0 ? depth + slack : depth);
+  return { below: widen(config.projectionBelowDepth ?? config.projectionDepth), above: widen(config.projectionAboveDepth ?? config.projectionDepth) };
 }
 
 /** Depth window beyond the cut, per side, in world units. Both > 0. */
