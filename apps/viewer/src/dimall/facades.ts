@@ -17,6 +17,8 @@ import type { PlanPart } from './types';
 
 /** Wall pieces and openings meet within this (metres). */
 const TOUCH = 0.03;
+/** An opening's edge within this of the wall's edge (metres) is that edge. */
+const SNAP = 0.06;
 /** A facade run shorter than this is a step in the outline, not a facade. */
 export const MIN_RUN = 0.3;
 
@@ -88,17 +90,31 @@ export function inFacade(f: Facade, box: Box): { s0: number; s1: number; d0: num
 export function bridgedOpenings(openings: readonly Opening[], walls: readonly Box[]): Opening[] {
   const out: Opening[] = [];
   for (const o of openings) {
-    const horizontal = o.box.x1 - o.box.x0 >= o.box.y1 - o.box.y0;
-    const [l0, l1, t0, t1] = horizontal ? [o.box.x0, o.box.x1, o.box.y0, o.box.y1] : [o.box.y0, o.box.y1, o.box.x0, o.box.x1];
-    let band: [number, number] | null = null;
-    for (const w of walls) {
-      const wh = w.x1 - w.x0 >= w.y1 - w.y0;
-      if (wh !== horizontal) continue;
-      const [wl0, wl1, wt0, wt1] = horizontal ? [w.x0, w.x1, w.y0, w.y1] : [w.y0, w.y1, w.x0, w.x1];
-      if (wl1 < l0 - TOUCH || wl0 > l1 + TOUCH || Math.min(wt1, t1) - Math.max(wt0, t0) <= GRID_TOL) continue;
-      band = band ? [Math.min(band[0], wt0), Math.max(band[1], wt1)] : [wt0, wt1];
+    // The longer side of the opening runs along its wall; a near-square one (a window drawn 0.5 x 0.5) is tried both ways.
+    const first = o.box.x1 - o.box.x0 >= o.box.y1 - o.box.y0;
+    for (const horizontal of [first, !first]) {
+      let [l0, l1] = horizontal ? [o.box.x0, o.box.x1] : [o.box.y0, o.box.y1];
+      const [t0, t1] = horizontal ? [o.box.y0, o.box.y1] : [o.box.x0, o.box.x1];
+      let band: [number, number] | null = null;
+      for (const w of walls) {
+        const wh = w.x1 - w.x0 >= w.y1 - w.y0;
+        if (wh !== horizontal) continue;
+        const [wl0, wl1, wt0, wt1] = horizontal ? [w.x0, w.x1, w.y0, w.y1] : [w.y0, w.y1, w.x0, w.x1];
+        if (wl1 < l0 - TOUCH || wl0 > l1 + TOUCH || Math.min(wt1, t1) - Math.max(wt0, t0) <= GRID_TOL) continue;
+        band = band ? [Math.min(band[0], wt0), Math.max(band[1], wt1)] : [wt0, wt1];
+      }
+      if (!band) continue;
+      // The opening is the gap in the wall: a frame, a stop or a leaf that reaches past the wall's edge does not widen it.
+      const [from, to] = [l0, l1];
+      for (const w of walls) {
+        const [wl0, wl1, wt0, wt1] = horizontal ? [w.x0, w.x1, w.y0, w.y1] : [w.y0, w.y1, w.x0, w.x1];
+        if (Math.min(wt1, band[1]) - Math.max(wt0, band[0]) <= GRID_TOL) continue;
+        if (Math.abs(wl1 - from) <= SNAP && wl1 < to) l0 = wl1;
+        if (Math.abs(wl0 - to) <= SNAP && wl0 > from) l1 = wl0;
+      }
+      out.push({ part: o.part, box: horizontal ? { x0: l0, x1: l1, y0: band[0], y1: band[1] } : { x0: band[0], x1: band[1], y0: l0, y1: l1 } });
+      break;
     }
-    if (band) out.push({ part: o.part, box: horizontal ? { x0: l0, x1: l1, y0: band[0], y1: band[1] } : { x0: band[0], x1: band[1], y0: l0, y1: l1 } });
   }
   return out;
 }

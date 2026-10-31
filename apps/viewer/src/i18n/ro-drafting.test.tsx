@@ -120,6 +120,8 @@ describe('Romanian plurals take the form of their noun (#314)', () => {
     assert.deepEqual(forms('drafting.msg.levelAligned', (count) => ({ count })), ['1 cotă de nivel aliniată.', '2 cote de nivel aliniate.', '20 de cote de nivel aliniate.']);
     assert.match(resolve('drafting.msg.dimAllHeads', { count: 1 }), /^Un șir de cote trece/);
     assert.match(resolve('drafting.msg.dimAllHeads', { count: 20 }), /^20 de șiruri de cote trec/);
+    assert.match(resolve('drafting.msg.dimAllDropped', { count: 1 }), /^Un șir de cote a fost lăsat deoparte/);
+    assert.match(resolve('drafting.msg.dimAllDropped', { count: 20 }), /^20 de șiruri de cote au fost lăsate deoparte/);
   });
 
   it('the Info dialog counts: pachet, modificare', () => {

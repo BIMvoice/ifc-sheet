@@ -23,6 +23,11 @@ export const annotateAllRo = {
   'drafting.msg.dimAllNone': 'Nimic de cotat: acest plan nu are pereți tăiați sau nicio fațadă cu un gol sau cu un perete transversal.',
   'drafting.msg.dimAllHave': 'Acest plan are deja toate șirurile de cote.',
   'drafting.msg.dimAllDone': 'Cote adăugate: {count}, grupate în șiruri de cote: {strings}. Fațade fără nimic de cotat: {skipped}.',
+  'drafting.msg.dimAllDropped': {
+    one: 'Un șir de cote a fost lăsat deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
+    few: '{count} șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
+    other: '{count} de șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
+  },
   'drafting.msg.dimAllHeads': {
     one: 'Un șir de cote trece prin săgeata sau litera unui marcaj de secțiune; cifrele lui rămân libere, dar poate doriți să mutați marcajul.',
     few: '{count} șiruri de cote trec prin săgeata sau litera unui marcaj de secțiune; cifrele lor rămân libere, dar poate doriți să mutați marcajul.',

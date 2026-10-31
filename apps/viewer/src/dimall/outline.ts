@@ -60,7 +60,7 @@ export function rotate(p: Pt, angle: number): Pt {
   return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
 }
 
-function pointInRing(p: Pt, ring: readonly Pt[]): boolean {
+export function pointInRing(p: Pt, ring: readonly Pt[]): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const a = ring[i], b = ring[j];

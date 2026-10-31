@@ -29,6 +29,8 @@ export interface DimensionSettings {
   stepMm?: number;
   /** Text height in drawing units. */
   textHeight: number;
+  /** Boxes of what the view already carries beyond the walls (tags with their leaders, notes), drawing space: the strings stand beyond the ones in front of their facade. */
+  clear?: readonly { x0: number; y0: number; x1: number; y1: number }[];
 }
 
 export type StringKind = 'inner' | 'middle' | 'overall';
@@ -53,6 +55,8 @@ export interface DimensionPlan {
   strings: PlannedString[];
   /** Facades with nothing to dimension (no opening and no cross wall). */
   skippedFacades: number;
+  /** Strings left out because their line would run through the building (a notch or a courtyard facade). */
+  droppedStrings: number;
   /** How far the building's main direction is turned from the drawing's x axis, radians. */
   angle: number;
   /** The building's outer outline, drawing space; empty when there are no walls. */
