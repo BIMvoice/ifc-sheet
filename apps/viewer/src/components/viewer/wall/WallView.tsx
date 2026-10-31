@@ -13,11 +13,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { useNextTaskValue } from '@/hooks/useNextTaskValue';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
-import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { isSetSheet } from '@/project/drawing-set';
 import { sectionProposals } from '@/project/drawing-set-actions';
 import { startSet } from '@/set-template/start';
-import { setExtent } from '@/draft-set/body';
+import { wallExtent } from '@/project/wall-extent';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
@@ -49,7 +48,7 @@ export function WallView() {
   // out from the same settled meshes as the extent, so it always starts from a matching pair.
   const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy }), [levels, meshes, models, legacy]));
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
-  const extent = useMemo(() => setExtent(settled.levels, settled.meshes, mergedSectionBounds(settled.models, settled.legacy)).extent, [settled]);
+  const extent = useMemo(() => wallExtent(settled), [settled]);
   const settledMeshes = settled.meshes;
   // A model that has finished loading and brought no geometry never gets a set laid out (#603): say so instead of waiting.
   // A model whose geometry failed stays in `models` with `loadState: 'error'`: that is a failure to report, not an absence of geometry.

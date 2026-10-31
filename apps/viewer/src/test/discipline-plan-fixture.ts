@@ -129,3 +129,6 @@ export async function loadPlanModel(path: string, options: { geometryHashes?: bo
   const drawnClasses = (drawing: Drawing2D) => new Set([...drawnIds(drawing)].map(classOf).filter(Boolean));
   return { levels, idsByName, nameOf, classOf, planOf, drawnNames, drawnClasses, drawnIds };
 }
+
+/** The IfcOpenHouse sample, committed beside the FZK-Haus (the same file `pnpm fixtures` fetches to `tests/models/ara3d/`): one storey, a roof, no site. */
+export const OPEN_HOUSE = fileURLToPath(new URL('./__fixtures__/IfcOpenHouse_IFC4.ifc', import.meta.url));

@@ -66,6 +66,7 @@ boundedProjectionBands: value
 boundsFromIndex: value
 boxGap: value
 buildDrawingSet: value
+buildingElementIds: value
 choosePaper: value
 createEntityBoundsLookup: value
 customPlaneCenter: value
