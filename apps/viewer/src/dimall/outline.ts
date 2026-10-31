@@ -33,26 +33,62 @@ export function boxOf(ring: readonly Pt[]): Box {
 export const unionBox = (a: Box, b: Box): Box => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) });
 export const ringOfBox = (b: Box): Pt[] => [{ x: b.x0, y: b.y0 }, { x: b.x1, y: b.y0 }, { x: b.x1, y: b.y1 }, { x: b.x0, y: b.y1 }];
 
+const area2 = (loop: readonly Pt[]): number => loop.reduce((s, p, i) => { const q = loop[(i + 1) % loop.length]; return s + p.x * q.y - q.x * p.y; }, 0);
+
+/** Edge directions are counted in bins this wide (degrees, modulo a right angle). */
+const BIN_DEG = 0.05;
+/** Edges this close to the busiest direction (degrees) are that direction: their mean is the result. */
+const SAME_DIR_DEG = 0.15;
+
 /**
- * The direction the main walls run in, as an angle in (-45, 45] degrees from
- * the x axis: the length-weighted mean of the wall edges' directions taken
- * modulo a right angle. Within 0.05 degrees of the axes it is exactly 0.
+ * The direction the main walls run in, as an angle in (-45, 45] degrees from the x axis: the direction, modulo a right
+ * angle, that holds the greatest length of wall edge. It is the busiest direction and not the mean of all of them,
+ * because a mean is pulled off every wall by whatever else is on the plan: a slanted jamb or a wing at an angle turned a
+ * square building by 0.06 degrees, enough to move its corners by 18 mm in 17 m. Within 0.05 degrees of the axes it is exactly 0.
  */
 export function mainDirection(rings: readonly (readonly Pt[])[]): number {
-  let sx = 0, sy = 0;
+  const edges: { deg: number; len: number }[] = [];
   for (const ring of rings) {
     for (let i = 0; i < ring.length; i++) {
       const a = ring[i], b = ring[(i + 1) % ring.length];
       const len = Math.hypot(b.x - a.x, b.y - a.y);
       if (len < 1e-9) continue;
-      const t = Math.atan2(b.y - a.y, b.x - a.x) * 4;
-      sx += len * Math.cos(t);
-      sy += len * Math.sin(t);
+      edges.push({ deg: (((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI) % 90 + 90) % 90, len });
     }
   }
-  if (Math.hypot(sx, sy) < 1e-9) return 0;
-  const angle = Math.atan2(sy, sx) / 4;
-  return Math.abs(angle) < (0.05 * Math.PI) / 180 ? 0 : angle;
+  if (edges.length === 0) return 0;
+  const n = Math.round(90 / BIN_DEG);
+  const bins = new Array<number>(n).fill(0);
+  for (const e of edges) bins[Math.min(n - 1, Math.floor(e.deg / BIN_DEG))] += e.len;
+  // A direction on the edge of a bin falls either side of it, so a bin counts with its next neighbour.
+  let peak = 0, most = -1;
+  for (let i = 0; i < n; i++) {
+    const both = bins[i] + bins[(i + 1) % n];
+    if (both > most) { most = both; peak = i; }
+  }
+  const centre = (peak + 1) * BIN_DEG;
+  let sum = 0, weight = 0;
+  for (const e of edges) {
+    const off = ((e.deg - centre + 45) % 90 + 90) % 90 - 45;
+    if (Math.abs(off) <= SAME_DIR_DEG) { sum += off * e.len; weight += e.len; }
+  }
+  const mean = centre + sum / weight;
+  const deg = mean > 45 ? mean - 90 : mean;
+  return Math.abs(deg) < 0.05 ? 0 : (deg * Math.PI) / 180;
+}
+
+/** Whether a ring lies along the axes of the frame it is given in: at least half its outline does, within `tolDeg`. A mitre or a slanted jamb leaves the rest of a wall on its axes; a wall at an angle has nothing on them. A ring with no area is the diagonal of a mitred layer's corner, the wall's own, and counts as on them. */
+export function ringOnAxes(ring: readonly Pt[], tolDeg: number): boolean {
+  if (Math.abs(area2(ring)) < 1e-6) return true;
+  let on = 0, all = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const off = (((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 45) % 90 + 90) % 90 - 45;
+    all += len;
+    if (Math.abs(off) <= tolDeg) on += len;
+  }
+  return on >= all / 2;
 }
 
 export function rotate(p: Pt, angle: number): Pt {
@@ -84,8 +120,6 @@ export function gridLines(values: number[]): number[] {
   if (group.length) lines.push(group.reduce((s, x) => s + x, 0) / group.length);
   return lines;
 }
-
-const area2 = (loop: readonly Pt[]): number => loop.reduce((s, p, i) => { const q = loop[(i + 1) % loop.length]; return s + p.x * q.y - q.x * p.y; }, 0);
 
 /** Drop the vertices a straight run passes through. */
 function straightened(loop: Pt[]): Pt[] {
@@ -154,12 +188,17 @@ export function filledCells(shapes: readonly (readonly Pt[])[], boxes: readonly 
  * shapes make several separate masses, the biggest one.
  */
 export function outlineOf(shapes: readonly (readonly Pt[])[]): Pt[] | null {
-  if (shapes.length === 0) return null;
+  return outlinesOf(shapes)[0] ?? null;
+}
+
+/** The outer boundary of each separate mass of the union of `shapes`, the biggest first. */
+export function outlinesOf(shapes: readonly (readonly Pt[])[]): Pt[][] {
+  if (shapes.length === 0) return [];
   const xs = gridLines(shapes.flatMap((r) => r.map((p) => p.x)));
   const ys = gridLines(shapes.flatMap((r) => r.map((p) => p.y)));
   const boxes = shapes.map(boxOf);
   const nx = xs.length - 1, ny = ys.length - 1;
-  if (nx < 1 || ny < 1) return null;
+  if (nx < 1 || ny < 1) return [];
   const filled = filledCells(shapes, boxes, xs, ys);
   const at = (i: number, j: number) => i >= 0 && j >= 0 && i < nx && j < ny && filled[i][j];
   const id = (i: number, j: number) => i * (ny + 1) + j;
@@ -204,7 +243,5 @@ export function outlineOf(shapes: readonly (readonly Pt[])[]): Pt[] | null {
       loops.push(loop.map(([i, j]) => ({ x: xs[i], y: ys[j] })));
     }
   }
-  let best: Pt[] | null = null;
-  for (const loop of loops) if (area2(loop) > 0 && (!best || area2(loop) > area2(best))) best = loop;
-  return best ? straightened(best) : null;
+  return loops.filter((loop) => area2(loop) > 0).sort((a, b) => area2(b) - area2(a)).map(straightened);
 }

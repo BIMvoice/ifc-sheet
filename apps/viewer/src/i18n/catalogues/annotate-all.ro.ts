@@ -24,9 +24,14 @@ export const annotateAllRo = {
   'drafting.msg.dimAllHave': 'Acest plan are deja toate șirurile de cote.',
   'drafting.msg.dimAllDone': 'Cote adăugate: {count}, grupate în șiruri de cote: {strings}. Fațade fără nimic de cotat: {skipped}.',
   'drafting.msg.dimAllDropped': {
-    one: 'Un șir de cote a fost lăsat deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
-    few: '{count} șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
-    other: '{count} de șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peste încăperi și etichete. Cotați acei pereți manual.',
+    one: 'Un șir de cote a fost lăsat deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau peretele stă oblic față de plan și nu a putut fi măsurat exact. Cotați acel perete manual.',
+    few: '{count} șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau pereții stau oblic față de plan și nu au putut fi măsurați exact. Cotați acei pereți manual.',
+    other: '{count} de șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau pereții stau oblic față de plan și nu au putut fi măsurați exact. Cotați acei pereți manual.',
+  },
+  'drafting.msg.dimAllOpenings': {
+    one: 'O ușă sau o fereastră a fost lăsată în afara șirurilor de cote: planul nu arată exact unde îi sunt marginile. Cotați-o manual.',
+    few: '{count} uși sau ferestre au fost lăsate în afara șirurilor de cote: planul nu arată exact unde le sunt marginile. Cotați-le manual.',
+    other: '{count} de uși sau ferestre au fost lăsate în afara șirurilor de cote: planul nu arată exact unde le sunt marginile. Cotați-le manual.',
   },
   'drafting.msg.dimAllHeads': {
     one: 'Un șir de cote trece prin săgeata sau litera unui marcaj de secțiune; cifrele lui rămân libere, dar poate doriți să mutați marcajul.',

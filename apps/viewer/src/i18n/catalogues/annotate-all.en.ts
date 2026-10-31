@@ -12,8 +12,12 @@ export const annotateAllEn = {
   'drafting.msg.dimAllHave': 'This plan has all its dimension strings already.',
   'drafting.msg.dimAllDone': 'Added {count} dimensions in {strings} strings. Facades with nothing to dimension: {skipped}.',
   'drafting.msg.dimAllDropped': {
-    one: '{count} string left out: on a notch or courtyard facade it would run through the building, over its rooms and labels. Dimension that wall by hand.',
-    other: '{count} strings left out: on a notch or courtyard facade they would run through the building, over its rooms and labels. Dimension those walls by hand.',
+    one: '{count} string left out: on a notch or courtyard facade it would run through the building, or its wall stands at an angle to the plan and it could not be measured exactly. Dimension that wall by hand.',
+    other: '{count} strings left out: on a notch or courtyard facade they would run through the building, or their walls stand at an angle to the plan and they could not be measured exactly. Dimension those walls by hand.',
+  },
+  'drafting.msg.dimAllOpenings': {
+    one: '{count} door or window left out of the strings: the plan does not show exactly where its edges are. Dimension it by hand.',
+    other: '{count} doors or windows left out of the strings: the plan does not show exactly where their edges are. Dimension them by hand.',
   },
   'drafting.msg.dimAllHeads': '{count} strings run through the arrow or letter of a section mark; their figures keep clear of it, but you may want to move the mark.',
   'drafting.cmd.tagAll': 'TAGALL',

@@ -18,6 +18,8 @@ export interface PlanPart {
   id: number;
   kind: PartKind;
   rings: Pt[][];
+  /** A door's or window's whole body seen from above, drawing space, when the model's mesh is at hand: what the plan's cut misses of a round or shaped window. */
+  body?: Pt[];
 }
 
 export interface DimensionSettings {
@@ -55,8 +57,10 @@ export interface DimensionPlan {
   strings: PlannedString[];
   /** Facades with nothing to dimension (no opening and no cross wall). */
   skippedFacades: number;
-  /** Strings left out because their line would run through the building (a notch or a courtyard facade). */
+  /** Strings left out: their line would run through the building (a notch or a courtyard facade), or their facade is not on the walls' axes and its figures could not be trusted. */
   droppedStrings: number;
+  /** Doors and windows left out of the strings because the plan does not show exactly where their edges are. */
+  droppedOpenings: number;
   /** How far the building's main direction is turned from the drawing's x axis, radians. */
   angle: number;
   /** The building's outer outline, drawing space; empty when there are no walls. */

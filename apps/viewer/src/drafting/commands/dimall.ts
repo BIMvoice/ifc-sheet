@@ -53,6 +53,7 @@ export const dimAllCommand: DraftCommandDef = {
     const crossed = stringsThroughHeads(plan.strings, symbolPieces(here), ctx.settings.textHeight);
     ctx.say('drafting.msg.dimAllDone', { count: drafts.length, strings: plan.strings.length, skipped: plan.skippedFacades });
     if (plan.droppedStrings > 0) ctx.say('drafting.msg.dimAllDropped', { count: plan.droppedStrings });
+    if (plan.droppedOpenings > 0) ctx.say('drafting.msg.dimAllOpenings', { count: plan.droppedOpenings });
     if (crossed > 0) ctx.say('drafting.msg.dimAllHeads', { count: crossed });
   },
 };
