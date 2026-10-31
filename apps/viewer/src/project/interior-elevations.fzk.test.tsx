@@ -141,8 +141,9 @@ describe('facade elevations and sections are unchanged', () => {
   }
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
-    north: '193/0/0/2000451137', south: '241/0/0/1942490408', east: '363/0/0/-141235747', west: '421/0/0/155999563',
-    'north-deep': '200/0/0/2058618608', 'south-deep': '258/0/0/1672430668', 'east-deep': '371/0/0/-464167292', 'west-deep': '371/0/0/-1001212464',
+    // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
+    north: '193/0/0/781551425', south: '241/0/0/-1142268376', east: '363/0/0/288291549', west: '421/0/0/-514462133',
+    'north-deep': '200/0/0/-1472118032', 'south-deep': '258/0/0/-109971380', 'east-deep': '371/0/0/-493559164', 'west-deep': '371/0/0/316887504',
     s1: '712/84/0/1814603118', s2: '2008/32/0/1592352504', s3: '1901/43/0/-787997569',
   };
   const s = Math.SQRT1_2;
