@@ -25,7 +25,9 @@ import type { MeshData } from '@ifc-lite/geometry';
 export type SurfaceFill = DrawingPolygon & { surfaceColour: string };
 
 /** Classes that are not surfaces of the building: they are never drawn as a face. */
-const NOT_SURFACES = new Set(['IFCSPACE', 'IFCOPENINGELEMENT', 'IFCVIRTUALELEMENT', 'IFCGRID', 'IFCANNOTATION', 'IFCZONE']);
+const NOT_SURFACES = new Set(['IFCSPACE', 'IFCOPENINGELEMENT', 'IFCVIRTUALELEMENT', 'IFCGRID', 'IFCANNOTATION', 'IFCZONE', 'IFCSITE']);
+/** A type object (IfcWallType) carries the shape its occurrences share, not a thing standing in the building; the headless sheets never mesh it. */
+const notSurface = (ifcType: string): boolean => NOT_SURFACES.has(ifcType.toUpperCase()) || ifcType.toUpperCase().endsWith('TYPE');
 
 /** Depth of one layer of the painter's order, metres. */
 const LAYER = 0.01;
@@ -67,15 +69,17 @@ function beyondPlane(corners: readonly Corner[]): Corner[] {
  */
 export function surfaceFills(
   meshes: readonly MeshData[], config: SectionConfig, shown: (entityId: number, ifcType: string | undefined) => boolean = () => true,
+  /** The colour a mesh is painted in (`#rrggbb`), `null` to leave it out; default: its own, `surfaceColourOf`. */
+  colourOf: (mesh: MeshData) => string | null = (mesh) => surfaceColourOf(mesh.color),
 ): SurfaceFill[] {
   const depth = config.projectionDepth;
   if (!(depth > 0)) return [];
   const plane = config.plane;
   const found: { layer: number; colour: string; fill: SurfaceFill }[] = [];
   for (const mesh of meshes) {
-    if (mesh.ifcType && NOT_SURFACES.has(mesh.ifcType.toUpperCase())) continue;
+    if (mesh.ifcType && notSurface(mesh.ifcType)) continue;
     if (!shown(mesh.expressId, mesh.ifcType)) continue;
-    const colour = surfaceColourOf(mesh.color);
+    const colour = colourOf(mesh);
     if (!colour) continue;
     const { positions, indices, origin } = mesh;
     const at = (i: number) => ({
