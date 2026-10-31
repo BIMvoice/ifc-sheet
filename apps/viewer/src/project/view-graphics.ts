@@ -16,7 +16,7 @@ import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2
 import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } from './types';
-import type { MaterialDrawing, MaterialHatch } from './material-drawing';
+import { materialFaces, type MaterialDrawing, type MaterialHatch } from '@bimvoice/ifcsheet/material-drawing';
 import { shownRooms, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
 import type { SurfaceFill } from '@bimvoice/ifcsheet/surface-fills';
@@ -136,17 +136,9 @@ function styledByGraphics(
   globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
   if (materials) {
-    const hatchOf = new Map<unknown, HatchSource>(drawing.cutPolygons.map((p) => [p.polygon.outer, { ifcType: p.ifcType, entityId: p.entityId, ...(p.materialId !== undefined ? { materialId: p.materialId } : {}) }]));
-    drawing = {
-      ...drawing,
-      cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
-        const fill = materials.fills.get(p);
-        return fill === undefined ? p : { ...p, materialFill: fill, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
-      }),
-      lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
-      materialHatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),
-      membranes: materials.membranes,
-    } as StyledDrawing;
+    // The engine's one application of a cut's materials, which the headless sheets draw through too (#645).
+    const { cutPolygons, lines, hatches, membranes } = materialFaces(drawing, materials);
+    drawing = { ...drawing, cutPolygons, lines, materialHatches: hatches, membranes } as StyledDrawing;
   }
   if (replaced) {
     drawing = {
