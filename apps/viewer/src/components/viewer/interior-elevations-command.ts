@@ -14,19 +14,20 @@ import { useViewerStore } from '@/store';
 import { createInteriorElevations } from '@/project/interior-elevation-actions';
 import { activateDocumentTab } from '@/project/open-view';
 
-/** Run it on the room drawn with render id `renderId`; `null`: no room was given. */
-export function runInteriorElevations(renderId: number | null): void {
+/** Run it on the room drawn with render id `renderId`; `null`: no room was given. Returns the sheet made, or `null` when none was. */
+export function runInteriorElevations(renderId: number | null): string | null {
   if (renderId === null) {
     toast.info(resolve('entityContextMenu.interiorElevationsSelectRoom'));
-    return;
+    return null;
   }
   const made = createInteriorElevations(renderId);
   if ('error' in made) {
     toast.info(resolve(made.error === 'noRoom' ? 'entityContextMenu.interiorElevationsNoRoom' : 'entityContextMenu.interiorElevationsNoFaces'));
-    return;
+    return null;
   }
   activateDocumentTab(made.sheetId);
   toast.success(resolve('entityContextMenu.interiorElevationsMade', { count: made.count, sheet: made.sheetNumber }));
+  return made.sheetId;
 }
 
 /** The selected room's render id, when exactly one room (IfcSpace) is selected. */
