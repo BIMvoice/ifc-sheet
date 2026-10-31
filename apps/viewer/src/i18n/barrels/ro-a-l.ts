@@ -42,6 +42,7 @@ import { ifcClassRo } from '../catalogues/ifc-class.ro';
 import { joineryCellRo } from '../catalogues/joinery-cell.ro';
 import { joineryBlockRo } from '../catalogues/joinery-block.ro';
 import { joineryHeadRo } from '../catalogues/joinery-head.ro';
+import { joineryReachRo } from '../catalogues/joinery-reach.ro';
 import { landxmlRo } from '../catalogues/landxml.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
@@ -87,6 +88,7 @@ export const roAL = {
   ...joineryCellRo,
   ...joineryHeadRo,
   ...joineryBlockRo,
+  ...joineryReachRo,
   ...landxmlRo,
   ...listScheduleRo,
 } as const;

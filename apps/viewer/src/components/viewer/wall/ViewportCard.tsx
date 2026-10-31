@@ -29,6 +29,8 @@ import { ScheduleExportCard } from './ScheduleExportCard';
 import { ScheduleFilterSection } from './ScheduleFilterCard';
 import { ScheduleTextCard } from './ScheduleTextCard';
 import { JoineryCellCard } from './JoineryCellCard';
+import { JoineryDrawInCard } from './JoineryDrawInCard';
+import type { JoineryDraft } from '../joinery/JoineryDraftHost';
 import { SubReportCard } from './SubReportCard';
 import { TypeClassificationCard } from './TypeClassificationCard';
 import { BoqCard } from '../boq/BoqCard';
@@ -54,9 +56,11 @@ interface ViewportCardProps {
   drawingBounds?: { min: { x: number; y: number }; max: { x: number; y: number } } | null;
   /** The model's extent: a scale change lays the sheet out again (`ScaleField`). */
   extent?: ModelExtent | null;
+  /** Step into a joinery schedule's type view to draw on it (#656); without it the schedule's card offers no such way in. */
+  onDrawIn?: (draft: JoineryDraft) => void;
 }
 
-export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null }: ViewportCardProps) {
+export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null, onDrawIn }: ViewportCardProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
@@ -116,6 +120,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {schedule ? <ScheduleFilterSection key={`${schedule.id}:filter`} schedule={schedule} /> : null}
           {schedule ? <ScheduleTextCard key={`${schedule.id}:text`} schedule={schedule} /> : null}
           {schedule ? <JoineryCellCard key={`${schedule.id}:cell`} schedule={schedule} /> : null}
+          {schedule && onDrawIn && (schedule.kind === 'all' || schedule.kind === 'door' || schedule.kind === 'window') ? <JoineryDrawInCard key={`${schedule.id}:drawin`} schedule={schedule} onDrawIn={onDrawIn} /> : null}
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}

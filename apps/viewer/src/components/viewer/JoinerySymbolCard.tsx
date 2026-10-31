@@ -89,7 +89,7 @@ export function JoinerySymbolCard({ modelId, expressId }: { modelId: string; exp
         </SelectContent>
       </Select>
       {entries.length === 0 && <p className="mt-1 text-2xs text-muted-foreground">{t('joinerySymbol.libraryEmpty')}</p>}
-      {facts.typeGlobalId ? <TypeOpeningForm key={facts.typeGlobalId} facts={facts} /> : null}
+      {facts.typeGlobalId ? <TypeOpeningForm key={facts.typeGlobalId} facts={facts} /> : <p data-joinery-untyped className="mt-1 text-2xs text-muted-foreground">{t('joinery.reach.untyped')}</p>}
     </section>
   );
 }
