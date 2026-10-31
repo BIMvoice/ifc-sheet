@@ -33,5 +33,7 @@ export function elementLabel(globalId: string, field: TagField): string | null {
   const read = (f: TagFieldId): string => String(firstValue(tagToolSourcesOf(el.tagFields, kind, f), (ref) => readStored(ref, el)).value ?? '');
   const name = read('name');
   if (field === 'name') return name || '?';
+  // A door or window never reads its Name or a class word: its mark is what the office's sources give, else the one mark the schedule shares (`joinery/opening-marks.ts`).
+  if (kind === 'door' || kind === 'window') return (el.tagFields?.[kind]?.mark ? read('mark') : '') || el.attribute('Mark') || '?';
   return read('mark') || name || '?';
 }
