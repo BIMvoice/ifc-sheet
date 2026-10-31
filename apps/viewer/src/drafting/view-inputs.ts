@@ -33,7 +33,7 @@ import type { DraftContext } from './commands/types';
 import type { DraftEntity } from './types';
 
 /** The part of a command's context that comes from the view and its drawing. */
-export type ViewInputs = Pick<DraftContext, 'closedLoops' | 'levelAt' | 'levelRefAt' | 'resolveLevel' | 'plane' | 'viewKind' | 'view' | 'viewElements' | 'planParts' | 'planObstacles' | 'rooms'>;
+export type ViewInputs = Pick<DraftContext, 'closedLoops' | 'levelAt' | 'levelRefAt' | 'resolveLevel' | 'plane' | 'viewKind' | 'view' | 'viewElements' | 'planParts' | 'planObstacles' | 'rooms' | 'planLines'>;
 
 export interface ViewInputsSource {
   view: Exclude<ProjectView, { kind: '3d' }>;
@@ -55,6 +55,8 @@ export function viewInputs({ view, drawing, entities, plane, levels }: ViewInput
     planObstacles: () => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips),
     // The rooms of this plan, each space cut at the plan's height (read as the check reads them).
     rooms: () => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult),
+    // Every line the drawing carries, hidden ones too: a figure inside a room keeps off them, and a dimension line does not run along one.
+    planLines: () => (drawing?.lines ?? []).map((l) => ({ a: { x: l.line.start.x, y: l.line.start.y }, b: { x: l.line.end.x, y: l.line.end.y } })),
     // Hatch boundaries: drafted closed shapes and the drawing's cut outlines.
     closedLoops: () => closedLoopsOf(entities, drawing),
     // Level marks: the plan's level, or the point's height on a section / elevation.

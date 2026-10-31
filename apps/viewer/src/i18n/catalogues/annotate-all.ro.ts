@@ -24,10 +24,16 @@ export const annotateAllRo = {
   'drafting.msg.dimAllHave': 'Acest plan are deja toate șirurile de cote.',
   'drafting.msg.dimAllDone': 'Cote adăugate: {count}, grupate în șiruri de cote: {strings}. Fațade fără nimic de cotat: {skipped}.',
   'drafting.msg.dimAllDropped': {
-    one: 'Un șir de cote a fost lăsat deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau peretele stă oblic față de plan și nu a putut fi măsurat exact. Cotați acel perete manual.',
-    few: '{count} șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau pereții stau oblic față de plan și nu au putut fi măsurați exact. Cotați acei pereți manual.',
-    other: '{count} de șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, sau pereții stau oblic față de plan și nu au putut fi măsurați exact. Cotați acei pereți manual.',
+    one: 'Un șir de cote a fost lăsat deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, peretele stă oblic față de plan și nu a putut fi măsurat exact, sau, într-o cameră, nu există un loc liber de pereți, etichete, mărci și simboluri. Cotați-l manual.',
+    few: '{count} șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, pereții stau oblic față de plan și nu au putut fi măsurați exact, sau, în camere, nu există un loc liber de pereți, etichete, mărci și simboluri. Cotați-le manual.',
+    other: '{count} de șiruri de cote au fost lăsate deoparte: pe o fațadă cu retragere sau curte interioară ar trece prin clădire, pereții stau oblic față de plan și nu au putut fi măsurați exact, sau, în camere, nu există un loc liber de pereți, etichete, mărci și simboluri. Cotați-le manual.',
   },
+  'drafting.msg.dimAllTagsMoved': {
+    one: 'O etichetă a fost mutată de-a lungul fațadei ca să nu fie tăiată de liniile de ajutor; indicatorul ei arată în continuare același element.',
+    few: '{count} etichete au fost mutate de-a lungul fațadelor ca să nu fie tăiate de liniile de ajutor; indicatoarele lor arată în continuare aceleași elemente.',
+    other: '{count} de etichete au fost mutate de-a lungul fațadelor ca să nu fie tăiate de liniile de ajutor; indicatoarele lor arată în continuare aceleași elemente.',
+  },
+  'drafting.msg.dimAllNoRooms': 'Modelul nu are camere pe acest plan (niciun IfcSpace), deci nu s-au cotat camerele: DIMALL nu ghicește camerele din pereți. Cotați camerele manual.',
   'drafting.msg.dimAllOpenings': {
     one: 'O ușă sau o fereastră a fost lăsată în afara șirurilor de cote: planul nu arată exact unde îi sunt marginile. Cotați-o manual.',
     few: '{count} uși sau ferestre au fost lăsate în afara șirurilor de cote: planul nu arată exact unde le sunt marginile. Cotați-le manual.',
