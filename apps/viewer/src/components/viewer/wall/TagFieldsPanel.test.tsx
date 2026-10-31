@@ -41,14 +41,14 @@ const preview = (ui: HTMLElement) => ui.querySelector('[data-testid="tag-preview
 describe('the tag fields panel', () => {
   it('previews the door mark on the first door of the model, and on another when asked', () => {
     const ui = render(<TagFieldsPanel />);
-    // The Tag of this door is a unique id, which is no mark: the tag falls back to the name.
-    assert.equal(preview(ui), 'No value, so the tag falls back to the name: Innentuer-1');
+    // The Tag of this door is a unique id, which is no mark: the mark is the one its type has in the schedule (#631), never the name.
+    assert.equal(preview(ui), 'The tag reads: D1');
     const picker = ui.querySelector('select')!;
     assert.ok([...picker.options].some((o) => o.textContent === 'Terrassentuer'));
     const other = [...picker.options].find((o) => o.textContent === 'Terrassentuer')!;
     picker.value = other.value;
     picker.dispatchEvent(new window.Event('change', { bubbles: true }));
-    assert.equal(preview(ui), 'No value, so the tag falls back to the name: Terrassentuer');
+    assert.match(preview(ui)!, /^The tag reads: D\d+$/);
   });
 
   it('adds a property as a source, shows what it reads, and saves it in the project', () => {
@@ -57,8 +57,8 @@ describe('the tag fields panel', () => {
     click(button(ui, 'Add source'));
     assert.deepEqual(useProjectStore.getState().tagFields, { door: { mark: [{ kind: 'attribute', name: 'Mark' }, { kind: 'pset', pset: 'ArchiCADProperties', property: 'Raumnummer' }] } });
     assert.equal(useProjectStore.getState().dirty, true);
-    // The Mark of these doors is a unique id, so it reads nothing and the property is the one taken.
-    assert.equal(preview(ui), 'The tag reads: 1');
+    // The Mark of these doors is the schedule's, so it is taken before the property.
+    assert.equal(preview(ui), 'The tag reads: D1');
     // Moved first, it is taken first; removed, the list left is still a choice (it opts the TAG tool in), and
     // only "Back to the default" removes the entry.
     click(named(ui, 'Move ArchiCADProperties.Raumnummer up'));
@@ -67,7 +67,7 @@ describe('the tag fields panel', () => {
     assert.deepEqual(useProjectStore.getState().tagFields, { door: { mark: [{ kind: 'attribute', name: 'Mark' }] } });
     click(button(ui, 'Back to the default'));
     assert.equal(useProjectStore.getState().tagFields, undefined);
-    assert.equal(preview(ui), 'No value, so the tag falls back to the name: Innentuer-1');
+    assert.equal(preview(ui), 'The tag reads: D1');
   });
 
   it('refuses a source that is not a set and a name', () => {

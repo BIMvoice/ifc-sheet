@@ -58,14 +58,14 @@ const byGuid = (drafts: DraftEntity[], guid: string) => drafts.find((d) => d.par
 beforeEach(() => resetProject());
 
 describe('TAGALL marks', () => {
-  it('shows the Tag, else the Name, else a running number the tool counts', () => {
+  it('shows the mark, else a running number the tool counts, and never the Name (#631)', () => {
     const { drafts, summary } = run();
     assert.equal(text(byGuid(drafts, 'D1')), 'D-01');
-    assert.equal(text(byGuid(drafts, 'D2')), 'Haustuer');
-    assert.equal(text(byGuid(drafts, 'W1')), '1');
-    assert.equal(text(byGuid(drafts, 'W2')), '2');
+    assert.equal(text(byGuid(drafts, 'D2')), '1');
+    assert.equal(text(byGuid(drafts, 'W1')), '2');
+    assert.equal(text(byGuid(drafts, 'W2')), '3');
     assert.equal(summary.marks, 4);
-    assert.equal(summary.numbered, 2);
+    assert.equal(summary.numbered, 3);
   });
   it('does not take a unique id for a mark', () => {
     assert.equal(markOf('E605AACB-6C4E-458D-93-46-5D9D8C7C21D3'), '');
@@ -85,7 +85,7 @@ describe('TAGALL marks', () => {
     const extra: LabelTarget = { guid: 'W3', className: 'IfcWindow', anchor: { x: 12, y: 0.5 }, renderId: 5, ring: box(11.5, 0.2, 12.5, 0.8) };
     const third = run(first, { targets: [...targets, extra], elements: [...els, { renderId: 5, anchor: extra.anchor, ring: extra.ring }] });
     delete model.W3;
-    assert.deepEqual(third.drafts.map(text), ['3']);
+    assert.deepEqual(third.drafts.map(text), ['4']);
   });
   it('keeps clear of annotation already on the view', () => {
     const free = run().drafts.find((d) => d.params.labelOf === 'D1')!;
@@ -99,11 +99,11 @@ describe('TAGALL marks', () => {
   it('a mark follows the model: a Tag added later replaces the number', () => {
     const { drafts } = run();
     const win = byGuid(drafts, 'W1');
-    assert.equal(win.params.numbered, 1);
+    assert.equal(win.params.numbered, 2);
     const tagged = settleLabels([win], [mark], () => opening('IfcWindow', { Tag: 'F-9' }), 'en');
     assert.equal(text(tagged[0]), 'F-9');
     const still = settleLabels([win], [mark], () => opening('IfcWindow', {}), 'en');
-    assert.equal(text(still[0]), '1');
+    assert.equal(text(still[0]), '2');
   });
 });
 
