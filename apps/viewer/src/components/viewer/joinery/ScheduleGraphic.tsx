@@ -10,8 +10,7 @@
  */
 
 import { memo, useEffect, useMemo } from 'react';
-import type { PanelOperation } from '@ifc-lite/create';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
@@ -21,7 +20,7 @@ import { scheduleDataOf } from '@/joinery/schedule-split';
 import { layoutSchedule, type ScheduleLabels, type ScheduleLayout, type SchedulePrim } from '@/joinery/schedule-layout';
 import { collectTakeoffElements } from '@/joinery/material-takeoff-models';
 import { layoutUrban } from '@/urban/urban-layout';
-import { layoutRoomSchedule, takeoffRows, type TakeoffRow, layoutMaterialTakeoff, type TakeoffLabels, takeoffLabelsOf, typeLabelsOf } from '@bimvoice/ifcsheet';
+import { joineryLabelsOf, layoutRoomSchedule, takeoffRows, type TakeoffRow, layoutMaterialTakeoff, type TakeoffLabels, takeoffLabelsOf, typeLabelsOf } from '@bimvoice/ifcsheet';
 import { registerFitOn, registerPaper, sharedRegisterRows, type RegisterRow } from '@/project/drawing-register';
 import { layoutRegisterPage, registerLabelsOf, type RegisterLabels } from '@bimvoice/ifcsheet';
 import { finishLabelsOf, layoutRoomFinishes, roomFinishes, type RoomFinishes, type RoomFinishLabels } from '@bimvoice/ifcsheet';
@@ -42,12 +41,8 @@ import { useRoomScheduleData, useRoomScheduleLabels, useRoomSummary } from './ro
 export function useScheduleLabels(title: string): ScheduleLabels {
   const { t } = useTranslation();
   const locale = useSheetLocale();
-  return useMemo(() => ({
-    locale, title,
-    mark: t('schedule.row.mark'), name: t('schedule.row.name'), size: t('schedule.row.size'), operation: t('schedule.row.operation'),
-    sill: t('schedule.row.sill'), total: t('schedule.row.total'), uValue: t('schedule.row.uValue'), fire: t('schedule.row.fire'), varies: t('joineryRow.varies'),
-    op: (op: PanelOperation) => t(`joinery.op.${op}` as TranslationKey),
-  }), [t, locale, title]);
+  // The labels are built by the engine's `joineryLabelsOf`, the build `ifcsheet build --project` prints with.
+  return useMemo(() => joineryLabelsOf((key) => t(key), locale, title), [t, locale, title]);
 }
 
 export function useTakeoffLabels(title: string): TakeoffLabels {

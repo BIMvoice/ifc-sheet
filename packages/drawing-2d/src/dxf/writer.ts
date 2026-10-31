@@ -47,6 +47,7 @@
  */
 
 import { cssToAci } from './aci-colors.js';
+import { escapeDxfText } from './text-escape.js';
 import type { Point2D } from '../types.js';
 
 /** Line style resolved to a DXF linetype. `dashed` maps to the `DASHED` LTYPE. */
@@ -119,9 +120,8 @@ export function sanitizeDxfLayerName(name: string): string {
 
 /** Sanitize a single line of DXF TEXT content: strip control characters (no raw newlines). */
 function sanitizeDxfText(text: string): string {
-  return stripControlChars(text, ' ');
+  return escapeDxfText(stripControlChars(text, ' '));
 }
-
 /** Sanitize a `999` comment line: no raw newlines/control characters. */
 function sanitizeDxfComment(text: string): string {
   return stripControlChars(text, ' ');

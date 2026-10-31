@@ -37,6 +37,15 @@ describe('modelReadiness', () => {
   });
 });
 
+describe('a model with nothing to draw (#604)', () => {
+  it('is not ready, even when it holds rooms and storeys, and even when it is empty', () => {
+    expect(kinds({ drawable: false })).toEqual(['noGeometry']);
+    expect(kinds({ drawable: false, storeys: 0, spaces: 0, elements: 0 })).toEqual(['noGeometry']);
+    expect(kinds({ drawable: true })).toEqual([]);
+    expect(kinds({})).toEqual([]);
+  });
+});
+
 describe('describeReadiness', () => {
   it('says, for every finding, what is missing and what is weaker, in English with the counts filled in', () => {
     const all = modelReadiness({ storeys: 0, spaces: 0, elements: 10, elementsWithoutStorey: 3, elementsWithoutMaterial: 4, elementsWithoutQuantities: 5, duplicateGlobalIds: 1, duplicatedEntities: 2 });
@@ -47,8 +56,8 @@ describe('describeReadiness', () => {
       expect(effect, f.kind).not.toMatch(/^ready\.|\{/);
     }
     expect(describeReadiness(all[3]).missing).toBe('4 of 10 elements have no material.');
-    // 30 model checks (the rural scope's and the title block's among them), and 20 of the ByggesaksBIM check (ten findings, each with its effect line).
-    expect(Object.keys(READINESS_EN)).toHaveLength(30 + 20);
+    // 32 model catalogue keys (the rural scope's and the title block's among them), and 20 of the ByggesaksBIM check (ten findings, each with its effect line).
+    expect(Object.keys(READINESS_EN)).toHaveLength(32 + 20);
   });
 });
 

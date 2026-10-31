@@ -57,8 +57,12 @@ INTERIOR: value
 IssueChangeRecord: type (type-only)
 IssuedModel: type (type-only)
 IssuedSheet: type (type-only)
+JOINERY_WORDS_EN: value
+JOINERY_WORDS_RO: value
 JoineryCellOverride: type (type-only)
 JoineryMapping: type (type-only)
+JoinerySay: type (type-only)
+JoineryWordKey: type (type-only)
 LIST_COUNT_ID: value
 LIST_WORDS_EN: value
 LIST_WORDS_RO: value
@@ -257,7 +261,9 @@ isModelRowId: value
 isOpenFilter: value
 isOverridableRow: value
 joineryCellText: value
+joineryLabelsOf: value
 joineryOverrideOf: value
+joinerySayFor: value
 keepApart: value
 keepId: value
 layoutBoq: value

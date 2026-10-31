@@ -24,7 +24,7 @@ import { elementShown } from './element-graphics.js';
 import { doorOperationOf, type DoorOperation } from './door-operation.js';
 import { drawnJoineryOf, typeIndex, type DrawnJoinery, type JoineryProject, type Live } from './joinery-schedule.js';
 import { openingSymbols, type OpeningSymbol } from './opening-symbols.js';
-import { hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
+import { curtainPartsOf, hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
 import { elevationOpeningSymbols, visibleEntities } from './elevation-openings.js';
 import { hiddenClassesOf } from './view-templates.js';
 import type { ViewGraphics } from './view-graphics-types.js';
@@ -81,11 +81,11 @@ export function openingReads(sources: OpeningSources): { typedOf: (id: number) =
 
 /**
  * The opening symbols of a plan cut at `plane`, before the detail level: of the meshes the view shows (an element it hides one by one
- * has no swing) and the classes it leaves visible. Empty for any plane but a horizontal one. `level` is the plan's own storey: the
- * host-wall rule (#586) draws only its doors and windows, and without it the rule is off.
+ * has no swing) and the classes it leaves visible. Empty for any plane but a horizontal one. `level` is the plan's own storey (`view.level`), required so a caller can't leave it out by accident: the
+ * host-wall rule (#586) draws only its doors and windows, and without one the rule is off.
  */
 export function planOpeningSymbols(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, sources: OpeningSources, graphics: ViewGraphics | undefined, level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, sources: OpeningSources, graphics: ViewGraphics | undefined, level: Pick<ProjectLevel, 'storeyGlobalIds'> | undefined,
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const hidden = hiddenClassesOf(graphics);
@@ -93,8 +93,9 @@ export function planOpeningSymbols(
   const shown = meshes.filter((m) => drawnBySymbol(m.ifcType) && elementShown(graphics, globalIdOf(m.expressId), m.ifcType));
   const reads = openingReads(sources);
   const hosts = openingHostsOf(sources.live.dataStore);
+  const curtainParts = curtainPartsOf(sources.live.dataStore);
   const own = level ? storeyMembersOf(sources.live.dataStore, level.storeyGlobalIds) : new Set<number>();
-  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id)))
+  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
 }
 

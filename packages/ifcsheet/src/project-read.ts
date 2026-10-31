@@ -105,6 +105,11 @@ type Json = Record<string, unknown>;
 const isStorey = (s: unknown): s is StoreyInput => isObject(s) && typeof s.name === 'string' && typeof s.elevation === 'number';
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** The flips a project keeps per element GlobalId (1 to 3), the entries that are not one dropped. */
+export function readSymbolFlips(value: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(Object.entries(value).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3));
+}
+
 /** A project file's text, read. Throws an Error with the app's wording when it is not a project file or is newer than this build reads. */
 export function readProjectFile(text: string): ProjectFacts {
   let parsed: unknown;
@@ -157,7 +162,7 @@ export function readProjectFile(text: string): ProjectFacts {
     set,
     ...(underlays.length > 0 ? { underlays } : {}),
     ...(parsed.openingLines === 'hinge' || parsed.openingLines === 'handle' ? { openingLines: parsed.openingLines } : {}),
-    ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
+    ...(isObject(parsed.symbolFlips) ? { symbolFlips: readSymbolFlips(parsed.symbolFlips) } : {}),
   };
 }
 
@@ -173,7 +178,7 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; extent?: unknown; geometryRead?: boolean; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
   const checks = project ? projectSubReportChecks(project, scheduleModelsOf(model, '', modelId)) : [];
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];
