@@ -362,9 +362,9 @@
     "hash": "5f804cfc8c58c540"
    },
    "lines": {
-    "paths": 3441,
-    "points": 6882,
-    "hash": "ddf892721744bebe"
+    "paths": 3442,
+    "points": 6884,
+    "hash": "75f02a500ec18689"
    },
    "marks": {
     "paths": 0,
@@ -399,10 +399,10 @@
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1840,
+     "paths": 1841,
      "regions": 0,
-     "points": 3680,
-     "hash": "ba05ddddf16e30f9"
+     "points": 3682,
+     "hash": "dc18c10084dd3b09"
     },
     "SYMBOLS stroke=#000000 fill=- #1": {
      "width": 0.13,

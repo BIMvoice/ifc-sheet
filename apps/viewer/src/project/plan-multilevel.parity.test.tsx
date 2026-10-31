@@ -18,17 +18,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { GeometryResult } from '@ifc-lite/geometry';
-import { generateDefaultSet, storeyFloorsOf } from '@bimvoice/ifcsheet';
+import { Drawing2DGenerator, type SectionConfig } from '@ifc-lite/drawing-2d';
+import { generateDefaultSet, planProjectionBands, storeyFloorsOf, viewProjection } from '@bimvoice/ifcsheet';
 import { generateViewDrawings, openModel, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import { TYPE_VISIBILITY_SEMANTIC_DEFAULTS } from '@/store/constants';
-import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
+import { boundsOf, meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import type { PlanProjectView, ProjectLevel } from './types';
 
 const FZK = new URL('../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 const BLOC = new URL('../../public/samples/bloc-p4.ifc', import.meta.url);
 const ONE_LEVEL = new URL('./__fixtures__/plan-cut-above-top.ifc', import.meta.url);
 
-/** Every line, hidden ones too: both sides classify them (the app shows them dashed, the sheet leaves them out). */
+/** Every line, hidden ones too: both sides classify them (the app and the sheet both draw them dashed; a plan only drops them when it says `showHidden: false`). */
 const counts = (d: Drawing2D) => {
   const lines = d.lines;
   return {
@@ -87,11 +88,12 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
   }
   const named = (l: Loaded | null, name: RegExp) => l?.plans.find((p) => name.test(p.name));
 
-  // 1.1 m, not the default 1.2: the ground floor's slab top sits exactly 1.2 m under the default cut, and the app's cut
-  // position (a percentage of the extent) is 1.2000000000000002, which puts that slab's edges one rounding error outside
-  // a 1.2 m band the engine's exact 1.2 keeps them in.
-  const ground = (extra: Partial<PlanProjectView> = {}) => named(fzk, /Erdgeschoss/) && { ...named(fzk, /Erdgeschoss/)!, id: `fzk-eg-${JSON.stringify(extra)}`, cutHeight: 1.1, ...extra };
-  it('FZK Erdgeschoss', (t) => row(t, () => [fzk, ground()], 100));
+  // The default 1.2 m cut: the ground slab's top sits exactly 1.2 m under it, and the app's cut position is 1.2000000000000002 (#628).
+  const ground = (extra: Partial<PlanProjectView> = {}) => named(fzk, /Erdgeschoss/) && { ...named(fzk, /Erdgeschoss/)!, id: `fzk-eg-${JSON.stringify(extra)}`, ...extra };
+  it('FZK Erdgeschoss, the default 1.2 m cut: 553 projection lines on both sides (#628)', async (t) => {
+    await row(t, () => [fzk, ground()], 553);
+    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 553);
+  });
   it('FZK Dachgeschoss', (t) => row(t, () => [fzk, named(fzk, /Dachgeschoss/)], 100));
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));
   it('FZK Erdgeschoss, depth 1', (t) => row(t, () => [fzk, ground({ viewDepth: 1 })], 20));
@@ -105,4 +107,29 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
   it('a one-level plan', (t) => row(t, () => flat(1.2), 10));
   it('a one-level reflected plan', (t) => row(t, () => flat(1.2, { reflected: true }), 10));
   it('a one-level reflected plan, depth 1', (t) => row(t, () => flat(1.2, { reflected: true, viewDepth: 1 }), 10));
+
+  // The engine never flips a plan, so the app's `flipped` has no engine twin: read the bands the app hands the generator
+  // and compare them with `planProjectionBands` for a flipped plan.
+  it('FZK Erdgeschoss, flipped: the app hands the generator the flipped bands', async (t) => {
+    if (!fzk) { t.skip('wasm bundle not built: run `pnpm build:wasm:fetch` first'); return; }
+    const view = ground({ viewDepth: 1 });
+    assert.ok(view, 'the plan exists');
+    const configs: SectionConfig[] = [];
+    const original = Drawing2DGenerator.prototype.generate;
+    Drawing2DGenerator.prototype.generate = function (this: Drawing2DGenerator, meshes, config, options) { configs.push(config); return original.call(this, meshes, config, options); };
+    try {
+      await viewDrawing(view, fzk.geometry, fzk.model.dataStore.spatialHierarchy, { ...TYPE_VISIBILITY_SEMANTIC_DEFAULTS, site: false }, { flipped: true });
+    } finally { Drawing2DGenerator.prototype.generate = original; }
+    assert.equal(configs.length, 1, 'one cut');
+    const sent = configs[0]!;
+    const { min, max } = boundsOf(fzk.geometry)!;
+    const { constructionProjectionDepth, showConstructionProjection } = viewProjection(view);
+    const floors = storeyFloorsOf(fzk.model.buildingMeshes, fzk.model.dataStore.spatialHierarchy);
+    const bandsFor = (flipped: boolean) => planProjectionBands({ depth: constructionProjectionDepth, projectionOn: showConstructionProjection, floors, position: sent.plane.position, axisMin: min.y, axisMax: max.y, down: true, custom: false, flipped, reflected: false });
+    const want = bandsFor(true);
+    assert.notDeepEqual(want, bandsFor(false), 'a flipped plan has other bands than an unflipped one, or this row proves nothing');
+    assert.equal(sent.plane.flipped, true);
+    assert.deepEqual({ below: sent.projectionBelowDepth, above: sent.projectionAboveDepth, clip: sent.clipProjectionBands, depth: sent.projectionDepth },
+      { below: want.projectionBelowDepth, above: want.projectionAboveDepth, clip: want.clipProjectionBands, depth: want.projectionDepth });
+  });
 });
