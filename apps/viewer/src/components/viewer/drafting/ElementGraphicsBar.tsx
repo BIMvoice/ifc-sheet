@@ -19,7 +19,9 @@ import { hideElements, showAllHidden } from '@/project/element-graphics-actions'
 import { selectedElements } from '@/project/model-guids';
 import { FLIP_HINGE, FLIP_SWING, flipOnDrawing, flippableGlobalIds, resetFlipsOnDrawing } from '@/project/drawing-symbol-flips';
 import { useProjectStore } from '@/project/project-store';
+import { symbolCardTarget } from '@/joinery/symbol-card-target';
 import { ElementGraphicsPanel } from './ElementGraphicsPanel';
+import { ElementOpeningCard } from './ElementOpeningCard';
 
 const NO_FLIPS: Record<string, number> = {};
 const BTN = 'h-7 whitespace-nowrap rounded-sm px-2 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800';
@@ -40,10 +42,14 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
   const selectedIds = useViewerStore((s) => s.selectedEntityIds);
   const selectedId = useViewerStore((s) => s.selectedEntityId);
   const models = useViewerStore((s) => s.models);
+  const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const elements = useMemo(() => selectedElements(), [selectedIds, selectedId, models]);
   const flips = useProjectStore((s) => s.symbolFlips) ?? NO_FLIPS;
   // Doors (and typed windows) among the selection: they can be turned on this drawing without touching the model.
   const flippable = useMemo(() => flippableGlobalIds([...new Set([...(selectedIds ?? []), ...(selectedId !== null && selectedId !== undefined ? [selectedId] : [])])]), [selectedIds, selectedId, models]);
+  // One door or window the model does not type itself: its opening, leaves and plan symbol are one card away (#656).
+  const joinery = useMemo(() => symbolCardTarget([...(selectedIds ?? []), ...(selectedId !== null && selectedId !== undefined ? [selectedId] : [])]), [selectedIds, selectedId, models, mutationVersion]);
+  const [opening, setOpening] = useState(false);
   const flippedSelected = flippable.filter((g) => flips[g]);
   const flippedCount = Object.keys(flips).length;
   const hiddenCount = hiddenElementIds(graphics).length + (graphics?.hiddenLines?.length ?? 0);
@@ -71,6 +77,7 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
             <button type="button" className={BTN} onClick={() => flipOnDrawing(flippable, FLIP_HINGE)}>{t('elgfx.flipHinge')}</button>
           </>
         ) : null}
+        {joinery ? <button type="button" className={BTN} aria-expanded={opening} onClick={() => setOpening(!opening)}>{t('joinery.reach.open')}</button> : null}
         {flippedSelected.length > 0 ? (
           <>
             <output className="px-1.5 text-xs text-primary">{t('elgfx.flipped')}</output>
@@ -88,6 +95,7 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
         {pickingLine ? <output className="px-1.5 text-xs text-zinc-600 dark:text-zinc-400">{t('elgfx.pickLine')}</output> : null}
         {showHidden && hiddenCount > 0 && !pickingLine ? <output className="px-1.5 text-xs text-zinc-600 dark:text-zinc-400">{t('elgfx.ghostHint')}</output> : null}
       </div>
+      {opening && joinery ? <ElementOpeningCard key={`${joinery.modelId}:${joinery.expressId}`} modelId={joinery.modelId} expressId={joinery.expressId} onClose={() => setOpening(false)} /> : null}
       {panel && elements.length > 0 ? (
         <ElementGraphicsPanel viewId={viewId} elements={elements} current={graphics?.elements?.[elements[0].globalId]} extraPatterns={extraPatterns} onClose={() => setPanel(false)} />
       ) : null}
