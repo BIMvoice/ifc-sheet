@@ -26,8 +26,14 @@ export const MARK_ROW = 'mark';
  */
 export function tagMark(tag: string | null | undefined): string {
   const t = (tag ?? '').trim();
-  return /^[0-9A-Fa-f]{6,}(?:-[0-9A-Fa-f]{2,}){3,}$/.test(t) || /^[0-9A-Za-z_$]{22}$/.test(t) && /\d/.test(t) && /[a-z]/.test(t) && /[A-Z]/.test(t) ? '' : t;
+  return MACHINE_TAG.some((re) => re.test(t)) || (/^[0-9A-Za-z_$]{22}$/.test(t) && /\d/.test(t) && /[a-z]/.test(t) && /[A-Z]/.test(t)) ? '' : t;
 }
+
+/**
+ * Tags that are an exporter's own identifier: a UUID or hex groups joined by hyphens; 32 hex digits; and a number of six or more digits (Revit's
+ * element id, "312456"). A door number an architect writes ("12", "101", "0042") is shorter, so it stays.
+ */
+const MACHINE_TAG: readonly RegExp[] = [/^[0-9A-Fa-f]{6,}(?:-[0-9A-Fa-f]{2,}){3,}$/, /^[0-9A-Fa-f]{32}$/, /^\d{6,}$/];
 
 export interface MarkInput {
   /** The element's IFC Tag as the model holds it. */
