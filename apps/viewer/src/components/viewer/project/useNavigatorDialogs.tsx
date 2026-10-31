@@ -13,6 +13,7 @@ import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { addModelLevel } from '@/project/model-levels';
+import { addStoreyPlan } from '@/project/storey-plan';
 import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS } from '@/project/view-defaults';
 import { bodyElevationOffset } from '@/draft-set/body';
 import { placeLibraryDetail } from '@/catalogue/detail-actions';
@@ -74,8 +75,7 @@ export function useNavigatorDialogs() {
       if (!Number.isFinite(cut)) return t('projectNavigator.dialog.badNumber');
       const reflected = v.looking === 'up';
       const name = v.name?.trim() || (reflected ? t('projectNavigator.dialog.ceilingPlanName', { level: level.name }) : level.name);
-      const id = addProjectView({ kind: 'plan', name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight: cut, ...(reflected ? { reflected: true } : {}) });
-      openProjectView(id);
+      openProjectView(addStoreyPlan(level, name, cut, reflected));
       return null;
     };
   } else if (kind === 'placeDetail') {

@@ -3,7 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * "Add a drawing", in eight big choices: a plan of a storey (pick the storey),
+ * "Add a drawing", in ten big choices: a plan of a storey (pick the storey),
+ * a reflected ceiling plan of a storey (pick the storey), the interior
+ * elevations of a room (pick the room),
  * a section (draw a line on a plan), an elevation (pick a side), a plan of one
  * discipline (structural, foundation, roof: `project/discipline-views.ts`), a
  * detail of an area (mark it on the drawing in front), a drafting view (blank,
@@ -14,7 +16,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
-import { ELEVATION_DIRECTIONS, elevationName, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
+import { DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, elevationName, planViewFor, resolvePlanLevel } from '@/project/view-defaults';
 import { defaultDisciplineLevel, disciplineViewFor, DISCIPLINE_IDS, type DisciplineId } from '@/project/discipline-views';
 import { addProjectView, useProjectStore } from '@/project/project-store';
 import { runAsOneUndoStep as inOneStep } from '@/drafting/draft-store';
@@ -22,6 +24,9 @@ import { draftingViewOf } from '@/drafting/drafting-view';
 import { placeLibraryDetail } from '@/catalogue/detail-actions';
 import type { ElevationDirection, PlanProjectView, ProjectLevel } from '@/project/types';
 import { ToolIcon, type ToolIconName } from '../ifcsheet/ToolIcon';
+import { addStoreyPlan } from '@/project/storey-plan';
+import { interiorRooms } from '@/project/interior-elevation-actions';
+import { runInteriorElevations } from '../interior-elevations-command';
 import { ensureSitePlan } from '@/siteplan/site-actions';
 import { CutawayAxoForm } from './CutawayAxoForm';
 
@@ -32,6 +37,8 @@ interface AddDrawingProps {
   onSection: () => void;
   /** Start marking the area of a detail on the drawing in front. */
   onDetail: () => void;
+  /** Step into a sheet made here (the interior elevations of a room hang on a sheet of their own). */
+  onSheet: (sheetId: string) => void;
   onClose: () => void;
 }
 
@@ -51,13 +58,16 @@ function Picks({ children }: { children: ReactNode }) {
 
 const pick = 'rounded-full border border-sky-300/40 px-4 py-2 text-sky-50 hover:border-sky-300 hover:bg-sky-500/10';
 
-export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingProps) {
+export function AddDrawing({ onView, onSection, onDetail, onSheet, onClose }: AddDrawingProps) {
   const { t } = useTranslation();
   const levels = useProjectStore((s) => s.levels);
-  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline' | 'drafting' | 'cutaway'>('kinds');
+  const [step, setStep] = useState<'kinds' | 'storey' | 'side' | 'discipline' | 'drafting' | 'cutaway' | 'room'>('kinds');
+  // The storey step is for a reflected ceiling plan.
+  const [ceiling, setCeiling] = useState(false);
   // The discipline plan a storey is being picked for.
   const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
   const details = useProjectStore((s) => s.details);
+  const hasRooms = step === 'kinds' && interiorRooms().length > 0;
 
   const disciplinePlanOf = (id: DisciplineId, level: ProjectLevel): void => {
     const { views } = useProjectStore.getState();
@@ -73,12 +83,18 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
     const { views } = useProjectStore.getState();
     const level = levels[index];
     if (discipline) return disciplinePlanOf(discipline, level);
-    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.site && !v.discipline && resolvePlanLevel(v, [level]) !== undefined);
+    const existing = views.find((v): v is PlanProjectView => v.kind === 'plan' && !v.site && !v.discipline && (v.reflected === true) === ceiling && resolvePlanLevel(v, [level]) !== undefined);
     if (existing) {
       onView(existing.id);
       return;
     }
-    inOneStep(() => onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false })));
+    if (ceiling) inOneStep(() => onView(addStoreyPlan(level, t('addDrawingKinds.ceilingName', { level: level.name }), DEFAULT_PLAN_CUT_HEIGHT_M, true)));
+    else inOneStep(() => onView(addProjectView({ ...planViewFor(level, views, Date.now(), levels), auto: false })));
+  };
+  const roomsOf = step === 'room' ? interiorRooms() : [];
+  const interiorOf = (renderId: number): void => {
+    const sheetId = runInteriorElevations(renderId);
+    if (sheetId) onSheet(sheetId);
   };
   const sideOf = (direction: ElevationDirection): void => {
     const existing = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === direction && !v.interior);
@@ -98,13 +114,15 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
       <div className="w-44 shrink-0">
         <h2 className="m-0 text-xl font-light leading-snug text-white">{t('wall.add.title')}</h2>
         <p className="mb-4 mt-3 text-2xs uppercase leading-relaxed tracking-widest text-cyan-400">{t('wall.add.kinds')}</p>
-        <button type="button" onClick={step === 'kinds' ? onClose : () => { setStep('kinds'); setDiscipline(null); }} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
+        <button type="button" onClick={step === 'kinds' ? onClose : () => { setStep('kinds'); setDiscipline(null); setCeiling(false); }} className="text-sm text-sky-300 underline-offset-4 hover:underline">{t('wall.add.close')}</button>
       </div>
       {step === 'kinds' ? (
-        <div className="flex gap-4">
+        <div className="flex max-w-[1000px] flex-wrap gap-4">
           <Choice icon="level" title={t('wall.add.plan')} hint={t('wall.add.planHint')} onClick={() => setStep('storey')} disabled={levels.length === 0} />
+          <Choice icon="level" title={t('addDrawingKinds.ceiling')} hint={t('addDrawingKinds.ceilingHint')} onClick={() => { setCeiling(true); setStep('storey'); }} disabled={levels.length === 0} />
           <Choice icon="section" title={t('wall.add.section')} hint={t('wall.add.sectionHint')} onClick={onSection} />
           <Choice icon="symbol" title={t('wall.add.elevation')} hint={t('wall.add.elevationHint')} onClick={() => setStep('side')} />
+          <Choice icon="symbol" title={t('addDrawingKinds.interior')} hint={hasRooms ? t('addDrawingKinds.interiorHint') : t('addDrawingKinds.noRooms')} onClick={() => setStep('room')} disabled={!hasRooms} />
           <Choice icon="cube" title={t('wall.add.discipline')} hint={t('wall.add.disciplineHint')} onClick={() => setStep('discipline')} disabled={levels.length === 0} />
           <Choice icon="plus" title={t('wall.add.detail')} hint={t('wall.add.detailHint')} onClick={onDetail} />
           <Choice icon="symbol" title={t('wall.add.drafting')} hint={t('wall.add.draftingHint')} onClick={() => setStep('drafting')} />
@@ -115,6 +133,8 @@ export function AddDrawing({ onView, onSection, onDetail, onClose }: AddDrawingP
         <Picks>{DISCIPLINE_IDS.map((id) => <button key={id} type="button" className={pick} onClick={() => pickDiscipline(id)}>{t(`wall.add.discipline.${id}`)}</button>)}</Picks>
       ) : step === 'storey' ? (
         <Picks>{levels.map((level, i) => <button key={level.name + level.elevation} type="button" className={pick} onClick={() => planOf(i)}>{level.name}</button>)}</Picks>
+      ) : step === 'room' ? (
+        <Picks>{roomsOf.map((room) => <button key={room.renderId} type="button" className={pick} onClick={() => interiorOf(room.renderId)}>{room.label}</button>)}</Picks>
       ) : step === 'cutaway' ? (
         <CutawayAxoForm onAdd={(view) => inOneStep(() => onView(addProjectView(view)))} />
       ) : step === 'drafting' ? (

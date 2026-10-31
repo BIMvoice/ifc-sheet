@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { addDrawingKindsEn } from '../catalogues/add-drawing-kinds.en';
 import { aiReportsEn } from '../catalogues/ai-reports.en';
 import { alignmentSectionEn } from '../catalogues/alignment-section.en';
 import { analysisPanelEn } from '../catalogues/analysis-panel.en';
@@ -80,6 +81,7 @@ export const enAE = {
   ...aiReportsEn,
   ...alignmentSectionEn,
   ...analysisPanelEn,
+  ...addDrawingKindsEn,
   ...annotateAllEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
