@@ -17,6 +17,7 @@ export const joineryCellRo: Record<keyof typeof joineryCellEn, TranslationValue>
   'joineryCell.measured': 'Măsurat pe geometria elementului: modelul nu declară nicio dimensiune (≈).',
   'joineryCell.value': 'Textul de pe planșă',
   'joineryCell.overridden': 'Scris peste textul din model, în toate tabelele de uși și ferestre. Marcată pe planșă doar aici; tipărirea nu poartă marcaj.',
+  'joineryCell.markSeveral': 'Elementele acestui tip au mărci diferite (etichetele lor din model), iar o marcă scrisă aici le-ar înlocui pe toate, deci nu se poate scrie aici. Setați eticheta fiecărui element în model. Lista completă a mărcilor este în CSV și XLSX; planșa o micșorează ca să încapă.',
   'joineryCell.reset': 'Revino la valoarea din model',
   'joineryCell.done': 'Gata',
   'joineryCell.addColumn': 'Adăugați o coloană',

@@ -137,7 +137,7 @@ describe('a column taken off and a cell typed over, from the sheet (#446)', () =
     assert.deepEqual([hit?.guid, hit?.column], [W2, 'fire']);
     assert.equal(cellAt(layout, { x: box.x - 5, y: box.y - 5 }), null);
     // Every row has pickable cells, the measured ones too (#485): the size, the total and the count of each level.
-    assert.deepEqual([...new Set(layout.cells!.map((c) => c.column))].sort(), ['fire', 'levels:Dachgeschoss', 'levels:Erdgeschoss', 'name', 'operation', 'sill', 'size', 'total', 'u']);
+    assert.deepEqual([...new Set(layout.cells!.map((c) => c.column))].sort(), ['fire', 'levels:Dachgeschoss', 'levels:Erdgeschoss', 'mark', 'name', 'operation', 'sill', 'size', 'total', 'u']);
   });
 
   it('applies to the type\'s cell in every joinery schedule, and is one undo step each', async () => {
