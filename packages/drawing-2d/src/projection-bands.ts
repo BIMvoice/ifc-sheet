@@ -41,7 +41,7 @@
  * cutter and `MeshData.positions` use (WASM applies `unit_scale` upstream).
  */
 
-import type { SectionPlaneConfig, Vec3, DrawingLine, MeshOutline2D } from './types.js';
+import type { SectionConfig, SectionPlaneConfig, Vec3, DrawingLine, MeshOutline2D } from './types.js';
 import { projectTo2D, projectTo2DBasis } from './math.js';
 import type { Point2D } from './types.js';
 
@@ -55,6 +55,33 @@ export type ProjectionBand =
   | 'overhead'  // above the cut → dashed
   | 'spanning'  // straddles the cut (drawn solid; the cut line itself is separate)
   | 'cull';     // outside both bands → drop
+
+/**
+ * How far past a band's edge geometry still counts as on it, metres (#628). The cut position the app derives is
+ * `min + (percent / 100) * (max - min)` over the render frame's bounds (`coordinateInfo.shiftedBounds`, which
+ * `CoordinateHandler` re-centres once a model sits beyond `NORMAL_COORD_THRESHOLD_M`), so it is off by a few ulps of
+ * its own magnitude: 1e-9 m covers that for coordinates up to ~1e4 m, and the `EPSILON * |position|` term keeps the
+ * allowance above the error where the frame was not shifted (a 5e6 m coordinate has an ulp of 9.3e-10 m). Never
+ * smaller than the exact comparison it replaces, and under 1e-8 m (10 nm) up to 5e6 m.
+ */
+export function bandEdgeTolerance(position: number): number {
+  return 1e-9 + 8 * Number.EPSILON * Math.abs(position);
+}
+
+/**
+ * The depths the band consumers read (the classifier, the edge window, the 3D clip) for `config`: its below and above
+ * depths, each with `bandEdgeTolerance` added once, here, for a plan (a `y` plane with no picked plane); sections and elevations keep their exact depths. The band edge is `position - depth`, and the app's `position`
+ * carries the rounding of its percentage round trip (1.2000000000000002 for a 1.2 m cut, #628), so geometry lying
+ * exactly on the edge would otherwise fall one rounding error outside it. A side with no depth stays at none.
+ */
+export function bandsWithEdgeTolerance(config: Pick<SectionConfig, 'plane' | 'projectionDepth' | 'projectionBelowDepth' | 'projectionAboveDepth'>): ProjectionBandDepths {
+  // Plans only: a section or elevation (any other axis, or a picked plane) keeps its exact depths, so the tolerance
+  // meant for the plan's rounded cut position cannot move its hidden-line classification (FZK s1/s3, #628).
+  const isPlan = config.plane.axis === 'y' && !config.plane.customPlane;
+  const slack = isPlan ? bandEdgeTolerance(config.plane.position) : 0;
+  const widen = (depth: number) => (depth > 0 ? depth + slack : depth);
+  return { below: widen(config.projectionBelowDepth ?? config.projectionDepth), above: widen(config.projectionAboveDepth ?? config.projectionDepth) };
+}
 
 /** Depth window beyond the cut, per side, in world units. Both > 0. */
 export interface ProjectionBandDepths {

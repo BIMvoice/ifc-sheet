@@ -38,7 +38,7 @@ import type { SVGExportOptions } from './svg-exporter.js';
 import { GPUSectionCutter } from './gpu-section-cutter.js';
 import { projectProfiles } from './profile-projector.js';
 import {
-  type ProjectionBandDepths,
+  bandsWithEdgeTolerance,
   getViewDirectionForPlane,
   outlineToProjectionLines,
 } from './projection-bands.js';
@@ -220,10 +220,7 @@ export class Drawing2DGenerator {
     if (opts.includeProjection) {
       report('edges', 0);
 
-      const bands: ProjectionBandDepths = {
-        below: config.projectionBelowDepth ?? config.projectionDepth,
-        above: config.projectionAboveDepth ?? config.projectionDepth,
-      };
+      const bands = bandsWithEdgeTolerance(config); // the band edge allowance, #628
 
       // Feature elements (IfcOpeningElement & the void/feature family) are
       // boolean operands, not building structure — they must never project

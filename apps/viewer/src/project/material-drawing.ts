@@ -20,6 +20,7 @@
  */
 
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
+import { cutFillOf } from '@bimvoice/ifcsheet/material-colour';
 import type { DraftShape, Pt } from '@/drafting/types';
 import type { ProjectMaterial } from './types';
 
@@ -135,7 +136,11 @@ export function materialDrawing(drawing: Drawing2D, r: MaterialResolver): Materi
       if (m) out.membranes.push(m);
       continue;
     }
-    if (g.fill !== undefined) out.fills.set(p, g.fill);
+    {
+      // 'ifc' is the colour the model gives this band (#633); with none, the band keeps the plain grey cut.
+      const fill = cutFillOf(g.fill, p.color);
+      if (fill !== undefined) out.fills.set(p, fill);
+    }
     if (g.hatch) out.hatches.push({ loops: [p.polygon.outer, ...p.polygon.holes] as Pt[][], pattern: g.hatch, scale: g.hatchScale ?? 1, pen: g.hatchPen ?? 'hairline' });
   }
 

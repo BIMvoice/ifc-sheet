@@ -133,7 +133,7 @@ export async function generateViewDrawings(
       try {
         const projection = config.projectionDepth > 0;
         // A plan is cut as the app cuts it: hidden edges classified (an opaque wall hides what is behind it and splits the
-        // lines it crosses, #6615; the drawing carries them marked `hidden` and the sheet leaves them out) and the Rust
+        // lines it crosses, #6615; the drawing carries them marked `hidden` and the sheet draws them dashed, unless the plan says `showHidden: false`, below) and the Rust
         // outline of non-extruded geometry (#623). Elevations and sections keep the unclassified cut they had.
         const asApp = projection && view.kind === 'plan';
         const generated = await generator.generate(meshes, config, {

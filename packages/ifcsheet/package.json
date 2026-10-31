@@ -85,6 +85,11 @@
       "import": "./dist/colour-scheme.js",
       "default": "./dist/colour-scheme.js"
     },
+    "./material-colour": {
+      "types": "./dist/material-colour.d.ts",
+      "import": "./dist/material-colour.js",
+      "default": "./dist/material-colour.js"
+    },
     "./surface-fills": {
       "types": "./dist/surface-fills.d.ts",
       "import": "./dist/surface-fills.js",

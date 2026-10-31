@@ -14,7 +14,9 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { scheduleOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
+import { createElement } from 'react';
+import { act } from 'react';
+import { scheduleOf, typeIdentityOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { joineryExport, joineryScheduleLayout, type ScheduleLabels } from '@bimvoice/ifcsheet/project';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { labelElementByGlobalId } from '@/labels/label-element.js';
@@ -27,6 +29,13 @@ import type { ViewElement } from '@/labels/view-elements.js';
 import type { Pt } from '@/drafting/types.js';
 import { scheduleData } from './schedule-data.js';
 import { joineryLabels } from './export-test-util.js';
+import { blur, cleanup, click, render, type as typeInto } from '@/test/render.js';
+import { resetSectionChoices } from '@/components/viewer/wall/card-section-state';
+import { JoineryCellCard } from '@/components/viewer/wall/JoineryCellCard';
+import { pickCell } from './list-cell-pick.js';
+import { addSchedule, scheduleById } from './schedules.js';
+import { loadProjectDocument, projectDocument } from '@/project/project-store.js';
+import { parseProjectFile, serializeProject } from '@/project/project-file.js';
 
 const box = (x: number, y: number, w = 0.9, h = 0.3): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
 const labels: ScheduleLabels = { locale: 'en', title: 'Doors and windows', mark: 'Mark', name: 'Name', size: 'Size', operation: 'Operation', sill: 'Sill', total: 'Total', uValue: 'U', fire: 'Fire', op: () => '' };
@@ -38,11 +47,13 @@ const ROWS: Row[] = [
   { id: 'door-tagged-b', cls: 'IFCDOOR', name: 'Door', tag: 'D02', width: 0.9, height: 2.1, expect: 'D02' },
   { id: 'door-untagged', cls: 'IFCDOOR', name: 'Door', tag: null, width: 1.0, height: 2.1, expect: 'D2' },
   { id: 'window-untagged', cls: 'IFCWINDOW', name: 'Window', tag: null, width: 1.2, height: 1.2, expect: 'W1' },
+  { id: 'door-single-tag', cls: 'IFCDOOR', name: 'Door', tag: 'D07', width: 1.1, height: 2.1, expect: 'D07' },
   { id: 'window-overridden', cls: 'IFCWINDOW', name: 'Window', tag: null, width: 1.5, height: 1.2, expect: 'WX' },
 ];
 const OVERRIDES: JoineryCellOverride[] = [{ type: 'untyped:window:1500×1200', row: 'mark', value: 'WX', about: 'W2 Window 1500×1200' }];
 
-function fixtureIfc(): string {
+/** `reversed`: the next version of the model, the same elements written in the opposite order (so their express ids move and their GlobalIds do not). */
+function fixtureIfc(reversed = false): string {
   const rows = [
     `#1=IFCPROJECT('0Zr1xa$W9EkOxMp4Oi0001',$,'P',$,$,$,$,(#9),#8);`, `#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`, `#8=IFCUNITASSIGNMENT((#2));`,
     `#9=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#10,$);`, `#10=IFCAXIS2PLACEMENT3D(#11,$,$);`, `#11=IFCCARTESIANPOINT((0.,0.,0.));`, `#12=IFCLOCALPLACEMENT($,#10);`,
@@ -50,12 +61,15 @@ function fixtureIfc(): string {
     `#15=IFCBUILDINGSTOREY('0Zr1xa$W9EkOxMp4Oi0004',$,'Level 0',$,$,#12,$,$,.ELEMENT.,0.);`,
     `#16=IFCRELAGGREGATES('0Zr1xa$W9EkOxMp4Oi0005',$,$,$,#1,(#13));`, `#17=IFCRELAGGREGATES('0Zr1xa$W9EkOxMp4Oi0006',$,$,$,#13,(#14));`, `#18=IFCRELAGGREGATES('0Zr1xa$W9EkOxMp4Oi0007',$,$,$,#14,(#15));`,
   ];
-  ROWS.forEach((r, i) => {
+  const order = ROWS.map((_, i) => i);
+  if (reversed) order.reverse();
+  order.forEach((i, pos) => {
+    const r = ROWS[i];
     const tag = r.tag === null ? '$' : `'${r.tag}'`;
     const tail = r.cls === 'IFCDOOR' ? `.DOOR.,.NOTDEFINED.,$` : `.WINDOW.,.NOTDEFINED.,$`;
-    rows.push(`#${100 + i}=${r.cls}('0Zr1xa$W9EkOxMp4Oi${String(10 + i).padStart(4, '0')}',$,'${r.name}',$,$,#12,$,${tag},${r.height},${r.width},${tail});`);
+    rows.push(`#${100 + pos}=${r.cls}('0Zr1xa$W9EkOxMp4Oi${String(10 + i).padStart(4, '0')}',$,'${r.name}',$,$,#12,$,${tag},${r.height},${r.width},${tail});`);
   });
-  rows.push(`#90=IFCRELCONTAINEDINSPATIALSTRUCTURE('0Zr1xa$W9EkOxMp4Oi0008',$,$,$,(${ROWS.map((_, i) => `#${100 + i}`).join(',')}),#15);`);
+  rows.push(`#90=IFCRELCONTAINEDINSPATIALSTRUCTURE('0Zr1xa$W9EkOxMp4Oi0008',$,$,$,(${ROWS.map((_, pos) => `#${100 + pos}`).join(',')}),#15);`);
   return `ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\nFILE_NAME('t.ifc','2026-10-31T00:00:00',(''),(''),'','','');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n${rows.join('\n')}\nENDSEC;\nEND-ISO-10303-21;\n`;
 }
 
@@ -126,6 +140,81 @@ describe('one mark on the plan and in the schedule (#631)', () => {
     assert.equal(rowOf(guidOf(0)), rowOf(guidOf(1)));
     const out = joineryExport(data, joineryLabels(labels));
     assert.equal(out.tables[1].rows.length, ROWS.length);
+  });
+});
+
+describe('a mark typed in the Mark cell, through the card (#636)', () => {
+  const entryOfRow = (id: string) => scheduleData('all').entries.find((e) => e.occurrences.some((o) => o.globalId === guidOf(ROWS.findIndex((r) => r.id === id))))!;
+  const allTags = () => planTags(ROWS.map((_, i) => guidOf(i)));
+  const tagOf = (id: string) => allTags().get(guidOf(ROWS.findIndex((r) => r.id === id)));
+  /** The card open on the Mark cell of the type of row `id`, as a click on the sheet leaves it. */
+  async function open(id: string) {
+    const schedule = addSchedule('all', 'Doors and windows');
+    const view = render(createElement(JoineryCellCard, { schedule: scheduleById(schedule)! }));
+    await act(async () => { pickCell({ scheduleId: schedule, guid: typeIdentityOf(entryOfRow(id)), column: 'mark' }); });
+    return view;
+  }
+  const markCellText = (id: string): string => String(joineryExport(printed(), joineryLabels(labels)).tables[0].rows[printed().entries.findIndex((e) => e.key === entryOfRow(id).key)][0]);
+
+  beforeEach(async () => { resetProject(); resetSectionChoices(); pickCell(null); seedModel('m', 0, await parseStep(fixtureIfc()), 1); });
+  afterEach(() => { cleanup(); pickCell(null); resetProject(); });
+
+  it('is offered on the sheet: the mark of every type is a pickable cell', () => {
+    const cells = joineryScheduleLayout(printed(), labels).cells!.filter((c) => c.column === 'mark');
+    assert.equal(cells.length, scheduleData('all').entries.length);
+  });
+
+  it('types over the Tag and the generated mark on every plan tag, the schedule and the printed header; a repeat of another mark is allowed', async () => {
+    const view = await open('window-untagged');
+    assert.equal(tagOf('window-untagged'), 'W1');
+    const field = view.querySelector<HTMLInputElement>('[data-joinery-cell-editor] input')!;
+    typeInto(field, 'D07');
+    blur(field);
+    assert.equal(tagOf('window-untagged'), 'D07', 'the plan tag');
+    assert.equal(elementLabel(guidOf(ROWS.findIndex((r) => r.id === 'window-untagged')), 'mark'), 'D07', 'the TAG tool');
+    assert.equal(tagOf('door-single-tag'), 'D07', 'another element keeps its own, equal mark: not blocked');
+    assert.equal(markCellText('window-untagged'), 'D07', 'the schedule, CSV');
+    const texts = joineryScheduleLayout(printed(), labels).prims.flatMap((p) => (p.kind === 'text' ? [p.text] : []));
+    assert.ok(texts.includes('D07'), 'the sheet and the PDF draw it');
+    assert.ok(joineryScheduleLayout(printed(), labels).cells!.some((c) => c.column === 'mark' && c.overridden === true));
+    assert.equal(tagOf('window-overridden'), 'W2', 'no other type moves');
+  });
+
+  it('survives a save and a reopen, also of an updated model whose elements are written in another order', async () => {
+    const view = await open('window-untagged');
+    typeInto(view.querySelector<HTMLInputElement>('[data-joinery-cell-editor] input')!, 'WIN-A');
+    blur(view.querySelector<HTMLInputElement>('[data-joinery-cell-editor] input')!);
+    const saved = serializeProject(projectDocument());
+    assert.equal(parseProjectFile(saved).joineryOverrides?.[0].row, 'mark');
+    cleanup(); resetProject();
+    seedModel('m', 0, await parseStep(fixtureIfc(true)), 1);
+    loadProjectDocument(parseProjectFile(saved));
+    assert.equal(tagOf('window-untagged'), 'WIN-A', 'the mark stayed with its window');
+    for (const id of ['door-tagged-a', 'door-tagged-b', 'door-untagged', 'door-single-tag']) assert.equal(tagOf(id), ROWS.find((r) => r.id === id)!.expect, `${id} is untouched`);
+  });
+
+  it('returns to the IFC Tag, or to the generated mark, when it is cleared', async () => {
+    for (const [id, back] of [['door-single-tag', 'D07'], ['window-untagged', 'W1']] as const) {
+      const view = await open(id);
+      const field = view.querySelector<HTMLInputElement>('[data-joinery-cell-editor] input')!;
+      typeInto(field, 'ZZ9'); blur(field);
+      assert.equal(tagOf(id), 'ZZ9');
+      click([...view.querySelectorAll('button')].find((b) => b.textContent === 'Reset to model value')!);
+      assert.equal(tagOf(id), back, id);
+      cleanup(); pickCell(null);
+    }
+    assert.equal(useProjectStore.getState().joineryOverrides, undefined);
+  });
+
+  it('does not let one typed mark overwrite the several Tags of one type: read only, with the hint', async () => {
+    const view = await open('door-tagged-a');
+    assert.equal(markCellText('door-tagged-a'), 'D01, D02');
+    assert.ok(view.querySelector('[data-joinery-mark-several]'), 'the card says where the marks are set');
+    assert.equal(view.querySelector('[data-joinery-cell-editor] input'), null, 'no field to type in');
+    assert.match(view.textContent ?? '', /CSV and XLSX/);
+    assert.equal(useProjectStore.getState().joineryOverrides, undefined);
+    assert.equal(tagOf('door-tagged-a'), 'D01');
+    assert.equal(tagOf('door-tagged-b'), 'D02');
   });
 });
 

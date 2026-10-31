@@ -26,7 +26,7 @@ const INPUT = 'h-6 w-24 rounded-sm border border-zinc-300 dark:border-zinc-700 b
 
 export const isDimensional = (shape: AnnotationShape) => shape.type === 'dimension' || shape.type === 'radial' || shape.type === 'angular';
 
-export function Line({ label, field, entity, children }: { label: string; field: string; entity: DraftEntity; children: React.ReactNode }) {
+export function Line({ label, field, entity, ids, children }: { label: string; field: string; entity: DraftEntity; ids?: ReadonlySet<string>; children: React.ReactNode }) {
   const { t } = useTranslation();
   const own = entity.params[overrideKey(field)] !== undefined;
   return (
@@ -34,7 +34,7 @@ export function Line({ label, field, entity, children }: { label: string; field:
       <span className={own ? 'font-medium text-primary' : 'text-zinc-500'} title={own ? t('standards.el.overridden') : t('standards.el.byStyle')}>{label}</span>
       <div className="flex items-center gap-1">
         {children}
-        <IconButton label={`${t('standards.el.reset')} · ${label}`} className="size-5" disabled={!own} onClick={() => setElementOverride(new Set([entity.id]), field, null)}>
+        <IconButton label={`${t('standards.el.reset')} · ${label}`} className="size-5" disabled={!own} onClick={() => setElementOverride(ids ?? new Set([entity.id]), field, null)}>
           <RotateCcw className="size-3" />
         </IconButton>
       </div>

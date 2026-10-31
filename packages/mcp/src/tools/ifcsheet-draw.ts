@@ -16,6 +16,7 @@ import {
   boqSayFor, boqTable, boqTableCells, drawingArea, listTableCells, readBoqArticles, readClassificationMappings, readJoineryMapping, readJoineryOverrides, readProjectLanguage, readProjectSet, readSiteArea, readUrbanSettings, readSchedule, roomSchedule, roomScheduleCsv, roomScheduleRows, sheetFormat,
   type BoqArticle, type ProjectDocument, type SheetLocale, type UnitsAndNumbers,
 } from '@bimvoice/ifcsheet';
+import { readMaterials } from '@bimvoice/ifcsheet/materials';
 import { boqCsv, boqResult } from '@bimvoice/ifcsheet/cli-boq';
 import { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, type OpenedModel, type ProjectSheetSource, type SheetGraphic } from '@bimvoice/ifcsheet/headless';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -129,7 +130,7 @@ export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Pro
   const language = drawLanguage(entry.set.document);
   const notes: string[] = [];
   const extras = project ? await projectSheetOptionsWithViews(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
-  const sheets = await sheetGraphics(entry.set, model.model, extras);
+  const sheets = await sheetGraphics(entry.set, model.model, { ...extras, materials: readMaterials((entry.set.document as unknown as Record<string, unknown>).materials) });
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
     const sheet = entry.set.document.sheets.find((s) => s.id === schedule.sheetId);

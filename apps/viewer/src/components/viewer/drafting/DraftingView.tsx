@@ -64,6 +64,7 @@ import {
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { SelectionStyleCard } from './SelectionStyleCard';
 import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
@@ -391,7 +392,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
         {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
         {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
         {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
-        {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
+        {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>

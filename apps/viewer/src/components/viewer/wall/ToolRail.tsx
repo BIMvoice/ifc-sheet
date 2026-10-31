@@ -10,7 +10,9 @@
  */
 
 import { useTranslation } from '@/i18n';
-import { toggleOrtho, useDraftingSession } from '@/drafting/session';
+import { currentLayerId, setCurrentLayer, toggleOrtho, useDraftingSession } from '@/drafting/session';
+import { useProjectStore } from '@/project/project-store';
+import { openStandards } from '@/project/standards-dialog-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
@@ -42,6 +44,8 @@ interface ToolRailProps {
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho);
+  useDraftingSession((o) => o.revision); // the current layer is session state outside the store
+  const layers = useProjectStore((p) => p.draftLayers);
   useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the tools name
   const orthoKeys = shortcutLabel('drafting.ortho');
   /** The tooltip: the tool's help line and its key from the keymap; a tool the keymap does not know keeps the bare line and announces no key. */
@@ -125,6 +129,24 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
       >
         {t('drafting.ortho')}
         {orthoKeys ? <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{orthoKeys}</kbd> : null}
+      </button>
+      <label className="mt-1 flex flex-col gap-0.5 text-xs text-sky-100">
+        {t('drafting.layer')}
+        <select
+          aria-label={t('drafting.layer')}
+          value={currentLayerId()}
+          onChange={(e) => setCurrentLayer(e.target.value)}
+          className="h-7 rounded-md border border-sky-300/20 bg-[#0d2a55] px-1 text-xs text-sky-50"
+        >
+          {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </label>
+      <button
+        type="button"
+        onClick={() => openStandards('layers')}
+        className="rounded-xl border border-sky-300/20 px-2 py-1 text-xs leading-tight text-sky-100 hover:border-sky-300/60"
+      >
+        {t('drafting.card.editors')}
       </button>
     </nav>
   );

@@ -262,7 +262,8 @@ export function sheetGraphic(
       // The rooms the view hides keep neither colour nor pattern, as in the app's sheets (`shownRooms`).
       const scheme = shownRooms(schemes.get(vp.viewId), graphics, globalIdOf) ?? undefined;
       const surface = surfaces.get(vp.viewId);
-      if (surface) out.fills.push(...viewportSurfaceFills(surface, at, box));
+      // One by one: a large model's faces are hundreds of thousands, more than a spread can pass to `push`.
+      if (surface) for (const fill of viewportSurfaceFills(surface, at, box)) out.fills.push(fill);
       if (scheme) out.fills.push(...viewportFills(drawing, scheme, at, box, patterns, pens.materialHatch.hairline));
       // How the view draws (its template's graphics, then its own, `resolveViewGraphics`; its single elements and lines, `element-graphics.ts`; its preset's
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by

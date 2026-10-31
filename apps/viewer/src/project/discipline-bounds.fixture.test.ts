@@ -32,12 +32,12 @@ describe('discipline plans are framed on what they draw (#257)', { skip: planMod
   before(async () => { m = await loadPlanModel(FZK_HAUS); });
 
   /** The drawing as a sheet has it: the host's drawing (`drawingShownBy`), then the sheet's styling with the view's filter. */
-  async function onSheet(id: DisciplineId, level: number): Promise<{ bounds: ReturnType<typeof extent>; content: ReturnType<typeof extent> }> {
-    const view = { ...disciplineViewFor(id, m.levels[level], []), createdAt: 0 } as ProjectView;
+  async function onSheet(id: DisciplineId, level: number, viewDepth?: number): Promise<{ bounds: ReturnType<typeof extent>; content: ReturnType<typeof extent>; ids: Set<number> }> {
+    const view = { ...disciplineViewFor(id, m.levels[level], []), createdAt: 0, ...(viewDepth === undefined ? {} : { viewDepth }) } as ProjectView;
     const generated = await m.planOf(view, { omits: 'none' });
     const stored = drawingShownBy(view, generated);
     const styled = styledDrawing(stored, view.graphics, partHostType, viewOmits(view), null);
-    return { bounds: styled.bounds, content: extent(styled) };
+    return { bounds: styled.bounds, content: extent(styled), ids: m.drawnIds(styled) };
   }
 
   // The roof plan sits on the highest storey, the others on the lowest (`defaultDisciplineLevel`).
@@ -48,8 +48,20 @@ describe('discipline plans are framed on what they draw (#257)', { skip: planMod
     });
   }
 
-  it('the structural plan is much smaller than the model\'s drawing', async () => {
-    const { bounds } = await onSheet('structural', m.levels.length - 1);
+  // #628: the ground slab lies exactly 1.2 m under the Erdgeschoss cut, on the edge of the default 1.2 m band, so the
+  // structural plan draws it at the default depth (before #628 the cut's float noise left it out and the plan framed
+  // on the beams alone). 1.1 m puts it outside the band, where only the beams are left.
+  it('the structural plan is much smaller than the model\'s drawing, with the slab outside the band (1.1 m)', async () => {
+    const { bounds, ids } = await onSheet('structural', m.levels.length - 1, 1.1);
+    assert.ok(ids.size > 0, 'the plan draws something, or its extent is of nothing');
+    assert.ok([...ids].every((id) => m.classOf(id) !== 'IfcSlab'), 'no slab is drawn');
     assert.ok(bounds.max.x - bounds.min.x < 6 && bounds.max.y - bounds.min.y < 1, JSON.stringify(bounds));
+  });
+
+  it('at the default 1.2 m the structural plan draws the slab on the band edge and is framed on it, as drawn', async () => {
+    const { bounds, content, ids } = await onSheet('structural', m.levels.length - 1);
+    assert.ok([...ids].some((id) => m.classOf(id) === 'IfcSlab'), 'the slab is drawn');
+    assert.ok(bounds.max.x - bounds.min.x > 6, JSON.stringify(bounds));
+    for (const [a, b] of [[bounds.min.x, content.min.x], [bounds.min.y, content.min.y], [bounds.max.x, content.max.x], [bounds.max.y, content.max.y]]) assert.ok(Math.abs(a - b) < 1e-6, `${JSON.stringify(bounds)} vs ${JSON.stringify(content)}`);
   });
 });
