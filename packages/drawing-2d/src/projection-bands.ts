@@ -70,12 +70,15 @@ export function bandEdgeTolerance(position: number): number {
 
 /**
  * The depths the band consumers read (the classifier, the edge window, the 3D clip) for `config`: its below and above
- * depths, each with `bandEdgeTolerance` added once, here. The band edge is `position - depth`, and the app's `position`
+ * depths, each with `bandEdgeTolerance` added once, here, for a plan (a `y` plane with no picked plane); sections and elevations keep their exact depths. The band edge is `position - depth`, and the app's `position`
  * carries the rounding of its percentage round trip (1.2000000000000002 for a 1.2 m cut, #628), so geometry lying
  * exactly on the edge would otherwise fall one rounding error outside it. A side with no depth stays at none.
  */
 export function bandsWithEdgeTolerance(config: Pick<SectionConfig, 'plane' | 'projectionDepth' | 'projectionBelowDepth' | 'projectionAboveDepth'>): ProjectionBandDepths {
-  const slack = bandEdgeTolerance(config.plane.customPlane?.distance ?? config.plane.position);
+  // Plans only: a section or elevation (any other axis, or a picked plane) keeps its exact depths, so the tolerance
+  // meant for the plan's rounded cut position cannot move its hidden-line classification (FZK s1/s3, #628).
+  const isPlan = config.plane.axis === 'y' && !config.plane.customPlane;
+  const slack = isPlan ? bandEdgeTolerance(config.plane.position) : 0;
   const widen = (depth: number) => (depth > 0 ? depth + slack : depth);
   return { below: widen(config.projectionBelowDepth ?? config.projectionDepth), above: widen(config.projectionAboveDepth ?? config.projectionDepth) };
 }

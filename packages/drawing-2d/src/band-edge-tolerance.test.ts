@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import type { MeshData } from '@ifc-lite/geometry';
 import { Drawing2DGenerator } from './drawing-generator.js';
-import { bandEdgeTolerance, classifyDepthRange } from './projection-bands.js';
+import { bandEdgeTolerance, bandsWithEdgeTolerance, classifyDepthRange } from './projection-bands.js';
 import type { SectionConfig } from './types.js';
 
 /** The app's cut position for a 1.2 m cut over FZK's bounds. */
@@ -75,5 +75,22 @@ describe('bandEdgeTolerance holds at both ends of the coordinate range', () => {
     expect(bandEdgeTolerance(5e6)).toBeLessThan(1e-8);
     expect(kept(5e6, 4 * ulp(5e6), 0)).toBe(true);
     expect(kept(5e6, 0, 1e-6)).toBe(false);
+  });
+});
+
+describe('the tolerance is for plans only (#628)', () => {
+  const base = { projectionDepth: 5, projectionBelowDepth: 5, projectionAboveDepth: 2 };
+  const plane = (axis: 'x' | 'y' | 'z', extra: object = {}) => ({ plane: { axis, position: 1.2000000000000002, flipped: false, ...extra }, ...base });
+
+  it('widens a plain y plan, on both sides', () => {
+    const { below, above } = bandsWithEdgeTolerance(plane('y'));
+    expect(below).toBeGreaterThan(5);
+    expect(above).toBeGreaterThan(2);
+  });
+
+  it('leaves a section on x or z, and a picked plane, at exactly the depths it was given', () => {
+    for (const config of [plane('x'), plane('z'), plane('y', { customPlane: { normal: { x: 0, y: 1, z: 0 }, distance: 1.2 } })]) {
+      expect(bandsWithEdgeTolerance(config)).toEqual({ below: 5, above: 2 });
+    }
   });
 });
