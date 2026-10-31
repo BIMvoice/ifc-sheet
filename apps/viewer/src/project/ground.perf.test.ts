@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine } from '@ifc-lite/drawing-2d';
-import { drawingWithGround } from './ground.js';
+import { drawingWithGround, GROUND_OVERHANG_M } from './ground.js';
 
 const seg = (x0: number, y0: number, x1: number, y1: number, ifcType: string, entityId: number): DrawingLine => ({
   line: { start: { x: x0, y: y0 }, end: { x: x1, y: y1 } }, category: 'projection', visibility: 'visible', entityId, ifcType, modelIndex: 0, depth: 0,
@@ -75,9 +75,14 @@ describe('the ground of an elevation on a triangulated terrain', () => {
     const heavy = out.lines.filter((l) => l.ifcType === 'IfcSite');
     const expected = referenceTop(ground);
     assert.ok(expected.size > 10 && expected.size < ground.length / 2, `a real profile (${expected.size} of ${ground.length})`);
-    assert.equal(heavy.length, expected.size);
+    // The line stops GROUND_OVERHANG_M past the walls (#648): the edges inside that reach are the pairwise rule's, the two at its ends are cut.
+    const reach = walls(14, 6).flatMap((l) => [l.line.start.x, l.line.end.x]);
+    const lo = Math.min(...reach) - GROUND_OVERHANG_M; const hi = Math.max(...reach) + GROUND_OVERHANG_M;
+    const inside = (l: DrawingLine) => Math.min(l.line.start.x, l.line.end.x) >= lo - 1e-9 && Math.max(l.line.start.x, l.line.end.x) <= hi + 1e-9;
     const key = (l: DrawingLine) => [l.line.start.x, l.line.start.y, l.line.end.x, l.line.end.y].map((v) => v.toFixed(9)).join();
-    assert.deepEqual(heavy.map(key).sort(), [...expected].map(key).sort());
+    assert.ok(heavy.every(inside), 'nothing past the overhang');
+    assert.deepEqual(heavy.filter((l) => [...expected].some((e) => key(e) === key(l))).map(key).sort(), [...expected].filter(inside).map(key).sort());
+    assert.ok(heavy.length - [...expected].filter(inside).length <= 2, 'at most the two end edges are cut');
   });
 
   it('cuts the walls at the profile', () => {
@@ -89,6 +94,8 @@ describe('the ground of an elevation on a triangulated terrain', () => {
   /** The fastest of three runs on a warmed engine, ms, and the drawing's heavy top profile. */
   const timed = (steps: number, wallCount: number) => {
     const d = drawing([...strip(steps, 100), ...walls(100, wallCount)]);
+    const reach = d.lines.filter((l) => l.ifcType === 'IfcWall').flatMap((l) => [l.line.start.x, l.line.end.x]);
+    const span = { lo: Math.min(...reach) - GROUND_OVERHANG_M, hi: Math.max(...reach) + GROUND_OVERHANG_M };
     let out = drawingWithGround(d, 'elevation');
     let ms = Infinity;
     for (let run = 0; run < 3; run++) {
@@ -96,7 +103,7 @@ describe('the ground of an elevation on a triangulated terrain', () => {
       out = drawingWithGround(d, 'elevation');
       ms = Math.min(ms, performance.now() - started);
     }
-    return { ms, out };
+    return { ms, out, span };
   };
 
   // The work grows with the terrain, not with its square: this is a ratio, so it holds on any machine, loaded or not. A quadratic
@@ -106,7 +113,10 @@ describe('the ground of an elevation on a triangulated terrain', () => {
     const small = timed(2500, 250);
     const large = timed(10_000, 1000);
     console.log(`ground profile scaling: ${small.ms.toFixed(0)} ms for 5 000 edges, ${large.ms.toFixed(0)} ms for 20 000 (x${(large.ms / small.ms).toFixed(1)})`);
-    assert.equal(large.out.lines.filter((l) => l.ifcType === 'IfcSite').length, 10_000, 'the top chain is the profile');
+    // The top chain is the profile, less what lies past the building's overhang (#648): the strip's edges are all of one width.
+    const kept = large.out.lines.filter((l) => l.ifcType === 'IfcSite');
+    assert.ok(kept.length > 9_800 && kept.length <= 10_000, `the top chain is the profile (${kept.length})`);
+    assert.ok(kept.every((l) => Math.min(l.line.start.x, l.line.end.x) >= large.span.lo - 1e-9 && Math.max(l.line.start.x, l.line.end.x) <= large.span.hi + 1e-9), 'and stays within the overhang');
     assert.ok(large.out.lines.filter((l) => l.ifcType === 'IfcWall').length >= 1000, 'the walls stay');
     assert.ok(large.ms < 8 * small.ms, `x${(large.ms / small.ms).toFixed(1)}`);
   });
