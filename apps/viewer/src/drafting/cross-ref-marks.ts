@@ -174,6 +174,8 @@ export interface Box {
   y0: number;
   x1: number;
   y1: number;
+  /** Part of a dashed overlay line (a roof edge, a grid line): drawn over, not part of the plan's cut, so a line may run across it. */
+  dashed?: boolean;
 }
 
 /** The box round `pts`. One pass, no spread: it runs for every obstacle segment and every spot a mark tries (#154). */
@@ -240,7 +242,11 @@ function shapeBoxes(sh: DraftShape, out: Box[]): void {
  */
 export function overlayObstacleBoxes(overlays: readonly PlanOverlay[]): Box[] {
   const out: Box[] = [];
-  for (const o of overlays) for (const sh of o.shapes) shapeBoxes(sh, out);
+  for (const o of overlays) {
+    const from = out.length;
+    for (const sh of o.shapes) shapeBoxes(sh, out);
+    if (o.dashed || o.lineType) for (let i = from; i < out.length; i++) out[i] = { ...out[i], dashed: true };
+  }
   return out;
 }
 

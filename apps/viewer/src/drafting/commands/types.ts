@@ -65,6 +65,8 @@ export interface DraftContext {
   planObstacles(): Box[];
   /** The rooms of the plan in front. */
   rooms(): RoomOfPlan[];
+  /** Every line the plan's drawing carries (cut, projected and hidden), drawing space: what a dimension inside a room keeps its figure and its line off. Absent: none. */
+  planLines?(): { a: Pt; b: Pt }[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;

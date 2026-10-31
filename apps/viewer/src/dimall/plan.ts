@@ -16,9 +16,10 @@
  */
 
 import type { Pt } from '@/drafting/types';
-import { bridgedOpenings, contentOf, facadeEnds, facadesOf, inFacade, type Facade, type Opening } from './facades';
-import { joinLayers, wallGaps } from './layers';
-import { boxOf, mainDirection, outlinesOf, pointInRing, ringOfBox, ringOnAxes, rotate, unionBox, type Box } from './outline';
+import { contentOf, facadeEnds, facadesOf, inFacade, type Facade } from './facades';
+import { wallGaps } from './layers';
+import { boxOf, outlinesOf, pointInRing, ringOfBox, rotate, type Box } from './outline';
+import { readPlan } from './read';
 import type { DimensionPlan, DimensionSettings, PlannedString, PlanPart, StringKind } from './types';
 
 /** Paper mm from the facade to the first string when the dimension style has no setting (the style default, `DEFAULT_DIM_STYLE.allOffset`): clear of a row of tags. */
@@ -28,8 +29,6 @@ export const STEP_MM = 8;
 const SAME = 0.005;
 /** How far short of its ends (metres) a string is tested for running through the building. */
 const CORNER = 0.01;
-/** A wall further than this off the plan's axes (degrees) is at an angle: a box in the plan's frame would no longer measure it to the millimetre. */
-const ON_AXES_DEG = 0.1;
 /** A separate mass shorter than this (metres) is a post, not a wall to dimension. */
 const MIN_MASS = 2;
 /** A mass thicker than this (metres) is more than one wall. */
@@ -48,16 +47,7 @@ const key = (f: Facade, kind: StringKind) => `${kind}:${Math.round(f.n.x)},${Mat
 
 export function planDimensions(parts: readonly PlanPart[], settings: DimensionSettings): DimensionPlan {
   const empty: DimensionPlan = { strings: [], skippedFacades: 0, droppedStrings: 0, droppedOpenings: 0, angle: 0, outline: [] };
-  const wallParts = parts.filter((p) => p.kind === 'wall');
-  const angle = mainDirection(wallParts.flatMap((p) => p.rings));
-  const turn = (ring: readonly Pt[]) => ring.map((p) => rotate(p, -angle));
-  const walls = wallParts.flatMap((p) => p.rings.map(turn));
-  // A wall's material layers are one wall to a plan: the boxes the facades and openings read are whole walls. A wall at an angle to the plan's axes has no such box (its box measures nothing along the wall): it still shapes the outline, and gives no figure.
-  const wholeWalls = wallParts.map((p) => joinLayers(p.rings.map(turn).filter((r) => ringOnAxes(r, ON_AXES_DEG)).map(boxOf)));
-  const wallBoxes = wholeWalls.flat();
-  const offAxis = walls.filter((r) => !ringOnAxes(r, ON_AXES_DEG));
-  const openings: Opening[] = parts.filter((p) => p.kind !== 'wall' && p.rings.length > 0).map((part) => ({ part, box: part.rings.map(turn).map(boxOf).reduce(unionBox), onAxes: part.rings.map(turn).every((r) => ringOnAxes(r, ON_AXES_DEG)), ...(part.body?.length ? { body: boxOf(turn(part.body)) } : {}) }));
-  const bridged = bridgedOpenings(openings, wallBoxes);
+  const { angle, walls, wholeWalls, wallBoxes, offAxis, bridged } = readPlan(parts);
   const inexact = bridged.filter((o) => !o.exact);
   const leftOut = new Set<number>();
   // A plan that cuts only bare walls: two gable walls under a roof, with nothing cut between them. Each wall gets its own facades, and a face turned towards another wall is an inner face, not a facade. A plan with an enclosed mass is that mass; what stands apart from it (a boundary wall) is not the building.
