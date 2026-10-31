@@ -67,6 +67,7 @@
  */
 
 import { overlapCheck, type Surface } from './measured-shells.js';
+import { WeldCells } from './weld-cells.js';
 
 /** One mesh piece of an element: what `MeshData` carries, the origin folded in by this module. */
 export interface MeasureMesh {
@@ -159,20 +160,20 @@ export function weldTolerance(meshes: readonly MeasureMesh[]): number {
  * still meet.
  */
 function weld(meshes: readonly MeasureMesh[], tol: number): Surface | null {
-  const cells = new Map<string, number>();
+  const cells = new WeldCells();
   const points: number[] = [];
   const triangles: number[] = [];
   const find = (x: number, y: number, z: number): number => {
     const i = Math.floor(x / tol), j = Math.floor(y / tol), k = Math.floor(z / tol);
-    const own = cells.get(`${i},${j},${k}`);
+    const own = cells.get(i, j, k);
     if (own !== undefined) return own;
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
-      const id = cells.get(`${i + a},${j + b},${k + c}`);
+      const id = cells.get(i + a, j + b, k + c);
       if (id === undefined) continue;
       if (Math.abs(points[id * 3] - x) <= tol && Math.abs(points[id * 3 + 1] - y) <= tol && Math.abs(points[id * 3 + 2] - z) <= tol) return id;
     }
     const id = points.length / 3;
-    cells.set(`${i},${j},${k}`, id);
+    cells.set(i, j, k, id);
     points.push(x, y, z);
     return id;
   };

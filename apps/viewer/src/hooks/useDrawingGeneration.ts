@@ -2,7 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { automaticViewDepth, planDepthBelowCut, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
+import { boundedProjectionBands } from '@bimvoice/ifcsheet';
+import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
  * useDrawingGeneration - Custom hook for 2D drawing generation logic
@@ -405,9 +406,8 @@ export function useDrawingGeneration({
         belowDepth = automaticViewDepth(sectionPlane, bounds) ?? 1e-3;
         aboveDepth = 1e-3;
       }
-      if (boundedProjection) {
-        belowDepth = sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected ? planDepthBelowCut(manualDepth, position, axisMax) : manualDepth; // a plan cut above the model looks its depth into it (#226)
-        if (manualDepth === 0 || sectionPlane.axis !== 'down') aboveDepth = 0;
+      if (boundedProjection) { // the one rule the engine's sheets draw a plan by too (#615)
+        ({ below: belowDepth, above: aboveDepth } = boundedProjectionBands({ below: belowDepth, above: aboveDepth }, { depth: manualDepth, position, axisMax, down: sectionPlane.axis === 'down', plainPlan: sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected }));
       }
 
       if (sectionPlane.reflected) aboveDepth = 1e-3; // a reflected ceiling plan sees only above its cut; the floor side is not drawn

@@ -17,6 +17,7 @@ SectionOptions: type (type-only)
 StrokeWeight: type (type-only)
 TypedPlanSymbol: type (type-only)
 archPoints: value
+curtainPartsOf: value
 doorSymbol: value
 drawnBySymbol: value
 elevationOpeningSymbols: value

@@ -54,6 +54,8 @@ export interface OpenedModel {
   buildingMeshes: MeshData[];
   /** The box of the building (the elements of `buildingMeshes`, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
+  /** Whether the geometry was read (`geometry` was not `false`): without it `extent` is `null` because nothing was measured, which says nothing about whether the model can be drawn. */
+  geometryRead: boolean;
   /** The elements the extent leaves out, farthest first; they are still in `meshes`, `buildingMeshes` and the schedules. Empty with `includeFarElements`. */
   farElements: FarElementInfo[];
   /** Whether the model was opened with `includeFarElements`. */
@@ -228,6 +230,7 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     meshes,
     buildingMeshes: meshes.filter((m) => inBuilding.has(m.expressId)),
     extent,
+    geometryRead: options.geometry !== false,
     farElements,
     includeFarElements,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),

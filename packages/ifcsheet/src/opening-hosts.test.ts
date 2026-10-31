@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { MeshData } from '@ifc-lite/geometry';
-import type { PlanProjectView } from './document.js';
+import type { PlanProjectView, ProjectLevel } from './document.js';
 import { generateDefaultSet } from './default-set.js';
 import { generateViewDrawings, openModel, sectionConfigFor, type OpenedModel } from './headless.js';
 import { hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
@@ -47,6 +47,8 @@ describe.skipIf(missing !== null)('a window in a wall the plan cuts is on the pl
   let model: OpenedModel;
   let symbols: ReturnType<typeof planOpeningSymbols>;
   let drawnIds: Set<number>;
+  let projectedIds: Set<number>;
+  let levels: ProjectLevel[];
 
   beforeAll(async () => {
     model = await openModel(new Uint8Array(readFileSync(FIXTURE)));
@@ -54,7 +56,10 @@ describe.skipIf(missing !== null)('a window in a wall the plan cuts is on the pl
     if (!set || !model.extent) throw new Error('no set: the model has no extent');
     const view = set.document.views.find((v): v is PlanProjectView => v.kind === 'plan' && v.name === 'Level 0')!;
     const drawing = (await generateViewDrawings([view], model.buildingMeshes, set.levels, model.extent)).get(view.id)!;
-    drawnIds = new Set([...drawing.cutPolygons, ...drawing.lines].map((e) => e.entityId));
+    levels = set.levels;
+    // What the cut drew: its faces and its lines, not the projection (a one-level plan also draws what is overhead, as the app does, #615).
+    drawnIds = new Set([...drawing.cutPolygons, ...drawing.lines.filter((l) => l.category !== 'projection')].map((e) => e.entityId));
+    projectedIds = new Set(drawing.lines.filter((l) => l.category === 'projection').map((l) => l.entityId));
     const plane = sectionConfigFor(view, set.levels, model.extent)!.plane;
     symbols = planOpeningSymbols(model.buildingMeshes, plane, { live: { dataStore: model.dataStore, view: null }, project: { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } }, undefined, view.level);
   }, 120_000);
@@ -63,6 +68,11 @@ describe.skipIf(missing !== null)('a window in a wall the plan cuts is on the pl
     expect(drawnIds.has(WALL)).toBe(true);
     expect(drawnIds.has(HOSTED)).toBe(false);
     expect(drawnIds.has(FREE)).toBe(false);
+  });
+
+  it('the unhosted window above the cut is only in the projection lines, on this one-level plan, as the app draws it (#615)', () => {
+    expect(levels).toHaveLength(1);
+    expect(projectedIds.has(FREE)).toBe(true);
   });
 
   it('reads the window\'s host wall through its opening', () => {

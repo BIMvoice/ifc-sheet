@@ -1,5 +1,6 @@
 Arrangement: type (type-only)
 BUILT_IN_TEMPLATES: value
+BoundedBandsInput: type (type-only)
 BoundingBox3D: type (type-only)
 CUSTOM_MM: value
 CUT_OVERHANG_M: value
@@ -34,6 +35,7 @@ PROJECT_FILE_FORMAT: value
 PROJECT_FILE_VERSION: value
 Point3: type (type-only)
 Point3D: type (type-only)
+ProjectionBands: type (type-only)
 ProposalInput: type (type-only)
 Reason: type (type-only)
 Rect: type (type-only)
@@ -57,8 +59,10 @@ SheetRelayout: type (type-only)
 StoreyInput: type (type-only)
 TARGET_SCALE: value
 TITLE_BLOCK_MM: value
+ViewProjection: type (type-only)
 WorldPoint: type (type-only)
 allTemplates: value
+boundedProjectionBands: value
 boundsFromIndex: value
 boxGap: value
 buildDrawingSet: value
@@ -149,4 +153,5 @@ unionEntityBounds: value
 uniqueViewName: value
 viewCentre: value
 viewExtent: value
+viewProjection: value
 withViewHung: value

@@ -5,9 +5,11 @@
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { projectTitleFields, readStoreFacts, standardTitleBlock as engineStandard, STANDARD_CAPTIONS_EN, type TitleSources } from '@bimvoice/ifcsheet';
+import { projectTitleFields, readStoreFacts, standardTitleBlock as engineStandard, STANDARD_CAPTIONS_EN, STANDARD_CAPTIONS_RO, type TitleSources } from '@bimvoice/ifcsheet';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import { en } from '@/i18n/en';
+import { sheetsRo } from '@/i18n/catalogues/sheets.ro';
+import { titleBlockSourcesRo } from '@/i18n/catalogues/title-block-sources.ro';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
 import { resetProject } from './project-store';
@@ -90,5 +92,12 @@ describe('the standard layout is one layout', () => {
 
   it('the engine\'s English captions are the app\'s English catalogue', () => {
     for (const [key, caption] of Object.entries(STANDARD_CAPTIONS_EN)) assert.equal(caption, en[key as keyof typeof en], key);
+  });
+
+  it('the engine\'s Romanian captions (what ifcsheet build --locale ro prints) are the app\'s Romanian catalogue', () => {
+    const ro: Record<string, string> = { ...sheetsRo, ...titleBlockSourcesRo };
+    const rows = Object.entries(STANDARD_CAPTIONS_RO);
+    assert.equal(rows.length, Object.keys(STANDARD_CAPTIONS_EN).length);
+    for (const [key, caption] of rows) assert.equal(caption, ro[key], key);
   });
 });
