@@ -16,6 +16,7 @@ export const joineryCellEn = {
   'joineryCell.measured': 'Measured from the element\'s geometry: the model states no size (≈).',
   'joineryCell.value': 'Text on the sheet',
   'joineryCell.overridden': 'Typed over the model\'s text, in every door and window schedule. Marked on the sheet here only; the print carries no mark.',
+  'joineryCell.markSeveral': 'The elements of this type carry different marks (their own Tags in the model), and one typed mark would replace them all, so it cannot be typed here. Set the Tag of each element in the model. The full list of marks is in the CSV and XLSX; the sheet shrinks it to fit.',
   'joineryCell.reset': 'Reset to model value',
   'joineryCell.done': 'Done',
   'joineryCell.addColumn': 'Add a column',

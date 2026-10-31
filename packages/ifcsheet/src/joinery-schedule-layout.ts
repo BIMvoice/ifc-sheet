@@ -25,7 +25,7 @@ import { fitText } from './title-block-template.js';
 import type { ExportCell, ExportTable } from './schedule-csv.js';
 import { PAD, pageTitle } from './paged-table.js';
 import { fireOf, thermalOf } from './joinery-custom-props.js';
-import { markCell, occurrenceMarkFor } from './element-mark.js';
+import { markCell, occurrenceMarkFor, MARK_ROW as MARK_ID } from './element-mark.js';
 import { isOverridableRow, joineryCellText, joineryOverrideOf, levelRowId, overrideNumbers, typeIdentityOf, type JoineryCellOverride, type TypeFacts } from './joinery-overrides.js';
 import { modelRowLabel, modelRowNumber, modelRowText } from './joinery-model-rows.js';
 import { shownRows, symbolsShown, textRowId } from './schedule-content.js';
@@ -268,6 +268,8 @@ export function joineryScheduleLayout(data: ScheduleData, labels: ScheduleLabels
       prims.push({ kind: 'line', x1: x + cw, y1: top, x2: x + cw, y2: top + bandH, w: PEN.grid });
       const mark = fitText({ size: 4, fit: cw - 3, bold: true }, markCell(e, data.overrides, groupsOf(data)));
       prims.push({ kind: 'text', x: cx, y: top + 7, text: mark.text, size: mark.size, anchor: 'middle', bold: true });
+      // The mark is typed over from the sheet like the rows below it (#636): the header cell is pickable, under the type's identity.
+      cells.push({ x, y: top, w: cw, h: MARK_ROW, guid: typeIdentityOf(e), column: MARK_ID, ...(joineryOverrideOf(data.overrides, e, MARK_ID, groupsOf(data)) ? { overridden: true as const } : {}) });
       // The elevation, bottom on a baseline that leaves room for the width dimension (and the plan under it).
       const base = shown.elevation ? top + MARK_ROW + drawingH - 7 - planBlock : top + MARK_ROW - 8;
       const v = viewsOf(e);
