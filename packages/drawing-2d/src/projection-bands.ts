@@ -56,6 +56,18 @@ export type ProjectionBand =
   | 'spanning'  // straddles the cut (drawn solid; the cut line itself is separate)
   | 'cull';     // outside both bands → drop
 
+/**
+ * How far past a band's edge geometry still counts as on it, metres (#628). The cut position the app derives is
+ * `min + (percent / 100) * (max - min)` over the render frame's bounds (`coordinateInfo.shiftedBounds`, which
+ * `CoordinateHandler` re-centres once a model sits beyond `NORMAL_COORD_THRESHOLD_M`), so it is off by a few ulps of
+ * its own magnitude: 1e-9 m covers that for coordinates up to ~1e4 m, and the `EPSILON * |position|` term keeps the
+ * allowance above the error where the frame was not shifted (a 5e6 m coordinate has an ulp of 9.3e-10 m). Never
+ * smaller than the exact comparison it replaces, and under 1e-8 m (10 nm) up to 5e6 m.
+ */
+export function bandEdgeTolerance(position: number): number {
+  return 1e-9 + 8 * Number.EPSILON * Math.abs(position);
+}
+
 /** Depth window beyond the cut, per side, in world units. Both > 0. */
 export interface ProjectionBandDepths {
   /** How far below the cut (toward the floor) to project as VISIBLE/solid. */

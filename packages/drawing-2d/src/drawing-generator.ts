@@ -39,6 +39,7 @@ import { GPUSectionCutter } from './gpu-section-cutter.js';
 import { projectProfiles } from './profile-projector.js';
 import {
   type ProjectionBandDepths,
+  bandEdgeTolerance,
   getViewDirectionForPlane,
   outlineToProjectionLines,
 } from './projection-bands.js';
@@ -220,9 +221,15 @@ export class Drawing2DGenerator {
     if (opts.includeProjection) {
       report('edges', 0);
 
+      // The band edge is `position - depth`, and the app's `position` carries the rounding of its percentage round
+      // trip (#628: 1.2000000000000002 for a 1.2 m cut), so geometry lying exactly on the edge falls one rounding
+      // error outside. Every band consumer below (the classifier, the edge window, the 3D clip) reads these depths,
+      // so the allowance is added once, here, to a band that has depth.
+      const slack = bandEdgeTolerance(config.plane.customPlane?.distance ?? config.plane.position);
+      const widen = (depth: number) => (depth > 0 ? depth + slack : depth);
       const bands: ProjectionBandDepths = {
-        below: config.projectionBelowDepth ?? config.projectionDepth,
-        above: config.projectionAboveDepth ?? config.projectionDepth,
+        below: widen(config.projectionBelowDepth ?? config.projectionDepth),
+        above: widen(config.projectionAboveDepth ?? config.projectionDepth),
       };
 
       // Feature elements (IfcOpeningElement & the void/feature family) are
