@@ -138,7 +138,12 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     for (const fill of sheet.fills) {
       const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
       doc.setFillColor(fill.colour);
-      doc.path(ops).fillEvenOdd();
+      if (fill.surface) {
+        // A coloured surface is filled non-zero and stroked with a hairline of its own colour, as the app's sheet draws it: viewers anti-alias the seam between two filled triangles into a faint line.
+        doc.setDrawColor(fill.colour);
+        doc.setLineWidth(0.1);
+        doc.path(ops).fillStroke();
+      } else doc.path(ops).fillEvenOdd();
       // A value's hatch (#493) goes over its colour and under every line.
       if (fill.hatch) {
         doc.setDrawColor(FILL_HATCH.ink);
