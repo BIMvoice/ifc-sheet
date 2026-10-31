@@ -14,6 +14,8 @@ import { extractAllEntityAttributes, type IfcDataStore } from '@ifc-lite/parser'
 import type { ListDataProvider } from '@ifc-lite/lists';
 import { tagClassification } from '@/classification/classification-model';
 import { createListDataProvider } from '@/lib/lists/adapter';
+import { tagMark } from '@bimvoice/ifcsheet';
+import { openingMarkOf } from '@/joinery/opening-marks';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
@@ -59,14 +61,11 @@ function longNameOf(modelId: string, expressId: number): string {
 }
 const longNames = new WeakMap<IfcDataStore, Map<number, string>>();
 
-/**
- * A Tag a draughtsman would write on a drawing: tools that fill Tag with the element's unique id (a GUID, or an
- * identifier of hex groups joined by hyphens) leave nothing to show, and the element is then marked by its Name.
- */
-export function markOf(tag: string): string {
-  const t = tag.trim();
-  return /^[0-9A-Fa-f]{6,}(?:-[0-9A-Fa-f]{2,}){3,}$/.test(t) || /^[0-9A-Za-z_$]{22}$/.test(t) && /\d/.test(t) && /[a-z]/.test(t) && /[A-Z]/.test(t) ? '' : t;
-}
+/** A Tag a draughtsman would write on a drawing (`tagMark`, the engine's rule): a Tag that is only the element's unique id leaves nothing to show. */
+export const markOf = (tag: string): string => tagMark(tag);
+
+/** Doors and windows carry the one mark the schedule shares (`joinery/opening-marks.ts`), not their Tag alone. */
+const isOpening = (className: string): boolean => /^ifc(door|window)/i.test(className);
 
 export function labelElementOf(modelId: string, expressId: number): LabelElement | null {
   const p = providerOf(modelId);
@@ -79,7 +78,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
         case 'Tag': return p.getEntityTag(expressId);
         case 'LongName': return longNameOf(modelId, expressId);
         case 'RoomNumber': return longNameOf(modelId, expressId) ? p.getEntityName(expressId) : '';
-        case 'Mark': return markOf(p.getEntityTag(expressId));
+        case 'Mark': return isOpening(p.getEntityTypeName(expressId)) ? openingMarkOf(modelId, expressId, p.getEntityTag(expressId)) : markOf(p.getEntityTag(expressId));
         case 'TagName': return '';
         case 'ObjectType': return p.getEntityObjectType(expressId);
         case 'Description': return p.getEntityDescription(expressId);

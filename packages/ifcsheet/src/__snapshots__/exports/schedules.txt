@@ -75,6 +75,7 @@ ListScheduleColumn: type (type-only)
 ListScheduleDef: type (type-only)
 ListScheduleTable: type (type-only)
 ListTableSource: type (type-only)
+MARK_ROW: value
 MARK_SCHEMES: value
 MAX_CUSTOM_PROPS: value
 MAX_JOINERY_OVERRIDES: value
@@ -89,7 +90,9 @@ MAX_WASTE: value
 MEASURED_MARK: value
 MappingMatch: type (type-only)
 MappingSource: type (type-only)
+MarkInput: type (type-only)
 MarkOf: type (type-only)
+MarkedEntry: type (type-only)
 MaterialShare: type (type-only)
 MeasuredWords: type (type-only)
 ModelFacts: type (type-only)
@@ -235,8 +238,10 @@ doorSwingFlips: value
 drawingRegisterRows: value
 dropJoineryOverrides: value
 elementCount: value
+elementMark: value
 elementQuantities: value
 elementTypeQuantities: value
+entryMarks: value
 estimatedAreas: value
 exportCsv: value
 fillTemplate: value
@@ -283,6 +288,9 @@ listScheduleTable: value
 listTableCells: value
 listTableText: value
 listWordsFor: value
+markCell: value
+markIndex: value
+markKey: value
 marked: value
 materialShares: value
 measureElementSize: value
@@ -301,6 +309,7 @@ modelRowsOf: value
 newArticle: value
 normaliseName: value
 notDrawingIds: value
+occurrenceMarkFor: value
 occurrenceMarkOf: value
 orderedRows: value
 orphanCells: value
@@ -389,6 +398,7 @@ summaryItems: value
 summaryTable: value
 surfaceOf: value
 symbolsShown: value
+tagMark: value
 takeoffLabelsOf: value
 takeoffRows: value
 takeoffSayFor: value

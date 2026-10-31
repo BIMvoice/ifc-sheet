@@ -40,7 +40,7 @@ const MAX_ROW_ID = 260;
  * fire rating), the measured ones (the size, the total and the count of each level, `levelRowId`), which a person fixes as a last resort when the
  * model, or the measuring of it, has it wrong, and the properties and quantities the schedule lists (`ModelRow`).
  */
-export const OVERRIDABLE_ROWS = ['name', 'size', 'operation', 'sill', 'u', 'fire', 'total'] as const;
+export const OVERRIDABLE_ROWS = ['mark', 'name', 'size', 'operation', 'sill', 'u', 'fire', 'total'] as const;
 export type OverridableRow = (typeof OVERRIDABLE_ROWS)[number];
 const LEVEL_PREFIX = 'levels:';
 /** The id of the count row of the level `level`, which a type's cell is typed over by. */
