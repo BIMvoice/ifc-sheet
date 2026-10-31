@@ -18,6 +18,7 @@ import { projectTitleFields } from './title-block-sources.js';
 import { northOfStore } from './true-north.js';
 import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 import { generateViewDrawings } from './view-drawings.js';
+import { storeyFloorsOf } from './plan-projection.js';
 import { planOpeningSymbols, viewOpeningSymbols } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
@@ -75,7 +76,7 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const { document: doc, levels } = set;
   const hung = new Set(doc.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const drawings = options.drawings === false || !model.extent ? new Map()
-    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError, options.onEmptyView);
+    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError, options.onEmptyView, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy));
   // A plan draws the 2D symbol of an element that has one in place of its body (#489), as the app's plans do; a view can switch it off.
   const symbols = model.dataStore && drawings.size > 0 ? readPlanSymbols(model.dataStore, model.coordinateInfo).symbols : null;
   for (const view of symbols?.size ? doc.views : []) {

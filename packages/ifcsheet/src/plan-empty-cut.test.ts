@@ -35,8 +35,8 @@ describe.skipIf(missing !== null)('a plan whose cut meets nothing, in the engine
     model = await openModel(new Uint8Array(readFileSync(FIXTURE)));
   }, 120_000);
 
-  const engine = async (views: PlanProjectView[], levels: ProjectLevel[], onEmpty: (v: ProjectView) => void = () => {}) =>
-    generateViewDrawings(views, model.buildingMeshes, levels, model.extent!, () => {}, onEmpty);
+  const engine = async (views: PlanProjectView[], levels: ProjectLevel[], onEmpty: (v: ProjectView) => void = () => {}, floors: number[] | null = null) =>
+    generateViewDrawings(views, model.buildingMeshes, levels, model.extent!, () => {}, onEmpty, floors);
 
   it('draws the model above a cut below it, with one level', async () => {
     const drawing = (await engine([plan('p', BELOW, 1.2)], [BELOW])).get('p')!;
@@ -50,15 +50,22 @@ describe.skipIf(missing !== null)('a plan whose cut meets nothing, in the engine
     expect(drawing.lines.filter((l) => l.category === 'projection').length).toBeGreaterThan(0);
   });
 
+  it('classifies the hidden lines of a plan, as the app does, and leaves them out when the view says showHidden: false', async () => {
+    const drawings = await engine([plan('shown', GROUND, 1.2), { ...plan('off', GROUND, 1.2), showHidden: false }], [GROUND]);
+    expect(drawings.get('shown')!.lines.filter((l) => l.visibility === 'hidden').length).toBeGreaterThan(0);
+    expect(drawings.get('off')!.lines.filter((l) => l.visibility === 'hidden')).toHaveLength(0);
+    expect(drawings.get('off')!.lines.length).toBeLessThan(drawings.get('shown')!.lines.length);
+  });
+
   it('a depth of 0 shows the cut only, with one level', async () => {
     const drawing = (await engine([{ ...plan('flat', GROUND, 1.2), viewDepth: 0 }], [GROUND])).get('flat')!;
     expect(drawing.cutPolygons.length).toBeGreaterThanOrEqual(4);
     expect(drawing.lines.filter((l) => l.category === 'projection')).toHaveLength(0);
   });
 
-  it('keeps the cut empty with two levels, as the app scopes the bands to the storey, and says so', async () => {
+  it('keeps the cut empty when the storey ceiling is under the model, as the app scopes the bands to the storey (the floors come from the spatial hierarchy, #623), and says so', async () => {
     const empty: ProjectView[] = [];
-    const drawing = (await engine([plan('two', BELOW, 1.2)], [BELOW, GROUND, UP], (v) => empty.push(v))).get('two')!;
+    const drawing = (await engine([plan('two', BELOW, 1.2)], [BELOW, GROUND, UP], (v) => empty.push(v), [-3, -1, 3])).get('two')!;
     expect(drawing.lines).toHaveLength(0);
     expect(drawing.cutPolygons).toHaveLength(0);
     expect(empty.map((v) => v.id)).toEqual(['two']);

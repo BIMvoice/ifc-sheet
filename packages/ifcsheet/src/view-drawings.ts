@@ -19,8 +19,10 @@ import type { ModelExtent } from './drawing-set.js';
 import type { ElevationDirection, PlanProjectView, ProjectLevel, ProjectView, SectionProjectPlane } from './document.js';
 import { customPlaneCenter } from './section-plane.js';
 import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
-import { boundedProjectionBands, viewProjection } from './plan-projection.js';
-import { levelFloorY, planDepthBelowCut, resolvePlanLevel } from './view-defaults.js';
+import * as IfcWasm from '@ifc-lite/wasm';
+import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-provider.js';
+import { planProjectionBands, viewProjection } from './plan-projection.js';
+import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
 const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boolean; flipped: boolean }> = {
@@ -29,6 +31,9 @@ const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boo
   east: { axis: 'x', atMax: true, flipped: false },
   west: { axis: 'x', atMax: false, flipped: true },
 };
+
+/** The Rust outline the app projects non-extruded geometry with; the runtime is initialised once a model is opened. */
+const meshOutline2dFn = (IfcWasm as unknown as { meshOutline2d?: MeshOutline2dFn }).meshOutline2d;
 
 const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 
@@ -51,21 +56,23 @@ function storedPlane(plane: SectionProjectPlane, depth: number): SectionConfig {
 }
 
 /**
- * A plan in a model with fewer than two levels, as the app draws it: the app scopes a plan's bands to its storey from
- * two floors up (`useDrawingGeneration`), and with one there is no other floor to keep out, so the whole extent is
- * looked at on both sides of the cut. The floor side is the plan's depth (its cut height when it has none), and what
- * is overhead is drawn too: the bridge model's deck sits above its storey at 0, and its 1.2 m cut meets none of it (#615).
- * The bands are `boundedProjectionBands`, the function the app's hook calls.
+ * A plan, as the app draws it: the bands are `planProjectionBands`, the function the app's hook calls, scoped to the
+ * storey the cut sits in when the model's spatial hierarchy gives two or more floors (`floors`, from
+ * `storeyFloorsOf`), and over the whole extent otherwise (#615, #623). A reflected plan looks up from its cut.
  */
-function singleLevelPlan(view: PlanProjectView, cut: number, extent: ModelExtent): SectionConfig {
-  const { constructionProjectionDepth: depth } = viewProjection(view);
-  const full = Math.max(extent.max.y - extent.min.y, 1e-3);
-  const { below, above } = boundedProjectionBands({ below: full, above: full }, { depth: depth ?? 0, position: cut, axisMax: extent.max.y, down: true, plainPlan: true });
-  return createSectionConfig('y', cut, { projectionDepth: below, clipProjectionBands: true, projectionBelowDepth: below, projectionAboveDepth: above, includeHiddenLines: false });
+function planConfig(view: PlanProjectView, cut: number, extent: ModelExtent, floors: readonly number[] | null): SectionConfig {
+  const { showConstructionProjection, constructionProjectionDepth } = viewProjection(view);
+  const bands = planProjectionBands({
+    depth: constructionProjectionDepth, projectionOn: showConstructionProjection, floors, position: cut,
+    axisMin: extent.min.y, axisMax: extent.max.y, down: true, custom: false, flipped: false, reflected: view.reflected === true,
+  });
+  const config = createSectionConfig('y', cut, { ...bands, includeHiddenLines: false });
+  if (view.reflected) config.plane.reflected = true;
+  return config;
 }
 
 /** The generator's settings for `view`, or `null` for a view with no plane (3D, drafting) or a plan whose level is gone. */
-export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLevel[], extent: ModelExtent): SectionConfig | null {
+export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLevel[], extent: ModelExtent, floors: readonly number[] | null = null): SectionConfig | null {
   const span = Math.max(extent.max.x - extent.min.x, extent.max.y - extent.min.y, extent.max.z - extent.min.z, 1);
   switch (view.kind) {
     case 'plan': {
@@ -73,7 +80,7 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
       if (!level) return null;
       // A cut above the model stays there and cuts nothing (#226).
       const cut = levelFloorY(level) + view.cutHeight;
-      return levels.length < 2 && !view.reflected ? singleLevelPlan(view, cut, extent) : createSectionConfig('y', cut, { projectionDepth: planDepthBelowCut(view.viewDepth ?? 0, cut, extent.max.y), includeHiddenLines: false });
+      return planConfig(view, cut, extent, floors);
     }
     case 'elevation': {
       if (view.interior) return storedPlane(view.interior.plane, view.viewDepth ?? span);
@@ -96,12 +103,14 @@ export const isEmptyDrawing = (d: Drawing2D): boolean => d.lines.length === 0 &&
 /**
  * The drawing of every view in `views` that has a plane, by view id. Views
  * whose drawing fails are left out and reported through `onError`. A plan
- * left with nothing to draw is reported through `onEmpty`.
+ * left with nothing to draw is reported through `onEmpty`. `floors` (`storeyFloorsOf`, from the model's spatial
+ * hierarchy) scopes a plan's projection to its storey, as the app does.
  */
 export async function generateViewDrawings(
   views: readonly ProjectView[], meshes: MeshData[], levels: readonly ProjectLevel[], extent: ModelExtent,
   onError: (view: ProjectView, error: unknown) => void = () => {},
   onEmpty: (view: ProjectView) => void = () => {},
+  floors: readonly number[] | null = null,
 ): Promise<Map<string, Drawing2D>> {
   const out = new Map<string, Drawing2D>();
   if (meshes.length === 0) return out;
@@ -119,11 +128,20 @@ export async function generateViewDrawings(
         }
         continue;
       }
-      const config = sectionConfigFor(view, levels, extent);
+      const config = sectionConfigFor(view, levels, extent, floors);
       if (!config) continue;
       try {
         const projection = config.projectionDepth > 0;
-        const drawing = await generator.generate(meshes, config, { includeHiddenLines: false, includeProjection: projection, includeEdges: projection, mergeLines: true });
+        // A plan is cut as the app cuts it: hidden edges classified (an opaque wall hides what is behind it and splits the
+        // lines it crosses, #6615; the drawing carries them marked `hidden` and the sheet leaves them out) and the Rust
+        // outline of non-extruded geometry (#623). Elevations and sections keep the unclassified cut they had.
+        const asApp = projection && view.kind === 'plan';
+        const generated = await generator.generate(meshes, config, {
+          includeHiddenLines: asApp, includeProjection: projection, includeEdges: projection, mergeLines: true,
+          outlineProvider: asApp && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
+        });
+        // A plan shows its hidden lines unless it says not to (`viewShowsHidden` in the app).
+        const drawing = asApp && view.showHidden === false ? { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') } : generated;
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);
         out.set(view.id, drawing);
       } catch (err) {
