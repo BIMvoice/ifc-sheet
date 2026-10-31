@@ -43,9 +43,9 @@
     "hash": "5fa96eec7981b27b"
    },
    "lines": {
-    "paths": 408,
-    "points": 816,
-    "hash": "8c970b44ffeeb81a"
+    "paths": 884,
+    "points": 1768,
+    "hash": "cc51bec6ab3fd279"
    },
    "marks": {
     "paths": 0,
@@ -84,6 +84,38 @@
      "regions": 48,
      "points": 478,
      "hash": "be16a95b42333e80"
+    },
+    "HIDDEN stroke=#000000 fill=- #1": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 202,
+     "regions": 0,
+     "points": 404,
+     "hash": "624de6373299ad65"
+    },
+    "HIDDEN stroke=#000000 fill=- #2": {
+     "width": 0.18,
+     "dash": "1.5,1",
+     "paths": 283,
+     "regions": 0,
+     "points": 566,
+     "hash": "77b0760ae5ef799c"
+    },
+    "SEEN stroke=#000000 fill=- #1": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 200,
+     "regions": 0,
+     "points": 400,
+     "hash": "32c6e85ed03fea6d"
+    },
+    "SEEN stroke=#000000 fill=- #2": {
+     "width": 0.25,
+     "dash": "",
+     "paths": 276,
+     "regions": 0,
+     "points": 552,
+     "hash": "e7cb538b1e6c91c3"
     },
     "SYMBOLS stroke=#000000 fill=- #1": {
      "width": 0.13,

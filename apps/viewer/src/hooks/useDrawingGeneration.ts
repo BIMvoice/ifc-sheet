@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { boundedProjectionBands } from '@bimvoice/ifcsheet';
+import { planProjectionBands, storeyFloorsOf } from '@bimvoice/ifcsheet';
 import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
@@ -20,8 +20,6 @@ import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/a
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createSectionConfig,
-  currentFloorBands,
-  storeyFloorsFromMeshes,
   type Drawing2D,
   type DrawingLine,
   type SectionConfig,
@@ -332,35 +330,13 @@ export function useDrawingGeneration({
       const axisMax = bounds.max[axis];
       const position = axisMin + (sectionPlane.position / 100) * (axisMax - axisMin);
 
-      // Calculate max depth as half the model extent
-      const maxDepth = (axisMax - axisMin) * 0.5;
-
-      // Construction-projection bands (issue #979 + current-floor follow-up).
-      // Project geometry on each side of the cut and let the band classifier
-      // split it (below → solid, above → dashed). `fullExtent` (the whole model
-      // height) is the baseline; for a multi-storey model on a plan cut the
-      // bands are instead clamped to the storey the cut sits in, so other
-      // floors don't bleed onto the plan (e.g. a roof two levels up — the
-      // reported bug). Flip-invariant: the classifier applies the flip sign
-      // itself. Floor at 1mm so a degenerate zero-extent model (or a storey
-      // collapsed to a single slab) doesn't yield 0-width bands that cull every
-      // element sitting on the plane.
-      const fullExtent = Math.max(axisMax - axisMin, 1e-3);
-      let belowDepth = fullExtent;
-      let aboveDepth = fullExtent;
-
-      // Auto-scope to the current floor only when it's safe and meaningful:
-      // a plan ('down') cut with projection on, a single model (storey ids are
-      // LOCAL express ids — federation would mismatch global mesh ids), no
-      // active manual isolation or storey selection (those already scope the
-      // set and the user's explicit choice wins), spatial-hierarchy data
-      // present (absent on cache-reopened models), and at most ONE building.
-      // A single IFC can hold several IfcBuildings with staggered storey
-      // elevations; flattening all their storey minima into one band mis-scopes
-      // (a cut on building B's ground floor capped by building A's upper
-      // storey), so multi-building models fall back to full extent too.
-      // Otherwise keep the shipped full-extent behavior so single-storey /
-      // cache-loaded / federated / multi-building models don't regress.
+      // Construction-projection bands (issue #979 + current-floor follow-up): the whole
+      // extent on both sides of the cut, scoped to the storey the cut sits in on a plan of a
+      // multi-storey model, then the view's depth. One function shared with the engine's
+      // sheets (`planProjectionBands`, #623). The storey scoping is safe only for a single
+      // model (storey ids are LOCAL express ids), with no manual isolation or storey
+      // selection (the user's explicit choice wins), with spatial-hierarchy data (absent on
+      // cache-reopened models) and one building (`storeyFloorsOf`).
       const sh = ifcDataStore?.spatialHierarchy;
       const canScopeFloor =
         projectionOn &&
@@ -376,41 +352,22 @@ export function useDrawingGeneration({
         // isolate as "no isolation" and let floor auto-scoping run over the
         // isolated-to-nothing set.
         computedIsolatedIds == null &&
-        sh !== undefined &&
-        sh.byBuilding.size <= 1;
+        sh !== undefined;
+      let floors: number[] | null = null;
       if (canScopeFloor && sh) {
         const cached = storeyFloorsCacheRef.current.get(geometryResult);
         const floorsCurrent = cached?.elementToStorey === sh.elementToStorey;
-        const floors = floorsCurrent ? cached.floors : storeyFloorsFromMeshes(modelMeshes, sh.elementToStorey);
-        if (!floorsCurrent) {
+        floors = floorsCurrent ? cached.floors : storeyFloorsOf(modelMeshes, sh);
+        if (!floorsCurrent && floors) {
           storeyFloorsCacheRef.current.set(geometryResult, { floors, elementToStorey: sh.elementToStorey });
         }
-        // Need ≥2 storeys to scope: with 0/1 storey there is no "other floor"
-        // to exclude, and full extent keeps an overhead roof projecting.
-        if (floors.length >= 2) {
-          // `currentFloorBands` returns GEOMETRIC depths — `below` toward the
-          // floor, `above` toward the ceiling. The band classifier reads them
-          // in FLIP-ADJUSTED depth space (d<0 = `below` slot), so on a flipped
-          // plan cut (looking up — a reflected-ceiling-plan style view) the
-          // floor/ceiling map to the opposite slots and the magnitudes must be
-          // swapped. The shipped full-extent bands were symmetric so this never
-          // mattered before; the asymmetric storey bands make flip significant.
-          const bands = currentFloorBands(floors, position, axisMin, axisMax);
-          belowDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.above : bands.below;
-          aboveDepth = sectionPlane.flipped || sectionPlane.reflected ? bands.below : bands.above;
-        }
       }
+      const bands = planProjectionBands({
+        depth: boundedProjection ? manualDepth : null, projectionOn, floors, position, axisMin, axisMax,
+        down: sectionPlane.axis === 'down', custom: !!sectionPlane.custom, flipped: sectionPlane.flipped, reflected: sectionPlane.reflected === true,
+        automaticDepth: projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down') ? automaticViewDepth(sectionPlane, bounds) : null,
+      });
 
-      if (projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down')) {
-        // The automatic depth is shared with the section's depth band on its plan.
-        belowDepth = automaticViewDepth(sectionPlane, bounds) ?? 1e-3;
-        aboveDepth = 1e-3;
-      }
-      if (boundedProjection) { // the one rule the engine's sheets draw a plan by too (#615)
-        ({ below: belowDepth, above: aboveDepth } = boundedProjectionBands({ below: belowDepth, above: aboveDepth }, { depth: manualDepth, position, axisMax, down: sectionPlane.axis === 'down', plainPlan: sectionPlane.axis === 'down' && !sectionPlane.custom && !sectionPlane.flipped && !sectionPlane.reflected }));
-      }
-
-      if (sectionPlane.reflected) aboveDepth = 1e-3; // a reflected ceiling plan sees only above its cut; the floor side is not drawn
       // Adjust progress to account for symbolic parsing phase (0-20%)
       const progressOffset = symbolicLines.length > 0 ? 20 : 0;
       const progressScale = symbolicLines.length > 0 ? 0.8 : 1;
@@ -420,10 +377,7 @@ export function useDrawingGeneration({
 
       // Create section config
       const config: SectionConfig = createSectionConfig(axis, position, {
-        projectionDepth: boundedProjection ? belowDepth : maxDepth,
-        clipProjectionBands: boundedProjection,
-        projectionBelowDepth: belowDepth,
-        projectionAboveDepth: aboveDepth,
+        ...bands,
         includeHiddenLines: displayOptions.showHiddenLines,
         scale: displayOptions.scale,
       });

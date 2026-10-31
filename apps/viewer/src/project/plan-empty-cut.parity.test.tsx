@@ -25,9 +25,9 @@ const BELOW: ProjectLevel = { name: 'Below', elevation: -3, storeyGlobalIds: [] 
 const plan = (level: ProjectLevel, cutHeight: number, viewDepth?: number): PlanProjectView =>
   ({ id: `${level.name}-${cutHeight}-${viewDepth ?? 'auto'}`, name: 'plan', createdAt: 0, kind: 'plan', level, cutHeight, ...(viewDepth === undefined ? {} : { viewDepth }) });
 
-/** `visible`: leave out the lines the app classifies as hidden (`includeHiddenLines: projectionOn`), which the engine does not make. */
-const counts = (d: Drawing2D, visible: boolean) => {
-  const lines = visible ? d.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') : d.lines;
+/** Every line, the hidden ones the app classifies (`includeHiddenLines: projectionOn`) too: the engine's plans classify them since #623. */
+const counts = (d: Drawing2D) => {
+  const lines = d.lines;
   return {
     lines: lines.length,
     cut: lines.filter((l) => l.category === 'cut').length,
@@ -37,20 +37,20 @@ const counts = (d: Drawing2D, visible: boolean) => {
   };
 };
 
-/** Row: the plan, the least cut faces, and whether only visible lines are compared: the walls under a slab a cut sits above are hidden lines in the app, which the engine leaves out (a difference from before #615, not touched by it). */
-const ROWS: [string, PlanProjectView, number, boolean][] = [
-  ['a cut through the walls, a slab overhead', plan(GROUND, 1.2), 4, false],
-  ['a cut below the whole model (the bridge deck above its storey)', plan(BELOW, 1.2), 0, false],
-  ['a cut above the model top', plan(GROUND, 5), 0, true],
-  ['a cut through the walls, depth 0.5', plan(GROUND, 1.2, 0.5), 4, false],
-  ['a cut through the walls, depth 0 (the cut only)', plan(GROUND, 1.2, 0), 4, false],
+/** Row: the plan and the least cut faces. */
+const ROWS: [string, PlanProjectView, number][] = [
+  ['a cut through the walls, a slab overhead', plan(GROUND, 1.2), 4],
+  ['a cut below the whole model (the bridge deck above its storey)', plan(BELOW, 1.2), 0],
+  ['a cut above the model top', plan(GROUND, 5), 0],
+  ['a cut through the walls, depth 0.5', plan(GROUND, 1.2, 0.5), 4],
+  ['a cut through the walls, depth 0 (the cut only)', plan(GROUND, 1.2, 0), 4],
 ];
 
 describe('a one-level plan, app against engine (#615)', () => {
   let geometry: GeometryResult | null = null;
   before(async () => { geometry = await meshFile(FIXTURE); });
 
-  for (const [name, view, minCutPolygons, visible] of ROWS) {
+  for (const [name, view, minCutPolygons] of ROWS) {
     it(name, async (t) => {
       if (!geometry) { t.skip('wasm bundle not built: run `pnpm build:wasm:fetch` first'); return; }
       const app = await viewDrawing(view, geometry);
@@ -58,9 +58,9 @@ describe('a one-level plan, app against engine (#615)', () => {
       const level = view.level;
       const engine = (await generateViewDrawings([view], geometry.meshes, [level], boundsOf(geometry)!)).get(view.id);
       assert.ok(engine, 'the engine drew nothing');
-      assert.ok(counts(app, visible).lines > 0, 'an empty drawing proves nothing');
+      assert.ok(counts(app).lines > 0, 'an empty drawing proves nothing');
       assert.ok(app.cutPolygons.length >= minCutPolygons);
-      assert.deepEqual(counts(engine, visible), counts(app, visible));
+      assert.deepEqual(counts(engine), counts(app));
     });
   }
 });
