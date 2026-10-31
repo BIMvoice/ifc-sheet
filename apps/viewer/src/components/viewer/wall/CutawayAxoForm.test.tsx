@@ -53,7 +53,7 @@ const cutaways = () => useProjectStore.getState().views.filter((v): v is ThreeDP
 describe('Add a drawing: cut-away axonometric (#97)', () => {
   it('makes the ground floor cut at its default height, seen from the south-east, and hangs it in one undo step', () => {
     clearDraftHistory();
-    const ui = render(<AddDrawing onView={(id) => addViewport('s', id, { x: 10, y: 10 })} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => addViewport('s', id, { x: 10, y: 10 })} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Cut-away axonometric/));
     const [storey, corner] = [...ui.querySelectorAll('select')] as HTMLSelectElement[];
     assert.equal(storey.selectedOptions[0].textContent, 'Ground Floor', 'the lowest storey first');
@@ -74,7 +74,7 @@ describe('Add a drawing: cut-away axonometric (#97)', () => {
   });
 
   it('a storey picked moves the cut to that storey\'s default; a typed height is kept', () => {
-    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Cut-away axonometric/));
     select(ui.querySelector('select') as HTMLSelectElement, '0');
     type(ui.querySelector('input') as HTMLInputElement, '0.9');
@@ -115,7 +115,7 @@ describe('Add a drawing: cut-away axonometric (#97)', () => {
 
   it('reads Romanian', () => {
     act(() => { registerLocale('ro', ro); setLocale('ro'); });
-    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Axonometrie secționată/));
     assert.ok(button(ui, /Adăugați desenul/));
     assert.match(ui.textContent ?? '', /Înălțimea de secționare/);

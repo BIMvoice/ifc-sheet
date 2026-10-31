@@ -332,6 +332,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 onClose={() => setAdding(false)}
                 onSection={() => startTool('sectionline')}
                 onDetail={() => startTool('detail')}
+                onSheet={(sheetId) => { setAdding(false); onStep(sheetId); }}
                 onView={(viewId) => {
                   setAdding(false);
                   const landed = extent ? hangView(viewId, extent) : null;
