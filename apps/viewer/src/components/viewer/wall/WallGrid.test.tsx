@@ -68,7 +68,7 @@ describe('WallGrid', () => {
     assert.ok(chip);
     click(chip);
     assert.equal(groupScale('plans'), 50);
-    assert.deepEqual(useProjectStore.getState().sheets.filter((x) => x.number.startsWith('A-2')).map((x) => x.viewports?.map((v) => v.scale)), [[100, 100], [50, 50]], 'the elevations stay as the set made them');
+    assert.deepEqual(useProjectStore.getState().sheets.filter((x) => x.number.startsWith('A-2')).map((x) => x.viewports?.map((v) => v.scale)), [[100, 100], [100, 100]], 'the elevations stay as the set made them');
     assert.equal(chip.getAttribute('aria-pressed'), 'true');
   });
 

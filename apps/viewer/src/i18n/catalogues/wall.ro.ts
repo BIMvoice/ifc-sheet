@@ -127,6 +127,7 @@ export const wallRo = {
   'wall.add.detailHint': 'Marcați zona pe desen',
   'wall.add.close': 'Închide',
   'wall.reason.fits': '1 : {scale}, cea mai mare scară care încape pe {paper}',
+  'wall.reason.shared': '1 : {scale}, aceeași scară ca a celorlalte planșe de același fel',
   'wall.reason.chosen': '1 : {scale}, aleasă',
   'wall.reason.noFit': '1 : {scale}, cea mai mică scară, și tot depășește {paper}',
   'wall.shell.sheetsViews': 'Planșe: {sheets} · vederi: {views}',

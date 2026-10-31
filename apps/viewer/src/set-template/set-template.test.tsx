@@ -65,7 +65,7 @@ describe('a set template made in one project makes the set of another (#21)', ()
     assert.deepEqual(template.sheets.map((s) => [s.name, s.series, s.layout.paper, s.slots.map((sl) => `${JSON.stringify(sl.view)}@${sl.scale}`)]), [
       ['Office plans', 'plans', 'A1', ['{"kind":"plan","storey":0}@200', '{"kind":"plan","storey":1}@200']],
       ['Elevations, south and north', 'elevations', 'A3', ['{"kind":"elevation","direction":"south"}@100', '{"kind":"elevation","direction":"north"}@100']],
-      ['Elevations, east and west', 'elevations', 'A3', ['{"kind":"elevation","direction":"east"}@50', '{"kind":"elevation","direction":"west"}@50']],
+      ['Elevations, east and west', 'elevations', 'A3', ['{"kind":"elevation","direction":"east"}@100', '{"kind":"elevation","direction":"west"}@100']],
       ['Sections', 'sections', 'A3', ['{"kind":"section","place":0}@50']],
     ]);
   });
@@ -83,8 +83,8 @@ describe('a set template made in one project makes the set of another (#21)', ()
     const { report } = useSetTemplates.getState();
     assert.equal(report?.template, 'Office');
     assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.defaulted').map((n) => n.params.names), ['Second, Third']);
-    // The tower is taller than the office's A3 sheets hold at 1:50: those sheets take the scale that fits, and say so.
-    assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.rescaled').map((n) => [n.params.wanted, n.params.used]), [[50, 100], [50, 100]]);
+    // The tower is taller than the office's A3 sheets hold at 1:50: that sheet takes the scale that fits, and says so (the east and west elevations were saved at 1:100 since #634).
+    assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.rescaled').map((n) => [n.params.wanted, n.params.used]), [[50, 100]]);
   });
 
   it('on a building with a basement: the ground storey keeps its slot, the basement is the storey nobody foresaw', () => {
