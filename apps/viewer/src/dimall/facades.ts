@@ -17,8 +17,6 @@ import type { PlanPart } from './types';
 
 /** Wall pieces and openings meet within this (metres). */
 const TOUCH = 0.03;
-/** An opening's edge within this of the wall's edge (metres) is that edge. */
-const SNAP = 0.06;
 /** A facade run shorter than this is a step in the outline, not a facade. */
 export const MIN_RUN = 0.3;
 /** Runs on one side this close across (metres) are one facade at a reveal in a finish: a plaster coat interrupted at each window is not a second facade. */
