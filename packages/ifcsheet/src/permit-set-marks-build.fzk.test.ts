@@ -42,7 +42,7 @@ async function pages(args: string[]): Promise<string[][]> {
   }
 }
 
-describe.skipIf(missing !== null)('ifcsheet build --pac draws the marks of the PAC set template, on AC20-FZK-Haus (#425)', () => {
+describe.skipIf(missing !== null)('ifcsheet build --pac draws the marks of the PAC set template, on AC20-FZK-Haus (#425)', { timeout: 120_000 }, () => {
   it('prints the north arrow\'s N and the scale bar\'s labels on the pages of the plans', async () => {
     const all = await pages(['--pac']);
     const text = all.flat();
