@@ -17,7 +17,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { scheduleOf, type JoineryCellOverride } from '@bimvoice/ifcsheet';
 import { joineryExport, joineryScheduleLayout, type ScheduleLabels } from '@bimvoice/ifcsheet/project';
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
-import { useViewerStore } from '@/store';
 import { labelElementByGlobalId } from '@/labels/label-element.js';
 import { resetProject, useProjectStore } from '@/project/project-store.js';
 import { planTagAll } from '@/tagall/plan.js';
