@@ -91,7 +91,7 @@ describe('the words', () => {
   });
 });
 
-describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the model', () => {
+describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the model', { timeout: 120_000 }, () => {
   const run = (nodeOptions: string, ...args: string[]) => spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: nodeOptions }, timeout: 120_000 });
 
   it('exits 1 in words, with no V8 abort report on stderr and nothing on stdout', () => {
@@ -123,5 +123,5 @@ describe.skipIf(!existsSync(FZK))('the executable with a heap too small for the 
     expect(summary.length).toBeGreaterThan(0);
     expect(readFileSync(out).subarray(0, 5).toString()).toBe('%PDF-');
     expect(run('', 'build').status).toBe(2);
-  }, 120_000);
+  });
 });
