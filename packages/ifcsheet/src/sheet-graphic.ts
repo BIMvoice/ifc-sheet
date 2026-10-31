@@ -31,7 +31,7 @@ import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { LOGO_FIELD } from './title-block-fields.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
-import { standardTitleBlock } from './title-block-standard.js';
+import { standardCaptionsFor, standardTitleBlock } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
@@ -154,7 +154,7 @@ export function printableLogo(src: string | undefined): string | undefined {
  */
 function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>, language?: string): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
   const tb = titleBlockRect(paper, frameOf(sheet));
-  const template = doc.titleBlockTemplate ?? standardTitleBlock();
+  const template = doc.titleBlockTemplate ?? standardTitleBlock(standardCaptionsFor(language));
   return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields, language), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
 }
 

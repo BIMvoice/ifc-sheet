@@ -16,6 +16,7 @@
  * them equal.
  */
 
+import { hasDrawableGeometry } from './drawable.js';
 import { buildDrawingSet, groundPlan, groupsThatDoNotFit, type ModelExtent, type SetGroup } from './drawing-set.js';
 import type { ElevationProjectView, NumberingScheme, PlanProjectView, ProjectDocument, ProjectLevel, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './document.js';
 import { freshProjectId } from './ids.js';
@@ -202,7 +203,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
 }
 
 function generateSet(model: SetModel, options: DefaultSetOptions): DefaultSet | null {
-  if (!model.extent) return null;
+  if (!hasDrawableGeometry(model) || !model.extent) return null;
   const now = options.now ?? Date.now();
   const templates = options.templates ?? {};
   const levels = levelsFromStoreys(model.storeys);

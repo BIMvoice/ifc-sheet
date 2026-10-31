@@ -50,7 +50,7 @@ describe.skipIf(missing !== null)('the sheets of AC20-FZK-Haus draw the door and
     const plans = set.document.views.filter((v) => v.kind === 'plan');
     const drawings = await generateViewDrawings(plans, model.buildingMeshes, set.levels, model.extent!);
     const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
-    const openings = new Map(plans.map((v) => [v.id, planOpeningSymbols(model.buildingMeshes, drawings.get(v.id)!.config.plane, { live: { dataStore: model.dataStore, view: null }, project }, resolveViewGraphics(v, set.document.viewTemplates))]));
+    const openings = new Map(plans.map((v) => [v.id, planOpeningSymbols(model.buildingMeshes, drawings.get(v.id)!.config.plane, { live: { dataStore: model.dataStore, view: null }, project }, resolveViewGraphics(v, set.document.viewTemplates), v.level)]));
     const bodies = [...drawings.values()].flatMap((d) => [...d.lines, ...d.cutPolygons]).filter((e) => /^IfcDoor|^IfcWindow/.test(e.ifcType)).length;
     expect(bodies, 'the plans cut doors and windows').toBeGreaterThan(0);
     expect([...openings.values()].reduce((n, s) => n + s.length, 0), 'symbols').toBeGreaterThan(0);

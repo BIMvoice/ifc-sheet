@@ -31,7 +31,8 @@ import type { ElementFacts } from '@/joinery/symbol-mapping';
 const DXF = readFileSync(new URL('../../../../packages/ifcsheet/src/__fixtures__/door-window-blocks.dxf', import.meta.url), 'utf8');
 const MODEL = 'm';
 
-interface Row { storey: string; plane: SectionPlaneConfig }
+type Level = Parameters<typeof planOpeningSymbols>[4];
+interface Row { storey: string; plane: SectionPlaneConfig; level: Level }
 
 /** A symbol as compared: its element, kind and every shape, to a micrometre. */
 const shape = (s: OpeningSymbol) => JSON.parse(JSON.stringify({ id: s.id, kind: s.kind, shapes: s.shapes, heavy: s.heavy ?? [], dashed: s.dashed ?? [] }, (_k, x) => (typeof x === 'number' ? Math.round(x * 1e6) / 1e6 : x)));
@@ -46,23 +47,23 @@ describe('the engine draws the door and window symbols of AC20-FZK-Haus as the a
     engine = await openModel(new Uint8Array(readFileSync(FZK_HAUS)));
     const set = generateDefaultSet(engine);
     assert.ok(set && engine.extent, 'the engine lays out a set');
-    rows = set.document.views.filter((v) => v.kind === 'plan').map((v) => ({ storey: v.name, plane: sectionConfigFor(v, set.levels, engine.extent!)!.plane }));
+    rows = set.document.views.filter((v) => v.kind === 'plan').map((v) => ({ storey: v.name, plane: sectionConfigFor(v, set.levels, engine.extent!)!.plane, level: v.level }));
     assert.ok(rows.length >= 2, 'a plan for each storey');
   });
   beforeEach(() => { resetProject(); invalidateJoineryReads(); });
 
   const appMeshes = () => [...useViewerStore.getState().models.values()].flatMap((m) => m.geometryResult?.meshes ?? []);
   const app = (plane: SectionPlaneConfig) => viewOpeningSymbols(appMeshes(), plane, useProjectStore.getState().symbolFlips, new Set(), 'fine');
-  const eng = (plane: SectionPlaneConfig) => {
+  const eng = (plane: SectionPlaneConfig, level: Level) => {
     const { joineryTypes, joineryMapping, symbolFlips } = useProjectStore.getState();
-    return planOpeningSymbols(engine.buildingMeshes, plane, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips } }, undefined);
+    return planOpeningSymbols(engine.buildingMeshes, plane, { live: { dataStore: engine.dataStore, view: null }, project: { joineryTypes: joineryTypes ?? [], joineryMapping: joineryMapping!, symbolFlips } }, undefined, level);
   };
 
   /** The engine's symbols per storey, each storey's equal to the app's; the rows must hold `kind` symbols somewhere. */
   function compare(kind: 'door' | 'window'): { storey: string; symbols: OpeningSymbol[] }[] {
-    const out = rows.map((r) => ({ storey: r.storey, symbols: eng(r.plane) }));
+    const out = rows.map((r) => ({ storey: r.storey, symbols: eng(r.plane, r.level) }));
     for (const r of rows) {
-      const a = app(r.plane), e = eng(r.plane);
+      const a = app(r.plane), e = eng(r.plane, r.level);
       for (const k of ['door', 'window'] as const) assert.deepEqual(sorted(e.filter((s) => s.kind === k)), sorted(a.filter((s) => s.kind === k)), `${r.storey}: ${k} symbols, engine vs app`);
     }
     assert.ok(out.some((o) => o.symbols.some((s) => s.kind === kind)), `the plans hold ${kind} symbols`);
