@@ -30,6 +30,7 @@ import { ViewDetailControls } from './ViewDetailControls';
 import { hideViewLine } from '@/joinery/view-choice-actions';
 import type { JoineryViewName } from '@bimvoice/ifcsheet/project';
 import { JoineryViewDrafting } from './JoineryViewDrafting';
+import { joineryDraftSource } from './joinery-draft-source';
 import { RegisterView } from './RegisterView';
 import { RoomFinishesView } from './RoomFinishesView';
 import { RoomScheduleView } from './RoomScheduleView';
@@ -63,7 +64,7 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const [hiding, setHiding] = useState(false);
   const [drafting, setDrafting] = useState<{ typeId: string; view: JoineryViewName }>();
   if (!result) return null;
-  const { data, layout, views } = result;
+  const { data, layout } = result;
   const w = layout.width + 2 * MARGIN, h = layout.height + 2 * MARGIN;
   const stem = sanitizeFilename(schedule.name, { fallback: 'schedule' });
 
@@ -89,10 +90,9 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
     const hit = layout.regions?.find((r) => p.x >= r.box.x && p.x <= r.box.x + r.box.w && p.y >= r.box.y && p.y <= r.box.y + r.box.h);
     if (hit) setDrafting({ typeId: hit.type, view: hit.view });
   };
-  const draftSpec = drafting ? data.entries.find((en) => en.spec?.id === drafting.typeId) : undefined;
-  const draftViews = draftSpec ? views?.get(draftSpec.key) : undefined;
-  if (drafting && draftSpec?.spec && draftViews) {
-    return <JoineryViewDrafting spec={draftSpec.spec} view={drafting.view} views={draftViews} scale={schedule.scale ?? 50} onDone={() => setDrafting(undefined)} />;
+  const draftSource = drafting ? joineryDraftSource(result, drafting.typeId) : null;
+  if (drafting && draftSource) {
+    return <JoineryViewDrafting spec={draftSource.spec} view={drafting.view} views={draftSource.views} scale={schedule.scale ?? 50} onDone={() => setDrafting(undefined)} />;
   }
 
   return (

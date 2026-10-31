@@ -21,7 +21,9 @@ import { addViewport } from '@/project/sheets';
 import { groundPlan, hangView } from '@/project/drawing-set-actions';
 import { useProjectStore } from '@/project/project-store';
 import type { SectionProposal } from '@/project/section-proposals';
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
+import { joineryDraftViewId } from '@/joinery/view-draft-id';
+import { JoineryDraftHost, type JoineryDraft } from '../joinery/JoineryDraftHost';
 import { DraftingView } from '../drafting/DraftingView';
 import { exportSheetDxf } from '../sheets/sheet-dxf';
 import { printSheet } from '../sheets/sheet-export';
@@ -88,7 +90,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
   const focus = views.find((v) => v.id === focusId);
-  const focusView = focus && focus.kind !== '3d' ? focus : null;
+  // A joinery type's view drawn on from the schedule's card (#656) is the drawing in front, as a view of its own kind of id.
+  const [joineryDraft, setJoineryDraft] = useState<JoineryDraft | null>(null);
+  const joineryView = useMemo<Exclude<ProjectView, { kind: '3d' }> | null>(() => (joineryDraft ? { kind: 'drafting', id: joineryDraftViewId(joineryDraft.typeId, joineryDraft.view), name: joineryDraft.name, createdAt: 0 } : null), [joineryDraft]);
+  const focusView = joineryView ?? (focus && focus.kind !== '3d' ? focus : null);
   const group = sheetGroup(sheet);
 
   // A tool ends (Esc, or it finished): the rail lets go of it; the drawing stays forward.
@@ -164,6 +169,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     cancelStart.current();
     setTool(null);
     setFocusId(null);
+    setJoineryDraft(null);
     refocus.current = true;
   }, []);
   // The button unmounts with the click, so focus would drop to <body>: it goes to the sheet's canvas instead, once that is back.
@@ -309,7 +315,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
-              <DraftingView key={focusView.id} view={focusView} bare />
+              {joineryDraft ? <JoineryDraftHost draft={joineryDraft} onDone={leaveEditMode} /> : <DraftingView key={focusView.id} view={focusView} bare />}
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
@@ -323,7 +329,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
           </div>
           {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (
