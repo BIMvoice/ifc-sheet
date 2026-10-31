@@ -4,8 +4,8 @@
 
 /**
  * TAGALL's planner: the labels a plan still needs, from what the model says.
- * A door or window shows its Tag, else its Name, else a running number the
- * tool gives it (and counts); a room shows its name and its area in the middle
+ * A door or window shows its mark (`elementMark`: its Tag, else the mark the
+ * schedule gives its type), else a running number the tool gives it (and counts); a room shows its name and its area in the middle
  * of the room, the area read from the model's quantities, else from the
  * footprint. Labels are ordinary parametric labels (`labels/label-all.ts`), so
  * they keep following the model. Doors and windows are placed first, beside
@@ -96,8 +96,8 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   for (const t of todo) {
     const el = read(t.guid);
     if (!el) continue;
-    // Numbered only when the mark and the name both read nothing (the office's sources for the mark included).
-    if (!hasValue(readFieldValue(MARK_REF, el).value) && el.attribute('Name') === '') extrasOf.set(t.guid, { numbered: ++counter });
+    // Numbered only when the mark reads nothing (the office's sources for it included): never the Name, never a class word.
+    if (!hasValue(readFieldValue(MARK_REF, el).value)) extrasOf.set(t.guid, { numbered: ++counter });
   }
   const gap = LABEL_GAP_MM * at.paperUnit;
   const items = todo.flatMap((t) => {

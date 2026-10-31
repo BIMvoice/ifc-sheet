@@ -9,6 +9,11 @@ import type { AnnotationType } from '@/catalogue/types';
 export const MARK_TYPE_ID = 'tagall-mark';
 export const ROOM_TYPE_ID = 'tagall-room';
 
+/** The door and window label: the one mark the schedule shares (`@bimvoice/ifcsheet` `elementMark`), never the Name (#631). */
+export const MARK_TEMPLATE = '{Mark}';
+/** What the mark label said before: the Name stood in for a missing mark, which put "Window" on a plan. */
+const OLD_MARK_TEMPLATE = '{Mark ?? Name}';
+
 /** The model's quantities a room's area is read from, first that has a value; then the footprint (`{Computed.Area}`). */
 export const AREA_FIELDS = ['Qto_SpaceBaseQuantities.NetFloorArea', 'BaseQuantities.NetFloorArea', 'Qto_SpaceBaseQuantities.GrossFloorArea', 'BaseQuantities.GrossFloorArea'] as const;
 
@@ -24,18 +29,18 @@ const OLD_ROOM_TEMPLATES: readonly string[] = [LEGACY_ROOM_TEMPLATE, NUMBERLESS_
 
 /**
  * The label types of TAGALL, ordinary label types the Standards dialog lists and edits: a door or window shows its
- * Tag (unless that is only the element's unique id), else its Name; a room shows its long name (else its Name) and its area.
+ * mark (its Tag unless that is only the element's unique id, else its type's schedule mark; never its Name); a room shows its long name (else its Name) and its area.
  */
 export const TAGALL_TYPES: readonly AnnotationType[] = [
-  { id: MARK_TYPE_ID, name: 'Door and window mark', tool: 'label', label: { template: '{Mark ?? Name}', frame: 'box', missing: 'empty' } },
+  { id: MARK_TYPE_ID, name: 'Door and window mark', tool: 'label', label: { template: MARK_TEMPLATE, frame: 'box', missing: 'empty' } },
   { id: ROOM_TYPE_ID, name: 'Room name and area', tool: 'label', label: { template: ROOM_TEMPLATE, missing: 'empty', leader: 'never' } },
 ];
 
 /** The types with a room label the office never changed taken to the template that reads the tag name; the same array when none is. */
 export function upgradeTagAllTypes(types: AnnotationType[]): AnnotationType[] {
-  const old = (t: AnnotationType) => t.id === ROOM_TYPE_ID && !!t.label && OLD_ROOM_TEMPLATES.includes(t.label.template);
+  const old = (t: AnnotationType) => !!t.label && ((t.id === ROOM_TYPE_ID && OLD_ROOM_TEMPLATES.includes(t.label.template)) || (t.id === MARK_TYPE_ID && t.label.template === OLD_MARK_TEMPLATE));
   if (!types.some(old)) return types;
-  return types.map((t) => (old(t) && t.label ? { ...t, label: { ...t.label, template: ROOM_TEMPLATE } } : t));
+  return types.map((t) => (old(t) && t.label ? { ...t, label: { ...t.label, template: t.id === MARK_TYPE_ID ? MARK_TEMPLATE : ROOM_TEMPLATE } } : t));
 }
 
 /** Which of TAGALL's three kinds of label to place (#497). A kind left out is not placed; one already placed stays. */
