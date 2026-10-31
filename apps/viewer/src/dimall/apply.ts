@@ -26,6 +26,8 @@ export interface DimensionTarget {
   dimStyle: string;
   /** The GlobalId of a plan part (a door or window), to stamp on the dimension that measures it. */
   guidOf?: (partId: number) => string | null;
+  /** Boxes of the tags and notes on the plan: a figure keeps clear of them like of a section symbol's letters. */
+  clear?: readonly { x0: number; y0: number; x1: number; y1: number }[];
 }
 
 /** The stamp of one dimension of a string: the string's place and where it starts and ends, to the centimetre. */
@@ -79,7 +81,8 @@ function stringShapes(plan: DimensionPlan, height: number, avoid: readonly Symbo
 export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, existing: readonly DraftEntity[], viewDrafts: readonly DraftEntity[] = []): DraftEntity[] {
   const done = new Set(existing.flatMap((d) => (typeof d.params.dimAll === 'string' ? [d.params.dimAll] : [])));
   const out: DraftEntity[] = [];
-  const shapes = stringShapes(plan, target.textHeight, symbolPieces(viewDrafts));
+  const boxPieces = (target.clear ?? []).map((r): SymbolPiece => ({ kind: 'head', a: { x: r.x0, y: r.y0 }, b: { x: r.x1, y: r.y1 }, box: [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }] }));
+  const shapes = stringShapes(plan, target.textHeight, [...symbolPieces(viewDrafts), ...boxPieces]);
   for (const s of plan.strings) {
     (shapes.get(s) ?? []).forEach((shape, k) => {
       const stamp = stampOf(s, shape.a, shape.b);

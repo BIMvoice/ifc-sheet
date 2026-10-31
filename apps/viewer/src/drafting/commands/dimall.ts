@@ -11,6 +11,8 @@
 import { dimensionDrafts, isDimAll } from '@/dimall/apply';
 import { stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
 import { planDimensions } from '@/dimall/plan';
+import { sectionLink } from '@/drafting/section-symbol';
+import { rectsOf } from '@/labels/label-annotations';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { paperUnitOf, styleBook } from '@/project/drafting-standards';
 import { dimStyleOf } from '../styles';
@@ -33,13 +35,16 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllNotOnDetail');
       return;
     }
-    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight, firstMm: dimStyleOf(styleBook(), ctx.settings.currentDimStyle).allOffset });
+    const placed = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
+    // Tags, notes and labels already on the plan (TAGALL runs first): the strings stand beyond the ones in front of a facade. A section symbol is its own case (`stringsThroughHeads`), dimensions are what is being drawn.
+    const clear = rectsOf(placed.filter((d) => d.shape.type !== 'dimension' && sectionLink(d) === null));
+    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight, firstMm: dimStyleOf(styleBook(), ctx.settings.currentDimStyle).allOffset, clear });
     if (plan.strings.length === 0) {
       ctx.say('drafting.msg.dimAllNone');
       return;
     }
-    const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId }, here.filter(isDimAll), here);
+    const here = placed;
+    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId, clear }, here.filter(isDimAll), here);
     if (drafts.length === 0) {
       ctx.say('drafting.msg.dimAllHave');
       return;
@@ -47,6 +52,8 @@ export const dimAllCommand: DraftCommandDef = {
     editDrafts({ add: drafts });
     const crossed = stringsThroughHeads(plan.strings, symbolPieces(here), ctx.settings.textHeight);
     ctx.say('drafting.msg.dimAllDone', { count: drafts.length, strings: plan.strings.length, skipped: plan.skippedFacades });
+    if (plan.droppedStrings > 0) ctx.say('drafting.msg.dimAllDropped', { count: plan.droppedStrings });
+    if (plan.droppedOpenings > 0) ctx.say('drafting.msg.dimAllOpenings', { count: plan.droppedOpenings });
     if (crossed > 0) ctx.say('drafting.msg.dimAllHeads', { count: crossed });
   },
 };
