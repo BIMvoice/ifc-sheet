@@ -33,7 +33,7 @@ describe('a cut by its materials on the sheet (#645)', () => {
 
   it('fills each band in its material, hatches the brick and draws the foil as a heavy dashed line', () => {
     expect(faces.cutPolygons.map((p) => p.materialFill)).toEqual(['#aa4433', '#ffe680']);
-    const pens = materialPens(faces, viewStyler({ pens: PEN_TABLE }), at, box, PEN_TABLE, []);
+    const pens = materialPens(faces, viewStyler({ graphics: undefined, pens: PEN_TABLE }), at, box, PEN_TABLE, []);
     const hatch = pens.find((p) => p.layer === 'HATCH');
     expect(hatch?.runs.length ?? 0).toBeGreaterThan(0);
     expect(hatch?.width).toBe(PEN_TABLE.materialHatch.hairline);
