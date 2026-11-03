@@ -74,19 +74,16 @@ function lineBoxes(a: Pt, b: Pt): Rect[] {
 
 const near = (a: Box, b: Box): boolean => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
 
-/**
- * Each space the plane cuts, one per space, ordered by id, with the cut outlines of everything else near it that its tag
- * keeps clear of (the walls and slabs the drawing cuts; a space the drawing happens to show is not one).
- */
+/** Each space the plane cuts, one per space, ordered by id, with the lines the drawing shows near it (a space the drawing happens to show is not one). */
 export function roomsOfCut(plane: SectionPlaneConfig | undefined, drawing: CutDrawing | null | undefined, meshes: readonly Mesh[]): RoomOfPlan[] {
   if (!plane) return [];
-  const others = (drawing?.cutPolygons ?? []).filter((p) => p.ifcType !== 'IfcSpace' && p.polygon.outer.length >= 3).map((p) => ({ ring: p.polygon.outer, box: ringBounds(p.polygon.outer) }));
-  const seen = (drawing?.lines ?? []).filter((l) => l.visibility !== 'hidden').map((l) => ({ a: l.line.start, b: l.line.end, box: { x0: Math.min(l.line.start.x, l.line.end.x), y0: Math.min(l.line.start.y, l.line.end.y), x1: Math.max(l.line.start.x, l.line.end.x), y1: Math.max(l.line.start.y, l.line.end.y) } }));
-  return [...spaceMeshes(meshes)].sort((a, b) => a[0] - b[0]).flatMap(([renderId, parts]) => {
+  const spaces = spaceMeshes(meshes);
+  const seen = (drawing?.lines ?? []).filter((l) => l.visibility !== 'hidden' && !spaces.has(l.entityId)).map((l) => ({ a: l.line.start, b: l.line.end, box: { x0: Math.min(l.line.start.x, l.line.end.x), y0: Math.min(l.line.start.y, l.line.end.y), x1: Math.max(l.line.start.x, l.line.end.x), y1: Math.max(l.line.start.y, l.line.end.y) } }));
+  return [...spaces].sort((a, b) => a[0] - b[0]).flatMap(([renderId, parts]) => {
     const guid = renderIdGlobalId(renderId);
     const ring = guid ? cutOutline(plane, parts) : null;
     if (!guid || !ring) return [];
     const box = ringBounds(ring);
-    return [{ renderId, ring, at: 'cut' as const, guid, floorArea: spaceFloorArea(parts) ?? null, keepClear: others.filter((o) => near(o.box, box)).map((o) => o.ring), preferClear: seen.filter((l) => near(l.box, box)).flatMap((l) => lineBoxes(l.a, l.b)) }];
+    return [{ renderId, ring, at: 'cut' as const, guid, floorArea: spaceFloorArea(parts) ?? null, preferClear: seen.filter((l) => near(l.box, box)).flatMap((l) => lineBoxes(l.a, l.b)) }];
   });
 }

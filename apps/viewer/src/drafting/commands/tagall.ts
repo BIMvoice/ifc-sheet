@@ -63,6 +63,7 @@ export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts)
   if (summary.numbered > 0) ctx.say('drafting.msg.tagAllNumbered', { count: summary.numbered });
   if (summary.rooms > 0) ctx.say('drafting.msg.tagAllAreas', { model: summary.areaFromModel, footprint: summary.areaFromFootprint });
   if (summary.roomsTooSmall > 0) ctx.say('drafting.msg.tagAllTooSmall', { count: summary.roomsTooSmall });
+  if (summary.roomsOverLines > 0) ctx.say('drafting.msg.tagAllOverLines', { count: summary.roomsOverLines });
   if (summary.noRooms) ctx.say(onPlan ? 'drafting.msg.tagAllNoRooms' : 'drafting.msg.tagAllNoRoomsCut');
 }
 

@@ -32,6 +32,20 @@ import { useViewerStore } from '@/store';
 import { contextForView, runCommandOnView, type AnnotatableView } from '@/annotate-set/run-view';
 import { ROOM_TYPE_ID } from './types';
 
+
+/** Whether the segment a-b passes through the rectangle (an end inside, or it crosses an edge). */
+function lineThrough(r: { x0: number; y0: number; x1: number; y1: number }, a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  for (const [p, q] of [[-dx, a.x - r.x0], [dx, r.x1 - a.x], [-dy, a.y - r.y0], [dy, r.y1 - a.y]] as const) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
 describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMissing(FZK_HAUS) }, () => {
   let model: LoadedPlanModel;
   let sections: AnnotatableView[];
@@ -41,7 +55,7 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
   const roomTags = (viewId: string) => draftsOfView(viewId).filter((d) => d.params.atype === ROOM_TYPE_ID);
   const textOf = (d: DraftEntity) => (d.shape.type === 'text' ? d.shape.text : '');
   /** The drawing as the app stores it: the viewer hides IfcSpace by default, so the section's cut holds none (`useDrawingGeneration`). The raw drawing, with the spaces cut, is what the tags are checked against. */
-  const asStored = (drawing: Drawing2D): Drawing2D => ({ ...drawing, cutPolygons: drawing.cutPolygons.filter((p) => p.ifcType !== 'IfcSpace') });
+  const asStored = (drawing: Drawing2D): Drawing2D => ({ ...drawing, cutPolygons: drawing.cutPolygons.filter((p) => p.ifcType !== 'IfcSpace'), lines: drawing.lines.filter((l) => !/^ifcspace$/i.test(model.classOf(l.entityId))) });
   const spacesCut = (drawing: Drawing2D) => new Set(drawing.cutPolygons.filter((p) => p.ifcType === 'IfcSpace').map((p) => renderIdGlobalId(p.entityId)));
 
   before(async () => {
@@ -82,6 +96,22 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
         assert.ok(rectsOf([tag]).every((r) => rectInsideRing(r, ring)), `${section.name}: the tag of ${guid} stands inside its room's cut outline`);
       }
     }
+  });
+
+  it('puts no room tag over a line the section shows: windows, doors, stairs, cut outlines; a room with no clear place is said in the run (#677)', () => {
+    let clear = 0;
+    for (const section of sections) {
+      useProjectStore.setState({ drafts: [] });
+      const drawing = asStored(drawings.get(section.id)!);
+      const { messages } = runCommandOnView(section, drawing, 'tagall');
+      const seen = drawing.lines.filter((l) => l.visibility !== 'hidden');
+      assert.ok(seen.length > 0);
+      const over = roomTags(section.id).filter((tag) => seen.some((l) => lineThrough(rectsOf([tag])[0], l.line.start, l.line.end)));
+      const said = Number(messages.find((m) => m.key === 'drafting.msg.tagAllOverLines')?.params?.count ?? 0);
+      assert.equal(over.length, said, `${section.name}: the tags over a line (${over.map((t) => textOf(t).replace(/\n/g, ' / ')).join('; ')}) are the ones the run says so of`);
+      clear += roomTags(section.id).length - over.length;
+    }
+    assert.ok(clear >= 5, 'most room tags stand clear of every visible line');
   });
 
   it('keeps clear of what the room already has, and a second run adds nothing', () => {
