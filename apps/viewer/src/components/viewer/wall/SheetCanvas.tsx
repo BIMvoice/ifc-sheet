@@ -76,7 +76,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   }, [paper.w, paper.h, fitKey]);
 
   const drafting = useSheetDrafting(sheet.id, pan, extraPatterns);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   const last = useRef<Pt | null>(null);
   useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', last.current) });

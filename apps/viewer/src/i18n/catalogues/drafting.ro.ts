@@ -93,7 +93,6 @@ export const draftingRo = {
   'drafting.prompt.filletFirst': 'Selectați prima linie (raza {radius}) sau scrieți o rază:',
   'drafting.prompt.filletSecond': 'Selectați a doua linie:',
   'drafting.prompt.textPoint': 'Specificați punctul de început al textului (sau scrieți o înălțime a textului, acum {height}):',
-  'drafting.prompt.enterText': 'Scrieți textul:',
   'drafting.prompt.leaderTip': 'Specificați punctul săgeții liniei de indicație:',
   'drafting.prompt.leaderBend': 'Specificați frângerea, sub orice unghi (Enter pentru o linie de indicație dintr-un singur segment):',
   'drafting.prompt.leaderEnd': 'Specificați capătul celui de-al doilea segment (se aliniază în apropierea orizontalei și a verticalei):',

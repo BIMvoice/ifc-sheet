@@ -25,12 +25,12 @@ import { SheetView } from './SheetView.js';
 
 const HOUSE: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } };
 
-function mount(): HTMLInputElement {
+function mount(): HTMLTextAreaElement {
   const ui = render(<SheetView sheet={useProjectStore.getState().sheets[1]} />);
-  return ui.querySelector('input[aria-label="Command line"]') as HTMLInputElement;
+  return ui.querySelector('textarea[aria-label="Command line"]') as HTMLTextAreaElement;
 }
 
-function enter(line: HTMLInputElement, text: string): void {
+function enter(line: HTMLTextAreaElement, text: string): void {
   for (const ch of text) press(document.body, ch);
   press(line, 'Enter');
 }

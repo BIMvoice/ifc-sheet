@@ -166,7 +166,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   useDraftingSession((s) => s.revision);
   const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
 
   const levels = useProjectStore((s) => s.levels);
