@@ -16,7 +16,7 @@ import type { DraftEntity } from '@/drafting/types';
 import { editDrafts, draftsOfView, newDraft } from '@/drafting/draft-store';
 import { tagCommand } from '@/drafting/commands/tag';
 import { rectsOf } from '@/labels/label-annotations';
-import { rectInsideRing, rectsOverlap, ringBounds } from '@/labels/label-geometry';
+import { pointInRing, rectInsideRing, rectsOverlap, ringBounds } from '@/labels/label-geometry';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { settleLabels } from '@/labels/label-sync';
 import { setExtent } from '@/draft-set/body';
@@ -31,6 +31,8 @@ import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from 
 import { useViewerStore } from '@/store';
 import { contextForView, runCommandOnView, type AnnotatableView } from '@/annotate-set/run-view';
 import { ROOM_TYPE_ID } from './types';
+import { leaderCrossesOutsideEntry } from './room-outside';
+import { textRect } from '@/labels/label-attach';
 
 
 /** Whether the segment a-b passes through the rectangle (an end inside, or it crosses an edge). */
@@ -54,8 +56,8 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
 
   const roomTags = (viewId: string) => draftsOfView(viewId).filter((d) => d.params.atype === ROOM_TYPE_ID);
   const textOf = (d: DraftEntity) => (d.shape.type === 'text' ? d.shape.text : '');
-  /** The drawing as the app stores it: the viewer hides IfcSpace by default, so the section's cut holds none (`useDrawingGeneration`). The raw drawing, with the spaces cut, is what the tags are checked against. */
-  const asStored = (drawing: Drawing2D): Drawing2D => ({ ...drawing, cutPolygons: drawing.cutPolygons.filter((p) => p.ifcType !== 'IfcSpace'), lines: drawing.lines.filter((l) => !/^ifcspace$/i.test(model.classOf(l.entityId))) });
+  /** The drawing as the app stores it: the viewer hides IfcSpace by default, so the section's cut holds none (`useDrawingGeneration`). The test generator also emits every hidden line, which the app's section of this house does not draw (see fzk-sections-zoom.png), so those are dropped too. The raw drawing, with the spaces cut, is what the tags are checked against. */
+  const asStored = (drawing: Drawing2D): Drawing2D => ({ ...drawing, cutPolygons: drawing.cutPolygons.filter((p) => p.ifcType !== 'IfcSpace'), lines: drawing.lines.filter((l) => l.visibility !== 'hidden' && !/^ifcspace$/i.test(model.classOf(l.entityId))) });
   const spacesCut = (drawing: Drawing2D) => new Set(drawing.cutPolygons.filter((p) => p.ifcType === 'IfcSpace').map((p) => renderIdGlobalId(p.entityId)));
 
   before(async () => {
@@ -93,25 +95,42 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
         const guid = String(tag.params.labelOf);
         assert.equal(textOf(tag), onPlan.get(guid), `${section.name}: the tag of ${guid} reads as it does on the plan`);
         const ring = drawing.cutPolygons.filter((p) => p.ifcType === 'IfcSpace' && renderIdGlobalId(p.entityId) === guid).map((p) => p.polygon.outer).sort((a, b) => ringBounds(b).x1 - ringBounds(b).x0 - (ringBounds(a).x1 - ringBounds(a).x0))[0];
-        assert.ok(rectsOf([tag]).every((r) => rectInsideRing(r, ring)), `${section.name}: the tag of ${guid} stands inside its room's cut outline`);
+        // Inside the room's cut outline, or, with no clear place there, outside it with a leader that ends inside it.
+        const led = tag.shape.type === 'text' ? tag.shape.leader : undefined;
+        assert.ok(led ? pointInRing(ring, led) : rectsOf([tag]).every((r) => rectInsideRing(r, ring)), `${section.name}: the tag of ${guid} stands inside its room's cut outline, or leads into it`);
       }
     }
   });
 
-  it('puts no room tag over a line the section shows: windows, doors, stairs, cut outlines; a room with no clear place is said in the run (#677)', () => {
-    let clear = 0;
+  it('puts no room tag over a line the section shows: a tag with no clear place inside its room stands outside with a leader that crosses only where it enters (#677)', () => {
+    let inside = 0, outside = 0;
     for (const section of sections) {
       useProjectStore.setState({ drafts: [] });
-      const drawing = asStored(drawings.get(section.id)!);
+      const whole = drawings.get(section.id)!;
+      const drawing = asStored(whole);
       const { messages } = runCommandOnView(section, drawing, 'tagall');
-      const seen = drawing.lines.filter((l) => l.visibility !== 'hidden');
+      const seen = drawing.lines;
       assert.ok(seen.length > 0);
-      const over = roomTags(section.id).filter((tag) => seen.some((l) => lineThrough(rectsOf([tag])[0], l.line.start, l.line.end)));
+      const over: string[] = [];
+      for (const tag of roomTags(section.id)) {
+        const guid = String(tag.params.labelOf);
+        const ring = whole.cutPolygons.filter((p) => p.ifcType === 'IfcSpace' && renderIdGlobalId(p.entityId) === guid).map((p) => p.polygon.outer)[0];
+        const name = textOf(tag).replace(/\n/g, ' / ');
+        // The tag's own box: the box of the entity runs on to the end of its leader.
+        const box = tag.shape.type === 'text' ? textRect(tag.shape) : rectsOf([tag])[0];
+        if (seen.some((l) => lineThrough(box, l.line.start, l.line.end))) { over.push(name); continue; }
+        if (tag.shape.type !== 'text' || !tag.shape.leader) { inside++; continue; }
+        outside++;
+        const tip = tag.shape.leader;
+        assert.ok(pointInRing(ring, tip), `${section.name}: the leader of "${name}" ends inside its room`);
+        const from = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+        assert.ok(!leaderCrossesOutsideEntry(ring, from, tip, seen.map((l) => ({ a: l.line.start, b: l.line.end }))), `${section.name}: the leader of "${name}" crosses a line other than where it enters its room`);
+      }
       const said = Number(messages.find((m) => m.key === 'drafting.msg.tagAllOverLines')?.params?.count ?? 0);
-      assert.equal(over.length, said, `${section.name}: the tags over a line (${over.map((t) => textOf(t).replace(/\n/g, ' / ')).join('; ')}) are the ones the run says so of`);
-      clear += roomTags(section.id).length - over.length;
+      assert.equal(over.length, said, `${section.name}: the tags over a line (${over.join('; ')}) are the ones the run says so of`);
     }
-    assert.ok(clear >= 5, 'most room tags stand clear of every visible line');
+    assert.ok(outside >= 1, 'a room with no clear place inside is tagged outside it with a leader');
+    assert.ok(inside >= 4, 'the rooms with a clear place keep the tag inside');
   });
 
   it('keeps clear of what the room already has, and a second run adds nothing', () => {

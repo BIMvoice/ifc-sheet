@@ -7,6 +7,7 @@
  * room fills of a coloured plan; this module keeps the app's name for it and the room as a command reads it.
  */
 
+import type { OutsideScene } from './room-outside';
 import type { Rect } from '@/labels/label-geometry';
 import type { RoomFootprint } from '@bimvoice/ifcsheet/footprint';
 
@@ -14,6 +15,6 @@ export { footprintOf, ringArea, roomFootprints, type Footprint, type RoomFootpri
 
 /**
  * A room of the view in front, as a command reads it. On a section or an elevation (`cut-rooms.ts`) the ring is the room's
- * cut outline, so the room's floor area is carried (`floorArea`, null when nothing gives one) and the lines the drawing shows near it, which its tag keeps clear of if it can (`preferClear`).
+ * cut outline, so the room's floor area is carried (`floorArea`, null when nothing gives one) and the lines the drawing shows near it, which its tag keeps clear of if it can (`preferClear`) and the drawing's lines and bounds, for a tag that goes outside the room (`outside`).
  */
-export type RoomOfPlan = RoomFootprint & { guid: string; floorArea?: number | null; preferClear?: readonly Rect[] };
+export type RoomOfPlan = RoomFootprint & { guid: string; floorArea?: number | null; preferClear?: readonly Rect[]; outside?: OutsideScene };

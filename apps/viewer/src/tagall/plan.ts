@@ -31,6 +31,7 @@ import { RectIndex } from '@/labels/rect-index';
 import { ringArea, type RoomOfPlan } from './footprint';
 import { roomLabelPoint } from './room-point';
 import { roomLabelPointLeast } from './room-point-least';
+import { roomLabelOutside } from './room-outside';
 import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types';
 
 export interface TagAllInput {
@@ -82,7 +83,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const shown = input.crop ? clipLoop(room.ring, input.crop) : room.ring;
     return shown.length >= 3 ? [{ room, shown }] : [];
   });
-  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0, roomsOverLines: 0 };
+  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0, roomsOverLines: 0, roomsOutside: 0 };
   const drafts: DraftEntity[] = [];
   const clear = LABEL_CLEAR_MM * at.paperUnit;
 
@@ -149,13 +150,23 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const hard = { rects: [], rings: [], rectIndex: roomIndex, ringIndex };
     const wanted = room.preferClear?.length ? roomLabelPoint(shown, size.w, size.h, { ...hard, rects: room.preferClear }, clear) : null;
     let spot = wanted?.fits ? wanted : roomLabelPoint(shown, size.w, size.h, hard, clear);
+    let tip: Pt | undefined;
     if (wanted && !wanted.fits) {
-      // No place clear of the lines: the one over the fewest of them, and the run says so.
-      const least = roomLabelPointLeast(shown, size.w, size.h, room.preferClear ?? [], roomIndex);
-      if (least) spot = { centre: least.centre, fits: true };
-      summary.roomsOverLines++;
+      // No place inside the room clear of the lines: outside it, with a short leader into the room; failing that, over the fewest lines, and the run says so.
+      const outside = room.outside ? roomLabelOutside(shown, size.w, size.h, room.outside, roomIndex, clear) : null;
+      if (outside) {
+        spot = { centre: outside.centre, fits: true };
+        tip = outside.tip;
+        summary.roomsOutside++;
+      } else {
+        const least = roomLabelPointLeast(shown, size.w, size.h, room.preferClear ?? [], roomIndex);
+        if (least) spot = { centre: least.centre, fits: true };
+        summary.roomsOverLines++;
+      }
     }
-    const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
+    const placed = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
+    // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).
+    const draft = placed && tip && placed.shape.type === 'text' ? { ...placed, shape: { ...placed.shape, leader: tip }, params: { ...placed.params, leaderFixed: true } } : placed;
     if (!draft) continue;
     drafts.push(draft);
     roomIndex.add(growRect(rectAround(spot.centre, size.w, size.h), 0));
