@@ -9,7 +9,15 @@ import type { TranslationValue } from '../types';
 export const joinLinesRo = {
   'drafting.cmd.join': 'JOIN',
   'drafting.sel.join': 'Unește',
-  'drafting.msg.joined': 'Am unit {count} linii și polilinii în {polylines} polilinie/polilinii',
-  'drafting.msg.joinLeft': '{count} piesă/piese lăsate neschimbate: capetele lor sunt la mai mult de {mm} mm de orice alt capăt',
+  'drafting.msg.joined': {
+    one: 'Am unit liniile și poliliniile selectate ({pieces}) într-o polilinie',
+    few: 'Am unit liniile și poliliniile selectate ({pieces}) în {count} polilinii',
+    other: 'Am unit liniile și poliliniile selectate ({pieces}) în {count} de polilinii',
+  },
+  'drafting.msg.joinLeft': {
+    one: 'O piesă a rămas neschimbată: capetele ei sunt la mai mult de {mm} mm de orice alt capăt',
+    few: '{count} piese au rămas neschimbate: capetele lor sunt la mai mult de {mm} mm de orice alt capăt',
+    other: '{count} de piese au rămas neschimbate: capetele lor sunt la mai mult de {mm} mm de orice alt capăt',
+  },
   'drafting.msg.joinNone': 'Nimic de unit: nicio pereche de linii sau polilinii deschise selectate nu se ating cap la cap (în {mm} mm)',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

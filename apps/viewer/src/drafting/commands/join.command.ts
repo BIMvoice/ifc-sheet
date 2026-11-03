@@ -44,7 +44,7 @@ function join(ctx: DraftContext): void {
   });
   commitDrafts(next);
   ctx.setSelection(new Set(seeds.keys()));
-  ctx.say('drafting.msg.joined', { count: joined.reduce((n, c) => n + c.ids.length, 0), polylines: joined.length });
+  ctx.say('drafting.msg.joined', { count: joined.length, pieces: joined.reduce((n, c) => n + c.ids.length, 0) });
   const left = chains.length - joined.length;
   if (left > 0) ctx.say('drafting.msg.joinLeft', { count: left, mm: JOIN_TOLERANCE * 1000 });
 }
