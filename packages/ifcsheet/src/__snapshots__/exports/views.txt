@@ -104,12 +104,15 @@ hiddenClassesOf: value
 hiddenElementIds: value
 hiddenLineElement: value
 hiddenLineEntry: value
+inDrawOrder: value
 itemRules: value
+layerOrder: value
 lineHidden: value
 lineKey: value
 mappingsFor: value
 matchKey: value
 materialKey: value
+movedInOrder: value
 orphanElements: value
 ownGraphicsOf: value
 parseClassificationRows: value

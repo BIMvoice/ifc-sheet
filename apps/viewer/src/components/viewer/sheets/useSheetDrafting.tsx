@@ -41,7 +41,7 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
   const snapOn = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const paperHeight = useProjectStore((s) => { const sheet = s.sheets.find((o) => o.id === sheetId); return sheet ? paperOf(sheet).h : 0; });
-  const entities = useMemo(() => draftsOfView(sheetId, drafts), [drafts, sheetId]);
+  const entities = useMemo(() => draftsOfView(sheetId, drafts, layers), [drafts, layers, sheetId]);
   const shapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   const [cursor, setCursor] = useState<{ p: Pt; snap: SnapHit | null } | null>(null);
 

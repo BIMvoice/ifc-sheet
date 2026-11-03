@@ -20,6 +20,7 @@ import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { documentRo } from '../catalogues/document.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
+import { drawOrderRo } from '../catalogues/draw-order.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { joineryDraftRo } from '../catalogues/joinery-draft.ro';
@@ -67,6 +68,7 @@ export const roAL = {
   ...cutawayAxoRo,
   ...documentRo,
   ...draftingRo,
+  ...drawOrderRo,
   ...draftingStandardsRo,
   ...elementGraphicsRo,
   ...joineryDraftRo,

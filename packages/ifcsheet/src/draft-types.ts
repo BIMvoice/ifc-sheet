@@ -134,6 +134,8 @@ export interface DraftLayer {
   print?: boolean;
   /** The layer group it belongs to (`LayerGroup.id`). */
   group?: string;
+  /** Where the layer stands in the stack of what is drafted (`draw-order.ts`): a higher number draws above a lower one. Absent: 0. */
+  order?: number;
 }
 
 export type SnapMode = 'endpoint' | 'midpoint' | 'center' | 'quadrant' | 'intersection' | 'perpendicular' | 'nearest';

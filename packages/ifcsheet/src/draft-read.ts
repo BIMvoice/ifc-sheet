@@ -147,5 +147,6 @@ export function readDraftLayer(v: unknown, path: string): DraftLayer {
     ...(isString(v.lineType) && v.lineType !== 'continuous' && v.lineType !== '' ? { lineType: v.lineType } : {}),
     ...(v.print === false ? { print: false } : {}),
     ...(isString(v.group) ? { group: v.group } : {}),
+    ...(isNumber(v.order) && Number.isInteger(v.order) && v.order !== 0 ? { order: v.order } : {}),
   };
 }

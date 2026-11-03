@@ -75,6 +75,10 @@ export function LayersTab() {
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
       </td>
+      <td className="py-1">
+        <input type="number" step={1} aria-label={`${l.name} · ${t('standards.layer.order')}`} title={t('standards.layer.orderHint')} className={`${INPUT} w-14`} defaultValue={l.order ?? 0} key={l.order ?? 0}
+          onBlur={(e) => { const n = Math.trunc(Number(e.target.value)); if (Number.isFinite(n) && n !== (l.order ?? 0)) updateLayer(l.id, { order: n === 0 ? undefined : n }); }} />
+      </td>
       <td className="py-1 text-center">
         <input type="checkbox" aria-label={`${l.name} · ${t('standards.layer.print')}`} title={t('standards.layer.printHint')} checked={l.print !== false} onChange={(e) => updateLayer(l.id, { print: e.target.checked ? undefined : false })} />
       </td>
@@ -116,6 +120,7 @@ export function LayersTab() {
             <th className="py-1 font-medium">{t('standards.layer.weight')}</th>
             <th className="py-1 font-medium">{t('standards.layer.type')}</th>
             <th className="py-1 font-medium">{t('standards.layer.group')}</th>
+            <th className="py-1 font-medium" title={t('standards.layer.orderHint')}>{t('standards.layer.order')}</th>
             <th className="py-1 font-medium">{t('standards.layer.print')}</th>
             <th className="py-1 font-medium">{t('standards.layer.visible')}</th>
             {view ? <th className="py-1 font-medium text-center">{t('standards.layer.inView', { view: view.name })}</th> : null}
@@ -125,7 +130,7 @@ export function LayersTab() {
         {sections.map(({ group, layers: members }) => (
           <tbody key={group?.id ?? 'ungrouped'}>
             <tr className="bg-zinc-50 dark:bg-zinc-900">
-              <td colSpan={view ? 10 : 9} className="py-1 px-1">
+              <td colSpan={view ? 11 : 10} className="py-1 px-1">
                 <div className="flex items-center gap-2 font-semibold">
                   {group ? (
                     <>
