@@ -28,9 +28,12 @@ const BUILT_IN_PAT = `
 0, 0,0, 0,8
 90, 0,0, 0,8
 
-*BRICK, Running-bond brick courses 8 x 4 mm
+*BRICK, Running-bond brick courses 8 x 4 mm (the face of a brick wall, as on an elevation)
 0, 0,0, 0,4
 90, 0,0, 4,4, 4,-4
+
+*BRICKCUT, Masonry cut: 45 degree lines, 2.5 mm apart (a brick or block wall cut by a plan or section)
+45, 0,0, 0,2.5
 
 *PARQUET, Parquet strips 12 x 3 mm in running bond
 0, 0,0, 0,3
@@ -40,23 +43,22 @@ const BUILT_IN_PAT = `
 45, 0,0, 0,4.2
 45, -0.55,0.55, 0,4.2
 
-*CONCRETE, Concrete speckle
-50, 0,0, 2.1,5.3, 0.9,-6.7
-140, 1.3,0.4, 3.7,4.9, 0.6,-5.9
-15, 0.7,2.2, 4.4,6.1, 0,-4.3, 0,-7.1
-95, 2.6,1.5, 3.2,5.7, 0,-5.2
+*CONCRETE, Concrete cut: aggregate (small triangles) and sand (dots) on a 6 mm grid
+0, 0,0, 0,6, 1.4,-4.6
+90, 0,0, 0,6, 1.4,-4.6
+135, 1.4,0, 4.243,4.243, 1.98,-6.505
+0, 3.1,3.4, 0,6, 0.3,-5.7
+0, 4.9,1.2, 0,6, 0.3,-5.7
+0, 1.3,4.6, 0,6, 0.3,-5.7
 
 *INSULATION, Batt insulation zig-zag rows
 60, 0,0, -2.309401,4, 4.618802,-4.618802
 120, 4.618802,0, 2.309401,4, 4.618802,-4.618802
 
-*EARTH, Groups of short strokes (earth)
-0, 0,0, 6,6, 4,-8
-0, 0,0.8, 6,6, 4,-8
-0, 0,1.6, 6,6, 4,-8
-90, 5.2,-2.6, -6,6, 4,-8
-90, 6,-2.6, -6,6, 4,-8
-90, 6.8,-2.6, -6,6, 4,-8
+*EARTH, Earth cut: diagonal lines in groups of three, 1.1 mm apart, groups 4.4 mm apart
+45, 0,0, 0,4.4
+45, -0.778,0.778, 0,4.4
+45, -1.556,1.556, 0,4.4
 
 *WOOD, Wood grain (approximated waves)
 0, 0,0, 7.3,2.4, 9,-1.5

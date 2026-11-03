@@ -32,6 +32,7 @@ import { feedbackRo } from '../catalogues/feedback.ro';
 import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { germanyRo } from '../catalogues/germany.ro';
 import { handoverRo } from '../catalogues/handover.ro';
+import { hatchAddRo } from '../catalogues/hatch-add.ro';
 import { hierarchyRo } from '../catalogues/hierarchy.ro';
 import { idsPanelRo } from '../catalogues/ids-panel.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
@@ -80,6 +81,7 @@ export const roAL = {
   ...geometryExportDialogsRo,
   ...germanyRo,
   ...handoverRo,
+  ...hatchAddRo,
   ...hierarchyRo,
   ...idsPanelRo,
   ...ionUploadRo,
