@@ -19,7 +19,7 @@ import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js
 import { farElementLabel, frameEntities } from './framing.js';
 import { buildingElementIds } from './building-ids.js';
 import { storeyFloorY } from './storey-origin.js';
-import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
+import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
 
 export interface OpenModelOptions {
@@ -142,7 +142,14 @@ function proposalInputOf(ds: IfcDataStore, meshes: MeshData[], extent: ModelExte
     const b = boundsOf(expressId);
     if (b) stairs.push(footprint(b));
   }
-  return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs };
+  const walls: Footprint[] = [];
+  for (const { expressId } of iterateEffectiveEntities(ds, null, PROPOSAL_WALL_TYPES)) {
+    const storey = hierarchy.elementToStorey.get(expressId) ?? null;
+    if (storey === null || !storeyIds.has(storey)) continue;
+    const b = boundsOf(expressId);
+    if (b) walls.push(footprint(b));
+  }
+  return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs, walls };
 }
 
 /** A file the engine will not read, with the one sentence that says why. The commands print `message` as it is. */

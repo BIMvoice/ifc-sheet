@@ -9,12 +9,10 @@ import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { cleanup, render } from '@/test/render.js';
 import { clearDraftHistory } from '@/drafting/draft-store';
-import { createProposedSection } from '@/drafting/section-create';
 import { addProjectSheet, resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
-import { ensureDrawingSet, hangView } from '@/project/drawing-set-actions';
+import { ensureDrawingSet } from '@/project/drawing-set-actions';
 import { addViewport, removeViewport, updateSheet, updateViewport } from '@/project/sheets';
 import { patchViewDrawing } from '@/project/view-drawings';
-import type { SectionProposal } from '@/project/section-proposals';
 import type { ProjectSheet } from '@/project/types';
 import { SHEET_PX } from '@/wall/wall-zoom';
 import { WallGrid } from './WallGrid.js';
@@ -29,7 +27,6 @@ import { WallGrid } from './WallGrid.js';
 /** A 12 x 10 m building, 6 m tall, far from the origin: x 100..112, z 200..210. */
 const BOUNDS = { min: { x: 100, y: 0, z: 200 }, max: { x: 112, y: 6, z: 210 } };
 const STOREYS = [{ name: 'Ground Floor', elevation: 0 }, { name: 'Level 1', elevation: 3 }];
-const STAIR: SectionProposal = { key: 'stair-0', label: 'Through the stair', through: 'stair', a: { x: 103, z: 201 }, b: { x: 103, z: 209 }, side: { x: 104, z: 205 } };
 /** The ground plan's drawing: the building's footprint, y running down the sheet (north at the top). */
 const FOOTPRINT = { min: { x: 100, y: 200 }, max: { x: 112, y: 210 } };
 
@@ -78,8 +75,9 @@ beforeEach(() => {
   const ground = state().views.find((v) => v.kind === 'plan' && v.level.elevation === 0);
   assert.equal(ground?.kind, 'plan');
   if (ground?.kind !== 'plan') return;
-  sectionB = createProposedSection(ground, state().levels, STAIR) ?? '';
-  assert.ok(hangView(sectionB, { min: { x: 100, y: 0, z: 200 }, max: { x: 112, y: 6, z: 210 } }));
+  // Section B is the set's second section, the one along the building (#665).
+  sectionB = state().views.find((v) => v.kind === 'section' && v.through?.endsWith('lengthwise'))?.id ?? '';
+  assert.ok(sectionB);
   patchViewDrawing(ground.id, {
     status: 'ready',
     drawing: { lines: [], cutPolygons: [], projectionPolygons: [], bounds: FOOTPRINT, config: { plane: { axis: 'y', position: 1.2, flipped: false } } } as unknown as Drawing2D,
