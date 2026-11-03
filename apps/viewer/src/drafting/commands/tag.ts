@@ -13,36 +13,39 @@
 import { renderIdGlobalId } from '@/project/element-guid';
 import { elementLabel, type TagField } from '@/tagfields/element-tag';
 import { editDrafts, newDraft } from '../draft-store';
+import { useProjectStore } from '@/project/project-store';
 import { styledParams } from '@/project/drafting-standards';
 import { entitySkeleton } from '../annotation';
 import type { Pt } from '../types';
 import type { DraftCommandDef } from './types';
 
-const FIELDS: Record<string, TagField> = { MARK: 'mark', NAME: 'name', CLASS: 'class', TYPE: 'class', CODE: 'classification', CODETITLE: 'classificationTitle' };
+const FIELDS: Record<string, TagField> = { MARK: 'mark', NAME: 'name', CLASS: 'class', TYPE: 'class', TYPENAME: 'typeName', CODE: 'classification', CODETITLE: 'classificationTitle' };
 
 export const tagCommand: DraftCommandDef = {
   id: 'tag',
   aliases: ['TAG', 'TG'],
   labelKey: 'drafting.cmd.tag',
   create(ctx) {
-    let field: TagField = ctx.settings.tagField;
+    // What a typed keyword chose, else: a tag type brings its own field; with none, the project's choice, read at each click so the Tag card changes a running tool (#676), else what the session last used.
+    let typed: TagField | null = null;
+    const currentField = (): TagField => typed ?? (ctx.settings.annotationType?.tool === 'tag' ? ctx.settings.tagField : useProjectStore.getState().tagField ?? ctx.settings.tagField);
     let anchor: { p: Pt; guid: string; text: string } | null = null;
     return {
-      prompt: () => ({ key: anchor ? 'drafting.prompt.tagLabel' : 'drafting.prompt.tagElement', params: { field: field.toUpperCase() } }),
+      prompt: () => ({ key: anchor ? 'drafting.prompt.tagLabel' : 'drafting.prompt.tagElement', params: { field: currentField().toUpperCase() } }),
       input: () => 'point',
       basePoint: () => anchor?.p ?? null,
       onKeyword(word) {
         const next = FIELDS[word];
         if (!next) return undefined;
-        field = next;
-        if (anchor) anchor = { ...anchor, text: elementLabel(anchor.guid, field) ?? anchor.text };
+        typed = next;
+        if (anchor) anchor = { ...anchor, text: elementLabel(anchor.guid, next) ?? anchor.text };
         return 'continue';
       },
       onPoint(p) {
         if (!anchor) {
           const id = ctx.elementAt(p);
           const guid = id === null ? null : renderIdGlobalId(id);
-          const text = guid ? elementLabel(guid, field) : null;
+          const text = guid ? elementLabel(guid, currentField()) : null;
           if (!guid || text === null) {
             ctx.say('drafting.msg.notAnElement');
             return 'continue';
@@ -50,7 +53,8 @@ export const tagCommand: DraftCommandDef = {
           anchor = { p, guid, text };
           return 'continue';
         }
-        const shape = { type: 'leader' as const, pts: [anchor.p, p], text: anchor.text, height: ctx.settings.textHeight };
+        const field = currentField();
+        const shape = { type: 'leader' as const, pts: [anchor.p, p], text: elementLabel(anchor.guid, field) ?? anchor.text, height: ctx.settings.textHeight };
         const styled = styledParams(ctx.viewId, shape, { textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle });
         editDrafts({ add: [newDraft(ctx.viewId, ctx.layerId, shape, { ...styled, tagOf: anchor.guid, tagField: field, ...(ctx.settings.annotationType?.tool === 'tag' ? { atype: ctx.settings.annotationType.id } : {}) })] });
         anchor = null;
