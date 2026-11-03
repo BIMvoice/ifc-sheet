@@ -10,7 +10,7 @@
  * steps aside while a command runs.
  */
 
-import { BringToFront, Copy, FlipHorizontal2, Move, RotateCw, SendToBack } from 'lucide-react';
+import { BringToFront, Copy, FlipHorizontal2, Merge, Move, RotateCw, SendToBack } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
 import { entityBounds } from '@/drafting/annotation';
@@ -26,6 +26,7 @@ const COMMANDS = [
   { id: 'rotate', labelKey: 'drafting.sel.rotate', icon: RotateCw },
   { id: 'mirror', labelKey: 'drafting.sel.mirror', icon: FlipHorizontal2 },
   // What draws on top (#682): they act at once on the selection.
+  { id: 'join', labelKey: 'drafting.sel.join', icon: Merge },
   { id: 'bringtofront', labelKey: 'drafting.sel.front', icon: BringToFront },
   { id: 'sendtoback', labelKey: 'drafting.sel.back', icon: SendToBack },
 ] as const satisfies readonly { id: string; labelKey: TranslationKey; icon: unknown }[];
