@@ -24,8 +24,8 @@ export function addProjectHatchPatterns(incoming: readonly HatchPattern[]): numb
   return incoming.length;
 }
 
-/** Ask for a `.pat` file and add its patterns to the project. */
-export function importHatchPatternFile(): Promise<void> {
+/** Ask for a `.pat` file and add its patterns to the project. Resolves with the names it added (none when cancelled or unreadable), so a caller can pick the first at once. */
+export function importHatchPatternFile(): Promise<string[]> {
   return new Promise((done) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -33,17 +33,18 @@ export function importHatchPatternFile(): Promise<void> {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
-        done();
+        done([]);
         return;
       }
       const { patterns, errors } = parsePat(await file.text());
       if (patterns.length === 0) {
         toast.error(resolve('drafting.msg.patNone', { detail: errors[0] ?? file.name }));
-      } else {
-        const count = addProjectHatchPatterns(patterns);
-        toast.success(resolve('drafting.msg.patLoaded', { count, skipped: errors.length }));
+        done([]);
+        return;
       }
-      done();
+      const count = addProjectHatchPatterns(patterns);
+      toast.success(resolve('drafting.msg.patLoaded', { count, skipped: errors.length }));
+      done(patterns.map((p) => p.name));
     };
     input.click();
   });

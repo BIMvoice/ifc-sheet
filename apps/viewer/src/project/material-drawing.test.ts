@@ -45,7 +45,7 @@ describe('building materials in a cut', () => {
   it('guesses hatches and membranes from material names', () => {
     assert.equal(guessMaterial('Concrete C25/30').hatch, 'CONCRETE');
     assert.equal(guessMaterial('Mineral wool').hatch, 'INSULATION');
-    assert.equal(guessMaterial('Cărămidă plină'.normalize('NFD').replace(/[̀-ͯ]/g, '')).hatch, 'BRICK');
+    assert.equal(guessMaterial('Cărămidă plină'.normalize('NFD').replace(/[̀-ͯ]/g, '')).hatch, 'BRICKCUT');
     assert.equal(guessMaterial('Vapour barrier').membrane, true);
     assert.equal(guessMaterial('Something else').hatch, null);
   });

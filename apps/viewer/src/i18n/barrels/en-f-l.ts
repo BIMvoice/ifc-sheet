@@ -14,6 +14,7 @@ import { georeferencingEn } from '../catalogues/georeferencing.en';
 import { germanyEn } from '../catalogues/germany.en';
 import { groupsEn } from '../catalogues/groups.en';
 import { handoverEn } from '../catalogues/handover.en';
+import { hatchAddEn } from '../catalogues/hatch-add.en';
 import { hierarchyEn } from '../catalogues/hierarchy.en';
 import { hostedPlaceEn } from '../catalogues/hosted-place.en';
 import { idsPanelEn } from '../catalogues/ids-panel.en';
@@ -47,6 +48,7 @@ export const enFL = {
   ...germanyEn,
   ...groupsEn,
   ...handoverEn,
+  ...hatchAddEn,
   ...hierarchyEn,
   ...hostedPlaceEn,
   ...idsPanelEn,
