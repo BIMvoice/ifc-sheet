@@ -13,10 +13,12 @@
 
 import type { LevelShape } from '@/drafting/level-mark';
 import type { Pt } from '@/drafting/types';
+import type { ProjectLevel } from '@/project/types';
+import { levelFloorY } from '@/project/view-defaults';
 
 export interface LevelsInput {
   /** The storeys of the project: name and elevation (metres). */
-  levels: readonly { name: string; elevation: number }[];
+  levels: readonly Pick<ProjectLevel, 'name' | 'elevation' | 'floorY'>[];
   /** The building's extent in the view, drawing coordinates (y is the height). */
   bounds: { x0: number; y0: number; x1: number; y1: number };
   /** Level marks the view already has (symbol and the height each reads). */
@@ -24,6 +26,12 @@ export interface LevelsInput {
   /** Boxes of the other annotation on the view, which a side's room is measured against. */
   taken: readonly { x0: number; y0: number; x1: number; y1: number }[];
   textHeight: number;
+  /**
+   * The height a drawing point stands for (metres): the view's own reading (`levelAt`), the one a mark reads once it is dragged. A
+   * section's drawing y is measured from its plane's origin, not from the model's zero, so a level's height is not its drawing y (#675).
+   * Absent: the drawing's y is the height.
+   */
+  heightAt?: (p: Pt) => number;
   /** Drawing units per paper millimetre. */
   paperUnit: number;
 }
@@ -62,18 +70,23 @@ export function planLevels(input: LevelsInput): LevelsPlan {
   const gap = LEVEL_OFFSET_MM * input.paperUnit;
   const x = side === 'right' ? b.x1 + gap + REACH_LEFT * h : b.x0 - gap - REACH_RIGHT * h;
   const edge = side === 'right' ? b.x1 : b.x0;
+  // Height = h0 + slope * y along the line of marks: invert it to find the drawing y of a level's height.
+  const heightAt = input.heightAt ?? ((p: Pt) => p.y);
+  const h0 = heightAt({ x: edge, y: 0 });
+  const slope = heightAt({ x: edge, y: 1 }) - h0;
+  const yOf = (height: number): number => (Math.abs(slope) < 1e-9 ? height : (height - h0) / slope);
   const heights: { key: string; y: number }[] = [
-    ...input.levels.filter((l) => l.elevation >= b.y0 - SAME_HEIGHT && l.elevation <= b.y1 + SAME_HEIGHT).map((l) => ({ key: `level:${Math.round(l.elevation * 100)}`, y: l.elevation })),
+    ...input.levels.map((l) => ({ key: `level:${Math.round(l.elevation * 100)}`, y: yOf(levelFloorY(l)) })).filter((l) => l.y >= b.y0 - SAME_HEIGHT && l.y <= b.y1 + SAME_HEIGHT),
     { key: 'top', y: b.y1 },
   ].sort((p, q) => p.y - q.y);
   const out: PlannedLevel[] = [];
   let already = 0;
   for (const level of heights) {
     // A level that is the same height as one already planned (the top of the building at a storey) is one mark.
-    if (out.some((m) => Math.abs(m.shape.value - level.y) < SAME_HEIGHT)) continue;
+    if (out.some((m) => Math.abs(m.shape.p.y - level.y) < SAME_HEIGHT)) continue;
     if (input.existing.some((m) => Math.abs((m.ref?.at.y ?? m.p.y) - level.y) < SAME_HEIGHT)) { already++; continue; }
     const at: Pt = { x: edge, y: level.y };
-    out.push({ key: level.key, shape: { type: 'level', p: { x, y: level.y }, value: level.y, height: h, ref: { at } } });
+    out.push({ key: level.key, shape: { type: 'level', p: { x, y: level.y }, value: heightAt(at), height: h, ref: { at } } });
   }
   return { marks: out, side, already };
 }
