@@ -71,7 +71,7 @@
     "yjs": "^13.6.33"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "ajv": "^8.17.1",
     "pdfjs-dist": "6.4.299",
     "typescript": "^6.0.3",
