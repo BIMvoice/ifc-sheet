@@ -53,11 +53,11 @@ describe('ensureDrawingSet', () => {
     assert.equal(offset('south'), 150);
   });
 
-  it('adds the missing section and the sheets, reusing the plans and elevations that exist', () => {
+  it('adds the missing sections and the sheets, reusing the plans and elevations that exist', () => {
     const before = state().views.length;
     const report = run();
-    assert.deepEqual({ ...report, notes: [] }, { viewsAdded: 1, viewsExisting: 6, sheetsAdded: 4, sheetsExisting: 0, addedSheetNumbers: ['A-101', 'A-201', 'A-202', 'A-301'], notes: [] });
-    assert.equal(state().views.length, before + 1);
+    assert.deepEqual({ ...report, notes: [] }, { viewsAdded: 2, viewsExisting: 6, sheetsAdded: 4, sheetsExisting: 0, addedSheetNumbers: ['A-101', 'A-201', 'A-202', 'A-301'], notes: [] });
+    assert.equal(state().views.length, before + 2);
     assert.deepEqual(state().sheets.map((s) => s.number), ['A-101', 'A-201', 'A-202', 'A-301']);
     // Every drawing is on exactly one sheet, except the 3D view.
     const placed = state().sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.viewId));
@@ -68,7 +68,7 @@ describe('ensureDrawingSet', () => {
   it('makes each group on the smallest paper that gives it 1:100, each sheet at the most detailed scale it fits', () => {
     run();
     const papers = state().sheets.map((s) => [s.number, s.paper, s.viewports?.map((v) => v.scale)]);
-    assert.deepEqual(papers, [['A-101', 'A3', [100, 100]], ['A-201', 'A3', [100, 100]], ['A-202', 'A3', [100, 100]], ['A-301', 'A3', [50]]]);
+    assert.deepEqual(papers, [['A-101', 'A3', [100, 100]], ['A-201', 'A3', [100, 100]], ['A-202', 'A3', [100, 100]], ['A-301', 'A3', [100, 100]]]);
   });
 
   it('cuts the proposed section through the middle and draws its symbol on the ground plan', () => {
@@ -81,6 +81,15 @@ describe('ensureDrawingSet', () => {
     const ground = state().views.find((v) => v.kind === 'plan' && v.level.elevation === 0);
     const marks = state().drafts.filter((d) => d.params.sectionOf === s.id);
     assert.ok(marks.length > 0 && marks.every((d) => d.viewId === ground?.id));
+  });
+
+  it('cuts the second section the other way, lengthwise through the middle, so the two look in different directions (#665)', () => {
+    run();
+    const [across, lengthwise] = sections();
+    if (across?.kind !== 'section' || lengthwise?.kind !== 'section') throw new Error('two sections');
+    assert.equal(lengthwise.through, 'Through the middle, lengthwise');
+    assert.deepEqual(lengthwise.plane.custom?.normal.map((n) => Math.abs(n)), [0, 0, 1]);
+    assert.ok(Math.abs(Math.abs(lengthwise.plane.custom?.distance ?? 0) - 205) < 1e-9);
   });
 
   it('gives views a default depth, and a plan the scale of its sheet', () => {
@@ -127,21 +136,21 @@ describe('ensureDrawingSet', () => {
 
   it('undoing the set removes only what it added; a section made after it is a step of its own (view and symbol together), and what came after stays', () => {
     run();
-    const [fromSet] = sections();
+    const fromSet = sections().map((v) => v.id);
     const mine = makeHallSection();
     // Added outside the history (addProjectSheet is a step of its own since #51), as anything that is not an undo step is.
     const sheet = 'later-sheet';
     useProjectStore.setState((s) => ({ sheets: [...s.sheets, { id: sheet, number: 'Z-1', series: 'other', name: 'Details', createdAt: 1 } as never] }));
     assert.equal(undoDrafts(), true, 'the section');
-    assert.deepEqual(sections().map((v) => v.id), [fromSet.id], 'one undo takes the person\'s section view and its symbol, and only that');
+    assert.deepEqual(sections().map((v) => v.id), fromSet, 'one undo takes the person\'s section view and its symbol, and only that');
     assert.equal(state().drafts.some((d) => d.params.sectionOf === mine), false, 'its symbol is gone with it');
     assert.equal(undoDrafts(), true, 'the set');
     assert.deepEqual(sections().map((v) => v.id), [], 'the set\'s section is gone');
     assert.ok(state().sheets.some((s) => s.id === sheet), 'the sheet added later is still there');
     assert.equal(redoDrafts(), true);
-    assert.equal(sections().length, 1);
+    assert.equal(sections().length, 2);
     assert.equal(redoDrafts(), true);
-    assert.deepEqual(sections().map((v) => v.id).sort(), [fromSet.id, mine].sort());
+    assert.deepEqual(sections().map((v) => v.id).sort(), [...fromSet, mine].sort());
     assert.ok(state().sheets.some((s) => s.id === sheet));
   });
 
@@ -149,7 +158,7 @@ describe('ensureDrawingSet', () => {
     run();
     const doc = JSON.stringify(projectDocument());
     const report = run();
-    assert.deepEqual({ ...report, notes: [] }, { viewsAdded: 0, viewsExisting: 7, sheetsAdded: 0, sheetsExisting: 4, addedSheetNumbers: [], notes: [] });
+    assert.deepEqual({ ...report, notes: [] }, { viewsAdded: 0, viewsExisting: 8, sheetsAdded: 0, sheetsExisting: 4, addedSheetNumbers: [], notes: [] });
     assert.equal(JSON.stringify(projectDocument()), doc);
     assert.equal(undoDrafts(), true);
     assert.equal(sections().length, 0, 'the second run left no step of its own');
@@ -159,8 +168,9 @@ describe('ensureDrawingSet', () => {
     run();
     const id = makeHallSection();
     const report = run();
-    assert.deepEqual([report.viewsAdded, report.sheetsAdded], [0, 0], 'it joins A-301, which has room');
-    assert.equal(state().sheets.find((s) => s.number === 'A-301')?.viewports?.some((v) => v.viewId === id), true);
+    // A-301 holds the set's two sections; a third goes on a sheet of the series of its own.
+    assert.deepEqual([report.viewsAdded, report.sheetsAdded], [0, 1]);
+    assert.equal(state().sheets.find((s) => s.number === 'A-302')?.viewports?.some((v) => v.viewId === id), true);
     const doc = JSON.stringify(projectDocument());
     run();
     assert.equal(JSON.stringify(projectDocument()), doc);
@@ -178,7 +188,7 @@ describe('ensureDrawingSet', () => {
     removeProjectItem(sections()[0].id);
     const report = run();
     assert.deepEqual([report.viewsAdded, report.sheetsAdded], [1, 1]);
-    assert.equal(sections().length, 1);
+    assert.equal(sections().length, 2);
     assert.equal(state().sheets.length, 4);
   });
 

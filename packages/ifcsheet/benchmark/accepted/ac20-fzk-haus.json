@@ -362,14 +362,14 @@
     "hash": "9c68313187596d03"
    },
    "cut": {
-    "paths": 55,
-    "points": 2012,
-    "hash": "1c3db11e34149290"
+    "paths": 62,
+    "points": 1753,
+    "hash": "5dcea07822a6e447"
    },
    "lines": {
-    "paths": 3547,
-    "points": 7094,
-    "hash": "a8dd19643d622ccd"
+    "paths": 2902,
+    "points": 5804,
+    "hash": "5d4a3cbeddfc05b7"
    },
    "marks": {
     "paths": 0,
@@ -380,66 +380,66 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 308,
+     "paths": 132,
      "regions": 0,
-     "points": 616,
-     "hash": "771213967ab0573e"
+     "points": 264,
+     "hash": "deff3848123308b3"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
      "dash": "",
-     "paths": 740,
+     "paths": 691,
      "regions": 0,
-     "points": 1480,
-     "hash": "cda61385963c5433"
+     "points": 1382,
+     "hash": "07873152de21d24a"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 28,
-     "points": 609,
-     "hash": "dc227531388c1391"
+     "regions": 18,
+     "points": 248,
+     "hash": "5630c62d67442997"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 27,
-     "points": 1403,
-     "hash": "6d3e2e393d7614e2"
+     "regions": 43,
+     "points": 1505,
+     "hash": "9cbeadb8bb1ef5c4"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 385,
+     "paths": 208,
      "regions": 0,
-     "points": 770,
-     "hash": "b48901bc25804210"
+     "points": 416,
+     "hash": "be79e08dc76cd4dd"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 836,
+     "paths": 1208,
      "regions": 0,
-     "points": 1672,
-     "hash": "a420544b3d828eb4"
+     "points": 2416,
+     "hash": "9bf2ab8b1b66215c"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1272,
+     "paths": 1455,
      "regions": 0,
-     "points": 2544,
-     "hash": "4dae8ad54946b372"
+     "points": 2910,
+     "hash": "4fa823c23fc51c61"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 1227,
+     "paths": 624,
      "regions": 0,
-     "points": 2454,
-     "hash": "c94f147d29ace9c1"
+     "points": 1248,
+     "hash": "71939925b0c30c9b"
     }
    },
    "texts": [
@@ -456,7 +456,7 @@
     "Projekt-FZK-Haus @232,245 h3.5",
     "Revision @297,280.2 h2",
     "Scale @362,274.2 h2",
-    "Section A-A  1:100 @142.5,164.09 h3.5 center",
+    "Section A-A  1:100 @132.5,164.09 h3.5 center",
     "Section B-B  1:100 @277.5,164.09 h3.5 center",
     "Sections @232,265 h3.5",
     "Sheet no. @362,254.2 h2",
