@@ -134,7 +134,9 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
       </button>
       <button
         type="button"
-        aria-pressed={tracking}
+        // A setting kept between sessions, not a tool or a lock that is held: a switch, so it is not read as a pressed tool.
+        role="switch"
+        aria-checked={tracking}
         title={t('tracking.hint')}
         onClick={toggleTracking}
         className={cn(
