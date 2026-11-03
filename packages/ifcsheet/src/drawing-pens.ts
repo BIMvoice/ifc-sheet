@@ -11,8 +11,8 @@
 
 import type { ItemStyle, StyleItem, ViewStyler } from './view-style.js';
 
-/** The layer a pen goes on: a colour scheme's fill, a cut face's fill, the hidden, seen and cut lines, and a plan's door and window symbols. */
-export type PenLayer = 'COLOUR' | 'FILL' | 'HIDDEN' | 'SEEN' | 'CUT' | 'SYMBOLS';
+/** The layer a pen goes on: a colour scheme's fill, a cut face's fill, the hidden, seen and cut lines, a plan's door and window symbols, a material's hatch and its membrane lines (#645). */
+export type PenLayer = 'COLOUR' | 'FILL' | 'HIDDEN' | 'SEEN' | 'CUT' | 'SYMBOLS' | 'HATCH' | 'MEMBRANE';
 
 export interface PenGroup<F, L> {
   key: string;

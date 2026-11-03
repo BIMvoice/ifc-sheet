@@ -26,7 +26,8 @@ import { planSymbolsOn, readPlanSymbols, withPlanSymbols } from './plan-symbols.
 import { propertySetsOf, type JoineryProject } from './joinery-schedule.js';
 import { PEN_TABLE, elementProperties, viewStyler, type PenTable } from './view-style.js';
 import type { SurfaceFill } from './surface-fills.js';
-import { meshMaterialName, viewSurfaceFills } from './material-colour.js';
+import { headlessMaterialSource, meshMaterialName, viewSurfaceFills } from './material-colour.js';
+import { materialResolver } from './material-drawing.js';
 import type { ProjectMaterial } from './materials.js';
 import { resolveViewGraphics } from './view-templates.js';
 import type { SheetAnnotations } from './sheet-annotations.js';
@@ -129,5 +130,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
   const project = options.annotations || options.schedules ? { annotations: options.annotations, schedules: options.schedules } : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces, openings));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces, openings, model.dataStore ? materialResolver(headlessMaterialSource(model.dataStore), options.materials ?? []) : undefined));
 }

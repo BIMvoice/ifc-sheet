@@ -16,6 +16,7 @@
 import type { SectionConfig } from '@ifc-lite/drawing-2d';
 import { extractMaterialsOnDemand, type IfcDataStore } from '@ifc-lite/parser';
 import type { MeshData } from '@ifc-lite/geometry';
+import type { MaterialSource } from './material-drawing.js';
 import { IFC_FILL, materialGraphics, type ProjectMaterial } from './materials.js';
 import { surfaceColourOf, surfaceFills, type SurfaceFill } from './surface-fills.js';
 
@@ -66,6 +67,18 @@ export function meshMaterialName(store: IfcDataStore, entityId: number, material
   if (materialId === undefined) return soleMaterialName(store, entityId);
   const raw = store.getEntity(materialId)?.attributes?.[0];
   return typeof raw === 'string' && raw.trim() ? raw : null;
+}
+
+/**
+ * How the headless sheets name a cut face's IfcMaterial for `materialResolver` (the app names it through its loaded model): the layer a
+ * band is (`materialId`), else the one material of an element cut in a piece. Layer sets are not read here yet, so a layer thinner than
+ * 2 mm that the section does not cut draws no membrane line on a headless sheet; a material set as a membrane still does.
+ */
+export function headlessMaterialSource(store: IfcDataStore): MaterialSource {
+  return {
+    nameOf: (p, soleToo) => (p.materialId !== undefined ? meshMaterialName(store, p.entityId, p.materialId) : soleToo ? soleMaterialName(store, p.entityId) : null),
+    layers: () => null,
+  };
 }
 
 export interface ViewSurfaceInputs {

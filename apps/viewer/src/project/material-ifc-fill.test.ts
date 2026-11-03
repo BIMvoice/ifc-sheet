@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import { IFC_FILL, type ProjectMaterial } from '@bimvoice/ifcsheet/materials';
-import { materialDrawing } from './material-drawing';
+import { materialDrawing } from '@bimvoice/ifcsheet/material-drawing';
 import { styledDrawing } from './view-graphics';
 
 const NAMES = ['Brick', 'Insulation', 'Plaster', 'Unstyled'];

@@ -85,6 +85,11 @@
       "import": "./dist/colour-scheme.js",
       "default": "./dist/colour-scheme.js"
     },
+    "./material-drawing": {
+      "types": "./dist/material-drawing.d.ts",
+      "import": "./dist/material-drawing.js",
+      "default": "./dist/material-drawing.js"
+    },
     "./material-colour": {
       "types": "./dist/material-colour.d.ts",
       "import": "./dist/material-colour.js",

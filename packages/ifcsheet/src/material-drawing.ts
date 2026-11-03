@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * A cut drawn by its building materials (`project/materials.ts`), the
+ * A cut drawn by its building materials (`materials.ts`), the
  * ArchiCAD way, from the per-layer cut polygons the drawing carries
  * (`DrawingPolygon.materialId`):
  *
@@ -16,13 +16,15 @@
  *   dashed line where it lies: on the interface between its neighbouring
  *   layers, or along the middle of its own thin band.
  *
- * Pure geometry over a `MaterialResolver`, so it is tested without a model.
+ * Pure geometry over a `MaterialResolver`, so it is tested without a model. The web app's sheets and the headless sheets
+ * (`sheet-graphic.ts`) both draw a cut through `materialDrawing` and `materialFaces` (#645); each only says how it names a
+ * polygon's IfcMaterial and finds an element's layers (`materialResolver`).
  */
 
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { cutFillOf } from '@bimvoice/ifcsheet/material-colour';
-import type { DraftShape, Pt } from '@/drafting/types';
-import type { ProjectMaterial } from './types';
+import type { DraftShape, Pt } from './draft-types.js';
+import { cutFillOf } from './material-colour.js';
+import { MEMBRANE_THICKNESS_M, materialGraphics, type MaterialGraphics, type ProjectMaterial } from './materials.js';
 
 export interface LayerRef {
   /** The layer's IfcMaterial (same id space as `DrawingPolygon.materialId`). */
@@ -33,7 +35,7 @@ export interface LayerRef {
 
 export interface MaterialResolver {
   /** The graphics of a polygon's material (a layer's, or the one material of an element cut in a piece), or null when it has none. */
-  graphics(polygon: DrawingPolygon): (ProjectMaterial & { auto: boolean }) | null;
+  graphics(polygon: DrawingPolygon): MaterialGraphics | null;
   /** The element's layers in order, when it has a layer set. */
   layers(entityId: number, modelIndex: number): LayerRef[] | null;
   /** Whether a layer is drawn as a membrane. */
@@ -188,4 +190,61 @@ export function materialDrawing(drawing: Drawing2D, r: MaterialResolver): Materi
     });
   }
   return out;
+}
+
+/** What a caller gives `materialResolver`: how its model names a cut face's IfcMaterial and reads an element's layers. */
+export interface MaterialSource {
+  /** The IfcMaterial a cut face is made of (its layer's, or an element of one material's); null when it has none. `soleToo`: the table has rows, so an element cut in one piece is named too. */
+  nameOf(polygon: DrawingPolygon, soleToo: boolean): string | null;
+  /** The element's layers in order, when it has a layer set. */
+  layers(entityId: number, modelIndex: number): LayerRef[] | null;
+}
+
+/** The resolver of `materialDrawing` for `source` and the project's materials `table`: the one place a name becomes a hatch, a fill or a membrane. */
+export function materialResolver(source: MaterialSource, table: readonly ProjectMaterial[]): MaterialResolver {
+  return {
+    graphics(p) {
+      const name = source.nameOf(p, table.length > 0);
+      if (!name) return null;
+      const g = materialGraphics(name, table);
+      // A material the project has no row for keeps the cut an element of one piece has always had: no hatch from its name alone.
+      return p.materialId === undefined && g.auto ? null : g;
+    },
+    layers: source.layers,
+    membrane: (layer) => layer.thickness < MEMBRANE_THICKNESS_M || (!!layer.name && !!materialGraphics(layer.name, table).membrane),
+  };
+}
+
+/** Which element (and layer material) a hatch was cut from: what the CAD layer standard and a view's hidden classes match it on. */
+export interface HatchSource { ifcType?: string; entityId?: number; materialId?: number }
+
+export type FacedPolygon = DrawingPolygon & { materialFill?: string | null };
+
+/** A drawing's cut as its materials draw it: bands filled and without the membranes' own, the lines inside one material gone, the hatches and membrane lines to draw. */
+export interface MaterialFaces {
+  cutPolygons: FacedPolygon[];
+  lines: DrawingLine[];
+  hatches: (MaterialHatch & HatchSource)[];
+  membranes: DraftShape[];
+}
+
+function rgba(hex: string): [number, number, number, number] | null {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 1];
+}
+
+/** `drawing` with `materials` applied: the one place the cut's bands get their fill (`materialFill`, read by the view's styler), hatches and membranes. */
+export function materialFaces(drawing: Pick<Drawing2D, 'cutPolygons' | 'lines'>, materials: MaterialDrawing): MaterialFaces {
+  const hatchOf = new Map<unknown, HatchSource>(drawing.cutPolygons.map((p) => [p.polygon.outer, { ifcType: p.ifcType, entityId: p.entityId, ...(p.materialId !== undefined ? { materialId: p.materialId } : {}) }]));
+  return {
+    cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p): FacedPolygon => {
+      const fill = materials.fills.get(p);
+      return fill === undefined ? p : { ...p, materialFill: fill, color: fill === null ? [1, 1, 1, 1] : rgba(fill) ?? p.color };
+    }),
+    lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
+    hatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),
+    membranes: materials.membranes,
+  };
 }

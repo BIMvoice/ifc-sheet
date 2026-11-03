@@ -17,8 +17,8 @@ import { useViewerStore } from '@/store';
 import { layerSetOf, liveConforms, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { idOf } from '@/joinery/object-id';
 import { useProjectStore } from './project-store';
-import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
-import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
+import { materialDrawing, materialResolver, type LayerRef, type MaterialDrawing } from '@bimvoice/ifcsheet/material-drawing';
+import { ifcMaterialName } from './materials';
 
 export function modelOf(entityId: number) {
   const s = useViewerStore.getState();
@@ -115,14 +115,8 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
   const key = `${useViewerStore.getState().mutationVersion}:${JSON.stringify(table)}`;
   const hit = cache.get(drawing);
   if (hit && hit.key === key) return hit.value;
-  const value = materialDrawing(drawing, {
-    graphics(p) {
-      const name = polygonMaterialName(p, table.length > 0);
-      if (!name) return null;
-      const g = materialGraphics(name, table);
-      // A material the project has no row for keeps the cut an element of one piece has always had: no hatch from its name alone.
-      return p.materialId === undefined && g.auto ? null : g;
-    },
+  const value = materialDrawing(drawing, materialResolver({
+    nameOf: polygonMaterialName,
     layers(entityId) {
       const m = modelOf(entityId);
       if (!m) return null;
@@ -131,8 +125,7 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
       if (!m || !set) return null;
       return set.layers.map((l): LayerRef => ({ materialId: l.materialId, name: (l.materialId !== null ? materialName(m, l.materialId) : null) ?? '', thickness: l.thickness }));
     },
-    membrane: (layer) => layer.thickness < MEMBRANE_THICKNESS_M || (!!layer.name && !!materialGraphics(layer.name, table).membrane),
-  });
+  }, table));
   cache.set(drawing, { key, value });
   return value;
 }

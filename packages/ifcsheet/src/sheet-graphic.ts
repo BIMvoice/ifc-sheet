@@ -42,6 +42,8 @@ import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
+import { materialDrawing, materialFaces, type MaterialResolver } from './material-drawing.js';
+import { materialPens } from './sheet-material-pens.js';
 import type { Obstacle } from './free-spot.js';
 import { siteMarks, siteObstacles } from './site-marks.js';
 import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } from './viewport-marks.js';
@@ -213,6 +215,8 @@ export function sheetGraphic(
   surfaces: ReadonlyMap<string, readonly SurfaceFill[]> = new Map(),
   /** The door and window symbols of the views, by view id (`planOpeningSymbols`, `viewOpeningSymbols`): a plan listed here draws them in place of its doors' and windows' cut and lines, an elevation or section over its drawing, as the app does. Absent: the bodies are drawn. */
   openings: ReadonlyMap<string, readonly OpeningSymbol[]> = new Map(),
+  /** How the model names a cut band's IfcMaterial (`materialResolver`): its bands are filled and hatched by material, as the app's sheets do (#645). Absent: the plain cut. */
+  materials?: MaterialResolver,
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
@@ -269,20 +273,23 @@ export function sheetGraphic(
       // rules), through the one styler the app's sheets use: what it hides is not on the sheet, and the rest carries the app's pens. Elements are known by
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
       const styler = viewStyler({ graphics, pens, globalIdOf, propertiesOf, materialOf });
-      for (const polygon of drawing.cutPolygons.filter((p) => styler.face(p).visible)) {
+      // The cut by its building materials (`material-drawing.ts`), through the one function the app's sheets call: the bands filled, the lines inside one material gone.
+      const faces = materials ? materialFaces(drawing, materialDrawing(drawing, materials)) : { cutPolygons: drawing.cutPolygons, lines: drawing.lines, hatches: [], membranes: [] };
+      for (const polygon of faces.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
-      for (const line of drawing.lines) {
+      for (const line of faces.lines) {
         if (line.visibility === 'hidden' || !styler.line(line).visible) continue;
         out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
       }
       // A face a colour scheme paints is in `fills` already (`viewportFills`), under the linework.
       const painted = scheme?.elementColours;
-      for (const g of penGroups(drawing.cutPolygons.filter((p) => !painted?.has(p.entityId)), drawing.lines, styler)) {
+      for (const g of penGroups(faces.cutPolygons.filter((p) => !painted?.has(p.entityId)), faces.lines, styler)) {
         const regions = g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map((l) => clipPolygon(l.map(at), box)).filter((l) => l.length >= 3).map(closeRing)).filter((r) => r.length > 0);
         const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions });
       }
+      out.pens.push(...materialPens(faces, styler, at, box, pens, patterns));
       if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).

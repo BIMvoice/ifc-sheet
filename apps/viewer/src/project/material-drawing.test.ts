@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { coincide, materialDrawing, type LayerRef, type MaterialResolver } from './material-drawing';
+import { coincide, materialDrawing, type LayerRef, type MaterialResolver } from '@bimvoice/ifcsheet/material-drawing';
 import { guessMaterial, materialGraphics } from './materials';
 import { styledDrawing, cutHatches } from './view-graphics';
 
