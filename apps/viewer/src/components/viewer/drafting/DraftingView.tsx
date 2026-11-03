@@ -57,14 +57,13 @@ import {
   pressEscape,
   runningCommand,
   setCurrentLayer,
-  toggleOrtho,
-  toggleSnap,
   useDraftingSession,
   pickEntity,
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
 import { SelectionStyleCard } from './SelectionStyleCard';
+import { SnapToggles } from './SnapToggles';
 import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
@@ -162,7 +161,6 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const selection = useDraftingSession((s) => s.selection);
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const orthoToggled = useDraftingSession((s) => s.ortho);
-  const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -302,8 +300,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
       {bare ? null : <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{view.name}</span>
         <span className="flex-1" />
-        <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
-        <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <SnapToggles />
         <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
@@ -370,6 +367,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           hoverId={state.hoverId}
           preview={preview}
           snap={state.snap}
+          tracking={state.tracking}
           cursor={state.cursor}
           orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
           window={state.window}

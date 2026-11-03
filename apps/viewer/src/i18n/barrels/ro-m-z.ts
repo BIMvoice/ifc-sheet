@@ -53,6 +53,7 @@ import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
+import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
@@ -112,6 +113,7 @@ export const roMZ = {
   ...wallReviewRo,
   ...wallSectionsRo,
   ...wallRelayoutRo,
+  ...trackingRo,
   ...underlayRo,
   ...wallZoomRo,
   ...wallCompareRo,
