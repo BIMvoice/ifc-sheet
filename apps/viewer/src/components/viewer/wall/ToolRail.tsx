@@ -137,7 +137,8 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         // A setting kept between sessions, not a tool or a lock that is held: a switch, so it is not read as a pressed tool.
         role="switch"
         aria-checked={tracking}
-        title={t('tracking.hint')}
+        // No tooltip: the rail's tooltips name a key, and tracking has none (F11, AutoCAD's key, is the browser's full screen).
+        aria-label={`${t('tracking.toggle')}: ${t('tracking.hint')}`}
         onClick={toggleTracking}
         className={cn(
           'flex items-center justify-between gap-2 rounded-xl border px-3 py-1 text-xs leading-tight',
