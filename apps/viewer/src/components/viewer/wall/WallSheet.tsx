@@ -49,8 +49,8 @@ function patternsOf(text: string): ReturnType<typeof parsePat>['patterns'] {
 export const WallSheet = forwardRef<SVGSVGElement, WallSheetProps>(function WallSheet({ sheet, width, selectedViewportId = null, sheetContent, pinned = true, currentCloudsOnly = false, issueDate, deferDrawings = false }, ref) {
   // What is drawn on the paper itself hangs with it.
   const drafts = useProjectStore((s) => s.drafts);
-  const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts) : NO_DRAFTS), [drafts, sheet.id]);
   const layers = useProjectStore((s) => s.draftLayers);
+  const sheetDrafts = useMemo(() => (drafts.some((d) => d.viewId === sheet.id) ? draftsOfView(sheet.id, drafts, layers) : NO_DRAFTS), [drafts, layers, sheet.id]);
   const projectName = useProjectStore((s) => s.name);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => patternsOf(patternText), [patternText]);

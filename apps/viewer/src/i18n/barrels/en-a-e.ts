@@ -67,6 +67,7 @@ import { creditsEn } from '../catalogues/credits.en';
 import { draftSetEn } from '../catalogues/draft-set.en';
 import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import { draftingEn } from '../catalogues/drafting.en';
+import { drawOrderEn } from '../catalogues/draw-order.en';
 import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
@@ -143,6 +144,7 @@ export const enAE = {
   ...draftSetEn,
   ...draftingStandardsEn,
   ...draftingEn,
+  ...drawOrderEn,
   ...drawingUnderlayEn,
   ...elementGraphicsEn,
   ...elementTypesEn,

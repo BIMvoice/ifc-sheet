@@ -35,7 +35,7 @@ import { AnnotationGraphics } from './AnnotationGraphics';
 import { entityPen, layerShows, lookOf, overrideKey } from '@/drafting/styles';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { useProjectStore } from '@/project/project-store';
-import type { LiveSymbolContext } from '@bimvoice/ifcsheet';
+import { inDrawOrder, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { currentEntityStyles } from '@/project/model-styles';
 import { liveGraphics } from '@/project/view-graphics-live';
 
@@ -78,7 +78,7 @@ export function ViewSvg({ view, drawing, axis, drafts, layers, extraPatterns, ov
         </Fragment>
       ))}
       <OverlayPaths overlays={overlays} transform={MM} axis={axis} />
-      {drafts.map((e) => {
+      {inDrawOrder(drafts, layers).map((e) => {
         const color = colour.get(e.layerId);
         if (color === null) return null;
         return isGeometry(e.shape)

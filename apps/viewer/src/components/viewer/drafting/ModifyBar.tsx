@@ -3,14 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Copy, Move, Rotate and Mirror for the selected drafted elements, on a bar
+ * Copy, Move, Rotate, Mirror, Bring to front and Send to back for the selected drafted elements, on a bar
  * under them, for a person who does not know the command line. Each button
  * starts the typed command of the same name (`drafting/commands/modify.ts`) on
  * the selection, so a button and the typed command cannot differ; the bar
  * steps aside while a command runs.
  */
 
-import { Copy, FlipHorizontal2, Move, RotateCw } from 'lucide-react';
+import { BringToFront, Copy, FlipHorizontal2, Move, RotateCw, SendToBack } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
 import { entityBounds } from '@/drafting/annotation';
@@ -25,6 +25,9 @@ const COMMANDS = [
   { id: 'move', labelKey: 'drafting.sel.move', icon: Move },
   { id: 'rotate', labelKey: 'drafting.sel.rotate', icon: RotateCw },
   { id: 'mirror', labelKey: 'drafting.sel.mirror', icon: FlipHorizontal2 },
+  // What draws on top (#682): they act at once on the selection.
+  { id: 'bringtofront', labelKey: 'drafting.sel.front', icon: BringToFront },
+  { id: 'sendtoback', labelKey: 'drafting.sel.back', icon: SendToBack },
 ] as const satisfies readonly { id: string; labelKey: TranslationKey; icon: unknown }[];
 
 interface Props {
