@@ -168,13 +168,23 @@ export function entityBounds(shape: EntityShape): { min: Pt; max: Pt } {
 
 /** Distance from `p` to the entity; inside a hatch or a text box counts as on it. */
 export function nearestOnEntity(shape: EntityShape, p: Pt): { point: Pt; dist: number } {
+  if (insideArea(shape, p)) return { point: p, dist: 0 };
+  return nearestOnEdges(shape, p);
+}
+
+/** Distance from `p` to the entity's lines only: a hatch's boundary or a text box's outline, never their interior. */
+export function nearestOnEdges(shape: EntityShape, p: Pt): { point: Pt; dist: number } {
   let best = { point: p, dist: Infinity };
   for (const part of entitySkeleton(shape)) {
     const hit = nearestOnShape(part, p);
     if (hit.dist < best.dist) best = hit;
   }
-  if ((shape.type === 'hatch' || shape.type === 'text') && insideAny(entitySkeleton(shape), p)) return { point: p, dist: 0 };
   return best;
+}
+
+/** True when `p` lies inside a hatch or a text box: an area that counts as picked anywhere within it. */
+export function insideArea(shape: EntityShape, p: Pt): boolean {
+  return (shape.type === 'hatch' || shape.type === 'text') && insideAny(entitySkeleton(shape), p);
 }
 
 function insideAny(parts: DraftShape[], p: Pt): boolean {
