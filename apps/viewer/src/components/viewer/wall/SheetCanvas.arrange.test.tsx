@@ -157,13 +157,13 @@ describe('the arrow keys nudge the chosen viewport (#186)', () => {
     setAutocadMode(true);
     chosen = 'a';
     const ui = render(<Harness />);
-    const line = ui.querySelector<HTMLInputElement>('[data-command-line]');
+    const line = ui.querySelector<HTMLTextAreaElement>('[data-command-line]');
     assert.ok(line, 'the command line shows');
     line.focus();
     press(line, 'ArrowRight');
     assert.equal(vpOf('a').x, 151, 'empty: nothing is typed there for the key to belong to');
     act(() => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(line, 'mo');
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set?.call(line, 'mo');
       line.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
     press(line, 'ArrowRight');

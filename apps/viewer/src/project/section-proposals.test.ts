@@ -10,6 +10,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { proposeSections as engineProposeSections } from '@bimvoice/ifcsheet';
 import { CUT_OVERHANG_M, proposeSections, type ProposalInput } from './section-proposals.js';
 
 /** A 10 × 7 m house, long along X, like the sample in the concept. */
@@ -25,11 +26,16 @@ const house = (extra: Partial<ProposalInput> = {}): ProposalInput => ({
   ...extra,
 });
 
+/** The cuts across the building's short side: the lengthwise ones (#665) come on top of them and are checked in the engine's `section-proposals.directions.test.ts`. */
+const across = (input: ProposalInput) => proposeSections(input).filter((p) => !p.key.startsWith('long-'));
+
 describe('proposeSections', () => {
   it('starts with the stair, then rooms by size', () => {
     const labels = proposeSections(house()).map((p) => p.label);
     assert.equal(labels[0], 'Through the stair');
-    assert.equal(labels[1], 'Through Living Room');
+    // The second is the first lengthwise cut (#665), through the next thing; the short-side cut through the living room follows.
+    assert.equal(labels[1], 'Through Living Room, lengthwise');
+    assert.equal(labels[2], 'Through Living Room');
     assert.ok(labels.includes('Through Kitchen') || labels[0] === 'Through the stair', 'the kitchen shares the stair cut or follows');
   });
 
@@ -49,8 +55,8 @@ describe('proposeSections', () => {
   });
 
   it('proposes a cut once when two things lie on it, and leaves out cupboards', () => {
-    const proposals = proposeSections(house({ rooms: [...house().rooms, { name: 'Store', min: { x: 5, z: 6 }, max: { x: 6, z: 7 } }] }));
-    const xs = proposals.map((p) => p.a.x);
+    const proposals = across(house({ rooms: [...house().rooms, { name: 'Store', min: { x: 5, z: 6 }, max: { x: 6, z: 7 } }] }));
+    const xs = proposals.filter((p) => !p.key.startsWith('long-')).map((p) => p.a.x);
     for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) assert.ok(Math.abs(xs[i] - xs[j]) >= 0.6, `${xs[i]} and ${xs[j]} are the same cut`);
     assert.ok(!proposals.some((p) => p.through === 'Store'), 'a 1 m² store gets no section');
     assert.ok(!proposals.some((p) => p.through === 'Entry'), 'the entry lies on the WC cut');
@@ -58,7 +64,7 @@ describe('proposeSections', () => {
 
   it('still proposes a cut through the middle of a model with no rooms or stair', () => {
     const proposals = proposeSections({ building: { min: { x: 0, z: 0 }, max: { x: 10, z: 7 } }, rooms: [], stairs: [] });
-    assert.deepEqual(proposals.map((p) => [p.label, p.a.x]), [['Through the middle', 5]]);
+    assert.deepEqual(proposals.map((p) => [p.label, p.a.x, p.a.z]), [['Through the middle', 5, -1], ['Through the middle, lengthwise', -1, 3.5]]);
   });
 
   it('proposes nothing for an empty extent', () => {
@@ -72,14 +78,14 @@ describe('proposeSections', () => {
     const input = (rooms: ProposalInput['rooms']): ProposalInput => ({ building: { min: { x: 0, z: 0 }, max: { x: 40, z: 7 } }, rooms, stairs: [] });
 
     it('keys each room by its own id, so no two entries share a key', () => {
-      const proposals = proposeSections(input([room('g1', 'Level 1', 0), room('g2', 'Level 1', 10), room('g3', 'Level 2', 20)]));
+      const proposals = across(input([room('g1', 'Level 1', 0), room('g2', 'Level 1', 10), room('g3', 'Level 2', 20)]));
       assert.equal(proposals.length, 3);
       assert.deepEqual(proposals.map((p) => p.key).sort(), ['room-g1', 'room-g2', 'room-g3']);
       assert.equal(new Set(proposals.map((p) => p.key)).size, proposals.length);
     });
 
     it('tells same-named rooms apart by storey, and by number when the storey is shared too', () => {
-      const proposals = proposeSections(input([room('g1', 'Level 1', 0), room('g2', 'Level 2', 10), room('g3', 'Level 2', 20)]));
+      const proposals = across(input([room('g1', 'Level 1', 0), room('g2', 'Level 2', 10), room('g3', 'Level 2', 20)]));
       const labels = proposals.map((p) => p.label);
       assert.equal(new Set(labels).size, 3, labels.join(' | '));
       assert.ok(labels.includes('Through OPEN OFFICE (Level 1)'));
@@ -87,7 +93,7 @@ describe('proposeSections', () => {
     });
 
     it('numbers same-named rooms when no storey is known, and leaves a unique name plain', () => {
-      const proposals = proposeSections(input([room('g1', undefined, 0), room('g2', undefined, 10), { ...room('g3', undefined, 20), name: 'Kitchen' }]));
+      const proposals = across(input([room('g1', undefined, 0), room('g2', undefined, 10), { ...room('g3', undefined, 20), name: 'Kitchen' }]));
       const labels = proposals.map((p) => p.label).sort();
       assert.deepEqual(labels, ['Through Kitchen', 'Through OPEN OFFICE (1)', 'Through OPEN OFFICE (2)']);
     });
@@ -100,15 +106,21 @@ describe('proposeSections', () => {
     });
 
     it('keys rooms without an id by name and the number among its namesakes', () => {
-      const proposals = proposeSections(input([{ ...room('x', undefined, 0), id: undefined }, { ...room('y', undefined, 10), id: undefined }]));
+      const proposals = across(input([{ ...room('x', undefined, 0), id: undefined }, { ...room('y', undefined, 10), id: undefined }]));
       assert.equal(new Set(proposals.map((p) => p.key)).size, 2);
     });
 
     it('numbers several stairs apart, and leaves a single stair plain', () => {
       const stairs = [{ min: { x: 2, z: 3 }, max: { x: 3, z: 5 } }, { min: { x: 20, z: 3 }, max: { x: 21, z: 5 } }];
-      const two = proposeSections({ ...input([]), stairs });
+      const two = across({ ...input([]), stairs });
       assert.deepEqual(two.map((p) => p.label), ['Through the stair (1)', 'Through the stair (2)']);
-      assert.deepEqual(proposeSections({ ...input([]), stairs: [stairs[0]] }).map((p) => p.label), ['Through the stair']);
+      assert.deepEqual(across({ ...input([]), stairs: [stairs[0]] }).map((p) => p.label), ['Through the stair']);
     });
+  });
+
+  it('is the engine\'s rule, so the app and `ifcsheet build` start a set with the same two sections (#665)', () => {
+    assert.equal(proposeSections, engineProposeSections);
+    const [first, second] = proposeSections(house());
+    assert.notEqual(first.a.x === first.b.x, second.a.x === second.b.x, 'one cuts across X and one across Y');
   });
 });

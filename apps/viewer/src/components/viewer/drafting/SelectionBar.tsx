@@ -153,11 +153,11 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
     onPointerDown: (e: ReactPointerEvent) => e.stopPropagation(),
     onBlur: commit,
   };
-  // A label of several lines (a room's number, name and area) opens as it is written: Enter commits, Shift+Enter breaks a line (#542).
-  if (value.includes('\n')) {
+  // A label of several lines (a room's number, name and area) opens as it is written, and a drafted text always can take another: Enter commits, Shift+Enter breaks a line (#542, #673).
+  if (value.includes('\n') || entity.shape.type === 'text') {
     return (
       <textarea
-        {...shared} ref={areaRef} rows={Math.min(value.split('\n').length + 1, 6)} className={`${shared.className} py-1`}
+        {...shared} ref={areaRef} rows={Math.min(Math.max(text.split('\n').length, value.split('\n').length), 6)} className={`${shared.className} py-1`}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           e.stopPropagation();

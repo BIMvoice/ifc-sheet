@@ -57,5 +57,11 @@ describe('planLevels', () => {
     const plan = planLevels({ ...base, levels: [...base.levels, { name: 'Roof', elevation: 7.4 }] });
     assert.deepEqual(ys(plan.marks), [0, 3.1, 7.4]);
   });
+  it('puts a level where the view reads its height, when the drawing y is not the height (#675)', () => {
+    // A section whose plane origin is 1.5 m up: drawing y 0 is height 1.5.
+    const plan = planLevels({ ...base, bounds: { x0: 0, y0: -1.8, x1: 12, y1: 5.9 }, heightAt: (p) => p.y + 1.5 });
+    assert.deepEqual(plan.marks.map((m) => [Math.round(m.shape.p.y * 1e6) / 1e6, Math.round(m.shape.value * 1e6) / 1e6]), [[-1.5, 0], [1.6, 3.1], [5.9, 7.4]]);
+    plan.marks.forEach((m) => assert.equal(m.shape.ref?.at.y, m.shape.p.y));
+  });
   it('is the same every time', () => assert.deepEqual(planLevels(base), planLevels(base)));
 });

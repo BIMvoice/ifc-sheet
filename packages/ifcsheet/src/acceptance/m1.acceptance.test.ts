@@ -78,7 +78,7 @@ const CASES: Case[] = [
     name: 'federated arch.ifc (hand-written, two levels)', file: here('../../../../apps/viewer/src/test/fixtures/federated/arch.ifc'),
     storeys: ['Level 0', 'Level 1'], doors: 1, windows: 0, rooms: 0,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 1, elevationDoorSymbols: 2, sectionCuts: ['IfcWall'], notDrawn: [],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 2, sectionCuts: ['IfcWall'], notDrawn: [],
   },
   {
     // ara3d ISSUE_068, a Norwegian school (ARK NUS skolebygg): 56 MB, no redistribution licence stated, so it is never committed.

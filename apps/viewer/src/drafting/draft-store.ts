@@ -15,7 +15,8 @@ import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from
 import { DOCUMENT_FIELDS } from '@/project/fields';
 import type { FieldKey } from '@/project/fields/define';
 import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
-import type { DraftEntity, DraftParamValue, EntityShape } from './types';
+import { inDrawOrder } from '@bimvoice/ifcsheet';
+import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from './types';
 
 const HISTORY_LIMIT = 200;
 
@@ -287,8 +288,9 @@ export function clearDraftHistory(): void {
   future = [];
 }
 
-export function draftsOfView(viewId: string, drafts: readonly DraftEntity[] = useProjectStore.getState().drafts): DraftEntity[] {
-  return drafts.filter((d) => d.viewId === viewId);
+/** The drafts of a view, bottom to top: the one order the screen, the sheets, the PDF and the DXF draw them in (`draw-order.ts`, #682). */
+export function draftsOfView(viewId: string, drafts: readonly DraftEntity[] = useProjectStore.getState().drafts, layers: readonly DraftLayer[] = useProjectStore.getState().draftLayers): DraftEntity[] {
+  return [...inDrawOrder(drafts.filter((d) => d.viewId === viewId), layers)];
 }
 
 export function newDraft(viewId: string, layerId: string, shape: EntityShape, params: Record<string, DraftParamValue> = {}): DraftEntity {

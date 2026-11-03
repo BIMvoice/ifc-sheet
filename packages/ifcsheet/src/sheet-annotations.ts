@@ -26,6 +26,7 @@ import { dimensionLayout } from './dimension-figure.js';
 import { entityPen, formatDimension, layerPrints, layerShows, lookOf, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import { AXIS_NAME } from './drawing-frame.js';
 import { isGeometry, type DraftEntity, type DraftLayer, type Pt } from './draft-types.js';
+import { inDrawOrder } from './draw-order.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
@@ -81,7 +82,7 @@ export function viewportAnnotations(
   const axis = plane ? AXIS_NAME[plane.axis] : 'down';
   const live = a.site ? liveSymbolContext(a.site, plane, axis, vp.scale, a.locale, COORDINATE_LABELS) : null;
   const context = (colour: string, look: MarkContext['look']): MarkContext => ({ at, frame, clip, box, mmPerMetre, colour, look, locale: a.locale, patterns: a.patterns ?? [], out });
-  for (const e of a.drafts) {
+  for (const e of inDrawOrder(a.drafts, a.layers)) {
     if (e.viewId !== vp.viewId) continue;
     const layer = layerOf.get(e.layerId);
     if (layer && !layerShows(layer, a.groups, { view: hidden })) continue;

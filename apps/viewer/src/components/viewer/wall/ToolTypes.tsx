@@ -15,6 +15,7 @@ import { baseDraftSettings, patchDraftSettings, useDraftingSession } from '@/dra
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { WALL_FIELD } from './wall-type';
+import { TagShows } from './TagShows';
 
 const field = WALL_FIELD;
 
@@ -37,9 +38,9 @@ export function ToolTypes({ tool }: { tool: string }) {
     );
   }
   const mine = (types ?? []).filter((x) => x.tool === tool);
-  if (mine.length === 0) return null;
+  if (mine.length === 0) return tool === 'tag' ? <TagShows /> : null;
   const current = settings.annotationType?.tool === tool ? settings.annotationType.id : '';
-  return (
+  const typeChoice = (
     <label className="mt-4 block text-xs text-sky-200">
       {t('wall.type.label')}
       <select
@@ -55,4 +56,5 @@ export function ToolTypes({ tool }: { tool: string }) {
       </select>
     </label>
   );
+  return tool === 'tag' ? <>{typeChoice}<TagShows /></> : typeChoice;
 }

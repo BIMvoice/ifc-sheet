@@ -37,9 +37,11 @@ import { splitToolRo } from '../catalogues/split-tool.ro';
 import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
+import { tagShowsRo } from '../catalogues/tag-shows.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { textLinesRo } from '../catalogues/text-lines.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -97,9 +99,11 @@ export const roMZ = {
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,
+  ...tagShowsRo,
   ...titleBlockParamsRo,
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
+  ...textLinesRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,

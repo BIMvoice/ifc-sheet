@@ -599,7 +599,7 @@
   },
   "A-301": {
    "name": "Sections",
-   "paper": "420 x 297 mm",
+   "paper": "594 x 420 mm",
    "scales": [
     "1:100"
    ],
@@ -610,23 +610,23 @@
    "bbox": [
     10,
     10,
-    410,
-    287
+    584,
+    410
    ],
    "frame": {
     "paths": 11,
     "points": 28,
-    "hash": "9c68313187596d03"
+    "hash": "36bcd358947d85d2"
    },
    "cut": {
-    "paths": 399,
-    "points": 3914,
-    "hash": "966236cc6449437f"
+    "paths": 237,
+    "points": 2264,
+    "hash": "d6e9ad4b85026668"
    },
    "lines": {
-    "paths": 11965,
-    "points": 23930,
-    "hash": "d16c9a131b350c7c"
+    "paths": 5236,
+    "points": 10472,
+    "hash": "07e2ae8abb453a8d"
    },
    "marks": {
     "paths": 0,
@@ -640,15 +640,15 @@
      "paths": 833,
      "regions": 0,
      "points": 1666,
-     "hash": "283ce3fcebe615d9"
+     "hash": "048e676c776fc674"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
      "dash": "",
-     "paths": 718,
+     "paths": 100,
      "regions": 0,
-     "points": 1436,
-     "hash": "3275297e2806e2b7"
+     "points": 200,
+     "hash": "06b044afcae24d3d"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
@@ -656,15 +656,15 @@
      "paths": 0,
      "regions": 207,
      "points": 2039,
-     "hash": "2cab226258b657da"
+     "hash": "182b55f1502ca68c"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 187,
-     "points": 1875,
-     "hash": "b9bf3b426576fea6"
+     "regions": 25,
+     "points": 225,
+     "hash": "f2b2fe147e23e8fe"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
@@ -672,15 +672,15 @@
      "paths": 4483,
      "regions": 0,
      "points": 8966,
-     "hash": "0007a3c4a6185542"
+     "hash": "57bc1051704a3886"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 2492,
+     "paths": 457,
      "regions": 0,
-     "points": 4984,
-     "hash": "8f62e3359c536da1"
+     "points": 914,
+     "hash": "e5411e2557733e7b"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
@@ -688,37 +688,37 @@
      "paths": 4271,
      "regions": 0,
      "points": 8542,
-     "hash": "0ea0f9f896058160"
+     "hash": "5f2b4cb8f3512d4d"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 6143,
+     "paths": 32,
      "regions": 0,
-     "points": 12286,
-     "hash": "feef05e8e90d63ed"
+     "points": 64,
+     "hash": "e64417d36a7d993a"
     }
    },
    "texts": [
-    "1:100 @362,282.5 h4.5",
-    "2026-10-21 @232,285 h3.5",
-    "A-301 @362,266.5 h9",
-    "Address @297,240.2 h2",
-    "Bloc P+4 @232,245 h3.5",
-    "Checked by @297,270.2 h2",
-    "Client @232,250.2 h2",
-    "Date @232,280.2 h2",
-    "Drawn by @232,270.2 h2",
-    "Organisation @297,250.2 h2",
-    "Project @232,240.2 h2",
-    "Revision @297,280.2 h2",
-    "Scale @362,274.2 h2",
-    "Section A-A  1:100 @121.2,209 h3.5 center",
-    "Section B-B  1:100 @298.8,209 h3.5 center",
-    "Sections @232,265 h3.5",
-    "Sheet no. @362,254.2 h2",
-    "Title @232,260.2 h2",
-    "ifc-lite @297,255 h3.5"
+    "1:100 @536,405.5 h4.5",
+    "2026-10-21 @406,408 h3.5",
+    "A-301 @536,389.5 h9",
+    "Address @471,363.2 h2",
+    "Bloc P+4 @406,368 h3.5",
+    "Checked by @471,393.2 h2",
+    "Client @406,373.2 h2",
+    "Date @406,403.2 h2",
+    "Drawn by @406,393.2 h2",
+    "Organisation @471,373.2 h2",
+    "Project @406,363.2 h2",
+    "Revision @471,403.2 h2",
+    "Scale @536,397.2 h2",
+    "Section A-A  1:100 @170.4,270.5 h3.5 center",
+    "Section B-B  1:100 @385.8,270.5 h3.5 center",
+    "Sections @406,388 h3.5",
+    "Sheet no. @536,377.2 h2",
+    "Title @406,383.2 h2",
+    "ifc-lite @471,378 h3.5"
    ],
    "images": 0
   }

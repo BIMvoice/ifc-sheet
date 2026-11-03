@@ -32,7 +32,7 @@ const model = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 /** Row: the model, the kinds of sheet it must make, and the scale each kind is drawn at (pinned so a drift in the choice shows). */
 const MODELS: { name: string; path: string; kinds: Record<string, number> }[] = [
   { name: 'FZK-Haus', path: FZK_HAUS, kinds: { plans: 100, elevations: 100, sections: 100 } },
-  { name: 'IfcOpenHouse', path: model('../../../../tests/models/ara3d/IfcOpenHouse_IFC4.ifc'), kinds: { plans: 50, elevations: 100, sections: 50 } },
+  { name: 'IfcOpenHouse', path: model('../../../../tests/models/ara3d/IfcOpenHouse_IFC4.ifc'), kinds: { plans: 50, elevations: 100, sections: 100 } },
   { name: 'bloc-p4 (a multi-storey block)', path: model('../../public/samples/bloc-p4.ifc'), kinds: { plans: 100, elevations: 100, sections: 100 } },
 ];
 

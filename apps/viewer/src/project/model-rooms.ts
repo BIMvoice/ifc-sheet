@@ -19,7 +19,7 @@ import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUt
 import { buildingElementIds, farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
 import type { FarElementFact } from '@bimvoice/ifcsheet/readiness';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals';
+import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals';
 import type { ProjectLevel } from './types';
 
 const footprint = (b: BoundingBox3D): Footprint => ({ min: { x: b.min.x, z: b.min.z }, max: { x: b.max.x, z: b.max.z } });
@@ -51,6 +51,7 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
   const wanted = new Set(level.storeyGlobalIds);
   const rooms: RoomFootprint[] = [];
   const stairs: Footprint[] = [];
+  const walls: Footprint[] = [];
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
@@ -71,8 +72,14 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
       const b = boundsOf(expressId + offset);
       if (b) stairs.push(footprint(b));
     }
+    for (const { expressId } of iterateEffectiveEntityIds(store, mv, PROPOSAL_WALL_TYPES)) {
+      const storey = storeyOfElement(modelId, expressId);
+      if (storey === null || !storeyIds.has(storey)) continue;
+      const b = boundsOf(expressId + offset);
+      if (b) walls.push(footprint(b));
+    }
   }
-  return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs };
+  return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs, walls };
 }
 
 /** The building's frame and the small elements it leaves out for lying far from it, named for a message. */

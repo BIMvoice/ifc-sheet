@@ -49,7 +49,7 @@ export const textCommand: DraftCommandDef = {
   create(ctx) {
     let at: Pt | null = null;
     return {
-      prompt: () => ({ key: at ? 'drafting.prompt.enterText' : 'drafting.prompt.textPoint', params: { height: ctx.settings.textHeight } }),
+      prompt: () => ({ key: at ? 'textLines.prompt' : 'drafting.prompt.textPoint', params: { height: ctx.settings.textHeight } }),
       input: () => 'point',
       basePoint: () => null,
       onPoint(p) {
@@ -86,7 +86,7 @@ export const leaderCommand: DraftCommandDef = {
     /** The end of the second segment for a cursor: the one place preview and click agree on. */
     const end = (p: Pt): Pt => snapLeaderEnd(pts[1], p);
     return {
-      prompt: () => ({ key: asking ? 'drafting.prompt.enterText' : (['drafting.prompt.leaderTip', 'drafting.prompt.leaderBend', 'drafting.prompt.leaderEnd'] as const)[Math.min(pts.length, 2)] }),
+      prompt: () => ({ key: asking ? 'textLines.prompt' : (['drafting.prompt.leaderTip', 'drafting.prompt.leaderBend', 'drafting.prompt.leaderEnd'] as const)[Math.min(pts.length, 2)] }),
       input: () => 'point',
       basePoint: () => pts.at(-1) ?? null,
       onPoint(p) {
