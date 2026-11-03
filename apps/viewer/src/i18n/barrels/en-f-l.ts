@@ -25,6 +25,7 @@ import { issueEn } from '../catalogues/issue.en';
 import { joineryEn } from '../catalogues/joinery.en';
 import { keyboardShortcutsEn } from '../catalogues/keyboard-shortcuts.en';
 import { landXmlEn } from '../catalogues/landxml.en';
+import { layerDuplicateEn } from '../catalogues/layer-duplicate.en';
 import { layersPanelEn } from '../catalogues/layers-panel.en';
 import { lensPanelEn } from '../catalogues/lens-panel.en';
 import { joineryCellEn } from '../catalogues/joinery-cell.en';
@@ -59,6 +60,7 @@ export const enFL = {
   ...joineryEn,
   ...keyboardShortcutsEn,
   ...landXmlEn,
+  ...layerDuplicateEn,
   ...layersPanelEn,
   ...lensPanelEn,
   ...joineryCellEn,
