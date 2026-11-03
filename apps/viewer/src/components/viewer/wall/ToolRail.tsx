@@ -10,6 +10,7 @@
  */
 
 import { useTranslation } from '@/i18n';
+import { toggleTracking, useTrackingPref } from '@/drafting/tracking-pref';
 import { currentLayerId, setCurrentLayer, toggleOrtho, useDraftingSession } from '@/drafting/session';
 import { useProjectStore } from '@/project/project-store';
 import { openStandards } from '@/project/standards-dialog-store';
@@ -44,6 +45,7 @@ interface ToolRailProps {
 export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho);
+  const tracking = useTrackingPref((o) => o.on);
   useDraftingSession((o) => o.revision); // the current layer is session state outside the store
   const layers = useProjectStore((p) => p.draftLayers);
   useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the tools name
@@ -129,6 +131,21 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
       >
         {t('drafting.ortho')}
         {orthoKeys ? <kbd className="rounded border border-current/40 px-1 text-xs opacity-80">{orthoKeys}</kbd> : null}
+      </button>
+      <button
+        type="button"
+        // A setting kept between sessions, not a tool or a lock that is held: a switch, so it is not read as a pressed tool.
+        role="switch"
+        aria-checked={tracking}
+        // No tooltip: the rail's tooltips name a key, and tracking has none (F11, AutoCAD's key, is the browser's full screen).
+        aria-label={`${t('tracking.toggle')}: ${t('tracking.hint')}`}
+        onClick={toggleTracking}
+        className={cn(
+          'flex items-center justify-between gap-2 rounded-xl border px-3 py-1 text-xs leading-tight',
+          tracking ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
+        )}
+      >
+        {t('tracking.toggle')}
       </button>
       <label className="mt-1 flex flex-col gap-0.5 text-xs text-sky-100">
         {t('drafting.layer')}
