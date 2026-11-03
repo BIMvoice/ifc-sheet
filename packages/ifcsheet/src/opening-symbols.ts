@@ -24,6 +24,7 @@ import type { JoinerySpec } from '@ifc-lite/create';
 import { doorSwingFlips, type DoorOperation } from './door-operation.js';
 import { typedPlanSymbol } from './joinery-plan-placement.js';
 import { worldToDrawing } from './drawing-frame.js';
+import { fitToHostWall } from './opening-in-wall.js';
 import type { DraftShape, Pt } from './draft-types.js';
 
 export interface OpeningRect {
@@ -351,13 +352,15 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
 /**
  * The door and window symbols of a plan cut at `plane` (a horizontal plane,
  * world units): every door / window whose meshes the cut height passes
- * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together.
+ * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together. `hostWallOf` gives the meshes of the wall
+ * a door stands in: its symbol is fitted to that wall's thickness and opening (`opening-in-wall.ts`).
  */
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
   typedOf: (id: number) => { spec: JoinerySpec; flips: number; source?: string } | null = () => null,
   operationOf: (id: number) => DoorOperation | null = () => null,
   hostedInCutWall: (id: number, cut: number) => boolean = () => false,
+  hostWallOf: (id: number) => readonly MeshData[] = () => [],
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
@@ -378,8 +381,11 @@ export function openingSymbols(
       out.push({ id, kind: entry.kind, shapes: typed.thin, heavy: typed.heavy, dashed: typed.dashed });
       continue;
     }
-    const rect = footprintRect(entry.meshes, plane);
-    if (!rect) continue;
+    const read = footprintRect(entry.meshes, plane);
+    if (!read) continue;
+    // A door's symbol stands in the wall's opening, not on its frame's footprint (`opening-in-wall.ts`, #678).
+    const hostMeshes = entry.kind === 'door' ? hostWallOf(id) : [];
+    const rect = hostMeshes.length > 0 ? fitToHostWall(read, hostMeshes, plane) : read;
     if (entry.kind === 'door') {
       const stated = operationOf(id);
       const own = stated && entry.l2w ? statedFlips(stated, entry.l2w, plane, rect) : null;

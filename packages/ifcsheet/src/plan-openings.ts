@@ -24,6 +24,7 @@ import { elementShown } from './element-graphics.js';
 import { doorOperationOf, type DoorOperation } from './door-operation.js';
 import { drawnJoineryOf, typeIndex, type DrawnJoinery, type JoineryProject, type Live } from './joinery-schedule.js';
 import { openingSymbols, type OpeningSymbol } from './opening-symbols.js';
+import { hostWallMeshes } from './opening-in-wall.js';
 import { curtainPartsOf, hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
 import { elevationOpeningSymbols, visibleEntities } from './elevation-openings.js';
 import { hiddenClassesOf } from './view-templates.js';
@@ -95,7 +96,7 @@ export function planOpeningSymbols(
   const hosts = openingHostsOf(sources.live.dataStore);
   const curtainParts = curtainPartsOf(sources.live.dataStore);
   const own = level ? storeyMembersOf(sources.live.dataStore, level.storeyGlobalIds) : new Set<number>();
-  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []))
+  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []), hostWallMeshes(meshes, (id) => hosts.get(id)))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
 }
 
