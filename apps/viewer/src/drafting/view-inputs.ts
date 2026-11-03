@@ -26,6 +26,7 @@ import { resolvePlanLevel } from '@/project/view-defaults';
 import { viewWorkPlane } from '@/project/view-plane-config';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
 import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfCut } from '@/tagall/cut-rooms';
 import { closedLoopsOf } from '@/components/viewer/drafting/drafting-shapes';
 import { drawingToWorld } from './frame';
 import { levelResolverFor, storeyOf } from './level-resolver';
@@ -54,7 +55,8 @@ export function viewInputs({ view, drawing, entities, plane, levels }: ViewInput
     // The door leaves, swings and window frames this plan draws, which a tag keeps clear of (the same symbols the marks keep clear of).
     planObstacles: () => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips),
     // The rooms of this plan, each space cut at the plan's height (read as the check reads them).
-    rooms: () => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult),
+    // A section or an elevation shows the rooms its plane cuts, by their cut outlines (#677).
+    rooms: () => (view.kind === 'plan' ? roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult) : roomsOfCut(plane ?? drawing?.config.plane, drawing, currentDrawingRuntime().geometryResult?.meshes ?? [])),
     // Every line the drawing carries, hidden ones too: a figure inside a room keeps off them, and a dimension line does not run along one.
     planLines: () => (drawing?.lines ?? []).map((l) => ({ a: { x: l.line.start.x, y: l.line.start.y }, b: { x: l.line.end.x, y: l.line.end.y } })),
     // Hatch boundaries: drafted closed shapes and the drawing's cut outlines.

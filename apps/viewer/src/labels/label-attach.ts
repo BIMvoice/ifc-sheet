@@ -34,7 +34,8 @@ const same = (a: Pt | undefined, b: Pt | undefined): boolean => (a === undefined
 
 /** The label `d` with its leader brought in line with where it is; the same entity when nothing changes. */
 export function settleLeader(d: DraftEntity, mode: LeaderMode | undefined, paperUnit: number): DraftEntity {
-  if (d.shape.type !== 'text') return d;
+  // A tag standing outside its room with a leader into it (TAGALL on a section, #677) keeps the leader it was given.
+  if (d.shape.type !== 'text' || d.params.leaderFixed === true) return d;
   const next = withLeader(d.shape, refToRing(d.params.labelRef), mode, paperUnit);
   return same(next.leader, d.shape.leader) ? d : { ...d, shape: next };
 }

@@ -119,7 +119,7 @@ export interface WallAll {
 
 export const WALL_ALL: Readonly<Record<string, WallAll>> = {
   dimaligned: { command: 'dimall', labelKey: 'wall.tool.dimension.all', kinds: ['plan'] },
-  tag: { command: 'tagall', labelKey: 'wall.tool.tag.all', kinds: ['plan'] },
+  tag: { command: 'tagall', labelKey: 'wall.tool.tag.all', kinds: ['plan', 'section', 'elevation'] },
   level: { command: 'levelall', labelKey: 'wall.tool.level.all', kinds: ['section', 'elevation'] },
 };
 

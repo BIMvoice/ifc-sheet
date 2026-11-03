@@ -24,10 +24,10 @@ describe('ToolRail', () => {
     assert.deepEqual(offers(ui), ['Dimension the whole plan', 'Tag everything']);
   });
 
-  it('offers every level marked on a section and on an elevation, and nothing else', () => {
+  it('offers every room tagged and every level marked on a section and on an elevation, and nothing else (#677)', () => {
     for (const kind of ['section', 'elevation'] as const) {
       const ui = render(<ToolRail active={null} onTool={() => {}} adding={false} onAdd={() => {}} viewKind={kind} onAll={() => {}} />);
-      assert.deepEqual(offers(ui), ['Mark all levels'], kind);
+      assert.deepEqual(offers(ui), ['Tag everything', 'Mark all levels'], kind);
       cleanup();
     }
   });
