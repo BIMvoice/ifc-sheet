@@ -28,7 +28,7 @@ import type { ViewElement } from '@/labels/view-elements';
 import { clipLoop } from '@/project/drawing-crop';
 import { pieceRects, symbolPieces } from '@/dimall/avoid';
 import { RectIndex } from '@/labels/rect-index';
-import { ringArea, type RoomFootprint } from './footprint';
+import { ringArea, type RoomOfPlan } from './footprint';
 import { roomLabelPoint } from './room-point';
 import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types';
 
@@ -37,7 +37,7 @@ export interface TagAllInput {
   elements: readonly ViewElement[];
   targets: readonly LabelTarget[];
   /** Each room of the plan: its footprint and the GlobalId of its space. */
-  rooms: readonly (RoomFootprint & { guid: string })[];
+  rooms: readonly RoomOfPlan[];
   existing: readonly DraftEntity[];
   placement: LabelPlacement;
   types: { mark: AnnotationType; room: AnnotationType };
@@ -132,17 +132,23 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   const roomed = labelledBy(input.existing, ROOM_TYPE_ID);
   const rings = [...input.elements.map((e) => e.ring), ...swings.map((s) => s.ring)];
   const ringIndex = new RectIndex<readonly Pt[]>(4 * at.textHeight);
-  for (const ring of rings) ringIndex.add(ringBounds(ring), ring);
+  // On a section the cut outlines near each room, besides the elements: a label stands clear of the walls and slabs cut beside it.
+  for (const ring of new Set([...rings, ...rooms.flatMap(({ room }) => room.keepClear ?? [])])) ringIndex.add(ringBounds(ring), ring);
   const seen = new Set<string>();
   for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
     seen.add(room.guid);
     if (roomed.has(room.guid)) { summary.already++; continue; }
     const fromModel = modelArea(read, room.guid) !== undefined;
-    const extras: LabelExtras = fromModel ? {} : { computedArea: ringArea(room.ring) };
+    // A plan's footprint is the floor; a section's outline (`floorArea` present) is a slice, so its area is the space's own floor area or none.
+    const computed = room.floorArea === undefined ? ringArea(room.ring) : room.floorArea;
+    const extras: LabelExtras = fromModel || computed === null ? {} : { computedArea: computed };
     const size = labelSize(input.types.room, room.guid, at.textHeight, at.locale, extras, read);
     if (!size) continue;
-    const spot = roomLabelPoint(shown, size.w, size.h, { rects: [], rings: [], rectIndex: roomIndex, ringIndex }, clear);
+    // On a section the lines the drawing shows in the room are kept clear of when there is room to; when there is not, the label goes where only the cut outlines and annotations are clear.
+    const hard = { rects: [], rings: [], rectIndex: roomIndex, ringIndex };
+    const wanted = room.preferClear?.length ? roomLabelPoint(shown, size.w, size.h, { ...hard, rects: room.preferClear }, clear) : null;
+    const spot = wanted?.fits ? wanted : roomLabelPoint(shown, size.w, size.h, hard, clear);
     const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
     if (!draft) continue;
     drafts.push(draft);

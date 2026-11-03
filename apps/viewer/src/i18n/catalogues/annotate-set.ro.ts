@@ -10,7 +10,7 @@ export const annotateSetRo = {
   'wall.annotate.open': 'Adnotați setul',
   'wall.annotate.title': 'Adnotați setul',
   'wall.annotate.hint': 'Rulează comenzile pe fiecare vedere de felul potrivit, fără ca vederea să fie deschisă, fiecare pe desenul ei, ca și cum le-ați rula acolo. Ce are deja o vedere nu se adaugă a doua oară. Un singur Undo anulează toată rularea.',
-  'wall.annotate.tagall': 'Etichetați fiecare plan (TAGALL)',
+  'wall.annotate.tagall': 'Etichetați fiecare plan și încăperile fiecărei secțiuni și fațade (TAGALL)',
   'wall.annotate.dimall': 'Cotați fiecare plan (DIMALL)',
   'wall.annotate.levelall': 'Cote de nivel pe fiecare fațadă și secțiune (LEVELALL)',
   'wall.annotate.part.doors': 'Uși: o etichetă pe fiecare ușă',
