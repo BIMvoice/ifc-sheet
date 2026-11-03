@@ -66,7 +66,7 @@ describe('a set template made in one project makes the set of another (#21)', ()
       ['Office plans', 'plans', 'A1', ['{"kind":"plan","storey":0}@200', '{"kind":"plan","storey":1}@200']],
       ['Elevations, south and north', 'elevations', 'A3', ['{"kind":"elevation","direction":"south"}@100', '{"kind":"elevation","direction":"north"}@100']],
       ['Elevations, east and west', 'elevations', 'A3', ['{"kind":"elevation","direction":"east"}@100', '{"kind":"elevation","direction":"west"}@100']],
-      ['Sections', 'sections', 'A3', ['{"kind":"section","place":0}@50']],
+      ['Sections', 'sections', 'A3', ['{"kind":"section","place":0}@100', '{"kind":"section","place":1}@100']],
     ]);
   });
 
@@ -83,8 +83,8 @@ describe('a set template made in one project makes the set of another (#21)', ()
     const { report } = useSetTemplates.getState();
     assert.equal(report?.template, 'Office');
     assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.defaulted').map((n) => n.params.names), ['Second, Third']);
-    // The tower is taller than the office's A3 sheets hold at 1:50: that sheet takes the scale that fits, and says so (the east and west elevations were saved at 1:100 since #634).
-    assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.rescaled').map((n) => [n.params.wanted, n.params.used]), [[50, 100]]);
+    // Nothing is rescaled: the east and west elevations were saved at 1:100 since #634, and the sections at 1:100 since #665 (two sections share A-301).
+    assert.deepEqual(report?.notes.filter((n) => n.key === 'setTemplate.note.rescaled').map((n) => [n.params.wanted, n.params.used]), []);
   });
 
   it('on a building with a basement: the ground storey keeps its slot, the basement is the storey nobody foresaw', () => {
@@ -169,7 +169,7 @@ describe('the Wall\'s set template panels (#21)', () => {
     project(two);
     startDrawingSet(null, HOUSE);
     const ui = render(<SetTemplateSave />);
-    assert.match(ui.querySelector('[data-testid="set-template-summary"]')?.textContent ?? '', /Sheets: 4\. Drawings found by rule: 7\. Schedules: 0\./);
+    assert.match(ui.querySelector('[data-testid="set-template-summary"]')?.textContent ?? '', /Sheets: 4\. Drawings found by rule: 8\. Schedules: 0\./);
     const name = ui.querySelector('input') as HTMLInputElement;
     type(name, 'Office');
     const keep = [...ui.querySelectorAll('button')].find((b) => b.textContent === 'Keep in this browser')!;
