@@ -24,6 +24,7 @@ elevationOpeningSymbols: value
 elevationSymbol: value
 glazingBarStrokes: value
 headArch: value
+hostWallMeshes: value
 hostedInCutWall: value
 hullCandidates: value
 minAreaRect: value
