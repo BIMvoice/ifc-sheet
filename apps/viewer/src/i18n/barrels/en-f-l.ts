@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { feedbackEn } from '../catalogues/feedback.en';
+import { fillMaskEn } from '../catalogues/fill-mask.en';
 import { filterGroupsEn } from '../catalogues/filter-groups.en';
 import { filterOperatorsEn } from '../catalogues/filter-operators.en';
 import { flowAssistantEn } from '../catalogues/flow-assistant.en';
@@ -37,6 +38,7 @@ import { listsEn } from '../catalogues/lists.en';
 /** The catalogues whose file starts with `f` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const enFL = {
   ...feedbackEn,
+  ...fillMaskEn,
   ...filterGroupsEn,
   ...filterOperatorsEn,
   ...flowAssistantEn,

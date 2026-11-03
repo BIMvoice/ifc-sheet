@@ -99,6 +99,8 @@ defaultDetailLevel: value
 defaultViewTemplates: value
 elementProperties: value
 elementShown: value
+fillColourOf: value
+fillLoopsOf: value
 hasElementGraphics: value
 hiddenClassesOf: value
 hiddenElementIds: value
@@ -110,6 +112,7 @@ layerOrder: value
 lineHidden: value
 lineKey: value
 mappingsFor: value
+maskingFill: value
 matchKey: value
 materialKey: value
 movedInOrder: value
