@@ -28,13 +28,13 @@ import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
 import { nearestEntity, visibleEntities } from './session-entities';
 import { withSectionParts } from './section-symbol';
 import { markWitnessPoint } from './witness-point';
-import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
+import { elementBoxesAt, hasModelPicker, modelLineAt, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
 import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelLinePicker, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -285,6 +285,7 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
   if (command.input() === 'pick') {
     const hit = pickEntity(p, tolerance);
     if (hit && command.onPick) finish(command.onPick(hit, p));
+    else if (!hit && command.onPickModelLine) { const m = modelLineAt(p, tolerance); if (m) finish(command.onPickModelLine(m, p)); }
     return;
   }
   if (command.onPoint) finish(command.onPoint(constrainPoint(p)));

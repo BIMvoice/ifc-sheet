@@ -9,9 +9,10 @@ import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { pickModelElement, referenceElementBoxes, type ReferenceSet } from '@/drafting/references';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { syncLevelMarks } from '@/drafting/level-sync';
-import { clearViewInputs, installViewInputs, setElementBoxProvider, setElementPicker, setModelPicker } from '@/drafting/session';
+import { clearViewInputs, installViewInputs, setElementBoxProvider, setElementPicker, setModelLinePicker, setModelPicker } from '@/drafting/session';
 import { viewInputs } from '@/drafting/view-inputs';
 import type { DraftEntity } from '@/drafting/types';
+import { nearestModelLine } from '@/project/line-pick';
 import { roofAtPoint } from '@/project/roof-plan';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { selectFromPlan } from '@/components/viewer/plan/PlanPointer';
@@ -37,6 +38,15 @@ export function useDraftingProviders({ view, drawing, references, entities, plan
     });
     return () => setModelPicker(null);
   }, [drawing, references, view, plane]);
+  // TRIM and EXTEND take a line of the generated drawing when no drafted line is under the click (the one "Hide a line" picks).
+  useEffect(() => {
+    setModelLinePicker((p, tolerance) => {
+      const hit = nearestModelLine(drawing, p, tolerance);
+      const globalId = hit ? renderIdGlobalId(hit.entityId) : null;
+      return hit && globalId ? { globalId, a: hit.line.start, b: hit.line.end } : null;
+    });
+    return () => setModelLinePicker(null);
+  }, [drawing]);
   // Commands that work on a model element (a door into a wall in elevation) ask what is under a point.
   useEffect(() => {
     setElementPicker((p) => (drawing && references ? pickModelElement(drawing, references, p, 6 / scale) : null));
