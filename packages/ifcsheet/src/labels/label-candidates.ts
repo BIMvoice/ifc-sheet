@@ -11,8 +11,8 @@
  * units), so the order and the result are the same at 1:50 and 1:200.
  */
 
-import type { Pt } from '@/drafting/types';
-import { ringBounds } from './label-geometry';
+import type { Pt } from '../draft-types.js';
+import { ringBounds } from './label-geometry.js';
 
 /** The smallest rectangle round a ring, turned to the ring's own direction: `u` along the long side. */
 export interface OrientedBox {

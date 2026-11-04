@@ -16,7 +16,7 @@ import type { DraftEntity } from '@/drafting/types';
 import { editDrafts, draftsOfView, newDraft } from '@/drafting/draft-store';
 import { tagCommand } from '@/drafting/commands/tag';
 import { rectsOf } from '@/labels/label-annotations';
-import { pointInRing, rectInsideRing, rectsOverlap, ringBounds } from '@/labels/label-geometry';
+import { pointInRing, rectInsideRing, rectsOverlap, ringBounds } from '@bimvoice/ifcsheet';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { settleLabels } from '@/labels/label-sync';
 import { setExtent } from '@/draft-set/body';

@@ -27,7 +27,7 @@
  * break the line. A brace that is not closed stays literal and is reported.
  */
 
-import { parseFormatSpec, type FormatSpec } from './label-format';
+import { parseFormatSpec, type FormatSpec } from './label-format.js';
 
 export const ATTRIBUTE_FIELDS = ['Name', 'LongName', 'RoomNumber', 'Tag', 'Mark', 'TagName', 'ObjectType', 'Description', 'PredefinedType', 'GlobalId'] as const;
 export type AttributeField = (typeof ATTRIBUTE_FIELDS)[number];

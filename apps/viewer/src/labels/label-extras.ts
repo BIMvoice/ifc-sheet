@@ -13,7 +13,7 @@
 
 import type { DraftParamValue } from '@/drafting/types';
 import { resolveTemplate, type LabelElement } from './label-resolve';
-import type { ParsedTemplate } from './label-template';
+import type { ParsedTemplate } from '@bimvoice/ifcsheet';
 import type { MissingMode } from './label-resolve';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 

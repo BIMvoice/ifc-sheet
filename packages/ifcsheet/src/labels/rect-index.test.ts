@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { rectsOverlap, type Rect } from './label-geometry';
-import { RectIndex } from './rect-index';
+import { rectsOverlap, type Rect } from './label-geometry.js';
+import { RectIndex } from './rect-index.js';
 
 const rnd = (() => { let s = 7; return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; })();
 const box = (spread: number, size: number): Rect => { const x = rnd() * spread, y = rnd() * spread; return { x0: x, y0: y, x1: x + rnd() * size, y1: y + rnd() * size }; };

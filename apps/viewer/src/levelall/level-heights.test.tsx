@@ -21,7 +21,7 @@ import { setExtent } from '@/draft-set/body';
 import { draftsOfView } from '@/drafting/draft-store';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { levelValueOf, type LevelShape } from '@/drafting/level-mark';
-import { viewElements } from '@/labels/view-elements';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { modelLevels } from '@/project/model-levels';
 import { resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';

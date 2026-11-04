@@ -12,7 +12,7 @@
 
 import { textBox } from '@/drafting/annotation';
 import type { DraftEntity, EntityShape, Pt } from '@/drafting/types';
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import { sectionLink } from '@/drafting/section-symbol';
 import type { DimensionPlan } from './types';
 

@@ -9,7 +9,7 @@
  * elements. The session reads them back through the getters here.
  */
 
-import type { ViewElement } from '@/labels/view-elements';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { PlanPart } from '@/dimall/types';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';

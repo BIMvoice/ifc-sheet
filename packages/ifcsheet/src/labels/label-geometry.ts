@@ -8,8 +8,8 @@
  * the two are apart. Pure, in drawing units.
  */
 
-import { clampToRect, rectCentre, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import type { Pt } from '@/drafting/types';
+import { clampToRect, rectCentre, type Rect } from '../text-leader.js';
+import type { Pt } from '../draft-types.js';
 
 // The rectangle, its centre and the nearest point of it are the engine's (`text-leader.ts`), where a text's leader starts.
 export { clampToRect, rectCentre, type Rect };

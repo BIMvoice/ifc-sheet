@@ -31,7 +31,7 @@ import { exportCsv } from '@/joinery/schedule-export';
 import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { parseTemplate } from '@/labels/label-template';
+import { parseTemplate } from '@bimvoice/ifcsheet';
 import { resolveTemplate } from '@/labels/label-resolve';
 import { elementLabel } from '@/tagfields/element-tag';
 import { previewElements } from '@/tagfields/preview-elements';

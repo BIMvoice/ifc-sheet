@@ -6,7 +6,7 @@
 
 import { entityBounds } from '@/drafting/annotation';
 import { isGeometry, type DraftEntity } from '@/drafting/types';
-import type { Rect } from './label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 
 /** Annotations only, hatches apart (they fill areas, not mark places): the lines of the drawing itself are the elements' outlines, which labels are checked against separately. */
 export function rectsOf(drafts: readonly DraftEntity[]): Rect[] {
