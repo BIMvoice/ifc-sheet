@@ -24,7 +24,8 @@ export const CONTOUR_IFC_TYPE = 'IfcGeographicElement';
  */
 export function contourIntervalOf(view: ProjectView | undefined): number | null {
   if (view?.kind !== 'plan' || view.reflected || view.discipline) return null;
-  if (view.site !== true && view.level.storeyGlobalIds.length > 0) return null;
+  // A view saved before storeys were listed (or a test's bare view) has no list: it takes contours only if it has terrain.
+  if (view.site !== true && (view.level?.storeyGlobalIds?.length ?? 0) > 0) return null;
   const interval = view.contourInterval ?? CONTOUR_DEFAULT_INTERVAL;
   return interval > 0 ? interval : null;
 }
