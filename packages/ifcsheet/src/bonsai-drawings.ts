@@ -71,6 +71,8 @@ export class BonsaiWriter {
   private readonly names = new Set<string>();
   /** The drawings' documents: one `IfcDocumentInformationRelationship` from the parent holds them all (`IsPointer` is at most one), written by `finish`. */
   private readonly drawingDocuments: number[] = [];
+  private readonly drawingGroups: number[] = [];
+  private sourceDrawings: Set<string> | null = null;
   private readonly extractor: EntityExtractor | null;
 
   constructor(
@@ -89,11 +91,41 @@ export class BonsaiWriter {
   /** An entity of the source by type whose attribute `at[i]` equals `want[i]`, or null. */
   private findInSource(type: string, at: readonly number[], want: readonly string[]): number | null {
     for (const id of this.store.entityIndex.byType.get(type) ?? []) {
-      const entry = this.store.entityIndex.byId.get(id);
-      const attrs = entry && this.extractor ? this.extractor.extractEntity(entry)?.attributes : null;
+      const attrs = this.sourceAttributes(id);
       if (attrs && at.every((a, i) => attrs[a] === want[i])) return id;
     }
     return null;
+  }
+
+  private sourceAttributes(id: number): readonly unknown[] | null {
+    const entry = this.store.entityIndex.byId.get(id);
+    return entry && this.extractor ? this.extractor.extractEntity(entry)?.attributes ?? null : null;
+  }
+
+  /** A reference as the parser gives it (a number or `#n`) as its express id. */
+  private static idOf(v: unknown): number | null {
+    if (typeof v === 'number') return v;
+    return typeof v === 'string' && /^#\d+$/.test(v) ? Number(v.slice(1)) : null;
+  }
+
+  /** The source's one relationship of `type` whose attribute `at` is `target` (Bonsai keeps one per parent, and `IsGroupedBy` / `IsPointer` allow no more), with its list. */
+  private sourceRelationOf(type: string, at: number, target: number, list: number): { id: number; members: string[] } | null {
+    for (const id of this.store.entityIndex.byType.get(type) ?? []) {
+      const attrs = this.sourceAttributes(id);
+      if (attrs && BonsaiWriter.idOf(attrs[at]) === target && Array.isArray(attrs[list])) {
+        return { id, members: attrs[list].map((v) => BonsaiWriter.idOf(v)).filter((n): n is number => n !== null).map(ref) };
+      }
+    }
+    return null;
+  }
+
+  /** True when the source already has a Bonsai drawing of this name: IfcSheet writes none beside it. */
+  hasDrawing(name: string): boolean {
+    this.sourceDrawings ??= new Set((this.store.entityIndex.byType.get('IFCANNOTATION') ?? [])
+      .map((id) => this.sourceAttributes(id))
+      .filter((a): a is readonly unknown[] => a !== null && a[4] === 'DRAWING')
+      .map((a) => String(a[2]).toLowerCase()));
+    return this.sourceDrawings.has(name.toLowerCase());
   }
 
   private ensureParentGroup(): number {
@@ -176,7 +208,8 @@ export class BonsaiWriter {
 
     const groupId = this.editor.addEntity('IfcGroup', [this.guid(), this.owned(), name, null, 'DRAWING']).expressId;
     this.assignToGroup([drawingId, ...params.annotationIds], groupId);
-    this.assignToGroup([groupId], this.ensureParentGroup());
+    this.ensureParentGroup();
+    this.drawingGroups.push(groupId);
 
     const location = `drawings/${fileSafe(name)}.svg`;
     const informationId = this.information('X', name, 'DRAWING');
@@ -188,8 +221,17 @@ export class BonsaiWriter {
 
   /** After the last drawing: the parent document's one relationship to the drawings' documents. */
   finish(): void {
+    if (this.drawingGroups.length > 0) {
+      const parent = this.ensureParentGroup();
+      const existing = this.sourceRelationOf('IFCRELASSIGNSTOGROUP', 6, parent, 4);
+      if (existing) this.editor.setPositionalAttribute(existing.id, 4, [...existing.members, ...this.drawingGroups.map(ref)]);
+      else this.assignToGroup(this.drawingGroups, parent);
+    }
     if (this.drawingDocuments.length === 0) return;
-    this.editor.addEntity('IfcDocumentInformationRelationship', [null, null, ref(this.ensureParentDocument()), this.drawingDocuments.map(ref), null]);
+    const parent = this.ensureParentDocument();
+    const existing = this.sourceRelationOf('IFCDOCUMENTINFORMATIONRELATIONSHIP', 2, parent, 3);
+    if (existing) this.editor.setPositionalAttribute(existing.id, 3, [...existing.members, ...this.drawingDocuments.map(ref)]);
+    else this.editor.addEntity('IfcDocumentInformationRelationship', [null, null, ref(parent), this.drawingDocuments.map(ref), null]);
   }
 
   /** One sheet: the document, its layout reference and a reference to each drawing placed on it. */

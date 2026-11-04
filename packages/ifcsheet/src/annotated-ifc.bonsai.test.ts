@@ -92,6 +92,32 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     }
   });
 
+  it('a second export of the exported file reuses the DRAWINGS parents and writes no drawing twice', async () => {
+    const first = await buildAnnotatedIfc(input);
+    const again = await buildAnnotatedIfc({ ...input, source: first.bytes, views: [...input.views, view('v-extra', 'Ground floor B', GROUND, 100)] });
+    const text = new TextDecoder().decode(again.bytes);
+    expect(text.match(/IFCANNOTATION\('[^']+',#12,'[^']*',\$,'DRAWING',/g)).toHaveLength(3);
+    expect(again.annotations.filter((a) => a.drawingExpressId !== undefined).map((a) => a.name)).toEqual(['Ground floor B']);
+    expect(text.match(/IFCGROUP\('[^']+',#12,'DRAWINGS',\$,'DRAWINGS'\)/g)).toHaveLength(1);
+    expect(text.match(/IFCDOCUMENTINFORMATION\('DRAWINGS',/g)).toHaveLength(1);
+    // One relationship from the parent document and one assignment to the parent group, each now holding all three.
+    expect(text.match(/IFCDOCUMENTINFORMATIONRELATIONSHIP\(\$,\$,#\d+,\(#\d+,#\d+,#\d+\),\$\)/g)).toHaveLength(1);
+    expect(text.match(/IFCDOCUMENTINFORMATIONRELATIONSHIP\(/g)).toHaveLength(1);
+    expect(text.match(/IFCRELASSIGNSTOGROUP\('[^']+',#12,\$,\$,\(#\d+,#\d+,#\d+\),\$,#\d+\)/g)).toHaveLength(1);
+    expect(again.sheets).toEqual([]); // the sheet is already there and its views have drawings
+    expect(text.match(/'SHEET'/g)).toHaveLength(1);
+    if (!python) return;
+    const file = join(mkdtempSync(join(tmpdir(), 'ifcsheet-bonsai-')), 'again.ifc');
+    writeFileSync(file, again.bytes);
+    const highest = Math.max(...[...new TextDecoder().decode(first.bytes).matchAll(/^#(\d+)\s*=/gm)].map((m) => Number(m[1])));
+    const seen = JSON.parse(execFileSync(python, [SCRIPT, file, String(highest)], { encoding: 'utf8', maxBuffer: 1 << 26 })) as {
+      new_findings: string[]; drawings: { name: string; group_parents: string[] }[]; sheets: unknown[];
+    };
+    expect(seen.new_findings).toEqual([]);
+    expect(seen.drawings.map((d) => [d.name, d.group_parents])).toEqual([['Ground floor', ['DRAWINGS']], ['Roof floor', ['DRAWINGS']], ['Ground floor B', ['DRAWINGS']]]);
+    expect(seen.sheets).toHaveLength(1);
+  }, 60_000);
+
   it('writes nothing for Bonsai when asked not to', async () => {
     const r = await buildAnnotatedIfc({ ...input, bonsai: false });
     const out = added(sourceText, new TextDecoder().decode(r.bytes));

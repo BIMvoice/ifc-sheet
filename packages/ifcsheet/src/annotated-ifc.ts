@@ -242,14 +242,14 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
       texts,
       properties: [{ name: 'View', value: v.name }, ...(v.scale ? [{ name: 'Scale', value: `1:${v.scale}` }] : [])],
     });
-    const drawing = bonsai?.addDrawing(anchor, {
+    const drawing = bonsai && !bonsai.hasDrawing(v.name) ? bonsai.addDrawing(anchor, {
       name: v.name,
       scale: v.scale ?? 100,
       extent: localExtent(v, to),
       cutHeight: v.cutHeight ?? 1.2,
       depth: Math.max((v.cutHeight ?? 1.2) + (v.viewDepth ?? 0), 0.1),
       annotationIds: [written.annotationId],
-    });
+    }) : undefined;
     if (drawing) locations.set(v.viewId, drawing.location);
     annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length, drawingExpressId: drawing?.drawingId, drawingGroupExpressId: drawing?.groupId });
   }
