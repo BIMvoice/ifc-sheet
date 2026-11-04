@@ -89,6 +89,8 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, textFirst);
       const toggle = TOGGLES.find(isKey);
       if (toggle) {
+        // Undo and redo with words in the command line are the field's own: they take back a typed letter or a "m²" made from "m2" (#674), not a drawing step.
+        if (e.target === input && (toggle === 'drafting.undo' || toggle === 'drafting.redo') && (input?.value ?? '') !== '') return;
         e.preventDefault();
         runDraftingAction(toggle);
         return;
