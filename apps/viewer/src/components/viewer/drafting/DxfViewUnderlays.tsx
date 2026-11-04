@@ -13,6 +13,7 @@ import { useTranslation } from '@/i18n';
 import { toast } from '@/components/ui/toast';
 import { useProjectStore } from '@/project/project-store';
 import { startDraftCommand } from '@/drafting/session';
+import { placeDxfUnderlayByGeoreference } from '@/underlay/dxf-underlay-georef';
 import { addDxfUnderlayFromText, removeDxfUnderlay, setDxfLayerVisible, setDxfLocked, setDxfOpacity, setDxfPrintsOn } from '@/underlay/dxf-underlay-actions';
 
 function Card({ u }: { u: ViewDxfUnderlay }) {
@@ -24,7 +25,13 @@ function Card({ u }: { u: ViewDxfUnderlay }) {
         <span className="truncate font-semibold" title={u.name}>{u.name}</span>
         <button type="button" className="text-red-600 hover:underline" onClick={() => removeDxfUnderlay(u.id)}>{t('dxfView.remove')}</button>
       </div>
-      <button type="button" disabled={u.locked} className="h-6 rounded-sm border border-zinc-300 px-2 disabled:opacity-50 dark:border-zinc-700" onClick={() => startDraftCommand('dxfalign')}>{t('dxfView.align')}</button>
+      <div className="flex flex-wrap gap-1">
+        <button type="button" disabled={u.locked} className="h-6 rounded-sm border border-zinc-300 px-2 disabled:opacity-50 dark:border-zinc-700" onClick={() => {
+          const r = placeDxfUnderlayByGeoreference(u.id);
+          toast.info(t(r === 'placed' ? 'dxfSite.placed' : r === 'locked' ? 'dxfSite.locked' : 'dxfSite.noGeoref'));
+        }}>{t('dxfSite.place')}</button>
+        <button type="button" disabled={u.locked} className="h-6 rounded-sm border border-zinc-300 px-2 disabled:opacity-50 dark:border-zinc-700" onClick={() => startDraftCommand('dxfalign')}>{t('dxfView.align')}</button>
+      </div>
       <div className="font-semibold">{t('dxfView.layers')}</div>
       {u.layers.map((layer) => (
         <label key={layer.name} className="flex items-center gap-2">
