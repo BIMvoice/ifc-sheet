@@ -8,11 +8,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { danglingAnnotations } from '@/check/findings.js';
 import type { DraftEntity } from '@/drafting/types';
-import { dimensionDrafts } from './apply.js';
-import { house } from './fixture.js';
-import { planDimensions } from './plan.js';
+import { dimensionDrafts, planDimensions } from '@bimvoice/ifcsheet';
+import { freshProjectId } from '@/project/view-defaults';
+import { styleBook } from '@/project/drafting-standards';
+import { draftReader } from './reader';
+import { house } from '@bimvoice/ifcsheet/dimall-fixture';
 
-const target = { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', guidOf: (id: number) => `G${id}` };
+const target = { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', newId: () => freshProjectId('draft'), book: styleBook(), paperUnit: 0.1, reader: draftReader(), guidOf: (id: number) => `G${id}` };
 const drafts = () => dimensionDrafts(planDimensions(house(), { paperUnit: 0.1, textHeight: 0.25 }), target, []);
 const widthOf = (d: DraftEntity): number => (d.shape.type === 'dimension' ? Math.round(Math.hypot(d.shape.b.x - d.shape.a.x, d.shape.b.y - d.shape.a.y) * 100) / 100 : NaN);
 

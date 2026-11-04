@@ -10,11 +10,10 @@
  * the dimension to carry gaps, a change to every renderer; a slide is the smaller change.
  */
 
-import { textBox } from '@/drafting/annotation';
-import type { DraftEntity, EntityShape, Pt } from '@/drafting/types';
-import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { sectionLink } from '@/drafting/section-symbol';
-import type { DimensionPlan } from './types';
+import type { DraftEntity, EntityShape, Pt } from '../draft-types.js';
+import type { Rect } from '../text-leader.js';
+import { textBoxIn, type DraftReader } from './measure.js';
+import type { DimensionPlan } from './types.js';
 
 /** How far a tag may slide (metres). */
 const REACH = 3;
@@ -50,14 +49,14 @@ const overlap = (a: Rect, b: Rect, m: number) => a.x0 < b.x1 + m && b.x0 < a.x1 
  * The tags among `drafts` (texts, with or without a leader) that an extension line of `plan` runs through, each with the shape it
  * slides to. `blocked` is what a tag may not move onto (other annotations, symbols), without the tags themselves.
  */
-export function clearTags(plan: DimensionPlan, drafts: readonly DraftEntity[], blocked: readonly Rect[], height: number): Map<string, EntityShape> {
+export function clearTags(plan: DimensionPlan, drafts: readonly DraftEntity[], blocked: readonly Rect[], height: number, reader: DraftReader): Map<string, EntityShape> {
   const out = new Map<string, EntityShape>();
   const lines = extensionLines(plan);
   const m = 0.15 * height;
-  const tags = drafts.filter((d) => d.shape.type === 'text' && sectionLink(d) === null);
+  const tags = drafts.filter((d) => d.shape.type === 'text' && reader.sectionLink(d) === null);
   const boxOf = (d: DraftEntity, dx: number, dy: number): Rect => {
     const s = d.shape as Extract<EntityShape, { type: 'text' }>;
-    return rectOf(textBox({ x: s.p.x + dx, y: s.p.y + dy }, s.text, s.height, s.rotation, s.frame));
+    return rectOf(textBoxIn(reader.measure, { x: s.p.x + dx, y: s.p.y + dy }, s.text, s.height, s.rotation, s.frame));
   };
   // Tags already moved count as obstacles for the ones after them.
   const placed: Rect[] = tags.map((d) => boxOf(d, 0, 0));

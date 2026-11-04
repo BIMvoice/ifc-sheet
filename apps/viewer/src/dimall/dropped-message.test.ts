@@ -17,8 +17,8 @@ import ro from '@/i18n/locales/ro';
 import { registerLocale, resolve, setLocale } from '@/i18n/registry';
 import { resetProject } from '@/project/project-store';
 import type { ProjectView } from '@/project/types';
-import { house, notched, part, rect } from './fixture';
-import { planDimensions } from './plan';
+import { house, notched, part, rect } from '@bimvoice/ifcsheet/dimall-fixture';
+import { planDimensions } from '@bimvoice/ifcsheet';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
 

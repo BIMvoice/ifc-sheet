@@ -8,26 +8,26 @@
  * checked by box against the walls, the obstacles and the other chains.
  */
 
-import '@/test/setup-dom.js';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { dimensionLayout } from '@/drafting/annotation';
-import { textBlock } from '@/drafting/text-block';
-import type { Pt } from '@/drafting/types';
-import { layeredHouse, lShape, part, rect, turned } from './fixture';
-import { planRoomChains, type RoomInput, type RoomPlan } from './rooms';
-import type { PlanPart } from './types';
+import { dimensionLayout } from '../dimension-figure.js';
+import { textBlock } from '../text-block.js';
+import { tableMeasure } from './measure.js';
+import type { Pt } from '../draft-types.js';
+import { layeredHouse, lShape, part, rect, turned } from './fixture.js';
+import { planRoomChains, type RoomInput, type RoomPlan } from './rooms.js';
+import type { PlanPart } from './types.js';
 
 const H = 0.25;
 const MM = 0.001;
-const plan = (parts: readonly PlanPart[], rooms: readonly RoomInput[], obstacles: { x0: number; y0: number; x1: number; y1: number; crossable?: boolean }[] = [], lines: { a: Pt; b: Pt }[] = []) => planRoomChains(parts, rooms, { textHeight: H, obstacles, lines });
+const plan = (parts: readonly PlanPart[], rooms: readonly RoomInput[], obstacles: { x0: number; y0: number; x1: number; y1: number; crossable?: boolean }[] = [], lines: { a: Pt; b: Pt }[] = []) => planRoomChains(parts, rooms, { textHeight: H, measure: tableMeasure, obstacles, lines });
 const room = (id: string, x0: number, y0: number, x1: number, y1: number): RoomInput => ({ id, ring: rect(x0, y0, x1, y1) });
 type Box = { x0: number; y0: number; x1: number; y1: number };
 const hit = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 /** What the figure of a chain covers on the plan, in a plan not turned: its text, either side of the line. */
 function figureBox(p: RoomPlan, i: number): Box {
-  const s = p.shapes[i], layout = dimensionLayout(s);
+  const s = p.shapes[i], layout = dimensionLayout(s, {}, tableMeasure.frame);
   const w = textBlock(layout.label, H).outer.x1;
   const horizontal = Math.abs(s.b.x - s.a.x) > Math.abs(s.b.y - s.a.y);
   const c = layout.textAt;
@@ -36,7 +36,7 @@ function figureBox(p: RoomPlan, i: number): Box {
 const lineBox = (p: RoomPlan, i: number): Box => ({ x0: Math.min(p.chains[i].a.x, p.chains[i].b.x) - 0.01, x1: Math.max(p.chains[i].a.x, p.chains[i].b.x) + 0.01, y0: Math.min(p.chains[i].a.y, p.chains[i].b.y) - 0.01, y1: Math.max(p.chains[i].a.y, p.chains[i].b.y) + 0.01 });
 const wallBoxes = (parts: readonly PlanPart[]): Box[] => parts.filter((q) => q.kind === 'wall').flatMap((q) => q.rings.map((r) => ({ x0: Math.min(...r.map((v) => v.x)), x1: Math.max(...r.map((v) => v.x)), y0: Math.min(...r.map((v) => v.y)), y1: Math.max(...r.map((v) => v.y)) })));
 const chainOf = (p: RoomPlan, id: string, dir: 'x' | 'y') => p.chains.findIndex((c) => c.room === id && c.dir === dir);
-const printed = (p: RoomPlan, i: number) => dimensionLayout(p.shapes[i]).label;
+const printed = (p: RoomPlan, i: number) => dimensionLayout(p.shapes[i], {}, tableMeasure.frame).label;
 
 /** The two faces of a room along x, read off the rings of two walls: the east face of the one, the west face of the other. */
 const gapX = (west: PlanPart, east: PlanPart) => Math.min(...east.rings.flat().map((v) => v.x)) - Math.max(...west.rings.flat().map((v) => v.x));
@@ -108,7 +108,7 @@ describe('room dimensions: the figures', () => {
     const b = box();
     const angle = (6 * Math.PI) / 180;
     const rot = (q: Pt): Pt => ({ x: q.x * Math.cos(angle) - q.y * Math.sin(angle), y: q.x * Math.sin(angle) + q.y * Math.cos(angle) });
-    const p = planRoomChains(turned(b.parts, angle), [{ id: 'r1', ring: rect(0.3, 0.3, 5.7, 4.2).map(rot) }], { textHeight: H, obstacles: [] });
+    const p = planRoomChains(turned(b.parts, angle), [{ id: 'r1', ring: rect(0.3, 0.3, 5.7, 4.2).map(rot) }], { textHeight: H, measure: tableMeasure, obstacles: [] });
     assert.equal(p.dropped, 0);
     assert.equal(printed(p, chainOf(p, 'r1', 'x')), '5.40');
     assert.equal(printed(p, chainOf(p, 'r1', 'y')), '3.90');

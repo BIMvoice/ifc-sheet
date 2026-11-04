@@ -12,8 +12,8 @@
 
 import { getProjectionAxes, type Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
-import type { Pt } from '@/drafting/types';
-import type { PartKind, PlanPart } from './types';
+import type { Pt } from '../draft-types.js';
+import type { PartKind, PlanPart } from './types.js';
 
 // A type (IfcWallType, IfcDoorStyle) is a template at the model's origin, not an element of the building.
 const KIND: [RegExp, PartKind][] = [[/^IFC(WALL|CURTAINWALL)(?!TYPE)/i, 'wall'], [/^IFCDOOR(?!TYPE|STYLE)/i, 'door'], [/^IFCWINDOW(?!TYPE|STYLE)/i, 'window']];

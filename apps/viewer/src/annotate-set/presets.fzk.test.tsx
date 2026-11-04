@@ -12,7 +12,7 @@ import '@/test/setup-dom.js';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { setExtent } from '@/draft-set/body';
-import { isDimAll } from '@/dimall/apply';
+import { isDimAll } from '@bimvoice/ifcsheet';
 import { clearDraftHistory, draftsOfView, lastDraftStepAt, undoDrafts } from '@/drafting/draft-store';
 import { labelTargets } from '@/labels/label-all';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';

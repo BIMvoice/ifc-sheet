@@ -10,7 +10,7 @@
  */
 
 import type { ViewElement } from '@bimvoice/ifcsheet';
-import type { PlanPart } from '@/dimall/types';
+import type { PlanPart } from '@bimvoice/ifcsheet';
 import type { RoomOfPlan } from '@/tagall/footprint';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';

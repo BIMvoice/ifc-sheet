@@ -15,12 +15,12 @@
  * Pure and deterministic: the same parts give the same strings.
  */
 
-import type { Pt } from '@/drafting/types';
-import { contentOf, facadeEnds, facadesOf, inFacade, type Facade } from './facades';
-import { wallGaps } from './layers';
-import { boxOf, outlinesOf, pointInRing, ringOfBox, rotate, type Box } from './outline';
-import { readPlan } from './read';
-import type { DimensionPlan, DimensionSettings, PlannedString, PlanPart, StringKind } from './types';
+import type { Pt } from '../draft-types.js';
+import { contentOf, facadeEnds, facadesOf, inFacade, type Facade } from './facades.js';
+import { wallGaps } from './layers.js';
+import { boxOf, outlinesOf, pointInRing, ringOfBox, rotate, type Box } from './outline.js';
+import { readPlan } from './read.js';
+import type { DimensionPlan, DimensionSettings, PlannedString, PlanPart, StringKind } from './types.js';
 
 /** Paper mm from the facade to the first string when the dimension style has no setting (the style default, `DEFAULT_DIM_STYLE.allOffset`): clear of a row of tags. */
 export const FIRST_MM = 20;

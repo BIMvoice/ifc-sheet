@@ -11,9 +11,9 @@
  * outward from it, with the outer face at `D`.
  */
 
-import type { Pt } from '@/drafting/types';
-import { boxOf, GRID_TOL, ringOfBox, unionBox, type Box } from './outline';
-import type { PlanPart } from './types';
+import type { Pt } from '../draft-types.js';
+import { boxOf, GRID_TOL, ringOfBox, unionBox, type Box } from './outline.js';
+import type { PlanPart } from './types.js';
 
 /** Wall pieces and openings meet within this (metres). */
 const TOUCH = 0.03;

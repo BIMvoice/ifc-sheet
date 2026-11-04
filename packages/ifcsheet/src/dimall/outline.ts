@@ -10,7 +10,7 @@
  * `mainDirection` finds that frame.
  */
 
-import type { Pt } from '@/drafting/types';
+import type { Pt } from '../draft-types.js';
 
 /** Edge coordinates closer than this (metres) are one coordinate. */
 export const GRID_TOL = 0.005;

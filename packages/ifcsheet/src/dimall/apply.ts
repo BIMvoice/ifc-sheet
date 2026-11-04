@@ -9,14 +9,14 @@
  * and the "what is missing" check can tell the view has been dimensioned.
  */
 
-import { dimensionLayout } from '@/drafting/annotation';
-import { newDraft } from '@/drafting/draft-store';
-import type { AnnotationShape, DraftEntity, Pt } from '@/drafting/types';
-import { textBlock } from '@/drafting/text-block';
-import { figureUp, layoutFacade } from '@/drafting/figure-layout';
-import { styledParams } from '@/project/drafting-standards';
-import { avoidBoxes, frameOf, symbolPieces, type SymbolPiece } from './avoid';
-import type { DimensionPlan, PlannedString } from './types';
+import type { StyleBook } from '../draft-look.js';
+import type { AnnotationShape, DraftEntity, Pt } from '../draft-types.js';
+import { figureUp, layoutFacade } from '../figure-layout.js';
+import { makeDraft } from '../make-draft.js';
+import { styledParamsIn } from '../style-fit.js';
+import { avoidBoxes, frameOf, symbolPieces, type SymbolPiece } from './avoid.js';
+import { figureWidth, type DraftReader } from './measure.js';
+import type { DimensionPlan, PlannedString } from './types.js';
 
 export interface DimensionTarget {
   viewId: string;
@@ -24,6 +24,13 @@ export interface DimensionTarget {
   textHeight: number;
   textStyle: string;
   dimStyle: string;
+  /** The next id of a draft. */
+  newId: () => string;
+  /** The project's text and dimension styles, and the drawing units per paper millimetre where the view is drawn. */
+  book: StyleBook;
+  paperUnit: number;
+  /** Which drafts are section symbols, and how a text is measured. */
+  reader: DraftReader;
   /** The GlobalId of a plan part (a door or window), to stamp on the dimension that measures it. */
   guidOf?: (partId: number) => string | null;
   /** Boxes of the tags and notes on the plan: a figure keeps clear of them like of a section symbol's letters. */
@@ -49,7 +56,7 @@ const facadeOf = (s: PlannedString) => s.key.slice(s.key.indexOf(':') + 1);
  * The dimensions of every string, one per span, each with its figure placed (`drafting/figure-layout.ts`):
  * the strings of a facade are laid out together, so a figure keeps clear of the lines of all of them.
  */
-function stringShapes(plan: DimensionPlan, height: number, avoid: readonly SymbolPiece[]): Map<PlannedString, DimShape[]> {
+function stringShapes(plan: DimensionPlan, height: number, avoid: readonly SymbolPiece[], reader: DraftReader): Map<PlannedString, DimShape[]> {
   const out = new Map<PlannedString, DimShape[]>();
   const groups = new Map<string, PlannedString[]>();
   for (const s of plan.strings) groups.set(facadeOf(s), [...(groups.get(facadeOf(s)) ?? []), s]);
@@ -65,7 +72,7 @@ function stringShapes(plan: DimensionPlan, height: number, avoid: readonly Symbo
     }));
     const u = (p: Pt) => p.x * frame.along.x + p.y * frame.along.y;
     const places = layoutFacade(
-      group.map((s, i) => ({ points: s.points.map(u), offset: s.offset, widths: spans[i].map((d) => textBlock(dimensionLayout(d).label, height).outer.x1) })),
+      group.map((s, i) => ({ points: s.points.map(u), offset: s.offset, widths: spans[i].map((d) => figureWidth(reader.measure, d, height)) })),
       { height, sigma: up.x * frame.outward.x + up.y * frame.outward.y > 0 ? 1 : -1, over: height * 0.6, obstacles: avoidBoxes(avoid, frame, height) },
     );
     group.forEach((s, i) => out.set(s, spans[i].map((d, k): DimShape => {
@@ -82,7 +89,7 @@ export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, ex
   const done = new Set(existing.flatMap((d) => (typeof d.params.dimAll === 'string' ? [d.params.dimAll] : [])));
   const out: DraftEntity[] = [];
   const boxPieces = (target.clear ?? []).map((r): SymbolPiece => ({ kind: 'head', a: { x: r.x0, y: r.y0 }, b: { x: r.x1, y: r.y1 }, box: [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }] }));
-  const shapes = stringShapes(plan, target.textHeight, [...symbolPieces(viewDrafts), ...boxPieces]);
+  const shapes = stringShapes(plan, target.textHeight, [...symbolPieces(viewDrafts, target.reader), ...boxPieces], target.reader);
   for (const s of plan.strings) {
     (shapes.get(s) ?? []).forEach((shape, k) => {
       const stamp = stampOf(s, shape.a, shape.b);
@@ -90,8 +97,8 @@ export function dimensionDrafts(plan: DimensionPlan, target: DimensionTarget, ex
       const measures = part !== null && part !== undefined ? target.guidOf?.(part) : null;
       if (done.has(stamp)) return;
       done.add(stamp);
-      const styled = styledParams(target.viewId, shape, { textStyle: target.textStyle, dimStyle: target.dimStyle });
-      out.push(newDraft(target.viewId, target.layerId, shape, { ...styled, dimAll: stamp, ...(measures ? { measures } : {}) }));
+      const styled = styledParamsIn(target.book, target.paperUnit, shape, { textStyle: target.textStyle, dimStyle: target.dimStyle });
+      out.push(makeDraft(shape, { id: target.newId(), viewId: target.viewId, layerId: target.layerId, params: { ...styled, dimAll: stamp, ...(measures ? { measures } : {}) } }));
     });
   }
   return out;

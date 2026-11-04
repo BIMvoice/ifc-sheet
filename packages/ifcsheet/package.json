@@ -20,6 +20,11 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./dimall-fixture": {
+      "types": "./dist/dimall/fixture.d.ts",
+      "import": "./dist/dimall/fixture.js",
+      "default": "./dist/dimall/fixture.js"
+    },
     "./true-north": {
       "types": "./dist/true-north.d.ts",
       "import": "./dist/true-north.js",
