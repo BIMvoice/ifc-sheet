@@ -37,6 +37,7 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.tool.symbol', labelKey: 'wall.tool.symbol', category: 'wall', when: 'wall', keys: [digit(6)] },
   { id: 'wall.draw.line', labelKey: 'wall.draw.line', category: 'wall', when: 'wall', keys: [digit(1, true)] },
   { id: 'wall.draw.polyline', labelKey: 'wall.draw.polyline', category: 'wall', when: 'wall', keys: [digit(2, true)] },
+  { id: 'wall.draw.rectangle', labelKey: 'wall.draw.rectangle', category: 'wall', when: 'wall', keys: [digit(8, true)] },
   { id: 'wall.draw.circle', labelKey: 'wall.draw.circle', category: 'wall', when: 'wall', keys: [digit(3, true)] },
   { id: 'wall.draw.text', labelKey: 'wall.draw.text', category: 'wall', when: 'wall', keys: [digit(4, true)] },
   { id: 'wall.draw.hatch', labelKey: 'wall.draw.hatch', category: 'wall', when: 'wall', keys: [digit(5, true)] },
@@ -64,7 +65,7 @@ export type WallKeyId = (typeof WALL_KEY_COMMANDS)[number]['id'];
 const TOOL_KEYS: Readonly<Record<string, WallKeyId>> = {
   dimaligned: 'wall.tool.dimaligned', tag: 'wall.tool.tag', leader: 'wall.tool.leader', level: 'wall.tool.level',
   sectionline: 'wall.tool.sectionline', symbol: 'wall.tool.symbol',
-  line: 'wall.draw.line', polyline: 'wall.draw.polyline', circle: 'wall.draw.circle', text: 'wall.draw.text', hatch: 'wall.draw.hatch', revcloud: 'wall.draw.revcloud', ptext: 'wall.draw.ptext',
+  line: 'wall.draw.line', polyline: 'wall.draw.polyline', rectangle: 'wall.draw.rectangle', circle: 'wall.draw.circle', text: 'wall.draw.text', hatch: 'wall.draw.hatch', revcloud: 'wall.draw.revcloud', ptext: 'wall.draw.ptext',
 };
 
 export function wallToolKey(command: string): WallKeyId | undefined {

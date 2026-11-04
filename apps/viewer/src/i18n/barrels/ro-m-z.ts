@@ -51,6 +51,7 @@ import { visibilityReasonsRo } from '../catalogues/visibility-reasons.ro';
 import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
 import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
+import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
@@ -116,6 +117,7 @@ export const roMZ = {
   ...wallExitsRo,
   ...wallKeyPresetsRo,
   ...wallKeysRo,
+  ...wallRectangleRo,
   ...wallMaterialsRo,
   ...wallReviewRo,
   ...sectionRoomTagsRo,

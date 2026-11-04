@@ -42,6 +42,7 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.tool.symbol': tool('symbol'),
     'wall.draw.line': tool('line'),
     'wall.draw.polyline': tool('polyline'),
+    'wall.draw.rectangle': tool('rectangle'),
     'wall.draw.circle': tool('circle'),
     'wall.draw.text': tool('text'),
     'wall.draw.hatch': tool('hatch'),

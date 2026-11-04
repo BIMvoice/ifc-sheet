@@ -32,6 +32,7 @@ const SHIPPED: Readonly<Record<string, readonly KeyChord[]>> = {
   'wall.tool.symbol': [{ key: 'code:Digit6', alt: true }],
   'wall.draw.line': [{ key: 'code:Digit1', alt: true, shift: true }],
   'wall.draw.polyline': [{ key: 'code:Digit2', alt: true, shift: true }],
+  'wall.draw.rectangle': [{ key: 'code:Digit8', alt: true, shift: true }],
   'wall.draw.circle': [{ key: 'code:Digit3', alt: true, shift: true }],
   'wall.draw.text': [{ key: 'code:Digit4', alt: true, shift: true }],
   'wall.draw.hatch': [{ key: 'code:Digit5', alt: true, shift: true }],

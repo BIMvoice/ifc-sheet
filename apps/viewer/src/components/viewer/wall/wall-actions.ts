@@ -99,6 +99,7 @@ export interface DrawTool {
 export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'line', labelKey: 'wall.draw.line', bodyKey: 'wall.draw.line.body' },
   { command: 'polyline', labelKey: 'wall.draw.polyline', bodyKey: 'wall.draw.polyline.body' },
+  { command: 'rectangle', labelKey: 'wall.draw.rectangle', bodyKey: 'wall.draw.rectangle.body' },
   { command: 'circle', labelKey: 'wall.draw.circle', bodyKey: 'wall.draw.circle.body' },
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
