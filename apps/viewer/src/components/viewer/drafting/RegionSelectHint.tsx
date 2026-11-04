@@ -15,7 +15,7 @@ export function RegionSelectHint({ hidden }: { hidden: boolean }) {
   const nothingSelected = useDraftingSession((s) => s.selection.size === 0);
   if (hidden || !nothingSelected) return null;
   return (
-    <p data-testid="region-select-hint" className="pointer-events-none absolute bottom-2 left-2 z-10 max-w-[28rem] rounded bg-white/80 px-2 py-1 text-[11px] leading-snug text-zinc-600">
+    <p data-testid="region-select-hint" className="pointer-events-none absolute bottom-2 left-2 z-10 max-w-[28rem] rounded bg-white/80 px-2 py-1 text-2xs leading-snug text-zinc-600">
       {t('regionSelect.hint')}
     </p>
   );
