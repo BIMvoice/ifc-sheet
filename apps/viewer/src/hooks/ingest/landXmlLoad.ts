@@ -10,6 +10,7 @@ import { captureModelLoaded, snapshotFromGeometry } from '../../utils/loadTeleme
 import { createEmptyBounds, type Bounds3D } from '../../utils/localParsingUtils.js';
 import { toast } from '../../components/ui/toast.js';
 import { parseLandXmlViewerModelFromBlobAsync, type LandXmlViewerModel } from './landXmlViewerModel.js';
+import { readLandXmlProjectFromFile } from './landXmlProject.js';
 import type { LandXmlGeometryPreflight } from './landXmlIngest.js';
 import type { LandXmlSchema, LandXmlTinDocument } from './landXmlSemantics.js';
 import { landXmlRenderFrameWarning, MAX_RENDER_FRAME_LOCAL_EXTENT_METRES, meshFitsRenderFrame, meshRenderFrameBounds } from './landXmlRenderFrame.js';
@@ -318,6 +319,8 @@ export async function loadLandXmlModel(options: LandXmlLoadOptions): Promise<voi
       if (dropped > 0) result.warnings.push(landXmlRenderFrameWarning(dropped));
       for (const mesh of result.geometryResult.meshes) markLandXmlGpuUploaded(mesh);
     }
+    const project = await readLandXmlProjectFromFile(options.file);
+    if (project) result.semanticDocument.project = project;
     if (options.targetKind === 'primary') options.onPrimary(result);
     const finalization = options.finalize(result.dataStore, result.geometryResult, result.schemaVersion, {
       loadPath: 'landxml',

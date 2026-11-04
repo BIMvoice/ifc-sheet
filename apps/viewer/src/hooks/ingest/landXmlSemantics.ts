@@ -163,6 +163,8 @@ export interface LandXmlTinDocument {
    * the CRS's EPSG code and what real producers write; `horizontalDatum` is a
    * datum NAME there. Only `spatialMetadataFromLandXml` turns these into a CRS.
    */
+  /** What the file names for itself (`<Project name>`, `<Application name>`), read from its head; fills the title block (#204). */
+  project?: { name?: string; application?: string };
   coordinateSystem?: { horizontalDatum?: string; verticalDatum?: string; epsgCode?: string };
   surfaces: LandXmlTinSurface[];
   extensions: Array<{ namespace: string; localName: string; path: string }>;

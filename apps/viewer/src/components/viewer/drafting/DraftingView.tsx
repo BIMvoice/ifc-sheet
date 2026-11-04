@@ -44,7 +44,7 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 
 import type { ProjectView } from '@/project/types';
 
-import { referenceSet, referencesIn } from '@/drafting/references';
+import { referencesIn } from '@/drafting/references';
 import { draftsOfView } from '@/drafting/draft-store';
 
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
@@ -102,7 +102,7 @@ import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
-import { UnderlayLayer } from './UnderlayLayer';
+import { UnderlayLayer, useSnapReferences } from './UnderlayLayer';
 import { RegionSelectHint } from './RegionSelectHint';
 import { UnderlayPanel } from './UnderlayPanel';
 
@@ -212,7 +212,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
   const runtimeGeometry = useDrawingRuntime().geometryResult;
   const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(drawing, view, models, runtimeGeometry), graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view, runtimeGeometry, detail]);
-  const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
+  const references = useSnapReferences(viewDrawing, view.id);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const phaseSource = useProjectStore((st) => st.phaseSource);

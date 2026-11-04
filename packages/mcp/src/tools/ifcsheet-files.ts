@@ -19,7 +19,7 @@ import {
   readProjectSet, readSchedule,
   type ProjectDocument, type SetTemplate, type TemplateNoteKey,
 } from '@bimvoice/ifcsheet';
-import { readUnderlays } from '@bimvoice/ifcsheet/underlay-read';
+import { readDxfUnderlays, readUnderlays } from '@bimvoice/ifcsheet/underlay-read';
 import { buildHandoverZip, asciiStem, type HandoverPart } from '@bimvoice/ifcsheet/handover';
 import { dxfName } from '@bimvoice/ifcsheet/sheet-file-name';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
@@ -250,7 +250,7 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
     }
   }
   const sheetIds = new Set(set.sheets.map((s) => s.id));
-  const { [SCHEDULES_KEY]: savedSchedules, underlays: _raw, ...rest } = raw;
+  const { [SCHEDULES_KEY]: savedSchedules, underlays: _raw, dxfUnderlays: _rawDxf, ...rest } = raw;
   const dropped: string[] = [];
   const schedules: SetSchedule[] = [];
   const articles = readBoqArticles(raw.boqArticles);
@@ -267,7 +267,9 @@ function readDocument(raw: unknown, modelName: string): { document: ProjectDocum
   // The same reader as the command-line build: an underlay missing its point or scale is refused with its path, not drawn.
   let underlays: ReturnType<typeof readUnderlays>;
   try { underlays = readUnderlays(raw); } catch (e) { throw invalid(e instanceof Error ? e.message : String(e)); }
-  const document = { ...rest, ...(underlays.length > 0 ? { underlays } : {}), name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: set.views, sheets: set.sheets } as unknown as ProjectDocument;
+  let dxfUnderlays: ReturnType<typeof readDxfUnderlays>;
+  try { dxfUnderlays = readDxfUnderlays(raw); } catch (e) { throw invalid(e instanceof Error ? e.message : String(e)); }
+  const document = { ...rest, ...(underlays.length > 0 ? { underlays } : {}), ...(dxfUnderlays.length > 0 ? { dxfUnderlays } : {}), name: typeof raw.name === 'string' && raw.name ? raw.name : modelName, models: Array.isArray(raw.models) ? raw.models : [], views: set.views, sheets: set.sheets } as unknown as ProjectDocument;
   return { document, schedules, dropped };
 }
 

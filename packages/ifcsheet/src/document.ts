@@ -23,6 +23,7 @@ import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
 import type { ViewUnderlay } from './underlay.js';
+import type { ViewDxfUnderlay } from './dxf-underlay.js';
 
 export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
@@ -335,4 +336,6 @@ export interface ProjectDocument {
   unitsAndNumbers?: UnitsAndNumbers;
   /** PDF pages and images laid under views (#457); a sheet prints those that name it in `printOnSheets` (`underlay.ts`). */
   underlays?: ViewUnderlay[];
+  /** DXF drawings laid under plan views as linework (#547); a sheet prints those that name it in `printOnSheets` (`dxf-underlay.ts`). */
+  dxfUnderlays?: ViewDxfUnderlay[];
 }

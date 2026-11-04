@@ -11,10 +11,11 @@
  * deterministic.
  */
 
-import type { LevelShape } from '@/drafting/level-mark';
-import type { Pt } from '@/drafting/types';
-import type { ProjectLevel } from '@/project/types';
-import { levelFloorY } from '@/project/view-defaults';
+import type { AnnotationShape, Pt } from '../draft-types.js';
+import type { ProjectLevel } from '../document.js';
+import { levelFloorY } from '../view-defaults.js';
+
+export type LevelShape = Extract<AnnotationShape, { type: 'level' }>;
 
 export interface LevelsInput {
   /** The storeys of the project: name and elevation (metres). */
