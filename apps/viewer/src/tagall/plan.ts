@@ -21,6 +21,12 @@ export type AppTagAllInput = Omit<TagAllInputs, 'env' | 'reader' | 'rectsOf' | '
   onPlan?: boolean;
 };
 
-export function planTagAllInApp({ read, onPlan = true, ...input }: AppTagAllInput): TagAllResult {
-  return planTagAll({ ...input, onPlan, env: labelEnv(read), reader: draftReader(), rectsOf });
+/** TAGALL's complete inputs in the app: the engine's with the models' reader, the text measure and the section links filled in. */
+export function tagAllInputsOf({ read, onPlan = true, ...input }: AppTagAllInput): TagAllInputs {
+  return { ...input, onPlan, env: labelEnv(read), reader: draftReader(), rectsOf };
+}
+
+/** TAGALL planned in the app. */
+export function planTagAllInApp(input: AppTagAllInput): TagAllResult {
+  return planTagAll(tagAllInputsOf(input));
 }
