@@ -13,7 +13,8 @@ import { effectiveTitleBlock } from '@/project/title-block-model';
 import { useViewerStore } from '@/store';
 import { scheduleData } from '@/joinery/schedule-data';
 import { useViewDrawings } from '@/project/view-drawings';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { checkSet } from './findings';
 import type { CheckInput, Finding, PlanElement } from './types';
@@ -26,7 +27,7 @@ function planElements(viewId: string): PlanElement[] | null {
   if (!view || view.kind !== 'plan' || entry?.status !== 'ready' || !entry.drawing) return null;
   const openings = labelTargets(viewElements(entry.drawing)).filter((t) => /^ifc(door|window)/i.test(t.className)).map((t) => ({ guid: t.guid, className: t.className }));
   // The rooms TAGALL would label, read the way it reads them.
-  const rooms = roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult).map((r) => ({ guid: r.guid, className: 'IfcSpace' }));
+  const rooms = roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult, renderIdGlobalId).map((r) => ({ guid: r.guid, className: 'IfcSpace' }));
   return [...openings, ...rooms];
 }
 

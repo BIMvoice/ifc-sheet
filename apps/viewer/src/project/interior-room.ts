@@ -8,7 +8,7 @@
  * from, so the room is in the frame its views are drawn in), a room out.
  */
 
-import { footprintOf } from '@/tagall/footprint';
+import { footprintOf } from '@bimvoice/ifcsheet/footprint';
 import type { Pt } from '@/drafting/types';
 
 interface RoomMesh {

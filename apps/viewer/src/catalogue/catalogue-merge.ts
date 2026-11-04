@@ -24,7 +24,7 @@
 import { parsePat, serializePat, type HatchPattern } from '@/drafting/hatch/pattern';
 import { STANDARD } from '@/drafting/styles';
 import { freshProjectId } from '@/project/view-defaults';
-import { TAG_FIELD_IDS, TAG_KINDS, withSources, type TagFieldConfig } from '@/tagfields/tag-fields';
+import { TAG_FIELD_IDS, TAG_KINDS, withSources, type TagFieldConfig } from '@bimvoice/ifcsheet/tag-fields';
 import { REGISTERED_CATALOGUE_KINDS, type Catalogue, type CatalogueKind } from './catalogue-file';
 import type { RegisteredCatalogueData } from './registered-kinds';
 import { mergeCadLayers } from './cad-layers-merge';

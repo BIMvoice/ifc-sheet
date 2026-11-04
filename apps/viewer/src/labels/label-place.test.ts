@@ -6,26 +6,26 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { newDraft } from '@/drafting/draft-store';
 import { textBox } from '@/drafting/annotation';
-import { centredAnchor, classesOf, planTagAll, type LabelTarget } from './label-place.js';
+import { centredAnchor, classesOf, unlabelledTargets, type LabelTarget } from '@bimvoice/ifcsheet';
 
 const t = (guid: string, className: string, x = 0): LabelTarget => ({ guid, className, anchor: { x, y: 0 }, renderId: 1, ring: [] });
 const existing = (guid: string, atype: string) => newDraft('v', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'x', height: 0.25, rotation: 0 }, { labelOf: guid, atype });
 
-describe('planTagAll', () => {
+describe('unlabelledTargets', () => {
   const targets = [t('a', 'IfcWall'), t('b', 'IfcWall'), t('c', 'IfcDoor'), t('d', 'IfcWall')];
   it('takes the elements of the class, in order', () => {
-    assert.deepEqual(planTagAll(targets, 'IfcWall', 'at1', []).map((x) => x.guid), ['a', 'b', 'd']);
+    assert.deepEqual(unlabelledTargets(targets, 'IfcWall', 'at1', []).map((x) => x.guid), ['a', 'b', 'd']);
   });
   it('skips those that already have this label type, and not those with another', () => {
     const drafts = [existing('b', 'at1'), existing('d', 'at-other')];
-    assert.deepEqual(planTagAll(targets, 'IfcWall', 'at1', drafts).map((x) => x.guid), ['a', 'd']);
+    assert.deepEqual(unlabelledTargets(targets, 'IfcWall', 'at1', drafts).map((x) => x.guid), ['a', 'd']);
   });
   it('is empty when all are labelled, so running it twice adds nothing', () => {
-    const drafts = planTagAll(targets, 'IfcWall', 'at1', []).map((x) => existing(x.guid, 'at1'));
-    assert.deepEqual(planTagAll(targets, 'IfcWall', 'at1', drafts), []);
+    const drafts = unlabelledTargets(targets, 'IfcWall', 'at1', []).map((x) => existing(x.guid, 'at1'));
+    assert.deepEqual(unlabelledTargets(targets, 'IfcWall', 'at1', drafts), []);
   });
   it('names the class without regard to case and labels an element once', () => {
-    assert.deepEqual(planTagAll([...targets, t('a', 'IfcWall')], 'ifcwall', 'at1', []).map((x) => x.guid), ['a', 'b', 'd']);
+    assert.deepEqual(unlabelledTargets([...targets, t('a', 'IfcWall')], 'ifcwall', 'at1', []).map((x) => x.guid), ['a', 'b', 'd']);
   });
 });
 

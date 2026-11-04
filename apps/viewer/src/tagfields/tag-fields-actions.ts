@@ -9,7 +9,7 @@
  */
 
 import { useProjectStore } from '@/project/project-store';
-import { withSources, type TagFieldId, type TagKind, type TagSource } from './tag-fields';
+import { withSources, type TagFieldId, type TagKind, type TagSource } from '@bimvoice/ifcsheet/tag-fields';
 
 /** Set the sources `field` of `kind` reads; `null` takes it back to the default. */
 export function setFieldSources(kind: TagKind, field: TagFieldId, sources: readonly TagSource[] | null): void {

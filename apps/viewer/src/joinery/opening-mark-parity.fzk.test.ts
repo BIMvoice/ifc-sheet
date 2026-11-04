@@ -21,10 +21,10 @@ import { joineryExport, joineryScheduleLayout, type ScheduleLabels } from '@bimv
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { labelElementByGlobalId } from '@/labels/label-element.js';
 import { resetProject, useProjectStore } from '@/project/project-store.js';
-import { planTagAll } from '@/tagall/plan.js';
-import { TAGALL_TYPES } from '@/tagall/types.js';
+import { planTagAllInApp } from '@/tagall/plan.js';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 import { elementLabel } from '@/tagfields/element-tag.js';
-import type { LabelTarget } from '@/labels/label-place.js';
+import type { LabelTarget } from '@bimvoice/ifcsheet';
 import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types.js';
 import { scheduleData } from './schedule-data.js';
@@ -82,7 +82,7 @@ function planTags(guids: string[]): Map<string, string> {
   const targets: LabelTarget[] = guids.map((g, i) => ({ guid: g, className: read(g)!.className(), anchor: elements[i].anchor, renderId: i + 1, ring: elements[i].ring }));
   const placement = { viewId: 'v', layerId: '0', textHeight: 0.25, textStyle: 'standard', dimStyle: 'standard', paperUnit: 0.1, locale: 'en' };
   const [mark, room] = TAGALL_TYPES;
-  const { drafts } = planTagAll({ elements, targets, rooms: [], existing: [], placement, types: { mark, room }, read });
+  const { add: drafts } = planTagAllInApp({ elements, targets, rooms: [], existing: [], placement, types: { mark, room }, read });
   return new Map(drafts.map((d) => [String(d.params.labelOf), d.shape.type === 'text' || d.shape.type === 'leader' ? d.shape.text : '']));
 }
 

@@ -14,7 +14,7 @@
 import { useMemo } from 'react';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { labelElementOf } from '@/labels/label-element';
-import { readField } from '@/labels/label-resolve';
+import { readField } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
 import { effectiveFields, ENGINE_NAMES_EN, ENGINE_NAMES_RO, MODEL_ENTITIES, readStoreFacts, resolvedTitleBlock as engineResolvedTitleBlock, projectNameFromFile, SILENT_FACTS, type ModelEntity, type TitleBlockFacts as ModelFacts, type ResolvedField, type TitleSources } from '@bimvoice/ifcsheet';

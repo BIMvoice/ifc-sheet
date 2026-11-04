@@ -55,6 +55,7 @@ import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
+import { wallPhasesRo } from '../catalogues/wall-phases.ro';
 import { sectionCreatedDocsRo } from '../catalogues/section-created-docs.ro';
 import { sectionRoomTagsRo } from '../catalogues/section-room-tags.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
@@ -122,6 +123,7 @@ export const roMZ = {
   ...wallRectangleRo,
   ...wallMaterialsRo,
   ...wallReviewRo,
+  ...wallPhasesRo,
   ...sectionRoomTagsRo,
   ...sectionCreatedDocsRo,
   ...wallSectionsRo,

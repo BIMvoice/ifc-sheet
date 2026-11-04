@@ -20,6 +20,11 @@
       "import": "./dist/names.js",
       "default": "./dist/names.js"
     },
+    "./dimall-fixture": {
+      "types": "./dist/dimall/fixture.d.ts",
+      "import": "./dist/dimall/fixture.js",
+      "default": "./dist/dimall/fixture.js"
+    },
     "./true-north": {
       "types": "./dist/true-north.d.ts",
       "import": "./dist/true-north.js",
@@ -114,6 +119,11 @@
       "types": "./dist/materials.d.ts",
       "import": "./dist/materials.js",
       "default": "./dist/materials.js"
+    },
+    "./tag-fields": {
+      "types": "./dist/labels/tag-fields.d.ts",
+      "import": "./dist/labels/tag-fields.js",
+      "default": "./dist/labels/tag-fields.js"
     },
     "./footprint": {
       "types": "./dist/footprint.d.ts",

@@ -9,6 +9,7 @@ export const viewerAliases = {
       '@': path.resolve(__dirname, './src'),
       '@bimvoice/ifcsheet/handover': path.resolve(__dirname, '../../packages/ifcsheet/src/handover.ts'),
       '@bimvoice/ifcsheet/names': path.resolve(__dirname, '../../packages/ifcsheet/src/names.ts'),
+      '@bimvoice/ifcsheet/tag-fields': path.resolve(__dirname, '../../packages/ifcsheet/src/labels/tag-fields.ts'),
       '@bimvoice/ifcsheet/boq-words': path.resolve(__dirname, '../../packages/ifcsheet/src/boq-words.ts'),
       '@bimvoice/ifcsheet/pac-words': path.resolve(__dirname, '../../packages/ifcsheet/src/pac-words.ts'),
       '@bimvoice/ifcsheet/urban': path.resolve(__dirname, '../../packages/ifcsheet/src/urban.ts'),

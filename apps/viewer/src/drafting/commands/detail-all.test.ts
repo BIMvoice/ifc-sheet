@@ -10,10 +10,10 @@ import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory } from '@/drafting/draft-store.js';
 import { attachDraftingView, cancelCommand, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider, submitCommandLine, useDraftingSession } from '@/drafting/session.js';
 import type { ProjectView } from '@/project/types';
-import type { LabelElement } from '@/labels/label-resolve.js';
+import type { LabelElement } from '@bimvoice/ifcsheet';
 import { wall } from '@/labels/label-fixture.js';
 import type { Pt } from '@/drafting/types';
-import { house } from '@/dimall/fixture.js';
+import { house } from '@bimvoice/ifcsheet/dimall-fixture';
 import { tagAll } from './tagall.js';
 
 const detail = { of: 'plan-1', min: { x: 0, y: 0 }, max: { x: 6, y: 6 }, number: 1 };

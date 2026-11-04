@@ -8,8 +8,8 @@
  * as the resolver (`tag-fields.ts`), so the preview cannot disagree with the tag.
  */
 
-import { readStored, type LabelElement } from '@/labels/label-resolve';
-import { sourceRef, sourcesOf, sourceText, tagKindOf, type TagFieldConfig, type TagFieldId, type TagSource } from './tag-fields';
+import { readStored, type LabelElement } from '@bimvoice/ifcsheet';
+import { sourceRef, sourcesOf, sourceText, tagKindOf, type TagFieldConfig, type TagFieldId, type TagSource } from '@bimvoice/ifcsheet/tag-fields';
 
 export interface SourcePreview {
   source: TagSource;

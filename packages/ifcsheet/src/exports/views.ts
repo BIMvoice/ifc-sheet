@@ -42,3 +42,5 @@ export {
 export { penGroups, penOrder, type PenGroup, type PenLayer } from '../drawing-pens.js';
 export { inDrawOrder, layerOrder, movedInOrder } from '../draw-order.js';
 export { fillColourOf, fillLoopsOf, maskingFill } from '../fill-mask.js';
+export { makeDraft } from '../make-draft.js';
+export type { MakeDraftOptions } from '../make-draft.js';

@@ -12,7 +12,7 @@ import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlanePr
 import type { ProjectView } from '@/project/types';
 import { DEFAULT_DIM_STYLE } from '@/drafting/styles';
 import { paperUnitOf } from '@/project/drafting-standards';
-import { house } from './fixture.js';
+import { house } from '@bimvoice/ifcsheet/dimall-fixture';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
 const dims = () => useProjectStore.getState().drafts.filter((d) => d.shape.type === 'dimension');

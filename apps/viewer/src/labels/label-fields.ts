@@ -9,7 +9,7 @@
  */
 
 import { formatValue } from '@bimvoice/ifcsheet';
-import { readFieldValue, type LabelElement } from './label-resolve';
+import { readFieldValue, type LabelElement } from '@bimvoice/ifcsheet';
 import { ATTRIBUTE_FIELDS, fieldPath, type FieldRef } from '@bimvoice/ifcsheet';
 
 export interface PickableField {

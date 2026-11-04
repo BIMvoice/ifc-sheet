@@ -19,7 +19,7 @@
 import type { TranslationKey } from '@/i18n';
 import { openUndoSpan, runAsStartingState } from '@/drafting/draft-store';
 import { useProjectStore } from '@/project/project-store';
-import type { TagParts } from '@/tagall/types';
+import type { TagParts } from '@bimvoice/ifcsheet';
 import { commandsFor, type AnnotateChoices } from './choices';
 import { demandDrawings, waitForDrawing, type DrawingResult } from './drawing-demand';
 import { runCommandOnView, type AnnotatableView, type CommandResult } from './run-view';

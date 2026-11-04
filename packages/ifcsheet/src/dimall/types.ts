@@ -1,0 +1,68 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * DIMALL's vocabulary: the parts of a plan the planner reads (wall, door and
+ * window cut outlines, one entry per model element) and the dimension strings
+ * it plans. Everything is in the view's drawing units (metres) except the
+ * paper distances, which are millimetres on paper.
+ */
+
+import type { Pt } from '../draft-types.js';
+
+export type PartKind = 'wall' | 'door' | 'window';
+
+/** A model element of a plan with the outlines it is cut in. */
+export interface PlanPart {
+  id: number;
+  kind: PartKind;
+  rings: Pt[][];
+  /** A door's or window's whole body seen from above, drawing space, when the model's mesh is at hand: what the plan's cut misses of a round or shaped window. */
+  body?: Pt[];
+}
+
+export interface DimensionSettings {
+  /** Drawing units per paper millimetre. */
+  paperUnit: number;
+  /** Paper millimetres from the building to the first string. */
+  firstMm?: number;
+  /** Paper millimetres from one string to the next. */
+  stepMm?: number;
+  /** Text height in drawing units. */
+  textHeight: number;
+  /** Boxes of what the view already carries beyond the walls (tags with their leaders, notes), drawing space: the strings stand beyond the ones in front of their facade. */
+  clear?: readonly { x0: number; y0: number; x1: number; y1: number }[];
+}
+
+export type StringKind = 'inner' | 'middle' | 'overall';
+
+/** One string of dimensions along a facade: the points it measures between, and the line it runs on. */
+export interface PlannedString {
+  /** Names the facade run and the kind, so a rerun finds the string again. */
+  key: string;
+  kind: StringKind;
+  /** The facade's direction (along the string) and outward normal, drawing space. */
+  along: Pt;
+  outward: Pt;
+  /** The measured points, ordered along the string, on the facade's outer face. */
+  points: Pt[];
+  /** Drawing units from the outer face to the string's line. */
+  offset: number;
+  /** Per span: the part (door or window) whose width the span measures, else null. */
+  measures: (number | null)[];
+}
+
+export interface DimensionPlan {
+  strings: PlannedString[];
+  /** Facades with nothing to dimension (no opening and no cross wall). */
+  skippedFacades: number;
+  /** Strings left out: their line would run through the building (a notch or a courtyard facade), or their facade is not on the walls' axes and its figures could not be trusted. */
+  droppedStrings: number;
+  /** Doors and windows left out of the strings because the plan does not show exactly where their edges are. */
+  droppedOpenings: number;
+  /** How far the building's main direction is turned from the drawing's x axis, radians. */
+  angle: number;
+  /** The building's outer outline, drawing space; empty when there are no walls. */
+  outline: Pt[];
+}

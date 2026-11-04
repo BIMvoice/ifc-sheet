@@ -9,10 +9,10 @@
  * both end here, so the rule is the same.
  */
 
-import { textBox } from '@/drafting/annotation';
+import { annotationScreenUp, textBox } from '@/drafting/annotation';
+import { textWidthEm } from '@/drafting/text-width';
 import type { AnnotationShape, DraftEntity, Pt } from '@/drafting/types';
-import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { DEFAULT_LEADER, DISPLACED_MM, leaderTip, refToRing, type LeaderMode } from './label-leader';
+import { refToRing, withLeaderOf, type LeaderMode, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
 
 type TextShape = Extract<AnnotationShape, { type: 'text' }>;
 
@@ -25,11 +25,8 @@ export function textRect(shape: TextShape): Rect {
 
 /** `shape` with the leader the mode gives it to the element outline `ring`; `paperUnit` is drawing units per paper millimetre. */
 export function withLeader(shape: TextShape, ring: readonly Pt[] | null, mode: LeaderMode | undefined, paperUnit: number): TextShape {
-  const { leader: _old, ...rest } = shape;
-  const tip = ring ? leaderTip(mode ?? DEFAULT_LEADER, textRect(shape), ring, DISPLACED_MM * paperUnit) : undefined;
-  return tip ? { ...rest, leader: tip } : rest;
+  return withLeaderOf(shape, ring, mode, paperUnit, annotationScreenUp(), textWidthEm);
 }
-
 const same = (a: Pt | undefined, b: Pt | undefined): boolean => (a === undefined ? b === undefined : b !== undefined && Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9);
 
 /** The label `d` with its leader brought in line with where it is; the same entity when nothing changes. */

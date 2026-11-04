@@ -20,9 +20,11 @@ import { FZK_HAUS, OPEN_HOUSE, loadPlanModel, planModelMissing, type LoadedPlanM
 import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { defaultPlanCutHeight } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
-import { roomsOfPlan } from '@/tagall/rooms';
-import { planParts } from './parts';
-import { planRoomChains, type RoomPlan } from './rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { planParts } from '@bimvoice/ifcsheet';
+import { draftReader } from './reader';
+import { planRoomChains, type RoomPlan } from '@bimvoice/ifcsheet';
 
 const missing = planModelMissing(FZK_HAUS) || planModelMissing(OPEN_HOUSE);
 
@@ -35,8 +37,8 @@ async function roomsOn(path: string, name: string): Promise<{ plan: RoomPlan; mo
   const view = { id: 'v', name, kind: 'plan', createdAt: 0, level, cutHeight: defaultPlanCutHeight(level, model.levels), scale: 100 } as unknown as Exclude<ProjectView, { kind: '3d' }>;
   const drawing = await viewDrawing(view, geometry);
   assert.ok(drawing);
-  const rooms = roomsOfPlan(view, model.levels, geometry).map((r) => ({ id: r.guid, ring: r.ring }));
-  return { plan: planRoomChains(planParts(drawing, geometry.meshes), rooms, { textHeight: 0.25, obstacles: [] }), model };
+  const rooms = roomsOfPlan(view, model.levels, geometry, renderIdGlobalId).map((r) => ({ id: r.guid, ring: r.ring }));
+  return { plan: planRoomChains(planParts(drawing, geometry.meshes), rooms, { textHeight: 0.25, measure: draftReader().measure, obstacles: [] }), model };
 }
 
 describe('room dimensions on real models', { skip: missing }, () => {

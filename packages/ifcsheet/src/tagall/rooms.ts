@@ -1,0 +1,25 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * The rooms of a plan: each space of the geometry the drawings are made from,
+ * cut at the plan's height, with the GlobalId of its space. TAGALL labels them
+ * and the check reports the ones without a label, so both read them here, from
+ * `currentDrawingRuntime()` (the federated geometry, with the workspace
+ * placement) and not from the viewer store's legacy single-model result.
+ */
+
+import type { GeometryResult } from '@ifc-lite/geometry';
+import type { ProjectLevel, ProjectView } from '../document.js';
+import { levelFloorY, resolvePlanLevel } from '../view-defaults.js';
+import { roomFootprints, type RoomOfPlan } from './footprint.js';
+
+export function roomsOfPlan(view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined, guidOf: (renderId: number) => string | null): RoomOfPlan[] {
+  if (view.kind !== 'plan') return [];
+  const level = resolvePlanLevel(view, levels) ?? view.level;
+  return roomFootprints(geometry?.meshes ?? [], levelFloorY(level) + view.cutHeight, levelFloorY(level)).flatMap((r) => {
+    const guid = guidOf(r.renderId);
+    return guid ? [{ ...r, guid }] : [];
+  });
+}

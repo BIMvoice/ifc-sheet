@@ -194,6 +194,7 @@ textWidth: value
 trueNorthOf: value
 unitFactor: value
 unitVector: value
+viewNormal: value
 viewportPaperUnit: value
 worldToDrawing: value
 wrapNote: value

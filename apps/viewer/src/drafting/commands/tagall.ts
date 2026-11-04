@@ -15,9 +15,9 @@ import type { ElementReader } from '@/labels/label-all';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
-import { planTagAll } from '@/tagall/plan';
+import { planTagAllInApp } from '@/tagall/plan';
 import { getLocale } from '@/i18n';
-import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES, type TagParts } from '@/tagall/types';
+import { MARK_TYPE_ID, ROOM_TYPE_ID, TAGALL_TYPES, type TagParts } from '@bimvoice/ifcsheet';
 import { editDrafts } from '../draft-store';
 import type { DraftCommandDef, DraftContext } from './types';
 import { currentSheetLocale } from '@/project/units-and-numbers';
@@ -46,7 +46,8 @@ export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts)
     return;
   }
   const elements = onPlan ? ctx.viewElements() : [];
-  const { drafts, summary } = planTagAll({
+  const result = planTagAllInApp({
+    onPlan,
     elements,
     targets: labelTargets(elements),
     rooms: ctx.rooms(),
@@ -54,17 +55,12 @@ export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts)
     placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()) },
     types: { mark: types.mark, room: types.room },
     read,
-    parts: onPlan ? parts : { doors: false, windows: false, rooms: parts?.rooms ?? true },
+    parts,
     crop: ctx.view()?.detail,
     obstacles: onPlan ? ctx.planObstacles() : [],
   });
-  if (drafts.length) editDrafts({ add: drafts });
-  ctx.say(drafts.length ? 'drafting.msg.tagAllDone' : 'drafting.msg.tagAllHave', { marks: summary.marks, rooms: summary.rooms, already: summary.already });
-  if (summary.numbered > 0) ctx.say('drafting.msg.tagAllNumbered', { count: summary.numbered });
-  if (summary.rooms > 0) ctx.say('drafting.msg.tagAllAreas', { model: summary.areaFromModel, footprint: summary.areaFromFootprint });
-  if (summary.roomsTooSmall > 0) ctx.say('drafting.msg.tagAllTooSmall', { count: summary.roomsTooSmall });
-  if (summary.roomsOverLines > 0) ctx.say('drafting.msg.tagAllOverLines', { count: summary.roomsOverLines });
-  if (summary.noRooms) ctx.say(onPlan ? 'drafting.msg.tagAllNoRooms' : 'drafting.msg.tagAllNoRoomsCut');
+  if (result.add.length) editDrafts({ add: result.add });
+  for (const m of result.messages) ctx.say(m.key, m.params);
 }
 
 export const tagAllCommand: DraftCommandDef = {
