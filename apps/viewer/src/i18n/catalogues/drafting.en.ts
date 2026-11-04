@@ -149,7 +149,6 @@ export const draftingEn = {
   'drafting.cmd.axis': 'AXIS',
   'drafting.cmd.hatch': 'HATCH',
   'drafting.prompt.textPoint': 'Specify text start point (or type a text height, now {height}):',
-  'drafting.prompt.enterText': 'Enter text:',
   'drafting.prompt.leaderTip': 'Specify leader arrow point:',
   'drafting.prompt.leaderBend': 'Specify the bend, at any angle (Enter for a one-segment leader):',
   'drafting.prompt.leaderEnd': 'Specify the end of the second segment (squares up near horizontal and vertical):',

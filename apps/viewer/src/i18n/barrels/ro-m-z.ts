@@ -41,6 +41,7 @@ import { tagShowsRo } from '../catalogues/tag-shows.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { textLinesRo } from '../catalogues/text-lines.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -52,8 +53,10 @@ import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
+import { sectionRoomTagsRo } from '../catalogues/section-room-tags.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
+import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
@@ -101,6 +104,7 @@ export const roMZ = {
   ...titleBlockParamsRo,
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
+  ...textLinesRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,
@@ -112,8 +116,10 @@ export const roMZ = {
   ...wallKeysRo,
   ...wallMaterialsRo,
   ...wallReviewRo,
+  ...sectionRoomTagsRo,
   ...wallSectionsRo,
   ...wallRelayoutRo,
+  ...trackingRo,
   ...underlayRo,
   ...wallZoomRo,
   ...wallCompareRo,

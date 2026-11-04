@@ -62,6 +62,10 @@ export interface TagAllSummary {
   areaFromFootprint: number;
   /** Rooms whose label is bigger than the room. */
   roomsTooSmall: number;
+  /** Rooms of a section whose label stands outside the room with a leader into it, having no place inside clear of the lines. */
+  roomsOutside: number;
+  /** Rooms of a section whose label has no place clear of the lines, inside or outside, so it lies over one. */
+  roomsOverLines: number;
   /** Doors, windows and rooms that already had theirs. */
   already: number;
   /** The plan shows no room at all (the model has no space at this level, or none reached the cut). */

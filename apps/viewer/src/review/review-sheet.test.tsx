@@ -91,7 +91,7 @@ describe('typing a comment', () => {
     // Letters that would each begin a drawing command or fill the command line, and Enter that would confirm one.
     for (const key of ['c', 'i', 'r', 'l', 'e', ' ', 'Delete', 'Backspace', 'z']) press(box, key);
     assert.equal(useDraftingSession.getState().commandId, running, 'LINE is still the running command');
-    const commandLine = ui.querySelector<HTMLInputElement>('input[aria-label="Command line"]');
+    const commandLine = ui.querySelector<HTMLTextAreaElement>('textarea[aria-label="Command line"]');
     assert.equal(commandLine?.value ?? '', '', 'nothing reached the command line');
     typeInto(box, 'Dimensiune lipsă');
     press(box, 'Enter');

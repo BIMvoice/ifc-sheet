@@ -102,7 +102,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
 
   // Drafting on the paper itself (annotations, lines), in millimetres.
   const sheetDrafting = useSheetDrafting(sheet.id, pan, extraPatterns);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   const lastPaper = useRef<{ x: number; y: number } | null>(null);
   useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', lastPaper.current) });

@@ -22,12 +22,12 @@ import { DraftingView } from './DraftingView.js';
 
 const plan = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 } satisfies ProjectView;
 
-function mount(): HTMLInputElement {
+function mount(): HTMLTextAreaElement {
   const ui = render(<DraftingView view={plan} />);
-  return ui.querySelector('input[aria-label="Command line"]') as HTMLInputElement;
+  return ui.querySelector('textarea[aria-label="Command line"]') as HTMLTextAreaElement;
 }
 
-function enter(line: HTMLInputElement, text: string): void {
+function enter(line: HTMLTextAreaElement, text: string): void {
   for (const ch of text) press(document.body, ch);
   press(line, 'Enter');
 }

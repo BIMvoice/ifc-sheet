@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { trackingEn } from '../catalogues/tracking.en';
 import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
 import { sceneActionsEn } from '../catalogues/scene-actions.en';
@@ -39,6 +40,7 @@ import { terrainImageryEn } from '../catalogues/terrain-imagery.en';
 import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
 import { titleBlockSourcesEn } from '../catalogues/title-block-sources.en';
+import { textLinesEn } from '../catalogues/text-lines.en';
 import { toursEn } from '../catalogues/tours.en';
 import { trimExtendEn } from '../catalogues/trim-extend.en';
 import { unitsNumbersEn } from '../catalogues/units-numbers.en';
@@ -60,6 +62,7 @@ import { wallKeysEn } from '../catalogues/wall-keys.en';
 import { wallMaterialsEn } from '../catalogues/wall-materials.en';
 import { wallRelayoutEn } from '../catalogues/wall-relayout.en';
 import { wallReviewEn } from '../catalogues/wall-review.en';
+import { sectionRoomTagsEn } from '../catalogues/section-room-tags.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
 import { wallEn } from '../catalogues/wall.en';
 import { webgpuTroubleshootingEn } from '../catalogues/webgpu-troubleshooting.en';
@@ -104,6 +107,7 @@ export const enSZ = {
   ...titleBlockParamsEn,
   ...titleBlockRoEn,
   ...titleBlockSourcesEn,
+  ...textLinesEn,
   ...toursEn,
   ...trimExtendEn,
   ...unitsNumbersEn,
@@ -125,7 +129,9 @@ export const enSZ = {
   ...wallKeysEn,
   ...wallMaterialsEn,
   ...wallReviewEn,
+  ...trackingEn,
   ...underlayEn,
+  ...sectionRoomTagsEn,
   ...wallSectionsEn,
   ...wallEn,
   ...webgpuTroubleshootingEn,

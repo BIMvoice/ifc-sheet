@@ -9,7 +9,7 @@ export const annotateSetEn = {
   'wall.annotate.open': 'Annotate the set',
   'wall.annotate.title': 'Annotate the set',
   'wall.annotate.hint': 'Runs the commands on every view of the right kind with no view open, each on its own drawing, as if you ran it there. What a view has already is not added a second time. One Undo takes the whole run back.',
-  'wall.annotate.tagall': 'Tag every plan (TAGALL)',
+  'wall.annotate.tagall': 'Tag every plan, and the rooms of every section and elevation (TAGALL)',
   'wall.annotate.dimall': 'Dimension every plan (DIMALL)',
   'wall.annotate.levelall': 'Level marks on every elevation and section (LEVELALL)',
   'wall.annotate.part.doors': 'Doors: a tag on each door',

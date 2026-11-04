@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The drafting command line: the last few history lines, the running
+ * The drafting command line (a field that is one line for a command and grows for a text: Shift+Enter breaks a line, #673): the last few history lines, the running
  * command's prompt, and an input for command names, coordinates
  * (`x,y`, `@dx,dy`, `@d<angle`), distances, values and keywords.
  */
@@ -19,12 +19,17 @@ interface CommandLineProps {
   onEscape: () => void;
 }
 
-export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(function CommandLine({ value, onChange, onSubmit, onEscape }, ref) {
+/** The prompts that ask for the words of a text, which may run to several lines. */
+const TEXT_PROMPTS: readonly string[] = ['textLines.prompt', 'tbparams.text.prompt'];
+const MAX_ROWS = 5;
+
+export const CommandLine = forwardRef<HTMLTextAreaElement, CommandLineProps>(function CommandLine({ value, onChange, onSubmit, onEscape }, ref) {
   const { t } = useTranslation();
   const history = useDraftingSession((s) => s.history);
   const prompt = useDraftingSession((s) => s.prompt);
   const running = useDraftingSession((s) => s.commandId !== null);
   const recent = history.slice(-3);
+  const multiline = prompt !== null && TEXT_PROMPTS.includes(prompt.key);
   const promptText = prompt ? t(prompt.key, prompt.params) : t('drafting.prompt.idle');
   return (
     <div className="shrink-0 min-w-0 overflow-hidden border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 font-mono text-xs">
@@ -53,16 +58,19 @@ export const CommandLine = forwardRef<HTMLInputElement, CommandLineProps>(functi
       <label className="flex items-center gap-2 px-3 py-1.5">
         {/* A long prompt truncates (whole in its tooltip): it must never widen the drawing above. */}
         <span className="min-w-0 truncate text-zinc-800 dark:text-zinc-200" title={promptText}>{promptText}</span>
-        <input
+        <textarea
           ref={ref}
           data-command-line=""
           aria-label={t('drafting.commandLine')}
-          className="min-w-32 flex-1 bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
+          className="min-w-32 flex-1 resize-none bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
+          rows={multiline ? Math.min(value.split('\n').length, MAX_ROWS) : 1}
           value={value}
           spellCheck={false}
           autoComplete="off"
-          onChange={(e) => onChange(e.target.value)}
+          // A typed command is one line: a pasted break is a space. A text keeps its breaks.
+          onChange={(e) => onChange(multiline ? e.target.value : e.target.value.replace(/\r?\n/g, ' '))}
           onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.shiftKey && multiline) return; // a new line in the text
             if (e.key === 'Enter') {
               e.preventDefault();
               onSubmit();

@@ -50,7 +50,7 @@ export const annotateAllRo = {
   'drafting.msg.ceilTagStacked': 'Plafoane care împart eticheta altuia, aflate exact sub el (același loc, aceeași înălțime): {stacked}. Etichete în total: {tags}.',
   'drafting.msg.ceilTagNone': 'Fiecare plafon al acestui plan are deja înălțimea ({already}) sau planul nu are plafoane.',
 
-  'drafting.msg.tagAllPlanOnly': 'TAGALL funcționează pe un plan.',
+  'drafting.msg.tagAllPlanOnly': 'TAGALL funcționează pe un plan, o secțiune sau o fațadă.',
   'drafting.msg.tagAllNeedsTypes': 'TAGALL are nevoie de tipurile de etichetă „Door and window mark” și „Room name and area”; restaurați-le în dialogul Standards.',
   'drafting.msg.tagAllDone': 'Etichetate: uși și ferestre: {marks}, încăperi: {rooms}. Deja etichetate: {already}.',
   'drafting.msg.tagAllHave': 'Fiecare ușă, fereastră și încăpere din acest plan are deja eticheta ({already}).',

@@ -33,7 +33,7 @@ export const annotateAllEn = {
   'drafting.msg.ceilTagStacked': 'Ceilings that share another one\'s tag, lying exactly under it (same spot, same height): {stacked}. Tags in all: {tags}.',
   'drafting.msg.ceilTagNone': 'Every ceiling of this plan has its height already ({already}), or the plan has none.',
   'drafting.tool.tagAll': 'Tag doors, windows and rooms',
-  'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan.',
+  'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan, a section or an elevation.',
   'drafting.msg.tagAllNeedsTypes': 'TAGALL needs the label types "Door and window mark" and "Room name and area"; restore them in the Standards dialog.',
   'drafting.msg.tagAllDone': 'Tagged {marks} doors and windows and {rooms} rooms. Already tagged: {already}.',
   'drafting.msg.tagAllHave': 'Every door, window and room of this plan has its label already ({already}).',
