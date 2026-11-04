@@ -1,0 +1,75 @@
+ALL_TAG_PARTS: value
+ANNOTATION_TOOLS: value
+AREA_FIELDS: value
+AnnotationTool: type (type-only)
+AnnotationType: type (type-only)
+COMPUTED_AREA: value
+COMPUTED_SET: value
+DEFAULT_LABEL: value
+DEFAULT_LEADER: value
+DISPLACED_MM: value
+ElementReader: type (type-only)
+FieldValue: type (type-only)
+LEADER_MODES: value
+LEGACY_ROOM_TEMPLATE: value
+LabelElement: type (type-only)
+LabelEnv: type (type-only)
+LabelExtras: type (type-only)
+LabelPlacement: type (type-only)
+LabelSpec: type (type-only)
+LabelTarget: type (type-only)
+LeaderMode: type (type-only)
+MARK_TEMPLATE: value
+MARK_TYPE_ID: value
+MISSING_MODES: value
+MissingMode: type (type-only)
+NUMBERLESS_ROOM_TEMPLATE: value
+OutsidePlace: type (type-only)
+OutsideScene: type (type-only)
+PropertySetLike: type (type-only)
+QuantitySetLike: type (type-only)
+ROOM_TEMPLATE: value
+ROOM_TYPE_ID: value
+RoomObstacles: type (type-only)
+RoomOfPlan: type (type-only)
+RoomPoint: type (type-only)
+TAGALL_TYPES: value
+TAG_FIELDS: value
+TagAllDrafts: type (type-only)
+TagAllInputs: type (type-only)
+TagAllKey: type (type-only)
+TagAllMessage: type (type-only)
+TagAllResult: type (type-only)
+TagAllSummary: type (type-only)
+TagFieldName: type (type-only)
+TagParts: type (type-only)
+TextShape: type (type-only)
+WidthOf: type (type-only)
+asLeaderMode: value
+centredAnchor: value
+classesOf: value
+clipLoop: value
+extrasOf: value
+labelDraft: value
+labelSize: value
+leaderCrossesOutsideEntry: value
+leaderTip: value
+modelArea: value
+planTagAll: value
+readField: value
+readFieldValue: value
+readStored: value
+refToRing: value
+resolveTemplate: value
+resolveWithExtras: value
+ringToRef: value
+roomLabelOutside: value
+roomLabelPoint: value
+roomLabelPointLeast: value
+roomsOfCut: value
+roomsOfPlan: value
+spaceFloorArea: value
+textRectOf: value
+unlabelledTargets: value
+upgradeTagAllTypes: value
+withLeaderOf: value

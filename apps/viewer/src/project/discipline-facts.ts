@@ -12,7 +12,7 @@
 
 import { RelationshipType } from '@ifc-lite/data';
 import { labelElementOf } from '@/labels/label-element';
-import type { LabelElement } from '@/labels/label-resolve';
+import type { LabelElement } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
 import { storeyOfElement } from './effective-storey';

@@ -14,12 +14,12 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject } from '@/project/project-store';
 import { wall } from '@/labels/label-fixture.js';
-import type { LabelElement } from '@/labels/label-resolve.js';
-import type { LabelTarget } from '@/labels/label-place.js';
+import type { LabelElement } from '@bimvoice/ifcsheet';
+import type { LabelTarget } from '@bimvoice/ifcsheet';
 import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types';
-import { planTagAll } from './plan.js';
-import { TAGALL_TYPES } from './types.js';
+import { planTagAllInApp } from './plan.js';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 
 const SCALE = Number(process.env.TAGALL_PERF_SCALE ?? 1);
 const box = (x0: number, y0: number, x1: number, y1: number): Pt[] => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
@@ -62,7 +62,7 @@ describe('TAGALL at a large size', () => {
       elements.push({ renderId: id++, anchor: { x, y }, ring: box(x, y, x + 0.2 + rnd() * 0.4, y + 0.2 + rnd() * 0.4) });
     }
     const started = performance.now();
-    const { drafts, summary } = planTagAll({
+    const { add: drafts, summary } = planTagAllInApp({
       elements, targets, rooms, existing: [],
       placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1, locale: 'en' },
       types: { mark, room }, read: (g) => model.get(g) ?? null,

@@ -13,7 +13,7 @@ import type { GeometryResult } from '@ifc-lite/geometry';
 import { addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { currentDrawingRuntime, publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { useViewerStore } from '@/store';
 import { currentFindings } from './collect.js';

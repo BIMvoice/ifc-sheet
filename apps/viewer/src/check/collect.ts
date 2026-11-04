@@ -13,7 +13,7 @@ import { effectiveTitleBlock } from '@/project/title-block-model';
 import { useViewerStore } from '@/store';
 import { scheduleData } from '@/joinery/schedule-data';
 import { useViewDrawings } from '@/project/view-drawings';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { checkSet } from './findings';

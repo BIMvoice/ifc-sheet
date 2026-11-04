@@ -12,10 +12,10 @@
  */
 
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { readStored } from '@/labels/label-resolve';
+import { readStored } from '@bimvoice/ifcsheet';
 import { TAG_FIELDS as TAG_FIELD_NAMES, type TagFieldName } from '@/catalogue/types';
 import { elementClassLabel } from '@/project/element-label';
-import { firstValue, tagKindOf, tagToolSourcesOf, type TagFieldId } from './tag-fields';
+import { firstValue, tagKindOf, tagToolSourcesOf, type TagFieldId } from '@bimvoice/ifcsheet/tag-fields';
 
 /** The fields the TAG tool can show: the one list (`catalogue/types.ts`), so an annotation type and the tool offer the same. */
 export type TagField = TagFieldName;

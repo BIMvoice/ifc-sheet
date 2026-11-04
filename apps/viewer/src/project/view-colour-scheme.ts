@@ -15,7 +15,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { activeColourScheme, resolveScheme, planHeights, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import type { ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { labelElementOf } from '@/labels/label-element';
-import { readStored } from '@/labels/label-resolve';
+import { readStored } from '@bimvoice/ifcsheet';
 import { parseFieldRef } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import { partHostRef } from './part-host';

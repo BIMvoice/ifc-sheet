@@ -14,9 +14,9 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import type { LabelSpec } from '@/catalogue/types';
 import { TEXT_FRAMES } from '@/drafting/text-block';
 import { listFields } from '@/labels/label-fields';
-import { DEFAULT_LEADER, LEADER_MODES, type LeaderMode } from '@/labels/label-leader';
+import { DEFAULT_LEADER, LEADER_MODES, type LeaderMode } from '@bimvoice/ifcsheet';
 import { labelElementOf } from '@/labels/label-element';
-import { MISSING_MODES, resolveTemplate } from '@/labels/label-resolve';
+import { MISSING_MODES, resolveTemplate } from '@bimvoice/ifcsheet';
 import { parseTemplate } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 

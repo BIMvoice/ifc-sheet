@@ -6,7 +6,7 @@
 
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
-import type { TagKind } from './tag-fields';
+import type { TagKind } from '@bimvoice/ifcsheet/tag-fields';
 
 const CLASSES: Record<TagKind, readonly string[]> = {
   door: ['IFCDOOR', 'IFCDOORSTANDARDCASE'],

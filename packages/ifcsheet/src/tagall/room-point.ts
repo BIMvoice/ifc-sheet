@@ -10,9 +10,9 @@
  * room; this point is always inside. Pure and deterministic.
  */
 
-import type { Pt } from '@/drafting/types';
-import type { RectIndex } from '@bimvoice/ifcsheet';
-import { pointInRing, rectAround, rectHitsRing, rectInsideRing, rectsOverlap, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
+import type { Pt } from '../draft-types.js';
+import type { RectIndex } from '../labels/rect-index.js';
+import { pointInRing, rectAround, rectHitsRing, rectInsideRing, rectsOverlap, ringBounds, type Rect } from '../labels/label-geometry.js';
 
 export interface RoomObstacles {
   /** Boxes of annotations already placed (and of labels placed before this one). */

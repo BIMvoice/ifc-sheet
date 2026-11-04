@@ -120,6 +120,11 @@
       "import": "./dist/materials.js",
       "default": "./dist/materials.js"
     },
+    "./tag-fields": {
+      "types": "./dist/labels/tag-fields.d.ts",
+      "import": "./dist/labels/tag-fields.js",
+      "default": "./dist/labels/tag-fields.js"
+    },
     "./footprint": {
       "types": "./dist/footprint.d.ts",
       "import": "./dist/footprint.js",

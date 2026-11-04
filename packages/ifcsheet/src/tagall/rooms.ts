@@ -11,9 +11,9 @@
  */
 
 import type { GeometryResult } from '@ifc-lite/geometry';
-import type { ProjectLevel, ProjectView } from '@/project/types';
-import { levelFloorY, resolvePlanLevel } from '@/project/view-defaults';
-import { roomFootprints, type RoomOfPlan } from './footprint';
+import type { ProjectLevel, ProjectView } from '../document.js';
+import { levelFloorY, resolvePlanLevel } from '../view-defaults.js';
+import { roomFootprints, type RoomOfPlan } from './footprint.js';
 
 export function roomsOfPlan(view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined, guidOf: (renderId: number) => string | null): RoomOfPlan[] {
   if (view.kind !== 'plan') return [];

@@ -21,11 +21,11 @@ import type { DraftEntity, DraftShape, Pt } from '@/drafting/types';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { viewElements } from '@bimvoice/ifcsheet';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { registerLocale, setLocale } from '@/i18n';
-import { TAGALL_TYPES } from '@/tagall/types';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 
 /**

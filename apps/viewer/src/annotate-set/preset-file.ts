@@ -8,7 +8,7 @@
  * one runs the same commands, so what a view has already is not placed again. Kept in the project.
  */
 
-import type { TagParts } from '@/tagall/types';
+import type { TagParts } from '@bimvoice/ifcsheet';
 import { COMMAND_ORDER, type AnnotateCommand } from './choices';
 
 export interface AnnotationPreset {

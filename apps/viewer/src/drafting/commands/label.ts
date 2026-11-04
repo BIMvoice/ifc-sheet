@@ -15,7 +15,7 @@
 
 import type { AnnotationType } from '@/catalogue/types';
 import { getLocale } from '@/i18n';
-import { classesOf, planTagAll, type LabelTarget } from '@/labels/label-place';
+import { classesOf, unlabelledTargets, type LabelTarget } from '@bimvoice/ifcsheet';
 import { defaultCentres, labelDraft, labelTargets, type LabelPlacement } from '@/labels/label-all';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
@@ -109,7 +109,7 @@ export const labelAllCommand: DraftCommandDef = {
         ctx.say('drafting.msg.labelNeedsType');
         return 'done';
       }
-      const plan = planTagAll(targets, className, type.id, ctx.entities());
+      const plan = unlabelledTargets(targets, className, type.id, ctx.entities());
       const at = placement(ctx);
       const centres = defaultCentres(type, plan, elements, ctx.entities(), at);
       const drafts = plan.flatMap((t) => labelDraft(type, t.guid, centres.get(t.guid) ?? t.anchor, at, t.ring) ?? []);

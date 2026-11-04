@@ -31,7 +31,7 @@ import { resolve } from '@/i18n/registry';
 import { readIssues } from '@bimvoice/ifcsheet';
 import { readJoineryList } from '@/joinery/spec-file';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-mapping';
-import { upgradeTagAllTypes } from '@/tagall/types';
+import { upgradeTagAllTypes } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSchedule } from '@bimvoice/ifcsheet';

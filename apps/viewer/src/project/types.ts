@@ -12,7 +12,7 @@ import type { JoinerySpec, StructureProfile } from '@ifc-lite/create';
 import type { ElementTypeKind, ElementTypeSpec } from '@/element-types/spec';
 import type { DimStyle, LayerGroup, TextStyle } from '@/drafting/styles';
 import type { AnnotationType, DraftSymbol, LibraryDetail, ProjectLegend } from '@/catalogue/types';
-import type { TagFieldConfig } from '@/tagfields/tag-fields';
+import type { TagFieldConfig } from '@bimvoice/ifcsheet/tag-fields';
 import type { CadLayerRule } from './cad-layers';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectIssue } from '@/issue/types';

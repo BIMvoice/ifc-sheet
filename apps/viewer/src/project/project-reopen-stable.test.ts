@@ -21,7 +21,7 @@ import { clearDraftHistory, newDraft } from '@/drafting/draft-store';
 import { attachDraftingView, cancelCommand, clickDrawing, setWorkPlaneProvider, startDraftCommand } from '@/drafting/session';
 import { installSectionLink } from '@/drafting/section-link';
 import type { AnnotationType } from '@/catalogue/types';
-import { ringToRef } from '@/labels/label-leader';
+import { ringToRef } from '@bimvoice/ifcsheet';
 import { refreshParametricLabels } from '@/labels/label-sync';
 import { loadProjectDocument, projectDocument, resetProject, useProjectStore } from './project-store.js';
 import { parseProjectFile, serializeProject } from './project-file.js';

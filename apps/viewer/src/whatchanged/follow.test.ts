@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { newDraft } from '@/drafting/draft-store';
-import { refToRing, ringToRef } from '@/labels/label-leader';
+import { refToRing, ringToRef } from '@bimvoice/ifcsheet';
 import { compareStates, type ModelChange } from './compare.js';
 import { followMovedElements } from './follow.js';
 import { snapshotFromElements, type SnapElement } from './snapshot.js';

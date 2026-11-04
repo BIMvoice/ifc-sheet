@@ -14,7 +14,7 @@
  */
 
 import type { DraftEntity, Pt } from '@/drafting/types';
-import { refToRing, ringToRef } from '@/labels/label-leader';
+import { refToRing, ringToRef } from '@bimvoice/ifcsheet';
 import type { ModelChange } from './compare';
 import { drawingRect, type ViewBand } from './visibility';
 

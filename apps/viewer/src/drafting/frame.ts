@@ -21,25 +21,10 @@
  * (`axisFlipForSection`), plus the pan offset.
  */
 
-import { AXIS_NAME, drawingToWorld, screenSigns, worldToDrawing, type SectionAxisName, type Vec3 } from '@bimvoice/ifcsheet';
-import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 } from '@bimvoice/ifcsheet';
 import type { Pt } from './types';
 
-/**
- * The world direction a view looks FROM, out of the drawing toward the
- * viewer: the custom plane's normal when the view has one (the frame
- * `drawingToWorld` uses), else the cardinal axis; reversed for a flipped view.
- */
-export function viewNormal(plane: SectionPlaneConfig): Vec3 {
-  const sign = plane.flipped ? -1 : 1;
-  const custom = plane.customPlane;
-  if (custom) return { x: custom.normal.x * sign, y: custom.normal.y * sign, z: custom.normal.z * sign };
-  const n: Vec3 = { x: 0, y: 0, z: 0 };
-  n[plane.axis] = sign;
-  return n;
-}
-
-export { AXIS_NAME, drawingToWorld, screenSigns, worldToDrawing, type SectionAxisName, type Vec3 };
+export { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 };
 
 export interface ViewTransform {
   x: number;

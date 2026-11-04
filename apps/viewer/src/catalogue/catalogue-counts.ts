@@ -7,7 +7,7 @@
  * classic Library tab and the Wall's library panel, so both count the same.
  */
 
-import { configuredFields } from '@/tagfields/tag-fields';
+import { configuredFields } from '@bimvoice/ifcsheet/tag-fields';
 import { selectKinds, CATALOGUE_KINDS, type Catalogue, type CatalogueKind } from './catalogue-file';
 
 /** The number of definitions of `kind` in `catalogue` (hatch patterns are counted by their `*NAME` headers). */
