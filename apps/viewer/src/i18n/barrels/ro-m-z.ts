@@ -21,6 +21,7 @@ import { reviewRo } from '../catalogues/review.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { roofRo } from '../catalogues/roof.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
+import { regionSelectRo } from '../catalogues/region-select.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
@@ -84,6 +85,7 @@ export const roMZ = {
   ...revisionsRo,
   ...roofRo,
   ...roomScheduleRo,
+  ...regionSelectRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
   ...selectionBarRo,
