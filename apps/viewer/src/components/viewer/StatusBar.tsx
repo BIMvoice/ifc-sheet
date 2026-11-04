@@ -4,6 +4,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { IFCLITE_URL } from '@/lib/credits';
+import { STAR_URL } from '@/lib/star';
 import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
 import { sameModelsExceptGeometry } from '@/lib/streaming-refresh';
 import { Boxes, CheckCircle2, AlertCircle, Layers } from 'lucide-react';
@@ -354,6 +355,15 @@ export function StatusBar() {
           aria-label={t('shellChrome.statusBar.ifcliteAriaLabel')}
         >
           {t('shellChrome.statusBar.ifcliteLinkLabel')}
+        </a>
+        <a
+          href={STAR_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="opacity-60 hover:opacity-100 hover:text-primary transition-opacity"
+          aria-label={t('star.linkAria')}
+        >
+          {t('star.link')}
         </a>
       </div>
 

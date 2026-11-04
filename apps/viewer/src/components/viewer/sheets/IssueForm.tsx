@@ -15,6 +15,7 @@ import { setHandoverPattern, useProjectStore } from '@/project/project-store';
 import { AnnotatedIfcButton } from './AnnotatedIfcButton';
 import type { SetSkin } from './set-skin';
 import { IssueChanges } from './IssueChanges';
+import { StarReminder } from './StarReminder';
 import { useIssue } from './useIssue';
 import { todayText, validDate } from '@/issue/plan';
 
@@ -45,7 +46,7 @@ export function IssueForm({ skin }: { skin: SetSkin }) {
   const [date, setDate] = useState(todayText);
   const [listFirst, setListFirst] = useState(true);
   const [archival, setArchival] = useState(false);
-  const { busy, lines, issue } = useIssue();
+  const { busy, lines, issue, star, closeStar } = useIssue();
   const [currentOnly, setCurrentOnly] = useState(false);
   // An empty or half-typed date is today, as the issue itself reads it.
   const issueDate = validDate(date, todayText());
@@ -72,6 +73,7 @@ export function IssueForm({ skin }: { skin: SetSkin }) {
       <HandoverPattern skin={skin} date={issueDate} />
       <AnnotatedIfcButton skin={skin} />
       {lines.map((l, i) => <p key={i} className={skin.note}>{l}</p>)}
+      {star ? <StarReminder skin={skin} onClose={closeStar} /> : null}
     </div>
   );
 }
