@@ -10,7 +10,7 @@
  */
 
 import { rectsOf } from '@/labels/label-annotations';
-import { ringBounds } from '@/labels/label-geometry';
+import { ringBounds } from '@bimvoice/ifcsheet';
 import { planLevels } from '@/levelall/plan';
 import { paperUnitOf, styledParams } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';

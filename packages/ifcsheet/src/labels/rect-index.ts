@@ -11,7 +11,7 @@
  * short list every query also reads. Pure.
  */
 
-import { rectsOverlap, type Rect } from './label-geometry';
+import { rectsOverlap, type Rect } from './label-geometry.js';
 
 /** A box spanning more cells than this (per side) is read from the short list instead of every cell it covers. */
 const SPAN_LIMIT = 8;

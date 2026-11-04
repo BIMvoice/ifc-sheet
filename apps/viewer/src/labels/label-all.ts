@@ -17,13 +17,13 @@ import { labelElementByGlobalId } from './label-element';
 import { centredAnchor, type LabelTarget } from './label-place';
 import { withLeader } from './label-attach';
 import { ringToRef } from './label-leader';
-import { layoutLabels, type LayoutElement } from './label-layout';
+import { layoutLabels, type LayoutElement } from '@bimvoice/ifcsheet';
 import { rectsOf } from './label-annotations';
 import { textBlock } from '@/drafting/text-block';
 import { resolveWithExtras, type LabelExtras } from './label-extras';
 import type { LabelElement } from './label-resolve';
-import { parseTemplate } from './label-template';
-import type { ViewElement } from './view-elements';
+import { parseTemplate } from '@bimvoice/ifcsheet';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export interface LabelPlacement {

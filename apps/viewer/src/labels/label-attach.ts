@@ -11,7 +11,7 @@
 
 import { textBox } from '@/drafting/annotation';
 import type { AnnotationShape, DraftEntity, Pt } from '@/drafting/types';
-import type { Rect } from './label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import { DEFAULT_LEADER, DISPLACED_MM, leaderTip, refToRing, type LeaderMode } from './label-leader';
 
 type TextShape = Extract<AnnotationShape, { type: 'text' }>;

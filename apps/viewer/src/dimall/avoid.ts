@@ -13,7 +13,7 @@
 import { textBox } from '@/drafting/annotation';
 import type { FigureBox } from '@/drafting/figure-layout';
 import { sectionLink } from '@/drafting/section-symbol';
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import type { PlannedString } from './types';
 

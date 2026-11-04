@@ -10,8 +10,8 @@
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import type { Pt } from '@/drafting/types';
-import { convexHull } from './label-geometry';
+import type { Pt } from '../draft-types.js';
+import { convexHull } from './label-geometry.js';
 
 export type DrawingForLabels = Pick<Drawing2D, 'cutPolygons' | 'projectionPolygons' | 'lines'>;
 

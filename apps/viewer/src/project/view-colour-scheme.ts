@@ -16,7 +16,7 @@ import { activeColourScheme, resolveScheme, planHeights, type SchemeResult } fro
 import type { ColourScheme } from '@bimvoice/ifcsheet/colour-scheme';
 import { labelElementOf } from '@/labels/label-element';
 import { readStored } from '@/labels/label-resolve';
-import { parseFieldRef } from '@/labels/label-template';
+import { parseFieldRef } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 import { partHostRef } from './part-host';
 import { useProjectStore } from './project-store';

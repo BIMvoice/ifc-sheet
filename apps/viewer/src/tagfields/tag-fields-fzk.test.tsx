@@ -34,7 +34,7 @@ import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
 import { planTagAll } from '@/tagall/plan.js';
 import { TAGALL_TYPES } from '@/tagall/types.js';
 import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import { previewElements } from './preview-elements.js';
 import { setFieldSources } from './tag-fields-actions.js';
 import type { TagKind } from './tag-fields.js';

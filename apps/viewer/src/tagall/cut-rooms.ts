@@ -15,7 +15,7 @@
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
 import { drawingToWorld, viewNormal, worldToDrawing, type Vec3 } from '@/drafting/frame';
-import { ringBounds, unionRect, type Rect } from '@/labels/label-geometry';
+import { ringBounds, unionRect, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { footprintOf, ringArea, roomFootprints, type RoomOfPlan, type SpaceMesh } from './footprint';
 

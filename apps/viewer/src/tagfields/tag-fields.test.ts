@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { wall } from '@/labels/label-fixture.js';
 import { readFieldValue, resolveTemplate, type LabelElement } from '@/labels/label-resolve.js';
-import { parseTemplate } from '@/labels/label-template.js';
+import { parseTemplate } from '@bimvoice/ifcsheet';
 import { parseCatalogue, serializeCatalogue, emptyCatalogue } from '@/catalogue/catalogue-file.js';
 import { mergeCatalogues } from '@/catalogue/catalogue-merge.js';
 import { defaultSources, isCustom, sourcesOf, tagKindOf, withSources, type TagFieldConfig, type TagSource } from './tag-fields.js';

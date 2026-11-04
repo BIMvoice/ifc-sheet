@@ -8,9 +8,9 @@
  * Pure: the viewer's data comes in through the interface (`label-element.ts`).
  */
 
-import { formatValue } from './label-format';
+import { formatValue } from '@bimvoice/ifcsheet';
 import { resolveTagField, tagKindOf, TAG_FIELD_ATTRIBUTES, type TagFieldConfig } from '@/tagfields/tag-fields';
-import type { AttributeField, FieldRef, ParsedTemplate, TemplateField } from './label-template';
+import type { AttributeField, FieldRef, ParsedTemplate, TemplateField } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 
 export interface PropertySetLike {

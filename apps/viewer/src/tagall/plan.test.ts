@@ -7,13 +7,13 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject } from '@/project/project-store';
-import { pointInRing, rectAround, rectInsideRing } from '@/labels/label-geometry.js';
+import { pointInRing, rectAround, rectInsideRing } from '@bimvoice/ifcsheet';
 import { wall } from '@/labels/label-fixture.js';
 import { textBlock } from '@/drafting/text-block.js';
 import { settleLabels } from '@/labels/label-sync.js';
 import type { LabelElement } from '@/labels/label-resolve.js';
 import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import { markOf } from '@/labels/label-element.js';
 import { planTagAll } from './plan.js';

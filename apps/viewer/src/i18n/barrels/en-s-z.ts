@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { starEn } from '../catalogues/star.en';
 import { trackingEn } from '../catalogues/tracking.en';
 import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
@@ -134,6 +135,7 @@ export const enSZ = {
   ...wallMaterialsEn,
   ...wallReviewEn,
   ...wallPhasesEn,
+  ...starEn,
   ...trackingEn,
   ...underlayEn,
   ...sectionRoomTagsEn,

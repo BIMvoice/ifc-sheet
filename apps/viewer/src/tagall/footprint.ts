@@ -8,7 +8,7 @@
  */
 
 import type { OutsideScene } from './room-outside';
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { RoomFootprint } from '@bimvoice/ifcsheet/footprint';
 
 export { footprintOf, ringArea, roomFootprints, type Footprint, type RoomFootprint, type SpaceMesh } from '@bimvoice/ifcsheet/footprint';

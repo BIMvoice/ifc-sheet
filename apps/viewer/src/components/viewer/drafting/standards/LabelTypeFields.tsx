@@ -17,7 +17,7 @@ import { listFields } from '@/labels/label-fields';
 import { DEFAULT_LEADER, LEADER_MODES, type LeaderMode } from '@/labels/label-leader';
 import { labelElementOf } from '@/labels/label-element';
 import { MISSING_MODES, resolveTemplate } from '@/labels/label-resolve';
-import { parseTemplate } from '@/labels/label-template';
+import { parseTemplate } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 
 const INPUT = 'h-7 w-40 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';

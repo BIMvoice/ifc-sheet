@@ -16,7 +16,7 @@ import { resetProject } from '@/project/project-store';
 import { wall } from '@/labels/label-fixture.js';
 import type { LabelElement } from '@/labels/label-resolve.js';
 import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types';
 import { planTagAll } from './plan.js';
 import { TAGALL_TYPES } from './types.js';

@@ -5,7 +5,7 @@
 /** The project as the checks read it: the stores' views, sheets and drafts, and what a drawn plan shows. */
 
 import { labelTargets } from '@/labels/label-all';
-import { viewElements } from '@/labels/view-elements';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
 import { snapshotElements } from '@/whatchanged/snapshot';
