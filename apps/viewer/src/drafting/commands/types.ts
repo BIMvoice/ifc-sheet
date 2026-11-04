@@ -83,6 +83,8 @@ export interface DraftContext {
 
 export interface DraftSettings {
   filletRadius: number;
+  /** CHAMFER: how far along each line the corner is cut. */
+  chamferDistance: number;
   offsetDistance: number | null;
   /** Annotation text height, model metres. */
   textHeight: number;

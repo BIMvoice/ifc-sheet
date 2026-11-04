@@ -23,7 +23,7 @@ function setup() {
   const ctx = {
     viewId: 'v',
     layerId: 'walls',
-    settings: { filletRadius: 2, offsetDistance: 1.5 },
+    settings: { filletRadius: 2, chamferDistance: 2, offsetDistance: 1.5 },
     entities: () => useProjectStore.getState().drafts,
     referenceShapes: () => [],
     say: (key: string) => said.push(key),

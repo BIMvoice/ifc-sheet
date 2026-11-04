@@ -39,7 +39,7 @@ export function withoutJoineryDraftViews<D extends { drafts?: readonly { viewId:
  */
 export const JOINERY_VIEW_COMMANDS: ReadonlySet<string> = new Set([
   'line', 'polyline', 'rectangle', 'circle', 'arc', 'text', 'hatch',
-  'erase', 'move', 'copy', 'rotate', 'mirror', 'offset', 'trim', 'extend', 'fillet',
+  'erase', 'move', 'copy', 'rotate', 'mirror', 'offset', 'trim', 'extend', 'fillet', 'chamfer',
 ]);
 
 /** What a symbol is made of: the strokes of a block. Text and hatches have no place in one, so the symbol's view refuses them. */

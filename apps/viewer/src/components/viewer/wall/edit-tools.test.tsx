@@ -11,7 +11,7 @@ import { resolveEnglish as t } from '@/i18n/registry';
 import { steppedHandlers, type SteppedActions } from './stepped-keys.js';
 import { ToolRail } from './ToolRail.js';
 
-/** #189: TRIM, EXTEND, FILLET and OFFSET are buttons on the rail, each with its key, and start their command. */
+/** #189: TRIM, EXTEND, FILLET, OFFSET and CHAMFER are buttons on the rail, each with its key, and start their command. */
 
 beforeEach(() => resetProject());
 afterEach(() => cleanup());
@@ -21,6 +21,7 @@ const TOOLS = [
   ['extend', 'Extend', 'wall.draw.extend'],
   ['fillet', 'Fillet', 'wall.draw.fillet'],
   ['offset', 'Offset', 'wall.draw.offset'],
+  ['chamfer', 'Chamfer', 'wall.draw.chamfer'],
 ] as const;
 
 describe('the edit tools on the rail (#189)', () => {
@@ -36,6 +37,18 @@ describe('the edit tools on the rail (#189)', () => {
       click(button);
     }
     assert.deepEqual(started, TOOLS.map(([c]) => c));
+  });
+
+  it('the edit tools sit in their own labelled section, after Draw and not in it', () => {
+    const ui = render(<ToolRail active={null} onTool={() => {}} adding={false} onAdd={() => {}} viewKind="plan" onAll={() => {}} />);
+    const heading = (name: string) => [...ui.querySelectorAll('p')].find((p) => p.textContent === name);
+    const edit = heading('Edit');
+    const draw = heading('Draw');
+    assert.ok(edit && draw, 'both section labels are on the rail');
+    const grids = (h: Element) => h.nextElementSibling;
+    const names = (el: Element | null | undefined) => [...(el?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
+    assert.deepEqual(names(grids(edit)), ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer']);
+    for (const label of ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer']) assert.ok(!names(grids(draw)).includes(label), `${label} is not under Draw`);
   });
 
   it('their keys start the same commands', () => {

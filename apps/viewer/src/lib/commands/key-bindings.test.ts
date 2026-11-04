@@ -42,6 +42,7 @@ const SHIPPED: Readonly<Record<string, readonly KeyChord[]>> = {
   'wall.draw.extend': [{ key: 'code:Digit8', alt: true }],
   'wall.draw.fillet': [{ key: 'code:Digit9', alt: true }],
   'wall.draw.offset': [{ key: 'code:Digit9', alt: true, shift: true }],
+  'wall.draw.chamfer': [{ key: 'code:Digit0', alt: true, shift: true }],
   'wall.addDrawing': [{ key: 'code:KeyA', alt: true }],
   'wall.fit': [{ key: 'code:Digit0', alt: true }],
   'wall.print': [{ key: 'p', mod: true }],

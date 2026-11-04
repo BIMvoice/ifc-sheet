@@ -17,12 +17,12 @@ import { openStandards } from '@/project/standards-dialog-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { ArrowRightToLine, Braces, Circle, Cloud, CornerUpRight, PaintBucket, Scissors, Slash, Spline, Square, SquareStack, Type } from 'lucide-react';
+import { ArrowRightToLine, Braces, Circle, Cloud, CornerUpRight, PaintBucket, Scissors, Slash, Slice, Spline, Square, SquareStack, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { toolHelpKey } from './tool-help';
 import { wallToolKey } from '@/lib/commands/wall-key-commands';
-import { DRAW_TOOLS, WALL_ALL, WALL_TOOLS } from './wall-actions';
+import { EDIT_TOOLS, PLAIN_DRAW_TOOLS, WALL_ALL, WALL_TOOLS, type DrawTool } from './wall-actions';
 import { shortcutLabel } from '@/lib/commands/shortcut-label';
 import { keyProps } from './wall-key-title';
 import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
@@ -30,7 +30,7 @@ import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 const DRAW_ICONS: Record<string, ReactNode> = {
   line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, rectangle: <Square className="size-5" />, circle: <Circle className="size-5" />,
   text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, revcloud: <Cloud className="size-5" />, ptext: <Braces className="size-5" />,
-  trim: <Scissors className="size-5" />, extend: <ArrowRightToLine className="size-5" />, fillet: <CornerUpRight className="size-5" />, offset: <SquareStack className="size-5" />,
+  trim: <Scissors className="size-5" />, extend: <ArrowRightToLine className="size-5" />, fillet: <CornerUpRight className="size-5" />, offset: <SquareStack className="size-5" />, chamfer: <Slice className="size-5" />,
 };
 
 interface ToolRailProps {
@@ -56,6 +56,30 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
     const id = wallToolKey(command);
     return id ? keyProps(t, name, id) : { title: name };
   };
+  /** A small grid of tools: the plain drawing ones, or the edit ones. */
+  const toolGrid = (tools: readonly DrawTool[]) => (
+    <div className="grid grid-cols-2 gap-1.5">
+      {tools.map((tool) => {
+        const on = active === tool.command;
+        return (
+          <button
+            key={tool.command}
+            type="button"
+            aria-pressed={on}
+            {...keyed(t(toolHelpKey(tool.command)), tool.command)}
+            onClick={() => onTool(tool.command)}
+            className={cn(
+              'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1 text-xs leading-tight',
+              on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
+            )}
+          >
+            {DRAW_ICONS[tool.command]}
+            {t(tool.labelKey)}
+          </button>
+        );
+      })}
+    </div>
+  );
   return (
     <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[116px] shrink-0 flex-col gap-1.5 overflow-y-auto py-1">
       {WALL_TOOLS.map((tool) => {
@@ -98,27 +122,9 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
         {t('wall.addDrawing')}
       </button>
       <p className="m-0 mt-2 text-2xs font-medium uppercase tracking-widest text-sky-300/70">{t('wall.draw')}</p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {DRAW_TOOLS.map((tool) => {
-          const on = active === tool.command;
-          return (
-            <button
-              key={tool.command}
-              type="button"
-              aria-pressed={on}
-              {...keyed(t(toolHelpKey(tool.command)), tool.command)}
-              onClick={() => onTool(tool.command)}
-              className={cn(
-                'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1 text-xs leading-tight',
-                on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
-              )}
-            >
-              {DRAW_ICONS[tool.command]}
-              {t(tool.labelKey)}
-            </button>
-          );
-        })}
-      </div>
+      {toolGrid(PLAIN_DRAW_TOOLS)}
+      <p className="m-0 mt-2 text-2xs font-medium uppercase tracking-widest text-sky-300/70">{t('wall.edit')}</p>
+      {toolGrid(EDIT_TOOLS)}
       <button
         type="button"
         aria-pressed={ortho}
