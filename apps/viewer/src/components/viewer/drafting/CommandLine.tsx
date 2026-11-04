@@ -10,6 +10,7 @@
 
 import { forwardRef } from 'react';
 import { useTranslation } from '@/i18n';
+import { inputTypeOf, onTypedText } from '@/drafting/unit-superscript';
 import { endCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 
 interface CommandLineProps {
@@ -67,8 +68,8 @@ export const CommandLine = forwardRef<HTMLTextAreaElement, CommandLineProps>(fun
           value={value}
           spellCheck={false}
           autoComplete="off"
-          // A typed command is one line: a pasted break is a space. A text keeps its breaks.
-          onChange={(e) => onChange(multiline ? e.target.value : e.target.value.replace(/\r?\n/g, ' '))}
+          // A typed command is one line: a pasted break is a space. A text keeps its breaks, and "25 m2" in it becomes "25 m²" (#674).
+          onChange={(e) => (multiline ? onTypedText(e.target, inputTypeOf(e), value, onChange) : onChange(e.target.value.replace(/\r?\n/g, ' ')))}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && e.shiftKey && multiline) return; // a new line in the text
             if (e.key === 'Enter') {
