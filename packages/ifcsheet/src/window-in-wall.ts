@@ -9,7 +9,7 @@
  * the wall and the glazing lines with it. Drawn so, the window sticks out of the wall and its glass runs the wrong way.
  *
  * `fitWindowToHostWall` takes the wall's direction from the wall's own footprint, measures the window's extent along and across it,
- * and fits that to the wall as a door is (`fitToHostWall`): its depth the wall's thickness, its width the void's jambs. A host wall
+ * and fits that to the wall as a door is (`fitToHostWall`): its depth the wall's thickness, its width its own measured width (the wall's vertices inside a window box are not jambs). A host wall
  * that is not one thin band leaves the rectangle as it was.
  */
 
