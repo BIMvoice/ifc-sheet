@@ -8,9 +8,9 @@
  * Pure and deterministic, like `roomLabelPoint`, which is tried first.
  */
 
-import type { Pt } from '@/drafting/types';
-import { rectAround, rectInsideRing, rectsOverlap, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import type { RectIndex } from '@bimvoice/ifcsheet';
+import type { Pt } from '../draft-types.js';
+import { rectAround, rectInsideRing, rectsOverlap, ringBounds, type Rect } from '../labels/label-geometry.js';
+import type { RectIndex } from '../labels/rect-index.js';
 
 export function roomLabelPointLeast(ring: readonly Pt[], w: number, h: number, lines: readonly Rect[], annotations: RectIndex): { centre: Pt; over: number } | null {
   const box = ringBounds(ring);

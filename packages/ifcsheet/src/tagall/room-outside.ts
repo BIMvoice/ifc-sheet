@@ -9,9 +9,9 @@
  * bound the room (it has to enter it) and ends at a point inside the room's cut that no line touches. Pure and deterministic.
  */
 
-import type { Pt } from '@/drafting/types';
-import { nearestOnRing, pointInRing, rectAround, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { RectIndex } from '@bimvoice/ifcsheet';
+import type { Pt } from '../draft-types.js';
+import { nearestOnRing, pointInRing, rectAround, ringBounds, type Rect } from '../labels/label-geometry.js';
+import { RectIndex } from '../labels/rect-index.js';
 
 /** A drawing's visible lines and the box that holds the drawing. */
 export interface OutsideScene {

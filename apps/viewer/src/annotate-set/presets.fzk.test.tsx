@@ -25,7 +25,7 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { startSet } from '@/set-template/start';
 import { useViewerStore } from '@/store';
 import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
-import { ALL_TAG_PARTS, MARK_TYPE_ID, ROOM_TYPE_ID } from '@/tagall/types';
+import { ALL_TAG_PARTS, MARK_TYPE_ID, ROOM_TYPE_ID } from '@bimvoice/ifcsheet';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { ALL_CHOICES } from './choices';
 import { annotateSet, targetViews } from './annotate-set';

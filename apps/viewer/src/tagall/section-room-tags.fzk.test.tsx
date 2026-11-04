@@ -30,8 +30,8 @@ import { startSet } from '@/set-template/start';
 import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
 import { useViewerStore } from '@/store';
 import { contextForView, runCommandOnView, type AnnotatableView } from '@/annotate-set/run-view';
-import { ROOM_TYPE_ID } from './types';
-import { leaderCrossesOutsideEntry } from './room-outside';
+import { ROOM_TYPE_ID } from '@bimvoice/ifcsheet';
+import { leaderCrossesOutsideEntry } from '@bimvoice/ifcsheet';
 import { textRect } from '@/labels/label-attach';
 
 

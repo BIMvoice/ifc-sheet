@@ -13,7 +13,8 @@
 import { textBox } from '@/drafting/annotation';
 import { boxOf, overlaps, type Box } from '@/drafting/cross-ref-marks';
 import type { Pt } from '@/drafting/types';
-import { centredAnchor } from '@/labels/label-place';
+import { centredAnchor } from '@bimvoice/ifcsheet';
+import { textWidthEm } from '@/drafting/text-width';
 
 /** Clear space kept round a tag, as a share of its text height. */
 const MARGIN_SHARE = 0.3;
@@ -26,7 +27,7 @@ const STEP_SHARE = 0.5;
  * on the ceiling is clear it stays at `at`: a tag over something beats no tag.
  */
 export function clearTagSpot(at: Pt, extent: Box, text: string, height: number, up: 1 | -1, obstacles: readonly Box[]): Pt {
-  const boxAt = (c: Pt): Box => boxOf(textBox(centredAnchor(c, text, height, undefined, up), text, height, 0));
+  const boxAt = (c: Pt): Box => boxOf(textBox(centredAnchor(c, text, height, undefined, up, textWidthEm), text, height, 0));
   const margin = MARGIN_SHARE * height;
   const clear = (c: Pt): boolean => obstacles.every((o) => !overlaps(boxAt(c), o, margin));
   if (clear(at)) return at;

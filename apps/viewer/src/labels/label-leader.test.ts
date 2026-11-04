@@ -10,7 +10,7 @@ import { entitySkeleton, textLeader } from '@/drafting/annotation';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import { settleLeader, withLeader } from './label-attach.js';
 import { rectAround } from '@bimvoice/ifcsheet';
-import { leaderStart, leaderTip, refToRing, ringToRef } from './label-leader.js';
+import { leaderStart, leaderTip, refToRing, ringToRef } from '@bimvoice/ifcsheet';
 import { settleLabels } from './label-sync.js';
 import { wall } from './label-fixture.js';
 

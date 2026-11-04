@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { LabelElement, PropertySetLike } from '@/labels/label-resolve';
+import type { LabelElement, PropertySetLike } from '@bimvoice/ifcsheet';
 import { factsOf, loadBearingOf } from './discipline-facts';
 
 /** LoadBearing is read the way the labels read a property: own sets first, then the type's. */

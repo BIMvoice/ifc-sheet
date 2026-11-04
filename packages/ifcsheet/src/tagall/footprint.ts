@@ -7,11 +7,11 @@
  * room fills of a coloured plan; this module keeps the app's name for it and the room as a command reads it.
  */
 
-import type { OutsideScene } from './room-outside';
-import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import type { RoomFootprint } from '@bimvoice/ifcsheet/footprint';
+import type { OutsideScene } from './room-outside.js';
+import type { Rect } from '../labels/label-geometry.js';
+import type { RoomFootprint } from '../footprint.js';
 
-export { footprintOf, ringArea, roomFootprints, type Footprint, type RoomFootprint, type SpaceMesh } from '@bimvoice/ifcsheet/footprint';
+export { footprintOf, ringArea, roomFootprints, type Footprint, type RoomFootprint, type SpaceMesh } from '../footprint.js';
 
 /**
  * A room of the view in front, as a command reads it. On a section or an elevation (`cut-rooms.ts`) the ring is the room's

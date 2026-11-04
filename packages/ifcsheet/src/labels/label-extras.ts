@@ -11,11 +11,11 @@
  * so the label still follows the model the moment it does.
  */
 
-import type { DraftParamValue } from '@/drafting/types';
-import { resolveTemplate, type LabelElement } from './label-resolve';
-import type { ParsedTemplate } from '@bimvoice/ifcsheet';
-import type { MissingMode } from './label-resolve';
-import type { SheetLocale } from '@bimvoice/ifcsheet/names';
+import type { DraftParamValue } from '../draft-types.js';
+import { resolveTemplate, type LabelElement } from './label-resolve.js';
+import type { ParsedTemplate } from './label-template.js';
+import type { MissingMode } from './label-resolve.js';
+import type { SheetLocale } from '../names.js';
 
 export interface LabelExtras {
   numbered?: number;

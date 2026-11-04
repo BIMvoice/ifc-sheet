@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { listFields } from './label-fields.js';
-import { resolveTemplate } from './label-resolve.js';
+import { resolveTemplate } from '@bimvoice/ifcsheet';
 import { parseTemplate, labelTemplateFields } from '@bimvoice/ifcsheet';
 import { wall } from './label-fixture.js';
 

@@ -13,10 +13,10 @@
  */
 
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { Pt } from '@/drafting/types';
-import { drawingToWorld, viewNormal, worldToDrawing, type Vec3 } from '@/drafting/frame';
-import { ringBounds, unionRect, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { footprintOf, ringArea, roomFootprints, type RoomOfPlan, type SpaceMesh } from './footprint';
+import type { Pt } from '../draft-types.js';
+import { drawingToWorld, viewNormal, worldToDrawing, type Vec3 } from '../drawing-frame.js';
+import { ringBounds, unionRect, type Rect } from '../labels/label-geometry.js';
+import { footprintOf, ringArea, roomFootprints, type RoomOfPlan, type SpaceMesh } from './footprint.js';
 
 type CutDrawing = Pick<Drawing2D, 'cutPolygons' | 'lines'>;
 type Mesh = SpaceMesh & { expressId: number; ifcType?: string; origin?: readonly number[] };

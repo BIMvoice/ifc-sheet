@@ -17,7 +17,7 @@ import type { DraftContext } from '@/drafting/commands/types';
 import { withAnnotationFrame } from '@/drafting/annotation';
 import { tagAll } from '@/drafting/commands/tagall';
 import { labelElementByGlobalId } from '@/labels/label-element';
-import type { TagParts } from '@/tagall/types';
+import type { TagParts } from '@bimvoice/ifcsheet';
 import { draftCommandById } from '@/drafting/commands/registry';
 import { draftsOfView } from '@/drafting/draft-store';
 import { AXIS_NAME } from '@/drafting/frame';

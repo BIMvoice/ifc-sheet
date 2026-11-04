@@ -4,10 +4,15 @@
 
 /** A room's footprint from its mesh, and where its label goes. */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { pointInRing, rectAround, rectInsideRing } from '@bimvoice/ifcsheet';
-import type { Pt } from '@/drafting/types';
+import { describe, expect, it } from 'vitest';
+
+const assert = {
+  equal: (a: unknown, b: unknown) => expect(a).toBe(b),
+  ok: (v: unknown, message?: string) => expect(v, message).toBeTruthy(),
+  deepEqual: (a: unknown, b: unknown) => expect(a).toEqual(b),
+};
+import { pointInRing, rectAround, rectInsideRing } from '../labels/label-geometry.js';
+import type { Pt } from '../draft-types.js';
 import { footprintOf, ringArea, type SpaceMesh } from './footprint.js';
 import { roomLabelPoint } from './room-point.js';
 

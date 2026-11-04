@@ -9,7 +9,7 @@ import { useTranslation } from '@/i18n';
 import { useState } from 'react';
 import { choicesFrom, hasChoices, type AnnotateCommand } from '@/annotate-set/choices';
 import { deleteAnnotationPreset, effectiveOptions, saveAnnotationPreset } from '@/annotate-set/presets';
-import type { TagParts } from '@/tagall/types';
+import type { TagParts } from '@bimvoice/ifcsheet';
 import { targetViews } from '@/annotate-set/annotate-set';
 import { applyAnnotationPreset, runAnnotateSet, stopAnnotateSet, switchCommand, switchTagPart, useAnnotatePanel } from '@/annotate-set/store';
 import { useProjectStore } from '@/project/project-store';

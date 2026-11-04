@@ -4,7 +4,7 @@
 
 /** A small wall for the label tests: own and type data, with the type carrying what the wall lacks. */
 
-import type { LabelElement, PropertySetLike, QuantitySetLike } from './label-resolve';
+import type { LabelElement, PropertySetLike, QuantitySetLike } from '@bimvoice/ifcsheet';
 
 export function wall(over: Partial<LabelElement> = {}): LabelElement {
   const attributes: Record<string, string> = { Name: 'W-01', Tag: 'T7', ObjectType: 'Basic Wall', Description: '', PredefinedType: 'STANDARD', GlobalId: '2O2Fr$t4X7Zf8NOew3FLOH' };

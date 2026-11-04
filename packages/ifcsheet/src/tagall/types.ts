@@ -4,7 +4,7 @@
 
 /** The label types TAGALL draws with, and what a run did. */
 
-import type { AnnotationType } from '@/catalogue/types';
+import type { AnnotationType } from '../annotation-type.js';
 
 export const MARK_TYPE_ID = 'tagall-mark';
 export const ROOM_TYPE_ID = 'tagall-room';

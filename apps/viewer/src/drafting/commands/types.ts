@@ -13,7 +13,7 @@ import type { TagFieldName } from '@/catalogue/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { PlanPart } from '@bimvoice/ifcsheet';
-import type { RoomOfPlan } from '@/tagall/footprint';
+import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { ProjectView } from '@/project/types';
 import type { Box } from '../cross-ref-marks';
 import type { ElementBox } from '../dimension-anchor';

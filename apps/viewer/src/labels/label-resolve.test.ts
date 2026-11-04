@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveTemplate } from './label-resolve.js';
+import { resolveTemplate } from '@bimvoice/ifcsheet';
 import { parseTemplate } from '@bimvoice/ifcsheet';
 import { wall } from './label-fixture.js';
 

@@ -32,7 +32,7 @@ import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from
 import { typeQuantitiesOf } from '@/joinery/type-quantities-models';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { parseTemplate } from '@bimvoice/ifcsheet';
-import { resolveTemplate } from '@/labels/label-resolve';
+import { resolveTemplate } from '@bimvoice/ifcsheet';
 import { elementLabel } from '@/tagfields/element-tag';
 import { previewElements } from '@/tagfields/preview-elements';
 import { newDraft } from '@/drafting/draft-store';

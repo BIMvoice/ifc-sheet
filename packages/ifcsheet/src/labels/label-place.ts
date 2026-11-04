@@ -7,12 +7,13 @@
  * "label all" gives a label (those of the class that carry none of this type yet).
  */
 
-import { GLYPH_ASCENT, GLYPH_DESCENT, textBlock, type TextFrame } from '@/drafting/text-block';
-import type { DraftEntity, Pt } from '@/drafting/types';
+import { GLYPH_ASCENT, GLYPH_DESCENT, textBlock } from '../text-block.js';
+import type { TextFace } from '../text-advance.js';
+import type { DraftEntity, Pt, TextFrame } from '../draft-types.js';
 
-/** The anchor of a text (the baseline start of its first line) that centres the whole block on `centre`; `up` is the drawing's screen-up sign. */
-export function centredAnchor(centre: Pt, text: string, height: number, frame: TextFrame | undefined, up: 1 | -1): Pt {
-  const { box, lines } = textBlock(text, height, frame);
+/** The anchor of a text (the baseline start of its first line) that centres the whole block on `centre`; `up` is the drawing's screen-up sign; `widthOf` measures a line (the app's font measurer; the table without one). */
+export function centredAnchor(centre: Pt, text: string, height: number, frame: TextFrame | undefined, up: 1 | -1, widthOf?: (line: string, face?: TextFace) => number): Pt {
+  const { box, lines } = textBlock(text, height, frame, undefined, widthOf);
   const glyphTop = -GLYPH_ASCENT * height, glyphBottom = lines.at(-1)!.y + GLYPH_DESCENT * height;
   return { x: centre.x - (box.x1 - box.x0) / 2, y: centre.y + ((glyphTop + glyphBottom) / 2) * up };
 }
@@ -29,7 +30,7 @@ export interface LabelTarget {
 }
 
 /** The targets of a label type that have none of it yet, in the order given; `className` is compared as the same class whatever its case. */
-export function planTagAll(targets: readonly LabelTarget[], className: string, typeId: string, drafts: readonly DraftEntity[]): LabelTarget[] {
+export function unlabelledTargets(targets: readonly LabelTarget[], className: string, typeId: string, drafts: readonly DraftEntity[]): LabelTarget[] {
   const done = new Set(drafts.filter((d) => d.params.atype === typeId && typeof d.params.labelOf === 'string').map((d) => String(d.params.labelOf)));
   const wanted = className.toLowerCase();
   const seen = new Set<string>();

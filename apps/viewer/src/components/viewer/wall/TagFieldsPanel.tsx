@@ -18,7 +18,7 @@ import { labelElementByGlobalId } from '@/labels/label-element';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { previewElements } from '@/tagfields/preview-elements';
-import { isCustom, SOURCE_ATTRIBUTES, sourceText, TAG_FIELD_IDS, TAG_KINDS, sourcesOf, type TagFieldId, type TagKind, type TagSource } from '@/tagfields/tag-fields';
+import { isCustom, SOURCE_ATTRIBUTES, sourceText, TAG_FIELD_IDS, TAG_KINDS, sourcesOf, type TagFieldId, type TagKind, type TagSource } from '@bimvoice/ifcsheet/tag-fields';
 import { moved, setFieldSources } from '@/tagfields/tag-fields-actions';
 import { parseSourcePath, previewSources, sourceCandidates, sourcePath } from '@/tagfields/tag-preview';
 import { libraryAction } from './library-style';

@@ -20,7 +20,7 @@ import { FZK_HAUS, OPEN_HOUSE, loadPlanModel, planModelMissing, type LoadedPlanM
 import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { defaultPlanCutHeight } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { planParts } from '@bimvoice/ifcsheet';
 import { draftReader } from './reader';
