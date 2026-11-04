@@ -2,7 +2,7 @@ Options:
   --out <file>     The PDF to write (required for build unless --handover is given).
   --dxf <dir>      Also write a DXF per sheet into this directory (created if absent).
   --handover <zip> Also write the handover package: the PDF, a DXF per sheet and the IFC as given, in one ZIP. The app's
-                   package adds the schedules and the drawing list as XLSX; DWG follows with #52.
+                   package adds the schedules and the drawing list as XLSX; DWG export is not available yet.
   --pattern <p>    How --handover names its files, with {project} {number} {sheet} {revision} {date} {issue}
                    (default "{number} {sheet}": A-101 Ground floor.dxf). Plain ASCII, no path separators.
   --template <file> A set template (.bvset) for build: which sheets, which views on them, at which scale.

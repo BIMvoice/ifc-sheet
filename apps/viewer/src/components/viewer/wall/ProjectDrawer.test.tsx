@@ -13,6 +13,10 @@ import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectLevel } from '@/project/types';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
+import { useViewerStore } from '@/store';
 import { ProjectDrawer } from './ProjectDrawer.js';
 import { useWallNav } from './wall-nav.js';
 import { forgetRecoveryOffer, offerRecovery } from '@/project/recovery-store';
@@ -126,5 +130,27 @@ describe('ProjectDrawer', () => {
     assert.equal(state?.getAttribute('data-viewport-state'), 'failed');
     assert.match(state?.textContent ?? '', /Its level is not in the loaded models/);
     assert.equal(ui.querySelectorAll('[data-viewport-state]').length, 1, 'on that drawing only');
+  });
+});
+
+describe('the drawer title (#653)', () => {
+  const title = (ui: HTMLElement) => ui.querySelector('header p:nth-of-type(2)')?.textContent;
+
+  it('names the project the way the title block does while the file gives it no name, and keeps a name it was given', async () => {
+    const store = await parseStep(readFileSync(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc')));
+    seedModel('fzk', 0, store, 1);
+    try {
+      const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+      assert.equal(title(ui), 'Projekt-FZK-Haus', 'the IfcProject name, not "Untitled project"');
+      act(() => { useProjectStore.setState({ name: 'Casa Mare' }); });
+      assert.equal(title(ui), 'Casa Mare', 'a name the person gave comes first');
+    } finally {
+      useViewerStore.setState({ models: new Map() });
+    }
+  });
+
+  it('still reads "Untitled project" with no model to name it', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    assert.equal(title(ui), 'Untitled project');
   });
 });

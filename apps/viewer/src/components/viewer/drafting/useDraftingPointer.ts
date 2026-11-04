@@ -93,6 +93,16 @@ function alignedDragPoint(grip: Grip, p: Pt): Pt {
   return baseDraftSettings().dimAlign ? alignDraggedGrip(useProjectStore.getState().drafts, grip.id, grip.key, p).at : p;
 }
 
+/** Where the ortho lock measures a dragged grip from: the fixed end of a line (a section mark's end must stay straight, #650), else the grip's own start. */
+function orthoPivot(grip: Grip): Pt {
+  const shape = useProjectStore.getState().drafts.find((d) => d.id === grip.id)?.shape;
+  if (shape?.type === 'line' || shape?.type === 'axis') {
+    if (grip.key === 'a') return shape.b;
+    if (grip.key === 'b') return shape.a;
+  }
+  return grip.at;
+}
+
 export function useDraftingPointer({ containerRef, transform, setTransform, axis, entityShapes, references, grips = [] }: Params) {
   const snapOn = useDraftingSession((s) => s.snap);
   const trackOn = useTrackingPref((s) => s.on);
@@ -181,12 +191,12 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     const raw = screenToDrawing(s, transform, axis);
     const held = d?.kind === 'grip' ? d.grip : carry.current;
     if (held) {
-      // A dragged grip snaps like a point does, and keeps to horizontal / vertical from where it started under the ortho lock
+      // A dragged grip snaps like a point does, and keeps to horizontal / vertical under the ortho lock (from the opposite end of a line, else from where it started)
       // (a detail's crop corner moves freely on both axes, and a section's depth is measured along the section's normal,
       // which a horizontal / vertical hold would only project onto, so neither is held).
       const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
       const free = hit?.point ?? raw;
-      const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(held.at, free));
+      const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(orthoPivot(held), free));
       setState({ tracking: NO_TRACKING, cursor: at, snap: hit, hoverId: null, window: null, lasso: null, gripDrag: { grip: held, at }, gripHover: null });
       return;
     }

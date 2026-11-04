@@ -14,6 +14,7 @@
  * unflipped cut keeps `dot(p, n) − d < 0`, so `n` points away from it.
  */
 
+import { isDocsEdition } from '@/edition';
 import { createSectionOnPlan } from '../section-create';
 import type { Pt } from '../types';
 import type { DraftCommandDef } from './types';
@@ -48,7 +49,8 @@ export const sectionLineCommand: DraftCommandDef = {
           ctx.say('drafting.msg.sectionFailed');
           return 'done';
         }
-        ctx.say('drafting.msg.sectionCreated');
+        // IfcSheet has no Project Navigator: say where the section really is (#653).
+        ctx.say(isDocsEdition() ? 'drafting.msg.sectionCreatedSheet' : 'drafting.msg.sectionCreated');
         return 'done';
       },
       preview(cursor) {
