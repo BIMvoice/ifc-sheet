@@ -21,6 +21,7 @@ import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { defaultPlanCutHeight } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
 import { roomsOfPlan } from '@/tagall/rooms';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { planParts } from './parts';
 import { planRoomChains, type RoomPlan } from './rooms';
 
@@ -35,7 +36,7 @@ async function roomsOn(path: string, name: string): Promise<{ plan: RoomPlan; mo
   const view = { id: 'v', name, kind: 'plan', createdAt: 0, level, cutHeight: defaultPlanCutHeight(level, model.levels), scale: 100 } as unknown as Exclude<ProjectView, { kind: '3d' }>;
   const drawing = await viewDrawing(view, geometry);
   assert.ok(drawing);
-  const rooms = roomsOfPlan(view, model.levels, geometry).map((r) => ({ id: r.guid, ring: r.ring }));
+  const rooms = roomsOfPlan(view, model.levels, geometry, renderIdGlobalId).map((r) => ({ id: r.guid, ring: r.ring }));
   return { plan: planRoomChains(planParts(drawing, geometry.meshes), rooms, { textHeight: 0.25, obstacles: [] }), model };
 }
 

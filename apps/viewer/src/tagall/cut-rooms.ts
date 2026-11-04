@@ -16,7 +16,6 @@ import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { Pt } from '@/drafting/types';
 import { drawingToWorld, viewNormal, worldToDrawing, type Vec3 } from '@/drafting/frame';
 import { ringBounds, unionRect, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { renderIdGlobalId } from '@/project/element-guid';
 import { footprintOf, ringArea, roomFootprints, type RoomOfPlan, type SpaceMesh } from './footprint';
 
 type CutDrawing = Pick<Drawing2D, 'cutPolygons' | 'lines'>;
@@ -75,7 +74,7 @@ function lineBoxes(a: Pt, b: Pt): Rect[] {
 const near = (a: Box, b: Box): boolean => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
 
 /** Each space the plane cuts, one per space, ordered by id, with the lines the drawing shows near it (a space the drawing happens to show is not one). */
-export function roomsOfCut(plane: SectionPlaneConfig | undefined, drawing: CutDrawing | null | undefined, meshes: readonly Mesh[]): RoomOfPlan[] {
+export function roomsOfCut(plane: SectionPlaneConfig | undefined, drawing: CutDrawing | null | undefined, meshes: readonly Mesh[], guidOf: (renderId: number) => string | null): RoomOfPlan[] {
   if (!plane) return [];
   const spaces = spaceMeshes(meshes);
   const seen = (drawing?.lines ?? []).filter((l) => !spaces.has(l.entityId)).map((l) => ({ a: l.line.start, b: l.line.end, box: { x0: Math.min(l.line.start.x, l.line.end.x), y0: Math.min(l.line.start.y, l.line.end.y), x1: Math.max(l.line.start.x, l.line.end.x), y1: Math.max(l.line.start.y, l.line.end.y) } }));
@@ -83,7 +82,7 @@ export function roomsOfCut(plane: SectionPlaneConfig | undefined, drawing: CutDr
   const extent = unionRect([...seen.map((l) => l.box), ...(drawing?.cutPolygons ?? []).filter((p) => p.ifcType !== 'IfcSpace' && p.polygon.outer.length >= 3).map((p) => ringBounds(p.polygon.outer))]);
   const outside = extent ? { bounds: extent, lines: all } : undefined;
   return [...spaces].sort((a, b) => a[0] - b[0]).flatMap(([renderId, parts]) => {
-    const guid = renderIdGlobalId(renderId);
+    const guid = guidOf(renderId);
     const ring = guid ? cutOutline(plane, parts) : null;
     if (!guid || !ring) return [];
     const box = ringBounds(ring);
