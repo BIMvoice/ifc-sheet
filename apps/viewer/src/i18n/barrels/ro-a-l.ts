@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { addDrawingKindsRo } from '../catalogues/add-drawing-kinds.ro';
+import { lengthUnitsFootRo } from '../catalogues/length-units-foot.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
@@ -54,6 +55,7 @@ import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roAL = {
+  ...lengthUnitsFootRo,
   ...addDrawingKindsRo,
   ...annotateAllRo,
   ...annotateSetRo,

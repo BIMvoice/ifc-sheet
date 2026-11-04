@@ -12,7 +12,7 @@
  */
 
 import type { DraftLayer, DraftParamValue } from './draft-types.js';
-import { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID as STANDARD, type DimStyle, type FontKind, type TextStyle } from './draft-styles.js';
+import { DEFAULT_DIM_STYLE, STANDARD_STYLE_ID as STANDARD, type DimStyle, type DraftLengthUnit, type FontKind, type TextStyle } from './draft-styles.js';
 import { decimalsOf, lengthUnitOf, type SheetLocale } from './units-and-numbers.js';
 import { sheetNumber } from './sheet-number.js';
 
@@ -81,11 +81,14 @@ export function resolveDim(book: StyleBook, params: Params): DimStyle {
   return overridden(dimStyleOf(book, params.dimStyle), params, DIM_OVERRIDES);
 }
 
+/** How many of each unit make a metre (the international foot is 0.3048 m, the US survey foot 1200/3937 m). */
+const UNIT_PER_METRE: Record<DraftLengthUnit, number> = { mm: 1000, cm: 100, m: 1, ft: 1 / 0.3048, ftUS: 3937 / 1200 };
+
 /** Metres to `unit`. */
-export const unitFactor = (unit: 'mm' | 'cm' | 'm'): number => (unit === 'mm' ? 1000 : unit === 'cm' ? 100 : 1);
+export const unitFactor = (unit: DraftLengthUnit): number => UNIT_PER_METRE[unit];
 
 /** The decimals a length is drawn to in `unit` when nothing says otherwise: metres to the centimetre, centimetres and millimetres whole. */
-export const naturalDecimals = (unit: 'mm' | 'cm' | 'm'): number => (unit === 'm' ? 2 : 0);
+export const naturalDecimals = (unit: DraftLengthUnit): number => (unit === 'm' || unit === 'ft' || unit === 'ftUS' ? 2 : 0);
 
 /**
  * A length in a dimension style's unit and precision (the value is metres). The project's "Units and numbers" (#88) overrides
