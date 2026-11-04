@@ -15,7 +15,7 @@ import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from
 import { DOCUMENT_FIELDS } from '@/project/fields';
 import type { FieldKey } from '@/project/fields/define';
 import { diffById, isEmptyDelta, redoDelta, undoDelta, type Delta } from './step-delta';
-import { inDrawOrder } from '@bimvoice/ifcsheet';
+import { inDrawOrder, makeDraft } from '@bimvoice/ifcsheet';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from './types';
 
 const HISTORY_LIMIT = 200;
@@ -294,7 +294,7 @@ export function draftsOfView(viewId: string, drafts: readonly DraftEntity[] = us
 }
 
 export function newDraft(viewId: string, layerId: string, shape: EntityShape, params: Record<string, DraftParamValue> = {}): DraftEntity {
-  return { id: freshProjectId('draft'), viewId, layerId, shape, params };
+  return makeDraft(shape, { id: freshProjectId('draft'), viewId, layerId, params });
 }
 
 /**
