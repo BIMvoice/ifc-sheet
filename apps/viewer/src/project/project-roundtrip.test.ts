@@ -133,7 +133,7 @@ const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationS
   level: { type: 'level', p: pt(1, 1), value: 3.2, height: 0.25, ref: { at: pt(1, 1), storey: 'Level 1' } },
   axis: { type: 'axis', a: pt(0, 0), b: pt(0, 9), label: 'B', bubble: 'square', ends: 'start', size: 0.8, height: 0.25, lineType: 'dotted' },
   symbol: { type: 'symbol', symbolId: 'sym-model', p: pt(2, 3), scale: 1.5, rotation: 0.7, followsNorth: true },
-  hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500' },
+  hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500', opaque: true, fill: '#ff00aa' },
 };
 const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNOTATION)];
 

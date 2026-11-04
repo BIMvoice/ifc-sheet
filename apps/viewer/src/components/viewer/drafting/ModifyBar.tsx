@@ -3,16 +3,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Copy, Move, Rotate, Mirror, Bring to front and Send to back for the selected drafted elements, on a bar
+ * Copy, Move, Rotate, Mirror, Bring to front, Send to back and Fill (#681) for the selected drafted elements, on a bar
  * under them, for a person who does not know the command line. Each button
  * starts the typed command of the same name (`drafting/commands/modify.ts`) on
  * the selection, so a button and the typed command cannot differ; the bar
  * steps aside while a command runs.
  */
 
-import { BringToFront, Copy, FlipHorizontal2, Merge, Move, RotateCw, SendToBack } from 'lucide-react';
+import { BringToFront, Copy, FlipHorizontal2, Merge, PaintBucket, Move, RotateCw, SendToBack } from 'lucide-react';
+import { fillLoopsOf } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
+import { isGeometry } from '@/drafting/types';
 import { entityBounds } from '@/drafting/annotation';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { startDraftCommand, useDraftingSession } from '@/drafting/session';
@@ -61,6 +63,13 @@ export function ModifyBar({ entities, transform, axis, areaWidth }: Props) {
       {COMMANDS.map(({ id, labelKey, icon: Icon }) => (
         <IconButton key={id} label={t(labelKey)} className="size-7" onClick={() => startDraftCommand(id)}><Icon className="size-3.5" /></IconButton>
       ))}
+      {/* A closed shape made an opaque fill that hides what is behind it (#681): white, or the colour picked. */}
+      {entities.some((e) => isGeometry(e.shape) && fillLoopsOf(e.shape)) ? (
+        <>
+          <IconButton label={t('drafting.sel.fill')} className="size-7" onClick={() => startDraftCommand('fill')}><PaintBucket className="size-3.5" /></IconButton>
+          <input type="color" defaultValue="#ffffff" aria-label={t('drafting.sel.fillColour')} title={t('drafting.sel.fillColour')} className="size-6 cursor-pointer rounded-sm border border-zinc-300 bg-transparent p-0 dark:border-zinc-700" onChange={(e) => startDraftCommand('fill', e.target.value)} />
+        </>
+      ) : null}
     </div>
   );
 }
