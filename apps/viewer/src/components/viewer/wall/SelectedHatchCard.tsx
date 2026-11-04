@@ -16,7 +16,7 @@ import { HatchSettings, hatchesOf } from './HatchSettings';
 import { WALL_CARD, WALL_CARD_TITLE, WALL_EYEBROW } from './wall-type';
 
 /** The chosen hatches, or none (also a hook of its own: the caller decides which card shows). */
-export function useSelectedHatches() {
+export function useSelectedHatches(): ReturnType<typeof hatchesOf> {
   const selection = useDraftingSession((s) => s.selection);
   const drafts = useProjectStore((s) => s.drafts);
   return useMemo(() => hatchesOf(drafts.filter((d) => selection.has(d.id))), [drafts, selection]);
