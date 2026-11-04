@@ -20,7 +20,7 @@
  * Area is always m² and volume m³ for now; they are not settings.
  */
 
-export const LENGTH_UNITS = ['mm', 'cm', 'm'] as const;
+export const LENGTH_UNITS = ['mm', 'cm', 'm', 'ft', 'ftUS'] as const;
 export type LengthUnit = (typeof LENGTH_UNITS)[number];
 
 /** The kinds of figure a sheet prints with a number of decimals of their own. */

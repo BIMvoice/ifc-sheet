@@ -11,16 +11,19 @@
 import { useMemo } from 'react';
 import { sheetFormat, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
+import { useViewerStore } from '@/store';
 import { useProjectStore } from './project-store';
+import { withLandXmlUnit } from './landxml-display-unit';
 
 /** The language and the open project's setting. For a hook or a component; everything else takes the value as an argument. */
 export function useSheetLocale(): SheetLocale {
   const { locale } = useTranslation();
   const units = useProjectStore((s) => s.unitsAndNumbers);
-  return useMemo(() => sheetFormat(locale, units), [locale, units]);
+  const models = useViewerStore((s) => s.models);
+  return useMemo(() => sheetFormat(locale, withLandXmlUnit(units, models.values())), [locale, units, models]);
 }
 
 /** The same value outside React (a command, a store subscription): the open project's setting read now. */
 export function currentSheetLocale(locale: string): SheetLocale {
-  return sheetFormat(locale, useProjectStore.getState().unitsAndNumbers);
+  return sheetFormat(locale, withLandXmlUnit(useProjectStore.getState().unitsAndNumbers, useViewerStore.getState().models.values()));
 }

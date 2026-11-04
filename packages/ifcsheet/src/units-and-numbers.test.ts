@@ -51,7 +51,7 @@ describe('the project\'s units and numbers (#88)', () => {
   });
 
   it('drops what is not a setting', () => {
-    expect(readUnitsAndNumbers({ lengthUnit: 'ft', decimals: { area: 9, volume: 2.5, level: 1, nope: 1 }, separator: 'semicolon', group: true })).toEqual({ decimals: { level: 1 } });
+    expect(readUnitsAndNumbers({ lengthUnit: 'yd', decimals: { area: 9, volume: 2.5, level: 1, nope: 1 }, separator: 'semicolon', group: true })).toEqual({ decimals: { level: 1 } });
     expect(readUnitsAndNumbers('x')).toBeUndefined();
     expect(readUnitsAndNumbers({})).toBeUndefined();
   });

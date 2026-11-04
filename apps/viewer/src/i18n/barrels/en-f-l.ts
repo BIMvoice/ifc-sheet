@@ -26,6 +26,7 @@ import { issueEn } from '../catalogues/issue.en';
 import { joineryEn } from '../catalogues/joinery.en';
 import { keyboardShortcutsEn } from '../catalogues/keyboard-shortcuts.en';
 import { landXmlEn } from '../catalogues/landxml.en';
+import { lengthUnitsFootEn } from '../catalogues/length-units-foot.en';
 import { layerDuplicateEn } from '../catalogues/layer-duplicate.en';
 import { layersPanelEn } from '../catalogues/layers-panel.en';
 import { lensPanelEn } from '../catalogues/lens-panel.en';
@@ -40,6 +41,7 @@ import { listsEn } from '../catalogues/lists.en';
 /** The catalogues whose file starts with `f` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const enFL = {
   ...feedbackEn,
+  ...lengthUnitsFootEn,
   ...fillMaskEn,
   ...filterGroupsEn,
   ...filterOperatorsEn,
