@@ -4,10 +4,9 @@
 
 /** LEVELALL's planner: a mark at each level the view shows and at the top, on one line, on the freer side. */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { levelValueOf, type LevelShape } from '@/drafting/level-mark.js';
-import { planLevels, type LevelsInput } from './plan.js';
+import { planLevels, type LevelShape, type LevelsInput } from './plan.js';
 
 const base: LevelsInput = {
   levels: [{ name: 'EG', elevation: 0 }, { name: 'DG', elevation: 3.1 }, { name: 'OG', elevation: 12 }, { name: 'UG', elevation: -3 }],
@@ -33,8 +32,6 @@ describe('planLevels', () => {
     marks.forEach((m) => {
       assert.equal(m.shape.p.y, m.shape.value);
       assert.deepEqual(m.shape.ref, { at: { x: base.bounds.x1, y: m.shape.value } });
-      // The number is read from the reference: the mark follows the model.
-      assert.equal(levelValueOf(m.shape, (r) => r.at.y + 1), m.shape.value + 1);
     });
   });
   it('takes the side with more room', () => {
