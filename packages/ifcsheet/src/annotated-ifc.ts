@@ -20,6 +20,7 @@
  */
 
 import { StepExporter } from '@ifc-lite/export';
+import { BonsaiWriter } from './bonsai-drawings.js';
 import {
   MutablePropertyView,
   StoreEditor,
@@ -64,6 +65,20 @@ export interface AnnotatedView {
   storeyGlobalIds: readonly string[];
   curves: readonly DrawnCurve[];
   texts: readonly DrawnText[];
+  /** The view's rectangle in world metres (the Bonsai camera's extent); absent: the annotations' bounds and a metre around them. */
+  extent?: { min: Pt2; max: Pt2 };
+  /** The cut plane's height above the storey, metres (the Bonsai camera's height); absent 1.2. */
+  cutHeight?: number;
+  /** How far below the cut plane the view sees, metres; absent 0 (down to the storey's floor). */
+  viewDepth?: number;
+}
+
+/** A sheet of the set and the views on it, written as a Bonsai sheet. */
+export interface AnnotatedSheet {
+  name: string;
+  /** Bonsai's sheet number (`A01`); absent: numbered in order. */
+  identification?: string;
+  viewIds: readonly string[];
 }
 
 /** An element's mark as the drawings show it. */
@@ -82,6 +97,10 @@ export interface AnnotatedIfcInput {
   source: Uint8Array;
   views: readonly AnnotatedView[];
   marks?: readonly ElementMark[];
+  /** The sheets of the set; written as Bonsai sheets with the views they hold. */
+  sheets?: readonly AnnotatedSheet[];
+  /** Write each view as a Bonsai drawing and each sheet as a Bonsai sheet (`bonsai-drawings.ts`); absent true. IFC2X3 files get none. */
+  bonsai?: boolean;
   /** Views the caller could not give as plan annotations, to be named in the notes. */
   leftOut?: readonly LeftOutView[];
   /** The name the copy is written under (the header's `FILE_NAME`); absent is `export.ifc`. */
@@ -94,7 +113,9 @@ export type AnnotatedIfcNoteKey =
   | 'storeyFrame'
   | 'viewEmpty'
   | 'markNoElement'
-  | 'markInTag';
+  | 'markInTag'
+  | 'bonsaiSchema'
+  | 'sheetNoDrawing';
 
 export interface AnnotatedIfcNote { key: AnnotatedIfcNoteKey; params: Record<string, string | number> }
 
@@ -107,12 +128,17 @@ export interface WrittenAnnotation {
   storeyGlobalId: string;
   curves: number;
   texts: number;
+  /** The view's Bonsai drawing (`IfcAnnotation` of ObjectType DRAWING) and its group, when written. */
+  drawingExpressId?: number;
+  drawingGroupExpressId?: number;
 }
 
 export interface AnnotatedIfcResult {
   bytes: Uint8Array;
   schema: string;
   annotations: WrittenAnnotation[];
+  /** The Bonsai sheets written: the sheet's name and its `IfcDocumentInformation`. */
+  sheets: { name: string; expressId: number; viewIds: string[] }[];
   /** Elements that got the `IfcSheet_Annotation` property set. */
   marked: { globalId: string; expressId: number; mark: string }[];
   /** What became of each mark given: written, already the file's own Tag (or Name), or the element is not in this file. */
@@ -147,6 +173,18 @@ function indexByGuid(ds: IfcDataStore, wanted: ReadonlySet<string>): Map<string,
   return out;
 }
 
+/** The rectangle of a view in the storey's local metres: the given world extent's, else the annotations' bounds and a metre around. */
+function localExtent(v: AnnotatedView, to: ReturnType<typeof localizer>): { min: Pt2; max: Pt2 } {
+  const world: Pt2[] = v.extent
+    ? [v.extent.min, v.extent.max, { x: v.extent.min.x, y: v.extent.max.y }, { x: v.extent.max.x, y: v.extent.min.y }]
+    : [...v.curves.flatMap((c) => (c.type === 'circle' ? [{ x: c.centre.x - c.radius, y: c.centre.y - c.radius }, { x: c.centre.x + c.radius, y: c.centre.y + c.radius }] : c.points)), ...v.texts.map((t) => t.position)];
+  const pts = world.map(to.point);
+  const margin = v.extent ? 0 : 1;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return { min: { x: Math.min(...xs) - margin, y: Math.min(...ys) - margin }, max: { x: Math.max(...xs) + margin, y: Math.max(...ys) + margin } };
+}
+
 /** World plan points and directions as the storey's local ones. */
 function localizer(frame: ReturnType<typeof storeyPlanFrame> & object) {
   const [c, s] = frame.axisX;
@@ -158,6 +196,11 @@ function localizer(frame: ReturnType<typeof storeyPlanFrame> & object) {
     // A direction turns with the storey but is not moved by its origin.
     direction: (d: Pt2): Pt2 => ({ x: c * d.x + s * d.y, y: -s * d.x + c * d.y }),
   };
+}
+
+/** The first `IfcOwnerHistory` of the file, which the new entities share (as `resolveSpatialAnchor` does); null when it has none. */
+function ownerHistoryOf(ds: IfcDataStore): number | null {
+  return ds.entityIndex.byType.get('IFCOWNERHISTORY')?.[0] ?? null;
 }
 
 export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<AnnotatedIfcResult> {
@@ -174,6 +217,9 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   const notes: AnnotatedIfcNote[] = [];
   for (const l of input.leftOut ?? []) notes.push({ key: 'viewLeftOut', params: { view: l.name, kind: l.kind } });
 
+  const bonsai = (input.bonsai ?? true) && schema !== 'IFC2X3' ? new BonsaiWriter(editor, store, ownerHistoryOf(store), undefined) : null;
+  if (input.bonsai === true && !bonsai && input.views.length > 0) notes.push({ key: 'bonsaiSchema', params: { schema } });
+  const locations = new Map<string, string>();
   const annotations: WrittenAnnotation[] = [];
   let contextId: number | null = null;
   for (const v of input.views) {
@@ -196,7 +242,25 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
       texts,
       properties: [{ name: 'View', value: v.name }, ...(v.scale ? [{ name: 'Scale', value: `1:${v.scale}` }] : [])],
     });
-    annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length });
+    const drawing = bonsai && !bonsai.hasDrawing(v.name) ? bonsai.addDrawing(anchor, {
+      name: v.name,
+      scale: v.scale ?? 100,
+      extent: localExtent(v, to),
+      cutHeight: v.cutHeight ?? 1.2,
+      depth: Math.max((v.cutHeight ?? 1.2) + (v.viewDepth ?? 0), 0.1),
+      annotationIds: [written.annotationId],
+    }) : undefined;
+    if (drawing) locations.set(v.viewId, drawing.location);
+    annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length, drawingExpressId: drawing?.drawingId, drawingGroupExpressId: drawing?.groupId });
+  }
+
+  bonsai?.finish();
+  const sheets: AnnotatedIfcResult['sheets'] = [];
+  for (const [i, sheet] of (bonsai ? input.sheets ?? [] : []).entries()) {
+    const viewIds = sheet.viewIds.filter((id) => locations.has(id));
+    if (viewIds.length === 0) { notes.push({ key: 'sheetNoDrawing', params: { sheet: sheet.name } }); continue; }
+    const expressId = bonsai!.addSheet({ identification: sheet.identification ?? `A${String(i + 1).padStart(2, '0')}`, name: sheet.name, locations: viewIds.map((id) => locations.get(id) as string) });
+    sheets.push({ name: sheet.name, expressId, viewIds });
   }
 
   const marked: AnnotatedIfcResult['marked'] = [];
@@ -218,5 +282,5 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   }
 
   const result = new StepExporter(store, view).export({ schema, applyMutations: true, ...(input.fileName ? { filename: input.fileName } : {}) });
-  return { bytes: result.content, schema, annotations, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
+  return { bytes: result.content, schema, annotations, sheets, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
 }

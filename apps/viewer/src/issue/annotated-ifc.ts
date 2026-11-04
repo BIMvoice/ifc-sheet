@@ -55,7 +55,7 @@ export async function runAnnotatedIfc(): Promise<AnnotatedIfcRun> {
     let result: AnnotatedIfcResult;
     try {
       // materialize(): the bytes as loaded; the engine parses a copy of them and never writes to them.
-      result = await buildAnnotatedIfc({ source: model.ifcDataStore!.source.materialize(), views: collected.views, marks: collected.marks, leftOut: [], fileName: name });
+      result = await buildAnnotatedIfc({ source: model.ifcDataStore!.source.materialize(), views: collected.views, sheets: collected.sheets, marks: collected.marks, leftOut: [], fileName: name });
     } catch (error) {
       say('annotatedIfc.msg.failed', { model: model.name, reason: error instanceof Error ? error.message : String(error) });
       continue;

@@ -11,7 +11,7 @@
  * annotations are named, not written: their drawing is a vertical plane and each would need a 3D placement of its own.
  */
 
-import type { AnnotatedView, DrawnCurve, DrawnText, ElementMark, LeftOutView } from '@bimvoice/ifcsheet/annotated-ifc';
+import type { AnnotatedSheet, AnnotatedView, DrawnCurve, DrawnText, ElementMark, LeftOutView } from '@bimvoice/ifcsheet/annotated-ifc';
 import { drawingToWorld } from '@/drafting/frame';
 import { ifcShapesOf } from '@/drafting/ifc-shapes';
 import { lookOf, layerShows, type DimStyle, type LayerGroup, type TextStyle } from '@/drafting/styles';
@@ -19,6 +19,7 @@ import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import { viewPlaneConfig } from '@/project/view-plane-config';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import type { ProjectLevel, ProjectView } from '@/project/types';
+import type { ProjectSheet } from '@/project/types';
 import { tagOverrideOf } from '@/drafting/tag-override';
 import { viewerToIfcAxes } from '@ifc-lite/geometry/world-frame';
 
@@ -30,12 +31,15 @@ export interface AnnotationSource {
   layerGroups?: readonly LayerGroup[];
   textStyles?: readonly TextStyle[];
   dimStyles?: readonly DimStyle[];
+  /** The sheets and the views on them, written as Bonsai sheets. */
+  sheets?: readonly Pick<ProjectSheet, 'name' | 'viewports'>[];
 }
 
 export interface CollectedAnnotations {
   views: AnnotatedView[];
   marks: ElementMark[];
   leftOut: LeftOutView[];
+  sheets: AnnotatedSheet[];
   /** Drafts that have no line to write (hatches). */
   hatches: number;
 }
@@ -47,7 +51,7 @@ export interface CollectedAnnotations {
 export function collectAnnotations(src: AnnotationSource, offset: { x: number; y: number }, locale: string): CollectedAnnotations {
   const layers = new Map(src.draftLayers.map((l) => [l.id, l]));
   const book = { textStyles: [...(src.textStyles ?? [])], dimStyles: [...(src.dimStyles ?? [])] };
-  const out: CollectedAnnotations = { views: [], marks: [], leftOut: [], hatches: 0 };
+  const out: CollectedAnnotations = { views: [], marks: [], leftOut: [], sheets: [], hatches: 0 };
   const marks = new Map<string, { mark: string; views: Set<string> }>();
 
   for (const view of src.views) {
@@ -80,9 +84,10 @@ export function collectAnnotations(src: AnnotationSource, offset: { x: number; y
       }
     }
     if (curves.length > 0 || texts.length > 0) {
-      out.views.push({ viewId: view.id, name: view.name, scale: view.scale ?? 100, storeyGlobalIds: level.storeyGlobalIds, curves, texts });
+      out.views.push({ viewId: view.id, name: view.name, scale: view.scale ?? 100, storeyGlobalIds: level.storeyGlobalIds, cutHeight: view.cutHeight, viewDepth: view.viewDepth ?? undefined, curves, texts });
     }
   }
+  out.sheets = (src.sheets ?? []).map((s) => ({ name: s.name, viewIds: [...new Set((s.viewports ?? []).map((vp) => vp.viewId))] }));
   out.marks = [...marks].map(([globalId, m]) => ({ globalId, mark: m.mark, views: [...m.views] }));
   return out;
 }
