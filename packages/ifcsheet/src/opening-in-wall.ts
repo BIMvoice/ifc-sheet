@@ -41,7 +41,7 @@ function jambOf(ss: readonly number[]): number | null {
 }
 
 /** `rect` fitted to the wall `host` (its meshes) the door stands in; `rect` itself when the wall does not show the opening. */
-export function fitToHostWall(rect: OpeningRect, host: readonly MeshData[], plane: SectionPlaneConfig): OpeningRect {
+export function fitToHostWall(rect: OpeningRect, host: readonly MeshData[], plane: SectionPlaneConfig, standsProud = false): OpeningRect {
   const at: { s: number; t: number }[] = [];
   for (const mesh of host) {
     const [ox, , oz] = mesh.origin ?? [0, 0, 0];
@@ -57,11 +57,14 @@ export function fitToHostWall(rect: OpeningRect, host: readonly MeshData[], plan
   if (near.length === 0) return rect;
   const t0 = Math.min(...near.map((v) => v.t)), t1 = Math.max(...near.map((v) => v.t));
   // The door must stand within the wall's faces (its frame may stand proud of them), else this is not the wall it is cut in.
-  if (t0 > -rect.depth / 2 + PROUD || t1 < rect.depth / 2 - PROUD || t1 - t0 > MAX_THICKNESS) return rect;
+  // `standsProud`: a mesh-only window's box may reach out past a wall face by any amount (window-in-wall.ts), so it need only overlap the wall.
+  const outside = standsProud ? t0 > rect.depth / 2 || t1 < -rect.depth / 2 : t0 > -rect.depth / 2 + PROUD || t1 < rect.depth / 2 - PROUD;
+  if (outside || t1 - t0 > MAX_THICKNESS) return rect;
   // The wall has vertices inside the door's width only where the void's jambs are: each jamb is the place most of them share on its side.
   const inside = near.filter((v) => Math.abs(v.s) < half - EPS && v.t >= t0 - EPS && v.t <= t1 + EPS).map((v) => v.s);
   const left = jambOf(inside.filter((s) => s < -half / 2)), right = jambOf(inside.filter((s) => s > half / 2));
-  const [s0, s1] = left !== null && right !== null ? [left, right] : [-half, half];
+  // A window's own width is the measure (its box is the opening; the wall's vertices inside it are not jambs).
+  const [s0, s1] = !standsProud && left !== null && right !== null ? [left, right] : [-half, half];
   const ds = (s0 + s1) / 2, dt = (t0 + t1) / 2;
   return { ...rect, c: { x: rect.c.x + rect.u.x * ds + rect.n.x * dt, y: rect.c.y + rect.u.y * ds + rect.n.y * dt }, width: s1 - s0, depth: t1 - t0 };
 }

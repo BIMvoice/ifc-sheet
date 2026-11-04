@@ -25,6 +25,7 @@ import { doorSwingFlips, type DoorOperation } from './door-operation.js';
 import { typedPlanSymbol } from './joinery-plan-placement.js';
 import { worldToDrawing } from './drawing-frame.js';
 import { fitToHostWall } from './opening-in-wall.js';
+import { fitWindowToHostWall } from './window-in-wall.js';
 import type { DraftShape, Pt } from './draft-types.js';
 
 export interface OpeningRect {
@@ -383,9 +384,9 @@ export function openingSymbols(
     }
     const read = footprintRect(entry.meshes, plane);
     if (!read) continue;
-    // A door's symbol stands in the wall's opening, not on its frame's footprint (`opening-in-wall.ts`, #678).
-    const hostMeshes = entry.kind === 'door' ? hostWallOf(id) : [];
-    const rect = hostMeshes.length > 0 ? fitToHostWall(read, hostMeshes, plane) : read;
+    // A door's or window's symbol stands in the wall's opening, not on its frame's footprint (`opening-in-wall.ts` #678, `window-in-wall.ts` #651).
+    const hostMeshes = hostWallOf(id);
+    const rect = hostMeshes.length === 0 ? read : entry.kind === 'door' ? fitToHostWall(read, hostMeshes, plane) : fitWindowToHostWall(read, footprintRect(hostMeshes, plane), hostMeshes, plane);
     if (entry.kind === 'door') {
       const stated = operationOf(id);
       const own = stated && entry.l2w ? statedFlips(stated, entry.l2w, plane, rect) : null;
