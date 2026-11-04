@@ -18,6 +18,7 @@ import { startDraftCommand } from '@/drafting/session';
 import { addUnderlay, placeUnderlay, removeUnderlay, setUnderlayLocked, setUnderlayOpacity, setUnderlayPrintsOn } from '@/underlay/underlay-actions';
 import { underlayFromFile } from '@/underlay/underlay-import';
 import { underlaysOfView, type ViewUnderlay } from '@/underlay/underlay';
+import { DxfViewUnderlays } from './DxfViewUnderlays';
 
 const DEG = 180 / Math.PI;
 
@@ -97,6 +98,7 @@ export function UnderlayPanel({ viewId }: { viewId: string }) {
           </label>
           {busy ? <output className="block">{t('underlay.importing')}</output> : null}
           {underlays.map((u) => <Card key={u.id} u={u} />)}
+          <DxfViewUnderlays viewId={viewId} />
         </section>
       ) : null}
     </span>

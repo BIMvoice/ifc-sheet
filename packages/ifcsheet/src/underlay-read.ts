@@ -50,3 +50,5 @@ export function readUnderlays(raw: Json): ViewUnderlay[] {
   if (!Array.isArray(list)) fail('/underlays', 'must be an array');
   return list.map((u, i) => readUnderlay(u, `/underlays/${i}`));
 }
+
+export * from './dxf-underlay-read.js';
