@@ -136,7 +136,7 @@ describe('Romanian catalogue (#53)', () => {
     const { 'drafting.prompt.firstPoint': _a, 'drafting.msg.tagAllDone': _b, 'keyboardShortcuts.header.title': _c, 'drafting.commandLine': _d, 'commands.wall.nextSheet': _e, ...without } = catalogue;
     assert.deepEqual(untranslatedFaceKeys(without).sort(), [
       'drafting.commandLine (components/viewer/drafting/CommandLine.tsx)',
-      'drafting.msg.tagAllDone (drafting/commands/tagall.ts)',
+      'drafting.msg.tagAllDone (packages/ifcsheet/src/tagall/tagall.ts)',
       'drafting.prompt.firstPoint (drafting/commands/draw.ts)',
       'keyboardShortcuts.header.title (components/viewer/KeyboardShortcutsDialog.tsx)',
       'commands.wall.nextSheet (lib/commands/keyboard-commands.ts)',
