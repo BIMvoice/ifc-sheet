@@ -29,6 +29,8 @@ export interface PlanReading {
   offAxis: Pt[][];
   openings: Opening[];
   bridged: Opening[];
+  /** What else the plan cuts that can stand in a wall's line (columns, cladding, mullions and panes), one box per outline on the plan's axes: it closes a gap in the outline it fills, and gives no figure. */
+  fillers: Box[];
 }
 
 export function readPlan(parts: readonly PlanPart[]): PlanReading {
@@ -40,6 +42,7 @@ export function readPlan(parts: readonly PlanPart[]): PlanReading {
   const wholeWalls = wallParts.map((p) => joinLayers(p.rings.map(turn).filter((r) => ringOnAxes(r, ON_AXES_DEG)).map(boxOf)));
   const wallBoxes = wholeWalls.flat();
   const offAxis = walls.filter((r) => !ringOnAxes(r, ON_AXES_DEG));
-  const openings: Opening[] = parts.filter((p) => p.kind !== 'wall' && p.rings.length > 0).map((part) => ({ part, box: part.rings.map(turn).map(boxOf).reduce(unionBox), onAxes: part.rings.map(turn).every((r) => ringOnAxes(r, ON_AXES_DEG)), ...(part.body?.length ? { body: boxOf(turn(part.body)) } : {}) }));
-  return { angle, walls, wholeWalls, wallBoxes, offAxis, openings, bridged: bridgedOpenings(openings, wallBoxes) };
+  const openings: Opening[] = parts.filter((p) => (p.kind === 'door' || p.kind === 'window') && p.rings.length > 0).map((part) => ({ part, box: part.rings.map(turn).map(boxOf).reduce(unionBox), onAxes: part.rings.map(turn).every((r) => ringOnAxes(r, ON_AXES_DEG)), ...(part.body?.length ? { body: boxOf(turn(part.body)) } : {}) }));
+  const fillers = parts.filter((p) => p.kind === 'filler').flatMap((p) => p.rings.map(turn).filter((r) => ringOnAxes(r, ON_AXES_DEG)).map(boxOf));
+  return { angle, walls, wholeWalls, wallBoxes, offAxis, openings, bridged: bridgedOpenings(openings, wallBoxes), fillers };
 }

@@ -4,7 +4,8 @@
 
 /**
  * The parts DIMALL reads off a plan's generated drawing: the cut outlines of
- * walls, doors and windows, one entry per model element. This is the source of
+ * walls, doors and windows, and of what can fill a gap between walls (columns,
+ * cladding, mullions and panes), one entry per model element. This is the source of
  * every point DIMALL measures to, and its limit: only what the plan's cut
  * plane passes through is there (a window above the cut height, or a wall
  * lower than it, is not).
@@ -16,7 +17,7 @@ import type { Pt } from '../draft-types.js';
 import type { PartKind, PlanPart } from './types.js';
 
 // A type (IfcWallType, IfcDoorStyle) is a template at the model's origin, not an element of the building.
-const KIND: [RegExp, PartKind][] = [[/^IFC(WALL|CURTAINWALL)(?!TYPE)/i, 'wall'], [/^IFCDOOR(?!TYPE|STYLE)/i, 'door'], [/^IFCWINDOW(?!TYPE|STYLE)/i, 'window']];
+const KIND: [RegExp, PartKind][] = [[/^IFC(WALL|CURTAINWALL)(?!TYPE)/i, 'wall'], [/^IFCDOOR(?!TYPE|STYLE)/i, 'door'], [/^IFCWINDOW(?!TYPE|STYLE)/i, 'window'], [/^IFC(COLUMN|COVERING|MEMBER|PLATE)(?!TYPE)/i, 'filler']];
 
 export function kindOfClass(ifcType: string): PartKind | null {
   return KIND.find(([re]) => re.test(ifcType))?.[1] ?? null;
@@ -48,7 +49,7 @@ export function planParts(drawing: Pick<Drawing2D, 'cutPolygons' | 'config'> | n
   if (plane) {
     for (const mesh of meshes) {
       const part = byId.get(mesh.expressId);
-      if (!part || part.kind === 'wall' || (mesh.geometryClass ?? 0) === 2) continue;
+      if (!part || part.kind === 'wall' || part.kind === 'filler' || (mesh.geometryClass ?? 0) === 2) continue;
       (part.body ??= []).push(...bodyOf(mesh, plane.axis, plane.flipped));
     }
   }

@@ -11,7 +11,8 @@
 
 import type { Pt } from '../draft-types.js';
 
-export type PartKind = 'wall' | 'door' | 'window';
+/** A filler is what else a plan cuts that can stand in a wall's line (a column, cladding, a mullion or a pane): it closes a gap in the outline and is never measured. */
+export type PartKind = 'wall' | 'door' | 'window' | 'filler';
 
 /** A model element of a plan with the outlines it is cut in. */
 export interface PlanPart {
