@@ -14,6 +14,7 @@ import type { PlanPart } from '@bimvoice/ifcsheet';
 import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
+import type { ModelLinePick } from './commands/types';
 import type { Box } from './cross-ref-marks';
 import type { ElementBox } from './dimension-anchor';
 import type { LevelResolver } from './level-mark';
@@ -81,6 +82,13 @@ export function setModelPicker(picker: typeof modelPicker): void {
 }
 export const hasModelPicker = (): boolean => modelPicker !== null;
 export const pickModel = (p: Pt, tolerance: number, additive: boolean): void => modelPicker?.(p, tolerance, additive);
+
+/** The line of the model's drawing under a point (the view installs it): what TRIM and EXTEND take when no drafted line is picked. */
+let modelLinePicker: (p: Pt, tolerance: number) => ModelLinePick | null = () => null;
+export function setModelLinePicker(picker: ((p: Pt, tolerance: number) => ModelLinePick | null) | null): void {
+  modelLinePicker = picker ?? (() => null);
+}
+export const modelLineAt = (p: Pt, tolerance: number): ModelLinePick | null => modelLinePicker(p, tolerance);
 
 export function setElementPicker(picker: ((p: Pt) => number | null) | null): void {
   elementPicker = picker ?? (() => null);

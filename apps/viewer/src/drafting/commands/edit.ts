@@ -15,10 +15,11 @@ import { filletLines } from '../fillet';
 import { useProjectStore } from '@/project/project-store';
 import { isLockedToView, withoutSectionLink } from '../section-symbol';
 import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '../types';
+import { editModelLine } from './edit-model-line';
 import type { DraftCommandDef, DraftContext } from './types';
 
 /** Every other drafted shape of the view plus the generated drawing lines around `shape`. */
-function boundariesFor(ctx: DraftContext, entity: DraftEntity, margin: number): DraftShape[] {
+export function boundariesFor(ctx: DraftContext, entity: DraftEntity | { id: null; shape: DraftShape }, margin: number): DraftShape[] {
   if (!isGeometry(entity.shape)) return [];
   const b = shapeBounds(entity.shape);
   const others: DraftShape[] = [];
@@ -109,6 +110,10 @@ function cutCommand(id: 'trim' | 'extend'): DraftCommandDef {
           const extended = extendShape(entity.shape, boundaries, at);
           if (!extended) ctx.say('drafting.msg.noBoundary');
           else editDrafts({ update: new Map([[entity.id, extended]]) });
+          return 'continue';
+        },
+        onPickModelLine: (pick, at) => {
+          editModelLine(ctx, id, pick, at);
           return 'continue';
         },
         onEnter: () => 'done',
