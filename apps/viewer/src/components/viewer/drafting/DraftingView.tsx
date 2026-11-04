@@ -103,6 +103,7 @@ import { MembraneLayer } from './MembraneLayer';
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
 import { UnderlayLayer } from './UnderlayLayer';
+import { RegionSelectHint } from './RegionSelectHint';
 import { UnderlayPanel } from './UnderlayPanel';
 
 import { roofAtPoint } from '@/project/roof-plan';
@@ -370,7 +371,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           tracking={state.tracking}
           cursor={state.cursor}
           orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
-          window={state.window}
+          window={state.window} lasso={state.lasso}
           highlight={highlight}
           extraPatterns={extraPatterns}
           transform={viewTransform}
@@ -383,6 +384,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           crop={view.detail}
           symbols={liveSymbols}
         />
+        <RegionSelectHint hidden={!!command} />
         {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

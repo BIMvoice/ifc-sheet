@@ -10,7 +10,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { baseDraftSettings, clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, setOrthoHeld, useDraftingSession, windowSelect } from '@/drafting/session';
+import { baseDraftSettings, clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, selectIn, setOrthoHeld, useDraftingSession, windowSelect } from '@/drafting/session';
+import { thinPath } from '@/drafting/region-select';
 import { findSnap } from '@/drafting/snaps';
 import { capturePointer } from '@/lib/pointer-capture';
 import { referencesIn, type ReferenceSet } from '@/drafting/references';
@@ -29,6 +30,8 @@ const SNAP_PX = 10;
 const PICK_PX = 6;
 const wantsPointNow = (command: ReturnType<typeof runningCommand>): boolean => command?.input() === 'point';
 const DRAG_PX = 4;
+/** A lasso keeps a point each time the pointer has moved this far on screen. */
+const LASSO_STEP_PX = 3;
 const GRIP_PX = 7;
 const SNAP_ORDER: readonly SnapMode[] = ['endpoint', 'intersection', 'midpoint', 'center', 'quadrant', 'perpendicular', 'nearest'];
 const ALL_MODES: ReadonlySet<SnapMode> = new Set(SNAP_ORDER);
@@ -72,6 +75,8 @@ export interface DraftingPointerState {
   snap: SnapHit | null;
   hoverId: string | null;
   window: { a: Pt; b: Pt } | null;
+  /** The freehand loop being drawn with Alt held (#666), in drawing units. */
+  lasso: readonly Pt[] | null;
   /** A grip being dragged, and where to. */
   gripDrag: { grip: Grip; at: Pt } | null;
   /** The grip under the cursor while nothing runs and none is held (#454): the canvas shows it can be picked up. */
@@ -93,10 +98,10 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
   const trackOn = useTrackingPref((s) => s.on);
   const track = useRef<TrackState>(EMPTY_TRACK);
   const dwell = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [state, setState] = useState<DraftingPointerState>({ tracking: NO_TRACKING, cursor: null, snap: null, hoverId: null, window: null, gripDrag: null, gripHover: null });
+  const [state, setState] = useState<DraftingPointerState>({ tracking: NO_TRACKING, cursor: null, snap: null, hoverId: null, window: null, lasso: null, gripDrag: null, gripHover: null });
   /** A grip picked up by a click and carried until the next click drops it (#454). */
   const carry = useRef<Grip | null>(null);
-  const drag = useRef<{ kind: 'pan' | 'window' | 'grip'; startScreen: Pt; startDrawing: Pt; startTransform: ViewTransform; grip?: Grip } | null>(null);
+  const drag = useRef<{ kind: 'pan' | 'window' | 'lasso' | 'grip'; path?: readonly Pt[]; startScreen: Pt; startDrawing: Pt; startTransform: ViewTransform; grip?: Grip } | null>(null);
 
   const local = (e: { clientX: number; clientY: number }): Pt => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -182,16 +187,17 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
       const free = hit?.point ?? raw;
       const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(held.at, free));
-      setState({ tracking: NO_TRACKING, cursor: at, snap: hit, hoverId: null, window: null, gripDrag: { grip: held, at }, gripHover: null });
+      setState({ tracking: NO_TRACKING, cursor: at, snap: hit, hoverId: null, window: null, lasso: null, gripDrag: { grip: held, at }, gripHover: null });
       return;
     }
     const { point, snap } = resolve(raw);
     const command = runningCommand();
     const hoverId = !command || command.input() === 'pick' ? pickEntity(raw, PICK_PX / transform.scale)?.id ?? null : null;
     const window = d?.kind === 'window' && Math.hypot(s.x - d.startScreen.x, s.y - d.startScreen.y) > DRAG_PX ? { a: d.startDrawing, b: raw } : null;
+    const lasso = d?.kind === 'lasso' ? (d.path = thinPath(d.path ?? [], raw, LASSO_STEP_PX / transform.scale)) : null;
     const gripHover = !command && !d ? gripAt(grips, raw, GRIP_PX / transform.scale) : null;
     const tracking = trackingView(point, snap, wantsPointNow(command));
-    setState({ tracking, cursor: point, snap, hoverId, window, gripDrag: null, gripHover });
+    setState({ tracking, cursor: point, snap, hoverId, window, lasso, gripDrag: null, gripHover });
   }, [transform, axis, resolve, setTransform, snapOn, entityShapes, grips, trackingView]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -226,7 +232,8 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       drag.current = { kind: 'grip', startScreen: s, startDrawing: raw, startTransform: transform, grip };
       return;
     }
-    drag.current = { kind: 'window', startScreen: s, startDrawing: raw, startTransform: transform };
+    // Alt + drag draws a loop (lasso); a plain drag draws the box (window or crossing).
+    drag.current = { kind: e.altKey ? 'lasso' : 'window', path: [raw], startScreen: s, startDrawing: raw, startTransform: transform };
   }, [transform, axis, resolve, grips, state.gripDrag, commitGrip]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
@@ -246,13 +253,16 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     }
     const s = local(e);
     const raw = screenToDrawing(s, transform, axis);
-    if (Math.hypot(s.x - d.startScreen.x, s.y - d.startScreen.y) > DRAG_PX) {
-      // Dragging leftward on screen is a crossing selection.
-      windowSelect(d.startDrawing, raw, s.x < d.startScreen.x, e.shiftKey);
+    // A loop that comes back to where it began is still a drag: it counts by how far it went, not where it ended.
+    const wentFar = d.kind === 'lasso' ? (d.path ?? []).some((p) => Math.hypot(p.x - d.startDrawing.x, p.y - d.startDrawing.y) * transform.scale > DRAG_PX) : Math.hypot(s.x - d.startScreen.x, s.y - d.startScreen.y) > DRAG_PX;
+    if (wentFar) {
+      // Dragging leftward on screen is a crossing selection; a loop selects what it encloses.
+      if (d.kind === 'lasso') selectIn({ kind: 'loop', pts: d.path ?? [] }, false, e.shiftKey);
+      else windowSelect(d.startDrawing, raw, s.x < d.startScreen.x, e.shiftKey);
     } else {
       clickDrawing(raw, PICK_PX / transform.scale, e.shiftKey);
     }
-    setState((prev) => ({ ...prev, window: null }));
+    setState((prev) => ({ ...prev, window: null, lasso: null }));
   }, [transform, axis, state.gripDrag, commitGrip]);
 
   useEffect(() => () => { if (dwell.current) clearTimeout(dwell.current); }, []);
