@@ -8,11 +8,11 @@
  * as the gaps they fill. One function, so a figure inside a room and one outside it are read the same way.
  */
 
-import type { Pt } from '@/drafting/types';
-import { bridgedOpenings, type Opening } from './facades';
-import { joinLayers } from './layers';
-import { boxOf, mainDirection, ringOnAxes, rotate, unionBox, type Box } from './outline';
-import type { PlanPart } from './types';
+import type { Pt } from '../draft-types.js';
+import { bridgedOpenings, type Opening } from './facades.js';
+import { joinLayers } from './layers.js';
+import { boxOf, mainDirection, ringOnAxes, rotate, unionBox, type Box } from './outline.js';
+import type { PlanPart } from './types.js';
 
 /** A wall further than this off the plan's axes (degrees) is at an angle: a box in the plan's frame would no longer measure it to the millimetre. */
 export const ON_AXES_DEG = 0.1;

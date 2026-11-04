@@ -7,21 +7,22 @@
  * it is clear, keeping the element it points at, and nothing about a figure changes.
  */
 
-import '@/test/setup-dom.js';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { textBox } from '@/drafting/annotation';
-import type { DraftEntity, Pt } from '@/drafting/types';
-import { house } from './fixture';
-import { planDimensions } from './plan';
-import { clearTags } from './tag-clear';
+import type { DraftEntity, Pt } from '../draft-types.js';
+import { house } from './fixture.js';
+import { planDimensions } from './plan.js';
+import { clearTags } from './tag-clear.js';
+import { tableMeasure, textBoxIn } from './measure.js';
+
+const reader = { sectionLink: (d: DraftEntity) => { const id = d.params.sectionOf; return typeof id === 'string' ? id : null; }, measure: tableMeasure };
 
 const H = 0.25;
 const plan = planDimensions(house(), { paperUnit: 0.1, textHeight: H });
 const tag = (id: string, p: Pt, leader?: Pt): DraftEntity => ({ id, viewId: 'v', layerId: 'l', shape: { type: 'text', p, text: 'W1', height: H, rotation: 0, frame: 'box', ...(leader ? { leader } : {}) }, params: {} });
 const boxOf = (d: DraftEntity, dx = 0) => {
   const s = d.shape as Extract<DraftEntity['shape'], { type: 'text' }>;
-  const c = textBox({ x: s.p.x + dx, y: s.p.y }, s.text, s.height, s.rotation, s.frame);
+  const c = textBoxIn(tableMeasure, { x: s.p.x + dx, y: s.p.y }, s.text, s.height, s.rotation, s.frame);
   return { x0: Math.min(...c.map((q) => q.x)), x1: Math.max(...c.map((q) => q.x)), y0: Math.min(...c.map((q) => q.y)), y1: Math.max(...c.map((q) => q.y)) };
 };
 
@@ -40,7 +41,7 @@ describe('a tag in front of a facade', () => {
   });
 
   it('slides along the facade to the nearest place clear of every line, and keeps its leader tip', () => {
-    const moves = clearTags(plan, [window5], [], H);
+    const moves = clearTags(plan, [window5], [], H, reader);
     const next = moves.get('w');
     assert.ok(next && next.type === 'text');
     assert.deepEqual(next.leader, { x: 5.5, y: 0 }, 'the tip stays on the window');
@@ -55,7 +56,7 @@ describe('a tag in front of a facade', () => {
 
   it('gives a tag that had no leader one, from its new place to where it stood', () => {
     const bare = tag('b', { x: 4.8, y: -0.7 });
-    const next = clearTags(plan, [bare], [], H).get('b');
+    const next = clearTags(plan, [bare], [], H, reader).get('b');
     assert.ok(next && next.type === 'text' && next.leader);
     const was = boxOf(bare);
     assert.deepEqual(next.leader, { x: (was.x0 + was.x1) / 2, y: (was.y0 + was.y1) / 2 });
@@ -64,11 +65,11 @@ describe('a tag in front of a facade', () => {
   it('leaves a tag no line crosses where it is', () => {
     const free = tag('f', { x: 5.2, y: -0.7 });
     assert.ok(!crossed(boxOf(free)));
-    assert.equal(clearTags(plan, [free], [], H).size, 0);
+    assert.equal(clearTags(plan, [free], [], H, reader).size, 0);
   });
 
   it('does not slide onto what is already there: with both ways blocked it stays put', () => {
     const blocked = [{ x0: 5.1, y0: -1.2, x1: 20, y1: 0 }, { x0: -20, y0: -1.2, x1: 4.6, y1: 0 }];
-    assert.equal(clearTags(plan, [window5], blocked, H).size, 0);
+    assert.equal(clearTags(plan, [window5], blocked, H, reader).size, 0);
   });
 });

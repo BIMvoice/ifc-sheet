@@ -1,0 +1,26 @@
+DimAllInputs: type (type-only)
+DimAllKey: type (type-only)
+DimAllMeasure: type (type-only)
+DimAllMessage: type (type-only)
+DimAllResult: type (type-only)
+DimensionPlan: type (type-only)
+DimensionTarget: type (type-only)
+DraftReader: type (type-only)
+PartKind: type (type-only)
+PlanPart: type (type-only)
+PlannedString: type (type-only)
+RectsOf: type (type-only)
+RoomPlan: type (type-only)
+SectionLinkOf: type (type-only)
+SymbolPiece: type (type-only)
+dimensionDrafts: value
+isDimAll: value
+kindOfClass: value
+pieceRects: value
+planDimAll: value
+planDimensions: value
+planParts: value
+planRoomChains: value
+stringsThroughHeads: value
+symbolPieces: value
+tableMeasure: value

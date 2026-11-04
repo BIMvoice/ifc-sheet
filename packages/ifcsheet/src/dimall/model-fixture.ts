@@ -9,8 +9,8 @@
  * the list says and never with the code under test.
  */
 
-import type { Pt } from '@/drafting/types';
-import type { PlanPart } from './types';
+import type { Pt } from '../draft-types.js';
+import type { PlanPart } from './types.js';
 
 export interface SurveyOpening {
   id: number;

@@ -13,7 +13,7 @@ import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlanePr
 import { setRoomsProvider } from '@/drafting/session-providers';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectView } from '@/project/types';
-import { layeredHouse, rect } from './fixture';
+import { layeredHouse, rect } from '@bimvoice/ifcsheet/dimall-fixture';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
 const roomDims = () => useProjectStore.getState().drafts.filter((d) => typeof d.params.dimAll === 'string' && d.params.dimAll.startsWith('room:'));

@@ -9,7 +9,7 @@
  * paper distances, which are millimetres on paper.
  */
 
-import type { Pt } from '@/drafting/types';
+import type { Pt } from '../draft-types.js';
 
 export type PartKind = 'wall' | 'door' | 'window';
 

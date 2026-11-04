@@ -8,16 +8,16 @@
  * from (`model-fixture.ts`). A figure that cannot be trusted must be left out and counted, never printed approximately.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import type { Pt } from '@/drafting/types';
-import { joinLayers, wallGaps } from './layers';
-import { boxOf, mainDirection, ringOnAxes } from './outline';
-import { lShape, part, rect } from './fixture';
-import { kindOfClass, planParts } from './parts';
-import { planDimensions } from './plan';
-import { rectangle, surveyParts, trueWidths, type SurveyWall } from './model-fixture';
-import type { DimensionPlan, PlannedString } from './types';
+import type { Pt } from '../draft-types.js';
+import { joinLayers, wallGaps } from './layers.js';
+import { boxOf, mainDirection, ringOnAxes } from './outline.js';
+import { lShape, part, rect } from './fixture.js';
+import { kindOfClass, planParts } from './parts.js';
+import { planDimensions } from './plan.js';
+import { rectangle, surveyParts, trueWidths, type SurveyWall } from './model-fixture.js';
+import type { DimensionPlan, PlannedString } from './types.js';
 
 const SETTINGS = { paperUnit: 0.1, textHeight: 0.25 };
 const MM = 0.001;

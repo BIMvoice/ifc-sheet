@@ -8,11 +8,11 @@
  * stands: a rerun that places the line elsewhere (a tag moved in between) still finds its dimension there.
  */
 
-import { newDraft } from '@/drafting/draft-store';
-import type { DraftEntity } from '@/drafting/types';
-import { styledParams } from '@/project/drafting-standards';
-import type { DimensionTarget } from './apply';
-import type { RoomChain, RoomPlan } from './rooms';
+import type { DraftEntity } from '../draft-types.js';
+import { makeDraft } from '../make-draft.js';
+import { styledParamsIn } from '../style-fit.js';
+import type { DimensionTarget } from './apply.js';
+import type { RoomChain, RoomPlan } from './rooms.js';
 
 export function roomStamp(c: RoomChain): string {
   const cm = (v: number) => Math.round(v * 100);
@@ -30,8 +30,8 @@ export function roomDrafts(plan: RoomPlan, target: DimensionTarget, existing: re
     const stamp = roomStamp(c);
     if (done.has(stamp)) return;
     done.add(stamp);
-    const styled = styledParams(target.viewId, plan.shapes[i], { textStyle: target.textStyle, dimStyle: target.dimStyle });
-    out.push(newDraft(target.viewId, target.layerId, plan.shapes[i], { ...styled, dimAll: stamp }));
+    const styled = styledParamsIn(target.book, target.paperUnit, plan.shapes[i], { textStyle: target.textStyle, dimStyle: target.dimStyle });
+    out.push(makeDraft(plan.shapes[i], { id: target.newId(), viewId: target.viewId, layerId: target.layerId, params: { ...styled, dimAll: stamp } }));
   });
   return out;
 }

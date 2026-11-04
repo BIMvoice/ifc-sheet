@@ -8,10 +8,10 @@
  * exactly the cells that looking at every shape would.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import type { Pt } from '@/drafting/types';
-import { boxOf, filledCells, gridLines, outlineOf } from './outline';
+import type { Pt } from '../draft-types.js';
+import { boxOf, filledCells, gridLines, outlineOf } from './outline.js';
 
 function pointInRing(p: Pt, ring: readonly Pt[]): boolean {
   let inside = false;

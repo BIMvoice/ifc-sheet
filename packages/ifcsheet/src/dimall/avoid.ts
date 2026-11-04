@@ -10,12 +10,11 @@
  * figure sitting on the cut line is not.
  */
 
-import { textBox } from '@/drafting/annotation';
-import type { FigureBox } from '@/drafting/figure-layout';
-import { sectionLink } from '@/drafting/section-symbol';
-import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import type { DraftEntity, Pt } from '@/drafting/types';
-import type { PlannedString } from './types';
+import type { DraftEntity, Pt } from '../draft-types.js';
+import type { FigureBox } from '../figure-layout.js';
+import type { Rect } from '../text-leader.js';
+import { textBoxIn, type DraftReader } from './measure.js';
+import type { PlannedString } from './types.js';
 
 /** The facade a string belongs to: its direction and outward normal, and where its face is across. */
 export interface FacadeFrame { along: Pt; outward: Pt; face: number }
@@ -29,24 +28,24 @@ const toFrame = (f: FacadeFrame, p: Pt): Pt => ({ x: p.x * f.along.x + p.y * f.a
 /** The pieces of a section symbol: the cut line is long, the stems and barbs are short, the letters are texts. */
 export interface SymbolPiece { kind: 'cut' | 'head'; a: Pt; b: Pt; box?: Pt[] }
 
-export function symbolPieces(drafts: readonly DraftEntity[]): SymbolPiece[] {
+export function symbolPieces(drafts: readonly DraftEntity[], reader: DraftReader): SymbolPiece[] {
   const out: SymbolPiece[] = [];
   const length = (d: DraftEntity): number => (d.shape.type === 'line' ? Math.hypot(d.shape.b.x - d.shape.a.x, d.shape.b.y - d.shape.a.y) : 0);
   // The longest line of each symbol, found once: asking per line was every line against every line.
   const longest = new Map<string, number>();
   for (const d of drafts) {
-    const link = sectionLink(d);
+    const link = reader.sectionLink(d);
     if (link !== null && d.shape.type === 'line') longest.set(link, Math.max(longest.get(link) ?? 0, length(d)));
   }
   for (const d of drafts) {
-    const link = sectionLink(d);
+    const link = reader.sectionLink(d);
     if (link === null) continue;
     const s = d.shape;
     if (s.type === 'line') {
       // A stem is four text heights; the cut line is the one piece longer than any stem or barb of its symbol.
       out.push({ kind: length(d) >= longest.get(link)! ? 'cut' : 'head', a: s.a, b: s.b });
     } else if (s.type === 'text') {
-      const box = textBox(s.p, s.text, s.height, s.rotation);
+      const box = textBoxIn(reader.measure, s.p, s.text, s.height, s.rotation);
       out.push({ kind: 'head', a: box[0], b: box[2], box });
     }
   }

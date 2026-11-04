@@ -7,7 +7,7 @@
  * A plan dimensions the wall, not its layers: the layers of one wall are joined into the box of the whole wall.
  */
 
-import type { Box } from './outline';
+import type { Box } from './outline.js';
 
 /** Layers of one wall touch within this (metres). */
 const TOUCH = 0.01;

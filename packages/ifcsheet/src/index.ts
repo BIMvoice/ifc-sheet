@@ -37,3 +37,4 @@ export * from './exports/quantities.js';
 export * from './exports/project-set.js';
 export * from './exports/opening-symbols.js';
 export * from './exports/labels.js';
+export * from './exports/dimall.js';

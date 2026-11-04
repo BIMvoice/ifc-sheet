@@ -17,7 +17,7 @@
  */
 
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { planParts } from '@/dimall/parts';
+import { planParts } from '@bimvoice/ifcsheet';
 import { viewElements } from '@bimvoice/ifcsheet';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import type { ProjectLevel, ProjectView } from '@/project/types';

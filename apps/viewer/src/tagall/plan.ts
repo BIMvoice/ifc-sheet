@@ -20,14 +20,14 @@ import { labelDraft, labelSize, type ElementReader, type LabelPlacement } from '
 import { rectsOf } from '@/labels/label-annotations';
 import type { LabelExtras } from '@/labels/label-extras';
 import { growRect, rectAround, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
-import { layoutLabels, LABEL_CLEAR_MM, LABEL_GAP_MM, type LayoutElement } from '@bimvoice/ifcsheet';
+import { pieceRects, RectIndex, symbolPieces, layoutLabels, LABEL_CLEAR_MM, LABEL_GAP_MM, type LayoutElement } from '@bimvoice/ifcsheet';
 import type { LabelTarget } from '@/labels/label-place';
 import { readFieldValue } from '@/labels/label-resolve';
 import { parseFieldRef } from '@bimvoice/ifcsheet';
 import type { ViewElement } from '@bimvoice/ifcsheet';
 import { clipLoop } from '@/project/drawing-crop';
-import { pieceRects, symbolPieces } from '@/dimall/avoid';
-import { RectIndex } from '@bimvoice/ifcsheet';
+import { draftReader } from '@/dimall/reader';
+
 import { ringArea, type RoomOfPlan } from './footprint';
 import { roomLabelPoint } from './room-point';
 import { roomLabelPointLeast } from './room-point-least';
@@ -108,7 +108,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
   });
   // What a label keeps clear of besides the elements' outlines: the room a door swings through, and the section symbols on the plan.
   const swings = input.targets.filter((t) => /^ifcdoor/i.test(t.className)).map((t): LayoutElement => ({ id: String(t.renderId), ring: swingOf(t.ring) }));
-  const sections = pieceRects(symbolPieces(input.existing), 0.2 * at.textHeight);
+  const sections = pieceRects(symbolPieces(input.existing, draftReader()), 0.2 * at.textHeight);
   // Everything a label keeps clear of sits on a grid (`labels/rect-index.ts`): a place is tested against the boxes near it, not against every box of the plan.
   const base = [...rectsOf(input.existing), ...sections];
   const index = new RectIndex(4 * at.textHeight);

@@ -19,13 +19,12 @@
  * counted; nothing is printed over anything.
  */
 
-import { dimensionLayout } from '@/drafting/annotation';
-import type { AnnotationShape, Pt } from '@/drafting/types';
-import { textBlock } from '@/drafting/text-block';
-import { boxOf, pointInRing, rotate, type Box } from './outline';
-import { readPlan } from './read';
-import { segmentHitsRect } from './tag-clear';
-import type { PlanPart } from './types';
+import type { AnnotationShape, Pt } from '../draft-types.js';
+import { figureWidth, type DimAllMeasure } from './measure.js';
+import { boxOf, pointInRing, rotate, type Box } from './outline.js';
+import { readPlan } from './read.js';
+import { segmentHitsRect } from './tag-clear.js';
+import type { PlanPart } from './types.js';
 
 export interface RoomInput {
   /** Names the room, so a rerun finds its dimensions again (its GlobalId). */
@@ -61,6 +60,8 @@ export interface RoomPlan {
 
 export interface RoomSettings {
   textHeight: number;
+  /** How a figure is measured and which way is up on screen. */
+  measure: DimAllMeasure;
   /** What the view already carries (tags, room labels, symbols, dimensions), drawing space. A figure keeps clear of all of it; a dimension line may run across what is `crossable` (a section's cut line, a dashed roof or grid line). */
   obstacles: readonly (Box & { crossable?: boolean })[];
   /** Every line the drawing carries (hidden ones too), drawing space: a figure keeps clear of all of them, and a dimension line never runs along one. */
@@ -181,7 +182,7 @@ export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomI
       const widths = new Map<number, number>();
       const widthOf = (l: Line) => {
         const k = Math.round((l.hi - l.lo) * 1000);
-        if (!widths.has(k)) widths.set(k, textBlock(dimensionLayout(chainShape(l, flip, back, h, 0)).label, h).outer.x1);
+        if (!widths.has(k)) widths.set(k, figureWidth(settings.measure, chainShape(l, flip, back, h, 0), h));
         return widths.get(k) as number;
       };
       const reach = Math.max(0, ...lines.map((l) => (l.hi - l.lo) / 2 - widthOf(l) / 2 - h));

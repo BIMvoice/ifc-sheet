@@ -4,11 +4,11 @@
 
 /** Which outlines of one wall element are its layers (joined) and which are not (#632). */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { rect } from './fixture';
-import { joinLayers } from './layers';
-import { boxOf } from './outline';
+import { rect } from './fixture.js';
+import { joinLayers } from './layers.js';
+import { boxOf } from './outline.js';
 
 const join = (...rings: ReturnType<typeof rect>[]) => joinLayers(rings.map(boxOf));
 

@@ -14,11 +14,11 @@ import { resetProject } from '@/project/project-store';
 import { newDraft } from '@/drafting/draft-store.js';
 import { sectionSymbolShapes } from '@/drafting/section-symbol.js';
 import type { DraftEntity, EntityShape, Pt } from '@/drafting/types';
-import { dimensionDrafts } from './apply.js';
-import { stringsThroughHeads, symbolPieces } from './avoid.js';
-import { house, lShape, mitred, turned } from './fixture.js';
-import { planDimensions } from './plan.js';
-import type { PlanPart } from './types';
+import { dimensionDrafts, planDimensions, stringsThroughHeads, symbolPieces, type PlanPart } from '@bimvoice/ifcsheet';
+import { freshProjectId } from '@/project/view-defaults';
+import { styleBook } from '@/project/drafting-standards';
+import { draftReader } from './reader';
+import { house, lShape, mitred, turned } from '@bimvoice/ifcsheet/dimall-fixture';
 
 const H = 0.25;
 /** A figure's glyph box (corners, convex) or a line (two points), in drawing space. */
@@ -62,7 +62,7 @@ function boxes(drafts: readonly DraftEntity[]): { figures: Shape[]; lines: Shape
 /** Every collision between figures and lines, as words. */
 export function collisions(parts: readonly PlanPart[], view: readonly DraftEntity[] = []): string[] {
   const plan = planDimensions(parts, { paperUnit: 0.1, textHeight: H });
-  const drafts = dimensionDrafts(plan, { viewId: 'v', layerId: 'l', textHeight: H, textStyle: 'Standard', dimStyle: 'Standard' }, [], view);
+  const drafts = dimensionDrafts(plan, { viewId: 'v', layerId: 'l', textHeight: H, textStyle: 'Standard', dimStyle: 'Standard', newId: () => freshProjectId('draft'), book: styleBook(), paperUnit: 0.1, reader: draftReader() }, [], view);
   const { figures, lines } = boxes(drafts);
   // The symbol's cut line is a line too.
   view.forEach((e) => { if (e.shape.type === 'line') lines.push({ pts: [e.shape.a, e.shape.b], what: 'cut line' }); });
@@ -78,7 +78,7 @@ beforeEach(() => resetProject());
 
 describe('DIMALL figures', () => {
   it('puts no figure on another figure or on a line (FZK-Haus ground plan)', () => {
-    assert.deepEqual(collisions(JSON.parse(readFileSync(new URL('./fzk-ground-plan.json', import.meta.url), 'utf8')) as PlanPart[]), []);
+    assert.deepEqual(collisions(JSON.parse(readFileSync(new URL('../../../../packages/ifcsheet/src/dimall/fzk-ground-plan.json', import.meta.url), 'utf8')) as PlanPart[]), []);
   });
   it('puts no figure on another figure or on a line (house)', () => assert.deepEqual(collisions(house()), []));
   it('puts no figure on another figure or on a line (L)', () => assert.deepEqual(collisions(lShape()), []));
@@ -96,7 +96,7 @@ describe('DIMALL and section marks', () => {
   it('counts the strings that run through the arrow or letter of a section mark', () => {
     const view = symbol({ x: 6, y: -1.8 }, { x: 6, y: 11.8 });
     const plan = planDimensions(house(), { paperUnit: 0.1, textHeight: H });
-    assert.ok(stringsThroughHeads(plan.strings, symbolPieces(view), H) > 0);
-    assert.equal(stringsThroughHeads(plan.strings, symbolPieces([]), H), 0);
+    assert.ok(stringsThroughHeads(plan.strings, symbolPieces(view, draftReader()), H) > 0);
+    assert.equal(stringsThroughHeads(plan.strings, symbolPieces([], draftReader()), H), 0);
   });
 });

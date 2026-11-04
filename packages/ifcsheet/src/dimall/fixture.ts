@@ -4,8 +4,8 @@
 
 /** Small buildings for the DIMALL tests, in plan coordinates (metres). */
 
-import type { Pt } from '@/drafting/types';
-import type { PartKind, PlanPart } from './types';
+import type { Pt } from '../draft-types.js';
+import type { PartKind, PlanPart } from './types.js';
 
 export const rect = (x0: number, y0: number, x1: number, y1: number): Pt[] => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 
