@@ -17,6 +17,7 @@
 
 import type { Pt } from '../draft-types.js';
 import { contentOf, facadeEnds, facadesOf, inFacade, type Facade } from './facades.js';
+import { closingBoxes } from './close.js';
 import { wallGaps } from './layers.js';
 import { boxOf, outlinesOf, pointInRing, ringOfBox, rotate, type Box } from './outline.js';
 import { readPlan } from './read.js';
@@ -51,7 +52,7 @@ export function planDimensions(parts: readonly PlanPart[], settings: DimensionSe
   const inexact = bridged.filter((o) => !o.exact);
   const leftOut = new Set<number>();
   // A plan that cuts only bare walls: two gable walls under a roof, with nothing cut between them. Each wall gets its own facades, and a face turned towards another wall is an inner face, not a facade. A plan with an enclosed mass is that mass; what stands apart from it (a boundary wall) is not the building.
-  const masses = outlinesOf([...walls, ...wholeWalls.flatMap(wallGaps).map(ringOfBox), ...bridged.map((o) => ringOfBox(o.box))]);
+  const masses = outlinesOf([...walls, ...wholeWalls.flatMap(wallGaps).map(ringOfBox), ...closingBoxes(wallBoxes).map(ringOfBox), ...bridged.map((o) => ringOfBox(o.box))]);
   if (masses.length === 0) return empty;
   const loop = masses[0];
   const loops = isBareWall(loop) ? masses.filter((m) => isBareWall(m)) : [loop];
