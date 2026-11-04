@@ -14,8 +14,9 @@
  * is PLAN_VIEW or NOTDEFINED (a REFLECTED_PLAN_VIEW symbol is the ceiling plan's). Bonsai (IfcOpenShell) writes
  * `Plan` / `Annotation` / `PLAN_VIEW` (`src/bonsai/bonsai/core/project.py` creates the contexts, `bim/module/model/door.py`
  * writes the Annotation / PLAN_VIEW representation of a sliding door) and offers `FootPrint` as a subcontext identifier
- * (`bim/module/context/prop.py`); `Plan` / `Body` / `PLAN_VIEW` is a 2D body of doors and windows, not a symbol, and is not
- * read. Doors and windows are left to their own opening symbols (`packages/ifcsheet/src/opening-symbols.ts`).
+ * (`bim/module/context/prop.py`). It also writes the 2D symbol of furniture and sanitaryware as `Body` (Curve2D, mapped from
+ * the type) in a `Plan` / PLAN_VIEW subcontext (#680), so `Body` is read too, in a Plan context only.
+ * Doors and windows are left to their own opening symbols (`packages/ifcsheet/src/opening-symbols.ts`).
  *
  * `readPlanSymbols` reads them off the parsed entities, in the render frame; `withPlanSymbols` puts them into a plan's
  * drawing, replacing the lines and faces of the elements that have one. The web app and the headless engine both call
@@ -49,7 +50,8 @@ export interface PlanSymbolRead {
 }
 
 const EMPTY: PlanSymbolRead = { symbols: new Map(), skipped: [] };
-const SYMBOL_IDENTIFIERS = new Set(['FOOTPRINT', 'ANNOTATION']);
+/** `Body` counts here because Bonsai writes a type's plan symbol as `Body` in a Plan / PLAN_VIEW subcontext (#680); a 3D Body is never in a Plan context. */
+const SYMBOL_IDENTIFIERS = new Set(['FOOTPRINT', 'ANNOTATION', 'BODY']);
 /** Doors and windows draw from their own opening symbols. */
 const OPENING = /^IFC(DOOR|WINDOW)/i;
 
