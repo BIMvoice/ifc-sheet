@@ -9,8 +9,8 @@
  */
 
 import type { Pt } from '@/drafting/types';
-import { rectAround, rectInsideRing, rectsOverlap, ringBounds, type Rect } from '@/labels/label-geometry';
-import type { RectIndex } from '@/labels/rect-index';
+import { rectAround, rectInsideRing, rectsOverlap, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
+import type { RectIndex } from '@bimvoice/ifcsheet';
 
 export function roomLabelPointLeast(ring: readonly Pt[], w: number, h: number, lines: readonly Rect[], annotations: RectIndex): { centre: Pt; over: number } | null {
   const box = ringBounds(ring);

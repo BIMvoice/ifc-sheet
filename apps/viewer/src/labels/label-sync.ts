@@ -26,7 +26,7 @@ import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
 import { extrasOf, resolveWithExtras } from './label-extras';
 import type { LabelElement } from './label-resolve';
-import { parseTemplate, type ParsedTemplate } from './label-template';
+import { parseTemplate, type ParsedTemplate } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useSheetLocale } from '@/project/units-and-numbers';
 

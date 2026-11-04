@@ -19,7 +19,7 @@ import { clearDraftHistory } from '@/drafting/draft-store';
 import { tagAll } from '@/drafting/commands/tagall';
 import type { DraftEntity, DraftShape, Pt } from '@/drafting/types';
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { viewElements } from '@/labels/view-elements';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
 import { roomsOfPlan } from '@/tagall/rooms';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';

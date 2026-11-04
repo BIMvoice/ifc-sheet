@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import type { Pt } from '@/drafting/types';
+import type { Pt } from '../draft-types.js';
 import { candidateCentres, orientedBox } from './label-candidates.js';
 import { rectAround, rectHitsRing, rectRingGap, rectsOverlap, type Rect } from './label-geometry.js';
 import { LABEL_GAP_MM, layoutLabels, type LayoutElement, type LayoutItem } from './label-layout.js';

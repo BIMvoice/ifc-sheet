@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { pointInRing, rectAround, rectInsideRing } from '@/labels/label-geometry.js';
+import { pointInRing, rectAround, rectInsideRing } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types';
 import { footprintOf, ringArea, type SpaceMesh } from './footprint.js';
 import { roomLabelPoint } from './room-point.js';

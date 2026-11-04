@@ -1,0 +1,28 @@
+ATTRIBUTE_FIELDS: value
+AttributeField: type (type-only)
+FieldRef: type (type-only)
+LABEL_CLEAR_MM: value
+LABEL_GAP_MM: value
+LayoutElement: type (type-only)
+ParsedTemplate: type (type-only)
+RectIndex: value+type
+TemplateField: type (type-only)
+ViewElement: type (type-only)
+fieldPath: value
+formatValue: value
+growRect: value
+labelTemplateFields: value
+layoutLabels: value
+nearestOnRing: value
+parseFieldRef: value
+parseFormatSpec: value
+parseTemplate: value
+pointInRing: value
+rectAround: value
+rectHitsRing: value
+rectInsideRing: value
+rectRingGap: value
+rectsOverlap: value
+ringBounds: value
+unionRect: value
+viewElements: value

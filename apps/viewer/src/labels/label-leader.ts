@@ -10,7 +10,7 @@
 
 import type { Pt } from '@/drafting/types';
 import { leaderStart } from '@bimvoice/ifcsheet';
-import { nearestOnRing, rectCentre, rectRingGap, type Rect } from './label-geometry';
+import { nearestOnRing, rectCentre, rectRingGap, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
 
 export const LEADER_MODES = ['never', 'displaced', 'always'] as const;
 /** never: no leader; displaced: one once the label is further than the threshold from its element; always: always. */

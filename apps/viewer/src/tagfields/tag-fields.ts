@@ -16,7 +16,7 @@
  * placeholders; formatting stays with the label that shows them.
  */
 
-import type { AttributeField, FieldRef } from '@/labels/label-template';
+import type { AttributeField, FieldRef } from '@bimvoice/ifcsheet';
 import type { FieldValue } from '@/labels/label-resolve';
 
 export const TAG_KINDS = ['door', 'window', 'room', 'wall', 'other'] as const;

@@ -25,7 +25,7 @@ import { planTagAll } from '@/tagall/plan.js';
 import { TAGALL_TYPES } from '@/tagall/types.js';
 import { elementLabel } from '@/tagfields/element-tag.js';
 import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types.js';
 import { scheduleData } from './schedule-data.js';
 import { joineryLabels } from './export-test-util.js';

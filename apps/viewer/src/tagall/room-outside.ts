@@ -10,8 +10,8 @@
  */
 
 import type { Pt } from '@/drafting/types';
-import { nearestOnRing, pointInRing, rectAround, ringBounds, type Rect } from '@/labels/label-geometry';
-import { RectIndex } from '@/labels/rect-index';
+import { nearestOnRing, pointInRing, rectAround, ringBounds, type LeaderRect as Rect } from '@bimvoice/ifcsheet';
+import { RectIndex } from '@bimvoice/ifcsheet';
 
 /** A drawing's visible lines and the box that holds the drawing. */
 export interface OutsideScene {

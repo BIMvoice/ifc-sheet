@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { dimensionLayout, formatLevel } from '@/drafting/annotation';
 import { formatDimension } from '@/drafting/styles';
 import type { AnnotationShape } from '@/drafting/types';
-import { formatValue, parseFormatSpec } from '@/labels/label-format';
+import { formatValue, parseFormatSpec } from '@bimvoice/ifcsheet';
 import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { joineryCsv, tableCsv } from '@/joinery/export-test-util';
 import { finishTable, layoutRoomFinishes, type RoomFinishLabels, roomFinishes, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';

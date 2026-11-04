@@ -16,7 +16,7 @@ import { readProjectFile } from '@bimvoice/ifcsheet/project';
 import { dimensionLayout, formatLength, formatLevel } from '@/drafting/annotation';
 import { formatDimension } from '@/drafting/styles';
 import type { AnnotationShape } from '@/drafting/types';
-import { formatValue, parseFormatSpec } from '@/labels/label-format';
+import { formatValue, parseFormatSpec } from '@bimvoice/ifcsheet';
 import { ceilingHeightText } from '@/rcp/ceiling-tags';
 import { formatDistance } from '@/components/viewer/tools/formatDistance';
 import { formatArea } from '@/components/viewer/tools/computePolygonArea';

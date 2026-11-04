@@ -36,3 +36,4 @@ export * from './exports/set-templates.js';
 export * from './exports/quantities.js';
 export * from './exports/project-set.js';
 export * from './exports/opening-symbols.js';
+export * from './exports/labels.js';

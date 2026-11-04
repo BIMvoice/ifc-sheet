@@ -10,10 +10,10 @@
  * same view gives the same result.
  */
 
-import type { Pt } from '@/drafting/types';
-import { candidateCentres, orientedBox } from './label-candidates';
-import { RectIndex } from './rect-index';
-import { growRect, rectAround, rectHitsRing, ringBounds, unionRect, type Rect } from './label-geometry';
+import type { Pt } from '../draft-types.js';
+import { candidateCentres, orientedBox } from './label-candidates.js';
+import { RectIndex } from './rect-index.js';
+import { growRect, rectAround, rectHitsRing, ringBounds, unionRect, type Rect } from './label-geometry.js';
 
 /** Clear space between a label and its element, paper millimetres. */
 export const LABEL_GAP_MM = 1.5;

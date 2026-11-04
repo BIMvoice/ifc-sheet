@@ -11,7 +11,7 @@ import { wall } from '@/labels/label-fixture.js';
 import { textBox } from '@/drafting/annotation';
 import type { LabelElement } from '@/labels/label-resolve.js';
 import type { DraftEntity, Pt } from '@/drafting/types';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { LabelTarget } from '@/labels/label-place.js';
 import { planTagAll } from './plan.js';
 import { TAGALL_TYPES } from './types.js';

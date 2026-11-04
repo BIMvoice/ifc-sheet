@@ -8,7 +8,8 @@
  * never leaves a unit standing alone.
  */
 
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import { sheetNumber } from '../sheet-number.js';
+import type { SheetLocale } from '../units-and-numbers.js';
 
 export interface FormatSpec {
   /** Digits after the point; null keeps the number as it is (up to three). */
