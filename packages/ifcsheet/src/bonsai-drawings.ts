@@ -9,8 +9,11 @@
  *
  * A DRAWING (`core.drawing.add_drawing`, `tool.Drawing.import_drawings`):
  * - an `IfcAnnotation`, `ObjectType` `DRAWING`, whose `Body` representation in the model's `Model` / `Body` / `MODEL_VIEW` context is
- *   the camera: a rectangle (the view's extent) extruded along -Z by the view depth, placed at the cut plane looking down;
- * - the property set `EPset_Drawing`: `TargetView` (`PLAN_VIEW`), `Scale` (`1/100`), `HumanScale` (`1:100`), and the switches it reads;
+ *   the camera: a rectangle (the view's crop) extruded along -Z by the view depth. A plan's camera sits at the cut plane looking down;
+ *   an elevation's or section's is placed as `tool.Drawing.generate_drawing_matrix` does: local -Z the way it looks (horizontal),
+ *   local Y up (world Z), local X to the right (`look` x Z), at the middle of the crop on the cut plane;
+ * - the property set `EPset_Drawing`: `TargetView` (`PLAN_VIEW`, `ELEVATION_VIEW` or `SECTION_VIEW`), `Scale` (`1/100`), `HumanScale`
+ *   (`1:100`), and the switches it reads;
  * - an `IfcGroup` of `ObjectType` `DRAWING` that the drawing and its annotations are assigned to (`IfcRelAssignsToGroup`), itself
  *   assigned to the parent `IfcGroup` named and typed `DRAWINGS`;
  * - an `IfcDocumentInformation` (`Scope` `DRAWING`) under the parent one named and scoped `DRAWINGS`, whose `IfcDocumentReference`
@@ -31,15 +34,32 @@ import { toNativeLength, type SpatialAnchor } from '@ifc-lite/create';
 
 export interface Pt2 { x: number; y: number }
 
+export type BonsaiTargetView = 'PLAN_VIEW' | 'ELEVATION_VIEW' | 'SECTION_VIEW';
+
+/** An elevation's or section's camera in the storey's local frame, metres. */
+export interface BonsaiVerticalCamera {
+  /** Unit horizontal direction the camera looks along. */
+  look: Pt2;
+  /** The middle of the crop on the cut plane; `z` above the storey's origin. */
+  centre: Pt2 & { z: number };
+  /** The crop across (along local X) and up (along Z). */
+  width: number;
+  height: number;
+}
+
 export interface BonsaiDrawingParams {
   name: string;
   /** The "N" of 1:N. */
   scale: number;
-  /** The camera's rectangle in the storey's local frame, metres. */
+  /** `EPset_Drawing.TargetView`; absent `PLAN_VIEW`. */
+  targetView?: BonsaiTargetView;
+  /** The camera's rectangle in the storey's local frame, metres (a plan). */
   extent: { min: Pt2; max: Pt2 };
-  /** The cut plane's height above the storey's origin, metres; the camera sits there looking down. */
+  /** The cut plane's height above the storey's origin, metres; the plan camera sits there looking down. */
   cutHeight: number;
-  /** How far below the cut plane the view sees, metres. */
+  /** An elevation's or section's camera; absent: a plan's, from `extent` and `cutHeight`. */
+  vertical?: BonsaiVerticalCamera;
+  /** How far the camera sees, metres (below the cut plane for a plan, along `look` for the others). */
   depth: number;
   /** The view's annotation(s) that Bonsai shows with the drawing. */
   annotationIds: readonly number[];
@@ -181,15 +201,21 @@ export class BonsaiWriter {
     const name = this.uniqueName(params.name);
     const point3 = (x: number, y: number, z: number): number => this.editor.addEntity('IfcCartesianPoint', [[x, y, z]]).expressId;
 
-    // The camera: placed on the storey's placement at the centre of the extent and at the cut height; its local -Z is the way it looks.
-    const centre = point3(n((min.x + max.x) / 2), n((min.y + max.y) / 2), n(params.cutHeight));
-    const axes = this.editor.addEntity('IfcAxis2Placement3D', [ref(centre), null, null]).expressId;
+    // The camera: placed on the storey's placement; its local -Z is the way it looks.
+    const { vertical } = params;
+    const width = vertical ? vertical.width : max.x - min.x;
+    const height = vertical ? vertical.height : max.y - min.y;
+    const centre = vertical
+      ? point3(n(vertical.centre.x), n(vertical.centre.y), n(vertical.centre.z))
+      : point3(n((min.x + max.x) / 2), n((min.y + max.y) / 2), n(params.cutHeight));
+    const direction = (x: number, y: number, z: number): number => this.editor.addEntity('IfcDirection', [[x, y, z]]).expressId;
+    const axes = this.editor.addEntity('IfcAxis2Placement3D', [ref(centre), vertical ? ref(direction(-vertical.look.x, -vertical.look.y, 0)) : null, vertical ? ref(direction(vertical.look.y, -vertical.look.x, 0)) : null]).expressId;
     const placement = this.editor.addEntity('IfcLocalPlacement', [ref(anchor.storeyPlacementId), ref(axes)]).expressId;
     const origin2 = this.editor.addEntity('IfcCartesianPoint', [[0, 0]]).expressId;
     const profilePlace = this.editor.addEntity('IfcAxis2Placement2D', [ref(origin2), null]).expressId;
-    const profile = this.editor.addEntity('IfcRectangleProfileDef', ['.AREA.', null, ref(profilePlace), n(max.x - min.x), n(max.y - min.y)]).expressId;
+    const profile = this.editor.addEntity('IfcRectangleProfileDef', ['.AREA.', null, ref(profilePlace), n(width), n(height)]).expressId;
     const solidPlace = this.editor.addEntity('IfcAxis2Placement3D', [ref(point3(0, 0, 0)), null, null]).expressId;
-    const down = this.editor.addEntity('IfcDirection', [[0, 0, -1]]).expressId;
+    const down = direction(0, 0, -1);
     const solid = this.editor.addEntity('IfcExtrudedAreaSolid', [ref(profile), ref(solidPlace), ref(down), n(params.depth)]).expressId;
     const shape = this.editor.addEntity('IfcShapeRepresentation', [ref(anchor.bodyContextId), 'Body', 'SweptSolid', [ref(solid)]]).expressId;
     const productShape = this.editor.addEntity('IfcProductDefinitionShape', [null, null, [ref(shape)]]).expressId;
@@ -197,7 +223,7 @@ export class BonsaiWriter {
     this.editor.addEntity('IfcRelContainedInSpatialStructure', [this.guid(), this.owned(), null, null, [ref(drawingId)], ref(anchor.storeyId)]);
 
     this.editor.addPropertySet(drawingId, 'EPset_Drawing', [
-      { name: 'TargetView', value: 'PLAN_VIEW', type: 'LABEL' },
+      { name: 'TargetView', value: params.targetView ?? 'PLAN_VIEW', type: 'LABEL' },
       { name: 'Scale', value: `1/${params.scale}`, type: 'LABEL' },
       { name: 'HumanScale', value: `1:${params.scale}`, type: 'LABEL' },
       { name: 'HasUnderlay', value: false, type: 'BOOLEAN' },
