@@ -85,7 +85,7 @@ const DOCUMENT_FIELD_DEFS = [
   // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
   defineField({ key: 'titleBlock', empty: () => ({}), fallback: () => ({}), read: whenPresent('titleBlock', (v) => readTitleBlock(v) ?? {}) }),
   defineField({ key: 'drafts', empty: () => [], read: (raw) => ({ drafts: at(raw, 'drafts', readDraft) }) }),
-  defineField({ key: 'draftLayers', empty: () => [{ ...DEFAULT_DRAFT_LAYER }], read: (raw) => ({ draftLayers: at(raw, 'draftLayers', readDraftLayer) }) }),
+  defineField({ key: 'draftLayers', empty: () => [{ ...DEFAULT_DRAFT_LAYER }], read: (raw) => ({ draftLayers: at(raw, 'draftLayers', readDraftLayer) }), heldByUndo: true }),
   defineField({ key: 'hatchPatterns', empty: () => '', fallback: () => '', read: (raw) => ({ hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '' }) }),
   recordField('symbolFlips', (raw) => readFlips(raw.symbolFlips)),
   defineField({ key: 'openingLines', fallback: () => 'handle' as const, load: (v) => v ?? 'handle', read: (raw) => (raw.openingLines === 'hinge' || raw.openingLines === 'handle' ? { openingLines: raw.openingLines } : {}) }),
