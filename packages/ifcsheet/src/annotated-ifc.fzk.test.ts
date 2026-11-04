@@ -51,6 +51,7 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with its annotations written ba
   const sourceHash = createHash('sha256').update(source).digest('hex');
   const input: AnnotatedIfcInput = {
     source,
+    bonsai: false, // these tests count the view annotations alone; the Bonsai drawings are annotated-ifc.bonsai.test.ts
     views: [planView('v-ground', 'Ground floor', GROUND, 'W1'), planView('v-roof', 'Roof floor', ROOF, 'R1')],
   };
 
