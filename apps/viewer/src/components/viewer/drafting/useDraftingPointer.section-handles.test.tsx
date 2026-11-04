@@ -149,3 +149,27 @@ describe('a section end handle (#454)', () => {
     assert.equal(read(ui, 'grip-cursor'), 'grab');
   });
 });
+
+describe('a section end handle under the ortho lock (#650)', () => {
+  const dragEnd = (ortho: boolean) => {
+    useDraftingSession.setState({ ortho });
+    const grip = sectionEndGrip();
+    const ui = render(<Harness grips={[grip]} />);
+    const surface = ui.querySelector('[data-testid=surface]')!;
+    fire(surface, 'pointerdown', 90, 10);
+    fire(surface, 'pointermove', 100, 40);
+    fire(surface, 'pointerup', 100, 40);
+    return endOf(grip)!;
+  };
+
+  it('keeps the section axis-aligned to its fixed end when dragged diagonally', () => {
+    const end = dragEnd(true);
+    // The other end is (10, 10): the dragged end stays on one axis through it.
+    assert.ok(end.y === 10 || end.x === 10, `slanted: ${JSON.stringify(end)}`);
+    assert.deepEqual(end, { x: 100, y: 10 });
+  });
+
+  it('leaves the end free with ortho off', () => {
+    assert.deepEqual(dragEnd(false), { x: 100, y: 40 });
+  });
+});
