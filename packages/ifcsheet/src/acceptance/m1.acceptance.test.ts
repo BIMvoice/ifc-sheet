@@ -53,7 +53,11 @@ interface Case {
   /** Plans whose cut passes through nothing (the storey is above or below what the model has there). */
   emptyPlans: string[];
   sections: number;
-  /** The least door symbols the four elevations draw (a door that states its operation, facing the elevation); the count the model gave when written. */
+  /**
+   * The least door symbols the four elevations draw: a door of the outside wall the elevation faces that states its operation. The elevations
+   * are cut with hidden lines classified (#627), so a door behind a wall is not seen; the 8 and 2 counted before were inner doors seen
+   * through the outer walls and doors seen from the far side of their own wall.
+   */
   elevationDoorSymbols: number;
   /** Classes that some section must cut. */
   sectionCuts: string[];
@@ -66,7 +70,9 @@ const CASES: Case[] = [
     name: 'AC20-FZK-Haus (ArchiCAD 20, KIT)', file: here('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'),
     storeys: ['Erdgeschoss', 'Dachgeschoss'], doors: 5, windows: 11, rooms: 7,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, elevationDoorSymbols: 8, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
+    emptyPlans: [], sections: 2,
+    // Two outside doors: the sliding terrace door (south) draws; the entrance (west) states no operation, so it draws nothing.
+    elevationDoorSymbols: 1, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
   },
   {
     name: 'bloc-p4 (residential block, five storeys)', file: here('../../../../apps/viewer/public/samples/bloc-p4.ifc'),
@@ -78,7 +84,9 @@ const CASES: Case[] = [
     name: 'federated arch.ifc (hand-written, two levels)', file: here('../../../../apps/viewer/src/test/fixtures/federated/arch.ifc'),
     storeys: ['Level 0', 'Level 1'], doors: 1, windows: 0, rooms: 0,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, elevationDoorSymbols: 2, sectionCuts: ['IfcWall'], notDrawn: [],
+    emptyPlans: [], sections: 2,
+    // The file has no IfcOpeningElement: its one door sits inside a solid wall, which hides it from both sides.
+    elevationDoorSymbols: 0, sectionCuts: ['IfcWall'], notDrawn: [],
   },
   {
     // ara3d ISSUE_068, a Norwegian school (ARK NUS skolebygg): 56 MB, no redistribution licence stated, so it is never committed.

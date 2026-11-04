@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { planProjectionBands, storeyFloorsOf } from '@bimvoice/ifcsheet';
+import { planProjectionBands, storeyFloorsOf, viewCutOptions } from '@bimvoice/ifcsheet';
 import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
@@ -507,16 +507,8 @@ export function useDrawingGeneration({
         allMeshes: geometryResult.meshes,
         meshes: meshesToProcess,
         config,
-        options: {
-          // Always classify projection occlusion. Hidden Lines controls whether
-          // the classified hidden edges render/export, not whether opaque walls
-          // hide geometry behind them (#6615). Overhead stays dashed separately.
-          includeHiddenLines: projectionOn,
-          includeProjection: projectionOn,
-          includeEdges: projectionOn,
-          mergeLines: true,
-          outline: projectionOn && typeof meshOutline2dFn === 'function',
-        },
+        // The engine's sheets cut with the same settings (`viewCutOptions`, #627).
+        options: viewCutOptions(projectionOn, typeof meshOutline2dFn === 'function'),
         profiles: projectionOn ? projectionProfiles : undefined,
         onProgress: progressCallback,
       }, meshOutline2dFn);

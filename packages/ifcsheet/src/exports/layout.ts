@@ -22,7 +22,8 @@ export {
   DEFAULT_PLAN_CUT_HEIGHT_M, ELEVATION_DIRECTIONS, LEVEL_MATCH_TOLERANCE_M, NEXT_FLOOR_CLEARANCE_M, defaultPlanCutHeight, defaultViews, elevationName, levelFloorY, levelsFromStoreys, planDepthBelowCut, planViewFor,
   resolvePlanLevel, sameElevation, syncDefaultViews, uniqueViewName, type StoreyInput,
 } from '../view-defaults.js';
-export { boundedProjectionBands, planProjectionBands, storeyFloorsOf, viewProjection, type BoundedBandsInput, type PlanBandOptions, type PlanBandsInput, type ProjectionBands, type ViewProjection } from '../plan-projection.js';
+export { viewCutOptions, viewShowsHidden, type ViewCutOptions } from '../view-cut-options.js';
+export { automaticDepthOfSpan, boundedProjectionBands, planProjectionBands, SECTION_VIEW_DEPTH_FRACTION, storeyFloorsOf, viewProjection, type BoundedBandsInput, type PlanBandOptions, type PlanBandsInput, type ProjectionBands, type ViewProjection } from '../plan-projection.js';
 export { DEPTH_MARGIN_M, ELEVATION_CLEARANCE_M, elevationDepth, elevationPlaneOffset, proposalDepth, type Extent3 } from '../set-defaults.js';
 export { CUT_OVERHANG_M, PROPOSAL_WALL_TYPES, SAME_CUT_M, SMALLEST_ROOM_M2, proposeSections, type Footprint, type ProposalInput, type RoomFootprint, type SectionProposal } from '../section-proposals.js';
 export { customPlaneCenter, sectionPlaneThrough, type WorldPoint } from '../section-plane.js';
