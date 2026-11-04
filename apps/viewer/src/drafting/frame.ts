@@ -22,7 +22,6 @@
  */
 
 import { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 } from '@bimvoice/ifcsheet';
-import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { Pt } from './types';
 
 export { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 };
