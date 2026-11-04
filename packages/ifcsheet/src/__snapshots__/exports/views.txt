@@ -38,6 +38,7 @@ HIDDEN_DASH_MM: value
 InteriorElevation: type (type-only)
 ItemRules: type (type-only)
 ItemStyle: type (type-only)
+MakeDraftOptions: type (type-only)
 ModelClassificationRef: type (type-only)
 NumberGroup: type (type-only)
 NumberingScheme: type (type-only)
@@ -111,6 +112,7 @@ itemRules: value
 layerOrder: value
 lineHidden: value
 lineKey: value
+makeDraft: value
 mappingsFor: value
 maskingFill: value
 matchKey: value
