@@ -1,0 +1,15 @@
+ALL_CHOICES: value
+AnnotateChoices: type (type-only)
+AnnotateCommand: type (type-only)
+AnnotatedKind: type (type-only)
+AnnotationOptions: type (type-only)
+AnnotationPreset: type (type-only)
+COMMAND_ORDER: value
+choicesFrom: value
+choicesOfTemplate: value
+commandsFor: value
+effectiveOptions: value
+hasChoices: value
+readAnnotationPresets: value
+withPreset: value
+withoutPreset: value
