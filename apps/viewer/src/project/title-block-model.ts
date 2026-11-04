@@ -58,7 +58,8 @@ function projectNamed(): boolean {
 function fileFacts(): ModelFacts {
   if (projectNamed()) return SILENT_FACTS;
   const first = [...useViewerStore.getState().models.values()].find((m) => !m.linked) ?? [...useViewerStore.getState().models.values()][0];
-  const name = first ? projectNameFromFile(first.name) : '';
+  // A LandXML file names its own project (#204); every other model offers its file name.
+  const name = first?.landXmlDocument?.project?.name?.trim() || (first ? projectNameFromFile(first.name) : '');
   return name ? { ...SILENT_FACTS, file: () => name } : SILENT_FACTS;
 }
 
