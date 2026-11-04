@@ -22,7 +22,8 @@
  * A SHEET (`core.drawing.add_sheet`, `add_drawing_to_sheet`): an `IfcDocumentInformation` with `Scope` `SHEET`, `Identification` and
  * `Name`, associated to the project, with one `IfcDocumentReference` of `Description` `LAYOUT` and one per drawing of `Description`
  * `DRAWING`, `Identification` its running number and the same `Location` as the drawing's own reference (that equality is how
- * Bonsai finds the sheets of a drawing). IfcSheet writes no SVG: Bonsai makes the drawing and sheet files itself.
+ * Bonsai finds the sheets of a drawing). IfcSheet writes no SVG (the drawing is rendered by the app, not the engine): Bonsai makes the drawing and sheet files itself, and finds its own
+ * stylesheet, markers, symbols, patterns and shading styles through the `EPset_Drawing` paths written with its defaults.
  *
  * IFC4 and IFC4X3 only: Bonsai's IFC2X3 document attributes differ and are not written.
  */
@@ -80,6 +81,20 @@ export interface BonsaiSheetParams {
   /** The drawings on the sheet, in order (`location` of each `BonsaiDrawingResult`). */
   locations: readonly string[];
 }
+
+/**
+ * The resource paths `core.drawing.add_drawing` writes into `EPset_Drawing` and `svgwriter.py` reads (Stylesheet, Markers, Symbols,
+ * Patterns, ShadingStyles), with the defaults of the add-on's document preferences (`bim/ui.py`), relative to the IFC file and with
+ * forward slashes as Bonsai stores them. Bonsai copies its own `shading_styles.json` there; the others it finds in its own data.
+ */
+export const BONSAI_DRAWING_RESOURCES: readonly (readonly [string, string])[] = [
+  ['Stylesheet', 'drawings/assets/default.css'],
+  ['Markers', 'drawings/assets/markers.svg'],
+  ['Symbols', 'drawings/assets/symbols.svg'],
+  ['Patterns', 'drawings/assets/patterns.svg'],
+  ['ShadingStyles', 'drawings/assets/shading_styles.json'],
+];
+export const BONSAI_DEFAULT_SHADING_STYLE = 'Blender Default';
 
 const ref = (id: number): string => `#${id}`;
 const fileSafe = (name: string): string => [...name].filter((c) => /[\p{L}\p{N}._ -]/u.test(c)).join('');
@@ -230,6 +245,8 @@ export class BonsaiWriter {
       { name: 'HasLinework', value: true, type: 'BOOLEAN' },
       { name: 'HasAnnotation', value: true, type: 'BOOLEAN' },
       { name: 'GlobalReferencing', value: true, type: 'BOOLEAN' },
+      ...BONSAI_DRAWING_RESOURCES.map(([name, value]) => ({ name, value, type: 'LABEL' as const })),
+      { name: 'CurrentShadingStyle', value: BONSAI_DEFAULT_SHADING_STYLE, type: 'LABEL' },
     ]);
 
     const groupId = this.editor.addEntity('IfcGroup', [this.guid(), this.owned(), name, null, 'DRAWING']).expressId;

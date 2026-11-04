@@ -63,6 +63,10 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     expect(out).toContain("IFCPROPERTYSINGLEVALUE('Scale',$,IFCLABEL('1/100'),$)");
     expect(out).toContain("IFCPROPERTYSINGLEVALUE('Scale',$,IFCLABEL('1/50'),$)");
     expect(out.match(/IFCPROPERTYSINGLEVALUE\('TargetView',\$,IFCLABEL\('PLAN_VIEW'\),\$\)/g)).toHaveLength(2);
+    // The paths Bonsai reads its stylesheet and symbol files from, with its defaults (core.drawing.add_drawing).
+    for (const [name, value] of [['Stylesheet', 'drawings/assets/default.css'], ['Markers', 'drawings/assets/markers.svg'], ['Symbols', 'drawings/assets/symbols.svg'], ['Patterns', 'drawings/assets/patterns.svg'], ['ShadingStyles', 'drawings/assets/shading_styles.json'], ['CurrentShadingStyle', 'Blender Default']]) {
+      expect(out.match(new RegExp(`IFCPROPERTYSINGLEVALUE\\('${name}',\\$,IFCLABEL\\('${value}'\\),\\$\\)`, 'g'))).toHaveLength(2);
+    }
     // The camera looks down: a rectangle extruded along -Z, in the model's Body context.
     expect(out.match(/IFCEXTRUDEDAREASOLID\(#\d+,#\d+,#\d+,1\.2\)/g)).toHaveLength(2);
     expect(out).toMatch(/IFCDIRECTION\(\(0\.,0\.,-1\.\)\)/);
@@ -132,7 +136,7 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     const highest = Math.max(...[...sourceText.matchAll(/^#(\d+)\s*=/gm)].map((m) => Number(m[1])));
     const seen = JSON.parse(execFileSync(python as string, [SCRIPT, file, String(highest)], { encoding: 'utf8', maxBuffer: 1 << 26 })) as {
       new_findings: string[];
-      drawings: { name: string; target_view: string; scale: string; group: string; group_parents: string[]; grouped: string[]; location: string; document_scope: string; camera: number[]; context: string }[];
+      drawings: { name: string; target_view: string; scale: string; group: string; group_parents: string[]; grouped: string[]; location: string; document_scope: string; camera: number[]; context: string; resources: Record<string, string | null> }[];
       sheets: { identification: string; name: string; drawings: string[]; project: string[] }[];
       plan_annotations: string[];
     };
@@ -143,6 +147,10 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     ]);
     // The view's own extent: its annotations (4 m wide, 3.4 m tall) and a metre around them.
     expect(seen.drawings[0].camera.slice(0, 3)).toEqual([6, 5.4, 1.2]);
+    // EPset_Drawing, read back by ifcopenshell, names the files Bonsai's svgwriter opens (default.css, markers.svg, ...).
+    for (const d of seen.drawings) {
+      expect(d.resources).toEqual({ Stylesheet: 'drawings/assets/default.css', Markers: 'drawings/assets/markers.svg', Symbols: 'drawings/assets/symbols.svg', Patterns: 'drawings/assets/patterns.svg', ShadingStyles: 'drawings/assets/shading_styles.json', CurrentShadingStyle: 'Blender Default' });
+    }
     expect(seen.sheets).toEqual([expect.objectContaining({ identification: 'A01', name: 'Plans', drawings: ['Ground floor', 'Roof floor'], project: ['IfcProject'] })]);
     expect(seen.plan_annotations).toEqual(['Ground floor', 'Roof floor']);
   }, 60_000);
