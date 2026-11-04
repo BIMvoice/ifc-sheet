@@ -24,6 +24,7 @@ import { projectOpenErrorText } from '@/project/open-error';
 import { requestNewProject } from '@/project/new-project';
 import { exportProjectFile, importProjectFile, openProjectDocument, PROJECT_FILE_SUFFIX } from '@/project/project-file';
 import { projectDocument, useProjectStore } from '@/project/project-store';
+import { useProjectTitle } from '@/project/title-block-model';
 import { RecoveryOffer } from './RecoveryOffer';
 import { stepInto } from './wall-nav';
 import { DrawerSections } from './drawer-sections/DrawerSections';
@@ -31,7 +32,7 @@ import { action } from './drawer-sections/parts';
 
 export function ProjectDrawer({ extent, onClose }: { extent: ModelExtent | null; onClose: () => void }) {
   const { t } = useTranslation();
-  const name = useProjectStore((s) => s.name);
+  const name = useProjectTitle();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const go = (sheetId: string | null, focus: string | null = null): void => {

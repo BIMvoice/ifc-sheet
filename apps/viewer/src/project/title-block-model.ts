@@ -121,3 +121,15 @@ export function useEffectiveTitleBlock(): Record<string, string> {
   const resolved = useResolvedTitleBlock();
   return useMemo(() => effectiveFields(resolved, typed), [resolved, typed]);
 }
+
+/**
+ * The name the Project drawer is titled with: the project's own name, or, while it still carries the untitled default,
+ * the name the title block prints (the model's IfcProject, or a file's name), so the two never read as different projects (#653).
+ */
+export function useProjectTitle(): string {
+  const name = useProjectStore((s) => s.name);
+  const block = useEffectiveTitleBlock();
+  const trimmed = name.trim();
+  if (trimmed !== '' && !UNTITLED.has(trimmed)) return name;
+  return block.project?.trim() || name;
+}
