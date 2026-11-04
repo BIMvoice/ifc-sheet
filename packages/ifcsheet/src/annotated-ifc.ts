@@ -20,7 +20,7 @@
  */
 
 import { StepExporter } from '@ifc-lite/export';
-import { BonsaiWriter } from './bonsai-drawings.js';
+import { BonsaiWriter, type BonsaiTargetView } from './bonsai-drawings.js';
 import {
   MutablePropertyView,
   StoreEditor,
@@ -55,7 +55,20 @@ export interface DrawnText {
   height: number;
 }
 
-/** One plan view's annotations. */
+/** An elevation's or section's crop in world metres: the camera Bonsai draws it from. */
+export interface VerticalCrop {
+  /** Unit horizontal direction the view looks along (an elevation looks at its facade). */
+  look: Pt2;
+  /** The middle of the crop on the cut plane; `z` is metres above the storey's origin. */
+  centre: Pt2 & { z: number };
+  /** The crop across and up, metres. */
+  width: number;
+  height: number;
+  /** How far it sees along `look`, metres. */
+  depth: number;
+}
+
+/** One view's annotations (a plan's; an elevation's or section's are not written, the view still is a Bonsai drawing). */
 export interface AnnotatedView {
   viewId: string;
   name: string;
@@ -67,6 +80,10 @@ export interface AnnotatedView {
   texts: readonly DrawnText[];
   /** The view's rectangle in world metres (the Bonsai camera's extent); absent: the annotations' bounds and a metre around them. */
   extent?: { min: Pt2; max: Pt2 };
+  /** What Bonsai draws it as (`EPset_Drawing.TargetView`); absent `PLAN_VIEW`. */
+  targetView?: BonsaiTargetView;
+  /** The crop of an elevation or section (`targetView` is not `PLAN_VIEW`); with none, the drawing is not written. */
+  vertical?: VerticalCrop;
   /** The cut plane's height above the storey, metres (the Bonsai camera's height); absent 1.2. */
   cutHeight?: number;
   /** How far below the cut plane the view sees, metres; absent 0 (down to the storey's floor). */
@@ -133,10 +150,21 @@ export interface WrittenAnnotation {
   drawingGroupExpressId?: number;
 }
 
+/** A view written as a Bonsai drawing, with or without annotations. */
+export interface WrittenDrawing {
+  viewId: string;
+  name: string;
+  targetView: BonsaiTargetView;
+  expressId: number;
+  groupExpressId: number;
+}
+
 export interface AnnotatedIfcResult {
   bytes: Uint8Array;
   schema: string;
   annotations: WrittenAnnotation[];
+  /** The Bonsai drawings written, one per view (a view without annotations has one too). */
+  drawings: WrittenDrawing[];
   /** The Bonsai sheets written: the sheet's name and its `IfcDocumentInformation`. */
   sheets: { name: string; expressId: number; viewIds: string[] }[];
   /** Elements that got the `IfcSheet_Annotation` property set. */
@@ -178,7 +206,8 @@ function localExtent(v: AnnotatedView, to: ReturnType<typeof localizer>): { min:
   const world: Pt2[] = v.extent
     ? [v.extent.min, v.extent.max, { x: v.extent.min.x, y: v.extent.max.y }, { x: v.extent.max.x, y: v.extent.min.y }]
     : [...v.curves.flatMap((c) => (c.type === 'circle' ? [{ x: c.centre.x - c.radius, y: c.centre.y - c.radius }, { x: c.centre.x + c.radius, y: c.centre.y + c.radius }] : c.points)), ...v.texts.map((t) => t.position)];
-  const pts = world.map(to.point);
+  // A view with no annotations and no extent: a 2 m square on the storey's origin, for Bonsai to resize.
+  const pts = world.length > 0 ? world.map(to.point) : [{ x: 0, y: 0 }];
   const margin = v.extent ? 0 : 1;
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
@@ -222,36 +251,49 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   const locations = new Map<string, string>();
   const annotations: WrittenAnnotation[] = [];
   let contextId: number | null = null;
+  const drawings: WrittenDrawing[] = [];
   for (const v of input.views) {
-    if (v.curves.length === 0 && v.texts.length === 0) { notes.push({ key: 'viewEmpty', params: { view: v.name } }); continue; }
+    const targetView = v.targetView ?? 'PLAN_VIEW';
+    const hasContent = targetView === 'PLAN_VIEW' && (v.curves.length > 0 || v.texts.length > 0);
+    const wantsDrawing = bonsai !== null && !bonsai.hasDrawing(v.name) && (targetView === 'PLAN_VIEW' || v.vertical !== undefined);
+    if (!hasContent && !wantsDrawing) { notes.push({ key: 'viewEmpty', params: { view: v.name } }); continue; }
     const storeyGlobalId = v.storeyGlobalIds.find((g) => storeys.has(g));
     if (!storeyGlobalId) { notes.push({ key: 'noStorey', params: { view: v.name } }); continue; }
     const storeyId = storeys.get(storeyGlobalId) as number;
     const frame = storeyPlanFrame(store, storeyId);
     if (!frame) { notes.push({ key: 'storeyFrame', params: { view: v.name } }); continue; }
     const to = localizer(frame);
-    contextId ??= ensurePlanAnnotationContext(editor, store, view);
     const anchor = { ...resolveSpatialAnchor(store, storeyId, view), storeyId };
     const curves: ViewAnnotationCurve[] = v.curves.map((c) => (c.type === 'circle'
       ? { type: 'circle', centre: to.point(c.centre), radius: c.radius }
       : { type: 'polyline', points: c.points.map(to.point), closed: c.closed }));
     const texts: ViewAnnotationText[] = v.texts.map((t) => ({ position: to.point(t.position), direction: t.direction ? to.direction(t.direction) : undefined, text: t.text, width: t.width, height: t.height }));
-    const written = addViewAnnotationToStore(editor, anchor, contextId, {
-      name: v.name,
-      curves,
-      texts,
-      properties: [{ name: 'View', value: v.name }, ...(v.scale ? [{ name: 'Scale', value: `1:${v.scale}` }] : [])],
-    });
-    const drawing = bonsai && !bonsai.hasDrawing(v.name) ? bonsai.addDrawing(anchor, {
+    let written: { annotationId: number } | null = null;
+    if (hasContent) {
+      contextId ??= ensurePlanAnnotationContext(editor, store, view);
+      written = addViewAnnotationToStore(editor, anchor, contextId, {
+        name: v.name,
+        curves,
+        texts,
+        properties: [{ name: 'View', value: v.name }, ...(v.scale ? [{ name: 'Scale', value: `1:${v.scale}` }] : [])],
+      });
+    }
+    const crop = v.vertical;
+    const drawing = wantsDrawing ? bonsai!.addDrawing(anchor, {
       name: v.name,
       scale: v.scale ?? 100,
+      targetView,
       extent: localExtent(v, to),
       cutHeight: v.cutHeight ?? 1.2,
-      depth: Math.max((v.cutHeight ?? 1.2) + (v.viewDepth ?? 0), 0.1),
-      annotationIds: [written.annotationId],
+      vertical: crop ? { look: to.direction(crop.look), centre: { ...to.point(crop.centre), z: crop.centre.z }, width: crop.width, height: crop.height } : undefined,
+      depth: crop ? Math.max(crop.depth, 0.1) : Math.max((v.cutHeight ?? 1.2) + (v.viewDepth ?? 0), 0.1),
+      annotationIds: written ? [written.annotationId] : [],
     }) : undefined;
-    if (drawing) locations.set(v.viewId, drawing.location);
-    annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length, drawingExpressId: drawing?.drawingId, drawingGroupExpressId: drawing?.groupId });
+    if (drawing) {
+      locations.set(v.viewId, drawing.location);
+      drawings.push({ viewId: v.viewId, name: v.name, targetView, expressId: drawing.drawingId, groupExpressId: drawing.groupId });
+    }
+    if (written) annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length, drawingExpressId: drawing?.drawingId, drawingGroupExpressId: drawing?.groupId });
   }
 
   bonsai?.finish();
@@ -282,5 +324,5 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   }
 
   const result = new StepExporter(store, view).export({ schema, applyMutations: true, ...(input.fileName ? { filename: input.fileName } : {}) });
-  return { bytes: result.content, schema, annotations, sheets, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
+  return { bytes: result.content, schema, annotations, drawings, sheets, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
 }

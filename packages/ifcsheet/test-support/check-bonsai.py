@@ -3,6 +3,8 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 """Reads the drawings and sheets of an IfcSheet export the way Bonsai does (#548), as JSON on stdout.
 
+Drawings of every TargetView (PLAN_VIEW, ELEVATION_VIEW, SECTION_VIEW) are listed with the camera's box and its place.
+
 usage: check-bonsai.py <file.ifc> <highest express id of the source>
 
 Each rule below is the one Bonsai's own code applies (v0.8.0), named in its comment, so the answer is what Bonsai would list:
@@ -16,6 +18,7 @@ import sys
 
 import ifcopenshell
 import ifcopenshell.util.element as element
+import ifcopenshell.util.placement as placement
 import ifcopenshell.validate as validate
 
 path, highest = sys.argv[1], int(sys.argv[2])
@@ -38,6 +41,13 @@ def box(drawing):
             if item.is_a("IfcExtrudedAreaSolid") and item.SweptArea.is_a("IfcRectangleProfileDef"):
                 return [item.SweptArea.XDim, item.SweptArea.YDim, item.Depth, list(item.ExtrudedDirection.DirectionRatios)]
     return None
+
+
+def frame(drawing):
+    """The camera's place in the world as Bonsai's matrix_world: location and local X (right), Y (up) and Z (it looks along -Z)."""
+    m = placement.get_local_placement(drawing.ObjectPlacement)
+    return {"location": [round(float(v), 4) for v in m[:3, 3]], "x": [round(float(v), 4) for v in m[:3, 0]],
+            "y": [round(float(v), 4) for v in m[:3, 1]], "z": [round(float(v), 4) for v in m[:3, 2]]}
 
 
 drawings = []
@@ -72,6 +82,7 @@ for e in f.by_type("IfcAnnotation"):
         "location": document.Location if document is not None else None,
         "document_scope": info.Scope if info is not None else None,
         "camera": box(e),
+        "camera_frame": frame(e),
         "context": e.Representation.Representations[0].ContextOfItems.ContextType if e.Representation else None,
     })
 
