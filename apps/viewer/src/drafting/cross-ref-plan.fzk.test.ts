@@ -132,9 +132,21 @@ describe('the marks on the ground plan of AC20-FZK-Haus (#221)', { skip: planMod
     }
   });
 
-  it('the old placement, without the symbols as obstacles, did land on a door (the test can fail)', () => {
-    const doors = doorPoints();
-    const hits = boxes(marks(undefined)).filter(({ box }) => doors.some((p) => inside(p, box)));
-    assert.ok(hits.length > 0, 'without the symbols a label lands on a door');
+  // #679: a door that states no swing now opens the way Bonsai builds it, so on this plan the
+  // unobstructed labels no longer land on the real swings (the nearest is 0.8 m off). The control
+  // therefore puts a symbol across each unobstructed label, so the check can still fail.
+  it('without the symbols as obstacles a label lands on a symbol, with them it does not (the test can fail)', () => {
+    const unobstructed = boxes(marks(undefined));
+    assert.ok(unobstructed.length > 0, 'the plan has marks');
+    const blocker: PlanOverlay = {
+      layer: 'SYMBOLS', width: 0.25,
+      shapes: unobstructed.map(({ box }): DraftShape => ({ type: 'line', a: box[0], b: box[2] })),
+    };
+    const pts: Pt[] = [];
+    for (const sh of blocker.shapes) sample(sh, 0.01, pts);
+    const hits = unobstructed.filter(({ box }) => pts.some((p) => inside(p, box)));
+    assert.ok(hits.length > 0, 'without the symbols a label lands on a symbol');
+    const avoided = boxes(marks([...(overlays ?? []), blocker])).filter(({ box }) => pts.some((p) => inside(p, box)));
+    assert.deepEqual(avoided.map((h) => h.id), [], 'with the symbols as obstacles no label lands on one');
   });
 });
