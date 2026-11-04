@@ -121,5 +121,9 @@ export function paintedSurfaces(
       }
     }
   }
-  return paintOrder(found);
+  // A face that crosses another is cut along it: each piece is its own fill, with the part's corners.
+  return paintOrder(found, (from, corners, depths) => ({
+    ...from, corners, depths, layer: Math.round(Math.max(0, (depths[0] + depths[1] + depths[2]) / 3) / LAYER),
+    fill: { ...from.fill, polygon: { outer: [...corners], holes: [] } },
+  }));
 }
