@@ -58,6 +58,7 @@ import { wallFindEn } from '../catalogues/wall-find.en';
 import { wallZoomEn } from '../catalogues/wall-zoom.en';
 import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
+import { wallRectangleEn } from '../catalogues/wall-rectangle.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
 import { wallMaterialsEn } from '../catalogues/wall-materials.en';
 import { wallRelayoutEn } from '../catalogues/wall-relayout.en';
@@ -127,6 +128,7 @@ export const enSZ = {
   ...wallCompareEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,
+  ...wallRectangleEn,
   ...wallMaterialsEn,
   ...wallReviewEn,
   ...trackingEn,

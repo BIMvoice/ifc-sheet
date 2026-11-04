@@ -17,7 +17,7 @@ import { openStandards } from '@/project/standards-dialog-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { cn } from '@/lib/utils';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
-import { Braces, Circle, Cloud, PaintBucket, Slash, Spline, Type } from 'lucide-react';
+import { Braces, Circle, Cloud, PaintBucket, Slash, Spline, Square, Type } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@/project/types';
 import { toolHelpKey } from './tool-help';
@@ -28,7 +28,7 @@ import { keyProps } from './wall-key-title';
 import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
-  line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, circle: <Circle className="size-5" />,
+  line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, rectangle: <Square className="size-5" />, circle: <Circle className="size-5" />,
   text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, revcloud: <Cloud className="size-5" />, ptext: <Braces className="size-5" />,
 };
 
