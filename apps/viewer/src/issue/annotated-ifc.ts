@@ -17,6 +17,7 @@ import { getLocale, resolve } from '@/i18n/registry';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { collectAnnotations } from './annotated-ifc-collect';
 
 export interface AnnotatedIfcFile { name: string; bytes: Uint8Array }
@@ -37,7 +38,7 @@ export async function runAnnotatedIfc(): Promise<AnnotatedIfcRun> {
 
   const project = useProjectStore.getState();
   const frame = renderFrameWorldOffset(federationFrameInfo(viewer.models.values(), viewer.geometryResult));
-  const collected = collectAnnotations(project, frame, getLocale());
+  const collected = collectAnnotations({ ...project, bounds: mergedSectionBounds(viewer.models, viewer.geometryResult) }, frame, getLocale());
   for (const l of collected.leftOut) say('annotatedIfc.msg.viewLeftOut', { view: l.name, kind: resolve(`annotatedIfc.kind.${l.kind}` as TranslationKey) });
   if (collected.hatches > 0) say('annotatedIfc.msg.hatches', { count: collected.hatches });
   if (collected.views.length === 0) { say('annotatedIfc.msg.nothing'); return { files: [], lines, done: false }; }
@@ -55,20 +56,21 @@ export async function runAnnotatedIfc(): Promise<AnnotatedIfcRun> {
     let result: AnnotatedIfcResult;
     try {
       // materialize(): the bytes as loaded; the engine parses a copy of them and never writes to them.
-      result = await buildAnnotatedIfc({ source: model.ifcDataStore!.source.materialize(), views: collected.views, marks: collected.marks, leftOut: [], fileName: name });
+      result = await buildAnnotatedIfc({ source: model.ifcDataStore!.source.materialize(), views: collected.views, sheets: collected.sheets, marks: collected.marks, leftOut: [], fileName: name });
     } catch (error) {
       say('annotatedIfc.msg.failed', { model: model.name, reason: error instanceof Error ? error.message : String(error) });
       continue;
     }
     for (const a of result.annotations) written.add(a.viewId);
+    for (const d of result.drawings) written.add(d.viewId);
     for (const m of result.marks) if (m.state !== 'noElement') found.add(m.globalId);
     for (const n of result.notes) {
       if (n.key === 'storeyFrame') say('annotatedIfc.msg.storeyFrame', { view: String(n.params.view), model: model.name });
     }
-    if (result.annotations.length === 0 && result.marked.length === 0) continue;
+    if (result.annotations.length === 0 && result.drawings.length === 0 && result.marked.length === 0) continue;
     used.add(name.toLowerCase());
     files.push({ name, bytes: result.bytes });
-    say('annotatedIfc.msg.done', { model: model.name, views: result.annotations.length, marks: result.marked.length, name });
+    say('annotatedIfc.msg.done', { model: model.name, views: Math.max(result.annotations.length, result.drawings.length), marks: result.marked.length, name });
   }
   for (const v of collected.views) if (!written.has(v.viewId) && !lines.some((l) => l.key === 'annotatedIfc.msg.storeyFrame' && l.params.view === v.name)) unplaced.set(v.viewId, v.name);
   for (const name of unplaced.values()) say('annotatedIfc.msg.noStorey', { view: name });

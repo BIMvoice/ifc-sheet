@@ -103,12 +103,17 @@ describe('the engine draws the door and window symbols of the elevations and sec
   it('a door that states its operation draws its opening lines on the elevations (no configured type)', () => {
     const rs = compare();
     const doors = of(rs, 'door');
-    assert.ok(doors.length >= 4, 'the doors the elevations see');
     assert.ok(doors.every((s) => strokes(s) > 0), 'each has opening lines');
-    assert.ok(rs.filter((r) => r.row.kind === 'elevation' && r.symbols.some((s) => s.kind === 'door')).length >= 3, 'on most elevations');
+    // An elevation sees only the doors of the outside wall it faces (#627): the opaque walls hide the three inner doors, and the terrace
+    // door from every side but its own. The house has two outside doors; the entrance states no operation, so the sliding terrace door,
+    // on the south elevation, is the one an elevation draws.
+    const onElevations = rs.filter((r) => r.row.kind === 'elevation').flatMap((r) => r.symbols.filter((s) => s.kind === 'door').map(() => r.row.name));
+    assert.deepEqual(onElevations, ['South Elevation'], 'the terrace door, on the elevation that faces it');
     assert.ok(rs.some((r) => r.row.kind === 'section' && r.symbols.some((s) => s.kind === 'door')), 'a section that cuts a door draws its opening lines over the cut');
-    // An unconfigured window has no type, so the elevation draws nothing for it (the app's rule).
-    assert.equal(of(rs, 'window').length, 0);
+    // An unconfigured window has no type, so it is drawn as the plain window of its measured box (#651): frame and glass, the same on both sides.
+    const windows = of(rs, 'window');
+    assert.ok(windows.length > 0, 'the untyped windows are drawn');
+    assert.ok(windows.every((s) => strokes(s) > 0), 'each untyped window has its frame and glass');
   });
 
   it('a configured window type draws its frame, panels and opening lines on the elevations and on the section that cuts it', () => {
@@ -163,10 +168,22 @@ describe('the engine draws the door and window symbols of the elevations and sec
   });
 
   it('the project\'s flips turn a door the same way on both sides', () => {
+    // The elevations see the two outside doors only (#627): the sliding terrace door, which a flip does not turn, and the entrance, which
+    // states no operation and so draws nothing. Configured as a swing door, the entrance is the door a flip turns.
+    const doorMeshes = new Set(engine.buildingMeshes.filter((m) => /^IfcDoor/i.test(m.ifcType ?? '')).map((m) => m.expressId));
+    const drawn = new Set(of(compare(), 'door').map((s) => s.id));
+    const entrances = [...new Set(rows.filter((r) => r.kind === 'elevation').flatMap((r) => [...visibleEntities(r.drawing)]))].filter((id) => doorMeshes.has(id) && !drawn.has(id));
+    assert.equal(entrances.length, 1, 'one door an elevation sees draws no symbol: the entrance');
+    const entrance = elementFacts(MODEL, entrances[0]);
+    assert.ok(entrance, 'the entrance has facts');
+    assert.ok(configureElementType(entrance, { operations: ['swing-left'], fanlight: false }), 'the entrance has a type to configure');
+    invalidateJoineryReads();
     const plain = of(compare(), 'door');
+    assert.ok(plain.some((s) => s.id === entrances[0]), 'the configured entrance is drawn');
     const guids = new Set(scheduleData('door').entries.flatMap((e) => e.occurrences).map((o) => elementFacts(MODEL, o.expressId)?.globalId).filter((g): g is string => !!g));
     assert.ok(guids.size >= 5);
     useProjectStore.setState({ symbolFlips: Object.fromEntries([...guids].map((g) => [g, 1])) });
+    invalidateJoineryReads();
     assert.notDeepEqual(sorted(of(compare(), 'door')), sorted(plain), 'the flips changed what is drawn');
   });
 

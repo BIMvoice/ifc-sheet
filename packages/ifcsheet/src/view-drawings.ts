@@ -21,7 +21,8 @@ import { customPlaneCenter } from './section-plane.js';
 import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-provider.js';
-import { planProjectionBands, viewProjection } from './plan-projection.js';
+import { viewCutOptions, viewShowsHidden } from './view-cut-options.js';
+import { automaticDepthOfSpan, planProjectionBands, viewProjection } from './plan-projection.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
@@ -37,11 +38,24 @@ const meshOutline2dFn = (IfcWasm as unknown as { meshOutline2d?: MeshOutline2dFn
 
 const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 
-/** A plane stored in world metres, with its custom plane anchored where the generator anchors it. */
-function storedPlane(plane: SectionProjectPlane, depth: number): SectionConfig {
-  const config = createSectionConfig(AXIS[plane.axis], plane.offset, { projectionDepth: depth, includeHiddenLines: false });
-  config.plane.flipped = plane.flipped;
-  const custom = plane.custom;
+/**
+ * A vertical cut at `position` along `axis`, with the bands the app gives it (`planProjectionBands`, the automatic depth
+ * of `automaticDepthOfSpan` when the view has none of its own, #627); `custom` anchors a plane that is not along an axis.
+ */
+function verticalConfig(
+  view: ProjectView, axis: 'x' | 'y' | 'z', position: number, flipped: boolean, custom: SectionProjectPlane['custom'], extent: ModelExtent,
+): SectionConfig {
+  const { showConstructionProjection, constructionProjectionDepth } = viewProjection(view);
+  const span = custom
+    ? Math.hypot(extent.max.x - extent.min.x, extent.max.y - extent.min.y, extent.max.z - extent.min.z)
+    : extent.max[axis] - extent.min[axis];
+  const bands = planProjectionBands({
+    depth: constructionProjectionDepth, projectionOn: showConstructionProjection, floors: null, position,
+    axisMin: extent.min[axis], axisMax: extent.max[axis], down: axis === 'y', custom: !!custom, flipped, reflected: false,
+    automaticDepth: showConstructionProjection && (custom || axis !== 'y') ? automaticDepthOfSpan(span) : null,
+  });
+  const config = createSectionConfig(axis, position, { ...bands, includeHiddenLines: false });
+  config.plane.flipped = flipped;
   if (custom) {
     const origin = customPlaneCenter(custom);
     config.plane.customPlane = {
@@ -53,6 +67,11 @@ function storedPlane(plane: SectionProjectPlane, depth: number): SectionConfig {
     };
   }
   return config;
+}
+
+/** A plane stored in world metres, with its custom plane anchored where the generator anchors it. */
+function storedPlane(view: ProjectView, plane: SectionProjectPlane, extent: ModelExtent): SectionConfig {
+  return verticalConfig(view, AXIS[plane.axis], plane.offset, plane.flipped, plane.custom, extent);
 }
 
 /**
@@ -73,7 +92,6 @@ function planConfig(view: PlanProjectView, cut: number, extent: ModelExtent, flo
 
 /** The generator's settings for `view`, or `null` for a view with no plane (3D, drafting) or a plan whose level is gone. */
 export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLevel[], extent: ModelExtent, floors: readonly number[] | null = null): SectionConfig | null {
-  const span = Math.max(extent.max.x - extent.min.x, extent.max.y - extent.min.y, extent.max.z - extent.min.z, 1);
   switch (view.kind) {
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
@@ -83,15 +101,13 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
       return planConfig(view, cut, extent, floors);
     }
     case 'elevation': {
-      if (view.interior) return storedPlane(view.interior.plane, view.viewDepth ?? span);
+      if (view.interior) return storedPlane(view, view.interior.plane, extent);
       const { axis, atMax, flipped } = ELEVATION_PLANES[view.direction];
       const position = view.planeOffset ?? (atMax ? extent.max[axis] : extent.min[axis]);
-      const config = createSectionConfig(axis, position, { projectionDepth: view.viewDepth ?? span, includeHiddenLines: false });
-      config.plane.flipped = flipped;
-      return config;
+      return verticalConfig(view, axis, position, flipped, undefined, extent);
     }
     case 'section':
-      return storedPlane(view.plane, view.viewDepth ?? span);
+      return storedPlane(view, view.plane, extent);
     default:
       return null;
   }
@@ -132,16 +148,15 @@ export async function generateViewDrawings(
       if (!config) continue;
       try {
         const projection = config.projectionDepth > 0;
-        // A plan is cut as the app cuts it: hidden edges classified (an opaque wall hides what is behind it and splits the
-        // lines it crosses, #6615; the drawing carries them marked `hidden` and the sheet draws them dashed, unless the plan says `showHidden: false`, below) and the Rust
-        // outline of non-extruded geometry (#623). Elevations and sections keep the unclassified cut they had.
-        const asApp = projection && view.kind === 'plan';
+        // Every view is cut as the app cuts it (`viewCutOptions`): hidden edges classified (an opaque wall hides what is behind
+        // it and splits the lines it crosses, #6615) and the Rust outline of non-extruded geometry (#623, #627).
+        const cut = viewCutOptions(projection, typeof meshOutline2dFn === 'function');
         const generated = await generator.generate(meshes, config, {
-          includeHiddenLines: asApp, includeProjection: projection, includeEdges: projection, mergeLines: true,
-          outlineProvider: asApp && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
+          includeHiddenLines: cut.includeHiddenLines, includeProjection: cut.includeProjection, includeEdges: cut.includeEdges, mergeLines: cut.mergeLines,
+          outlineProvider: cut.outline && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
         });
-        // A plan shows its hidden lines unless it says not to (`viewShowsHidden` in the app).
-        const drawing = asApp && view.showHidden === false ? { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') } : generated;
+        // The hidden lines it found are drawn unless the view leaves them out (`viewShowsHidden`, as the app).
+        const drawing = viewShowsHidden(view) ? generated : { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') };
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);
         out.set(view.id, drawing);
       } catch (err) {

@@ -4,6 +4,7 @@
 
 import { addDrawingKindsRo } from '../catalogues/add-drawing-kinds.ro';
 import { contoursRo } from '../catalogues/contours.ro';
+import { lengthUnitsFootRo } from '../catalogues/length-units-foot.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
@@ -24,6 +25,7 @@ import { draftingRo } from '../catalogues/drafting.ro';
 import { drawOrderRo } from '../catalogues/draw-order.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { dxfViewRo } from '../catalogues/dxf-view.ro';
+import { dxfSiteRo } from '../catalogues/dxf-site.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { joineryDraftRo } from '../catalogues/joinery-draft.ro';
 import { exportChangesReviewRo } from '../catalogues/export-changes-review.ro';
@@ -56,6 +58,7 @@ import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roAL = {
+  ...lengthUnitsFootRo,
   ...addDrawingKindsRo,
   ...contoursRo,
   ...annotateAllRo,
@@ -78,6 +81,7 @@ export const roAL = {
   ...drawOrderRo,
   ...draftingStandardsRo,
   ...dxfViewRo,
+  ...dxfSiteRo,
   ...elementGraphicsRo,
   ...joineryDraftRo,
   ...exportChangesReviewRo,

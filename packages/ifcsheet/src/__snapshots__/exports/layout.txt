@@ -51,6 +51,7 @@ RenumberRow: type (type-only)
 RoomFootprint: type (type-only)
 SAME_CUT_M: value
 SCHEME_PRESETS: value
+SECTION_VIEW_DEPTH_FRACTION: value
 SEQUENTIAL_SCHEME: value
 SET_PAPER: value
 SET_PAPERS: value
@@ -67,9 +68,11 @@ SheetRelayout: type (type-only)
 StoreyInput: type (type-only)
 TARGET_SCALE: value
 TITLE_BLOCK_MM: value
+ViewCutOptions: type (type-only)
 ViewProjection: type (type-only)
 WorldPoint: type (type-only)
 allTemplates: value
+automaticDepthOfSpan: value
 boundedProjectionBands: value
 boundsFromIndex: value
 boxGap: value
@@ -163,6 +166,8 @@ typedBeforeSchemes: value
 unionEntityBounds: value
 uniqueViewName: value
 viewCentre: value
+viewCutOptions: value
 viewExtent: value
 viewProjection: value
+viewShowsHidden: value
 withViewHung: value

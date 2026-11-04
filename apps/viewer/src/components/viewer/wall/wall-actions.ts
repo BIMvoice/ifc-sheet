@@ -105,6 +105,11 @@ export const DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
   { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
   { command: 'ptext', labelKey: 'wall.draw.ptext', bodyKey: 'wall.draw.ptext.body' },
+  // Edit tools: they work on a drafted line or a line of the generated drawing (#189).
+  { command: 'trim', labelKey: 'wall.draw.trim', bodyKey: 'wall.draw.trim.body' },
+  { command: 'extend', labelKey: 'wall.draw.extend', bodyKey: 'wall.draw.extend.body' },
+  { command: 'fillet', labelKey: 'wall.draw.fillet', bodyKey: 'wall.draw.fillet.body' },
+  { command: 'offset', labelKey: 'wall.draw.offset', bodyKey: 'wall.draw.offset.body' },
 ];
 
 /**

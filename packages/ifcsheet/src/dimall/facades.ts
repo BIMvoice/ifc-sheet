@@ -21,6 +21,12 @@ const TOUCH = 0.03;
 export const MIN_RUN = 0.3;
 /** Runs on one side this close across (metres) are one facade at a reveal in a finish: a plaster coat interrupted at each window is not a second facade. */
 const SHALLOW = 0.05;
+/**
+ * An opening's outer face can lie this far behind the facade (metres) and still be on it: the wall it sits in carries a
+ * finish that is its own element, a coat 25 mm thick standing 25 mm clear of the wall (a balcony wall of bloc-p4, #642).
+ * Without it the recess behind a parapet has windows and no opening on its facade, and gets no string.
+ */
+const BEHIND = 0.06;
 /** A wall's edge this far from where an opening's frame reaches (metres) can be that opening's jamb. */
 const REACH = 0.25;
 /** How far outside a frame's edge (metres) a wall's edge can still be that frame's jamb. */
@@ -184,7 +190,7 @@ export function contentOf(f: Facade, walls: readonly Box[], openings: readonly O
   for (const o of openings) {
     if (o.exact === false) continue;
     const b = inFacade(f, o.box);
-    if (near(b.d1, f.D) && b.s0 >= f.s0 - TOUCH && b.s1 <= f.s1 + TOUCH) {
+    if (b.d1 <= f.D + TOUCH && b.d1 >= f.D - BEHIND && b.s0 >= f.s0 - TOUCH && b.s1 <= f.s1 + TOUCH) {
       c.openings.push(Math.max(b.s0, f.s0), Math.min(b.s1, f.s1));
       c.openingParts.push({ s0: Math.max(b.s0, f.s0), s1: Math.min(b.s1, f.s1), id: o.part.id });
     }
