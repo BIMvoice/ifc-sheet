@@ -49,7 +49,9 @@ import { readSiteArea } from './site-area.js';
 import type { StoreyInput } from './view-defaults.js';
 import { readMaterials, type ProjectMaterial } from './materials.js';
 import { readUnderlays } from './underlay-read.js';
+import { readDxfUnderlays } from './dxf-underlay-read.js';
 import type { ViewUnderlay } from './underlay.js';
+import type { ViewDxfUnderlay } from './dxf-underlay.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
 import { readProjectSet, type ProjectSet } from './project-set.js';
 
@@ -100,6 +102,8 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   set: ProjectSet;
   /** The pictures laid under views (#457); absent when the file has none. A build prints each on the sheets it names, when the generated set has that view and sheet. */
   underlays?: ViewUnderlay[];
+  /** The DXF drawings laid under plan views (#547); absent when the file has none. */
+  dxfUnderlays?: ViewDxfUnderlay[];
   /** The project's building materials table (#90); absent when the file has none. A build paints elevations and sections by its fills (#633). */
   materials?: ProjectMaterial[];
 }
@@ -135,6 +139,7 @@ export function readProjectFile(text: string): ProjectFacts {
   // Before the lenient fields: a view, sheet or draft the app refuses the file for refuses it here first, as in the app.
   const set = readProjectSet(parsed);
   const underlays = readUnderlays(parsed);
+  const dxfUnderlays = readDxfUnderlays(parsed);
   const materials = readMaterials(parsed.materials);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   const sheets = readProjectSheets(parsed);
@@ -165,6 +170,7 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(urbanSettings ? { urbanSettings } : {}),
     set,
     ...(underlays.length > 0 ? { underlays } : {}),
+    ...(dxfUnderlays.length > 0 ? { dxfUnderlays } : {}),
     ...(materials.length > 0 ? { materials } : {}),
     ...(parsed.openingLines === 'hinge' || parsed.openingLines === 'handle' ? { openingLines: parsed.openingLines } : {}),
     ...(isObject(parsed.symbolFlips) ? { symbolFlips: readSymbolFlips(parsed.symbolFlips) } : {}),
