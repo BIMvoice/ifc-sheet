@@ -22,6 +22,7 @@ import { labelElementByGlobalId } from '@/labels/label-element';
 import { viewElements } from '@bimvoice/ifcsheet';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
 import { roomsOfPlan } from '@/tagall/rooms';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { registerLocale, setLocale } from '@/i18n';
 import { TAGALL_TYPES } from '@/tagall/types';
@@ -101,7 +102,7 @@ describe('room labels on the ground plan of AC20-FZK-Haus (#42)', { skip: planMo
       viewId: ground.id, layerId: '0', settings: { textHeight: 0.25, currentTextStyle: 'Standard', currentDimStyle: 'Standard' },
       viewKind: () => 'plan', view: () => ground, say: () => {}, entities: () => existing,
       viewElements: () => viewElements(drawing),
-      rooms: () => roomsOfPlan(ground, levels, { meshes } as never),
+      rooms: () => roomsOfPlan(ground, levels, { meshes } as never, renderIdGlobalId),
       planObstacles: () => planSymbolObstacles(ground, levels, meshes, undefined),
     }) as unknown as Parameters<typeof tagAll>[0];
   });

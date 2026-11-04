@@ -14,6 +14,7 @@ import { addProjectView, resetProject, useProjectStore } from '@/project/project
 import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 import { currentDrawingRuntime, publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { roomsOfPlan } from '@/tagall/rooms';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { useViewerStore } from '@/store';
 import { currentFindings } from './collect.js';
 
@@ -49,7 +50,7 @@ describe('the check reads the rooms TAGALL labels', () => {
   it('reports a room the fix would label as unlabelled, on a models-map load', () => {
     const id = planOnASheet();
     const view = useProjectStore.getState().views.find((v) => v.id === id)!;
-    const fix = roomsOfPlan(view, useProjectStore.getState().levels, currentDrawingRuntime().geometryResult).map((r) => r.guid);
+    const fix = roomsOfPlan(view, useProjectStore.getState().levels, currentDrawingRuntime().geometryResult, renderIdGlobalId).map((r) => r.guid);
     assert.deepEqual(fix, [GUID], 'the fix has the room');
     const found = currentFindings().filter((f) => f.kind === 'unlabelledRooms');
     assert.deepEqual(found.map((f) => [f.viewId, f.guids, f.fix]), [[id, [GUID], 'TAGALL']]);

@@ -15,22 +15,19 @@
  */
 
 import {
-  DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD, TABLES_STYLE_ID,
+  DEFAULT_TEXT_STYLE, overrideKey, resolveText, STANDARD, TABLES_STYLE_ID,
   type DimStyle, type LayerGroup, type StyleBook, type TextStyle,
 } from '@/drafting/styles';
 import { commitDrafts } from '@/drafting/draft-store';
 import type { CustomLineType } from '@/drafting/line-types';
 import type { DraftEntity, DraftLayer, DraftParamValue, EntityShape } from '@/drafting/types';
-import { findSymbol, symbolDrawingScale } from '@bimvoice/ifcsheet';
+import { findSymbol, isSizedShape, paperUnitFor, styleBookOf, styledParamsIn, symbolDrawingScale } from '@bimvoice/ifcsheet';
 import { useProjectStore } from './project-store';
 import { freshProjectId } from './view-defaults';
 
 type State = ReturnType<typeof useProjectStore.getState>;
 
-const book = (s: State): StyleBook => ({
-  textStyles: s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE],
-  dimStyles: s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE],
-});
+const book = (s: State): StyleBook => styleBookOf(s.textStyles, s.dimStyles);
 
 export function styleBook(): StyleBook {
   return book(useProjectStore.getState());
@@ -38,11 +35,10 @@ export function styleBook(): StyleBook {
 
 /** Drawing units per paper millimetre where an entity lives: a view's scale / 1000, a sheet's 1. */
 export function paperUnitOf(viewId: string, s: State = useProjectStore.getState()): number {
-  if (s.sheets.some((sheet) => sheet.id === viewId)) return 1;
-  return (s.views.find((v) => v.id === viewId)?.scale ?? 100) / 1000;
+  return paperUnitFor(viewId, s.sheets, s.views);
 }
 
-const sized = (shape: EntityShape): shape is Extract<EntityShape, { height: number }> => 'height' in shape && typeof (shape as { height?: unknown }).height === 'number';
+const sized = isSizedShape;
 
 /** The height an annotation should have under its style (or its override). */
 function styledHeight(entity: DraftEntity, s: State): number | null {
@@ -83,13 +79,8 @@ export const commitStandards = commit;
 
 /** A new annotation takes its style: style ids by kind, and an `o.height` when its height is not the style's. */
 export function styledParams(viewId: string, shape: EntityShape, current: { textStyle: string; dimStyle: string }): Record<string, DraftParamValue> {
-  if (!sized(shape)) return {};
   const s = useProjectStore.getState();
-  const dimensional = shape.type === 'dimension' || shape.type === 'radial' || shape.type === 'angular';
-  const params: Record<string, DraftParamValue> = dimensional ? { dimStyle: current.dimStyle } : { textStyle: current.textStyle };
-  const mm = shape.height / paperUnitOf(viewId, s);
-  if (Math.abs(mm - resolveText(book(s), params).height) > 1e-6) params[overrideKey('height')] = Number(mm.toFixed(3));
-  return params;
+  return styledParamsIn(book(s), paperUnitOf(viewId, s), shape, current);
 }
 
 // ─── Layers and groups ────────────────────────────────────────────────────

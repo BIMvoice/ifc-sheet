@@ -11,16 +11,15 @@
  */
 
 import type { GeometryResult } from '@ifc-lite/geometry';
-import { renderIdGlobalId } from '@/project/element-guid';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { levelFloorY, resolvePlanLevel } from '@/project/view-defaults';
 import { roomFootprints, type RoomOfPlan } from './footprint';
 
-export function roomsOfPlan(view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined): RoomOfPlan[] {
+export function roomsOfPlan(view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined, guidOf: (renderId: number) => string | null): RoomOfPlan[] {
   if (view.kind !== 'plan') return [];
   const level = resolvePlanLevel(view, levels) ?? view.level;
   return roomFootprints(geometry?.meshes ?? [], levelFloorY(level) + view.cutHeight, levelFloorY(level)).flatMap((r) => {
-    const guid = renderIdGlobalId(r.renderId);
+    const guid = guidOf(r.renderId);
     return guid ? [{ ...r, guid }] : [];
   });
 }
