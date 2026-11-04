@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { describe, expect, it } from 'vitest';
-import { createSectionConfig } from '@ifc-lite/drawing-2d';
+import { createSectionConfig, projectPointForPlane } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import { surfaceColourOf, surfaceFills } from './surface-fills.js';
 
@@ -26,6 +26,31 @@ describe('the surfaces of a coloured elevation (#499)', () => {
     const fills = surfaceFills([near, far], south());
     expect(fills.map((f) => f.surfaceColour)).toEqual(['#0000ff', '#0000ff', '#ff0000', '#ff0000']);
     expect(fills.map((f) => f.entityId)).toEqual([2, 2, 1, 1]);
+  });
+
+  it('paints a roof slope over the wall it stands in front of, though its mean depth is farther than the wall (#646)', () => {
+    // Seen from the south (z = 10, depth = 10 - z). The wall: 4 wide, 2 high, at depth 3. The roof slope: its eave at y = 1.5 in front
+    // (depth 1), its ridge at y = 4 far back (depth 9). Its mean depth (3.67) is behind the wall's, but where the two overlap
+    // (y 1.5 to 2) the slope is at depth 1 to 2.6, in front of the wall.
+    const wall = quad(1, 7, [1, 1, 1, 1]);
+    wall.positions = new Float32Array([0, 0, 7, 4, 0, 7, 4, 2, 7, 0, 2, 7]);
+    const roof = quad(2, 0, [0.8, 0.2, 0.1, 1], 'IfcSlab');
+    roof.positions = new Float32Array([0, 1.5, 9, 4, 1.5, 9, 2, 4, 1]);
+    roof.indices = new Uint32Array([0, 1, 2]);
+    const fills = surfaceFills([wall, roof], south());
+    // The colour a viewer sees at a point is the last fill painted over it.
+    const seenAt = (x: number, y: number, z: number): string | undefined => {
+      const p = projectPointForPlane({ x, y, z }, south().plane);
+      const inside = (f: (typeof fills)[number]) => f.polygon.outer.every((a, k, o) => {
+        const b = o[(k + 1) % o.length];
+        return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) > 0;
+      });
+      return fills.filter(inside).at(-1)?.surfaceColour;
+    };
+    // On the slope, 0.2 above the eave (depth 1.64): in front of the wall.
+    expect(seenAt(2, 1.7, 9 - 8 * 0.2 / 2.5)).toBe('#cc331a');
+    // Below the eave only the wall is there.
+    expect(seenAt(1, 1, 7)).toBe('#ffffff');
   });
 
   it('leaves out the terrain and the type objects: neither stands in the building', () => {
