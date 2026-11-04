@@ -46,6 +46,7 @@ import { joineryCellRo } from '../catalogues/joinery-cell.ro';
 import { joineryBlockRo } from '../catalogues/joinery-block.ro';
 import { joineryHeadRo } from '../catalogues/joinery-head.ro';
 import { joineryReachRo } from '../catalogues/joinery-reach.ro';
+import { joinLinesRo } from '../catalogues/join-lines.ro';
 import { landxmlRo } from '../catalogues/landxml.ro';
 import { layerDuplicateRo } from '../catalogues/layer-duplicate.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
@@ -96,6 +97,7 @@ export const roAL = {
   ...joineryHeadRo,
   ...joineryBlockRo,
   ...joineryReachRo,
+  ...joinLinesRo,
   ...landxmlRo,
   ...layerDuplicateRo,
   ...listScheduleRo,

@@ -32,6 +32,7 @@ import { joineryCellEn } from '../catalogues/joinery-cell.en';
 import { joineryBlockEn } from '../catalogues/joinery-block.en';
 import { joineryHeadEn } from '../catalogues/joinery-head.en';
 import { joineryReachEn } from '../catalogues/joinery-reach.en';
+import { joinLinesEn } from '../catalogues/join-lines.en';
 import { listScheduleEn } from '../catalogues/list-schedule.en';
 import { listsEn } from '../catalogues/lists.en';
 
@@ -67,6 +68,7 @@ export const enFL = {
   ...joineryHeadEn,
   ...joineryBlockEn,
   ...joineryReachEn,
+  ...joinLinesEn,
   ...listScheduleEn,
   ...listsEn,
 } as const;
