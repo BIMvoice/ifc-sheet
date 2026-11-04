@@ -82,6 +82,8 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       return {
         type: 'hatch', loops, pattern: v.pattern, scale: isNumber(v.scale) && v.scale > 0 ? v.scale : 1, angle: isNumber(v.angle) ? v.angle : 0,
         ...(isString(v.color) ? { color: v.color } : {}),
+        ...(v.opaque === true ? { opaque: true as const } : {}),
+        ...(isString(v.fill) && /^#[0-9a-f]{6}$/i.test(v.fill) ? { fill: v.fill } : {}),
       };
     }
     default:
@@ -147,5 +149,6 @@ export function readDraftLayer(v: unknown, path: string): DraftLayer {
     ...(isString(v.lineType) && v.lineType !== 'continuous' && v.lineType !== '' ? { lineType: v.lineType } : {}),
     ...(v.print === false ? { print: false } : {}),
     ...(isString(v.group) ? { group: v.group } : {}),
+    ...(isNumber(v.order) && Number.isInteger(v.order) && v.order !== 0 ? { order: v.order } : {}),
   };
 }

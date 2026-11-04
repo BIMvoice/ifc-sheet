@@ -57,14 +57,13 @@ import {
   pressEscape,
   runningCommand,
   setCurrentLayer,
-  toggleOrtho,
-  toggleSnap,
   useDraftingSession,
   pickEntity,
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
 import { SelectionStyleCard } from './SelectionStyleCard';
+import { SnapToggles } from './SnapToggles';
 import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
@@ -104,6 +103,7 @@ import { MembraneLayer } from './MembraneLayer';
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
 import { UnderlayLayer } from './UnderlayLayer';
+import { RegionSelectHint } from './RegionSelectHint';
 import { UnderlayPanel } from './UnderlayPanel';
 
 import { roofAtPoint } from '@/project/roof-plan';
@@ -162,11 +162,10 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const selection = useDraftingSession((s) => s.selection);
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const orthoToggled = useDraftingSession((s) => s.ortho);
-  const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
 
   const levels = useProjectStore((s) => s.levels);
@@ -204,7 +203,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
     setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale: 40, x: width / 2, y: height / 2 } : t));
   }, [drawing, setViewTransform, target]);
 
-  const entities = useMemo(() => draftsOfView(view.id, allDrafts), [allDrafts, view.id]);
+  const entities = useMemo(() => draftsOfView(view.id, allDrafts, layers), [allDrafts, layers, view.id]);
   const entityShapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
@@ -302,8 +301,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
       {bare ? null : <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{view.name}</span>
         <span className="flex-1" />
-        <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
-        <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <SnapToggles />
         <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
@@ -370,9 +368,10 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           hoverId={state.hoverId}
           preview={preview}
           snap={state.snap}
+          tracking={state.tracking}
           cursor={state.cursor}
           orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
-          window={state.window}
+          window={state.window} lasso={state.lasso}
           highlight={highlight}
           extraPatterns={extraPatterns}
           transform={viewTransform}
@@ -385,6 +384,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           crop={view.detail}
           symbols={liveSymbols}
         />
+        <RegionSelectHint hidden={!!command} />
         {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
         {selected.length === 1 && !state.gripDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />

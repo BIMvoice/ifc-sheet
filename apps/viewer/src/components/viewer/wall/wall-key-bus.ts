@@ -33,7 +33,7 @@ export type WallHandlers = Readonly<Record<WallKeyId, (() => void) | null>>;
  * are the field's.
  */
 export function keysBelongElsewhere(target: EventTarget | null): boolean {
-  if (autocadModeOn() && target instanceof HTMLInputElement && target.hasAttribute('data-command-line') && target.value === '') {
+  if (autocadModeOn() && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) && target.hasAttribute('data-command-line') && target.value === '') {
     return target.closest('[data-owns-keys]') !== null;
   }
   if (isTextEntryElement(target)) return true;

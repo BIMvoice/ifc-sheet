@@ -133,7 +133,7 @@ const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationS
   level: { type: 'level', p: pt(1, 1), value: 3.2, height: 0.25, ref: { at: pt(1, 1), storey: 'Level 1' } },
   axis: { type: 'axis', a: pt(0, 0), b: pt(0, 9), label: 'B', bubble: 'square', ends: 'start', size: 0.8, height: 0.25, lineType: 'dotted' },
   symbol: { type: 'symbol', symbolId: 'sym-model', p: pt(2, 3), scale: 1.5, rotation: 0.7, followsNorth: true },
-  hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500' },
+  hatch: { type: 'hatch', loops: [[pt(0, 0), pt(2, 0), pt(2, 2)], [pt(0.5, 0.2), pt(1, 0.2), pt(1, 0.8)]], pattern: 'ANSI31', scale: 2, angle: 0.4, color: '#aa5500', opaque: true, fill: '#ff00aa' },
 };
 const SHAPES: EntityShape[] = [...Object.values(GEOMETRY), ...Object.values(ANNOTATION)];
 
@@ -157,7 +157,7 @@ const legend: Required<ProjectLegend> = {
   columns: 2, rowHeight: 9, swatchWidth: 22, textStyle: 'big', headings: false,
 };
 
-const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'lt-centre', group: 'g1', print: false };
+const layer: Required<DraftLayer> = { id: 'L-pen', name: 'Pen', color: '#cc0000', visible: false, locked: true, lineWeight: 0.5, lineType: 'lt-centre', group: 'g1', print: false, order: 2 };
 
 const viewport: Required<SheetViewport> = {
   id: 'vp1', viewId: 'v-plan', x: 210, y: 148.5, scale: 50, width: 300, height: 200, center: { x: 4, y: 5 }, hiddenLayers: ['L-pen'], page: 2, placed: true, placedPages: [{ page: 3, x: 120, y: 80 }], keyPlanOf: 'vp0', northArrow: false, scaleBar: true, drawingNumber: '7',

@@ -19,8 +19,9 @@ import { useProjectStore } from '@/project/project-store';
 import { draftCommandById } from './commands/registry';
 import { namedCommand } from './command-name';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
-import { entityBounds, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
+import { setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyTypedLine } from './command-line';
+import { boxRegion, entityInRegion, type Region } from './region-select';
 import { applyOrtho } from './input';
 import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
@@ -291,18 +292,17 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
 
 /** Window (fully inside) or crossing (touching) selection of a drawn rectangle. */
 export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean): void {
-  const { viewId } = get();
+  selectIn(boxRegion(a, b), crossing, additive);
+}
+
+/** Selects what a box (window or crossing) or a freehand loop (lasso, #666) takes in. */
+export function selectIn(region: Region, crossing: boolean, additive: boolean): void {
+  const { viewId, selection, selecting } = get();
   if (!viewId) return;
-  const min = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
-  const max = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) };
-  const next = new Set(additive || get().selecting ? get().selection : []);
-  for (const entity of visibleEntities(viewId)) {
-    const bb = entityBounds(entity.shape);
-    const inside = bb.min.x >= min.x && bb.max.x <= max.x && bb.min.y >= min.y && bb.max.y <= max.y;
-    const touches = bb.max.x >= min.x && bb.min.x <= max.x && bb.max.y >= min.y && bb.min.y <= max.y;
-    if (inside || (crossing && touches)) next.add(entity.id);
-  }
-  set({ selection: withSectionParts(next, visibleEntities(viewId)) });
+  const entities = visibleEntities(viewId);
+  const next = new Set(additive || selecting ? selection : []);
+  for (const entity of entities) if (entityInRegion(entity.shape, region, crossing)) next.add(entity.id);
+  set({ selection: withSectionParts(next, entities) });
   refresh();
 }
 

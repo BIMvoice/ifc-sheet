@@ -27,18 +27,21 @@ import { runDraftingAction, type DraftingRunId } from './run-action';
 const TOGGLES: readonly DraftingRunId[] = ['drafting.undo', 'drafting.redo', 'drafting.snap', 'drafting.ortho'];
 
 interface Params {
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  inputRef: React.RefObject<CommandFieldEl | null>;
   setText: React.Dispatch<React.SetStateAction<string>>;
   /** Confirm with an empty line (Enter / Space outside the input). */
   submit: () => void;
 }
+
+/** The command line's field (a textarea since #673); tests may hand an input. */
+type CommandFieldEl = HTMLInputElement | HTMLTextAreaElement;
 
 /**
  * Whether a key event belongs to another text field than the command line,
  * or to a panel that keeps its own keys (`data-owns-keys`: Enter and Space
  * press its buttons, and nothing it is given reaches a running tool).
  */
-function inOtherField(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+function inOtherField(target: EventTarget | null, input: CommandFieldEl | null): boolean {
   if (!(target instanceof HTMLElement) || target === input) return false;
   if (target.closest('[data-owns-keys]')) return true;
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
@@ -63,7 +66,7 @@ const INTERACTIVE = 'button, a[href], [role="button"], select, textarea, input, 
  * line, which `submit`s on its own, aside). In AutoCAD mode (#168) `confirm`
  * repeats the last alias, so a Space that presses a button must not also do that.
  */
-function onInteractiveControl(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+function onInteractiveControl(target: EventTarget | null, input: CommandFieldEl | null): boolean {
   return target instanceof Element && target !== input && target.closest(INTERACTIVE) !== null;
 }
 
@@ -86,6 +89,8 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, textFirst);
       const toggle = TOGGLES.find(isKey);
       if (toggle) {
+        // Undo and redo with words in the command line are the field's own: they take back a typed letter or a "m²" made from "m2" (#674), not a drawing step.
+        if (e.target === input && (toggle === 'drafting.undo' || toggle === 'drafting.redo') && (input?.value ?? '') !== '') return;
         e.preventDefault();
         runDraftingAction(toggle);
         return;

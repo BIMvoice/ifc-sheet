@@ -52,6 +52,7 @@ import { roofEn } from '../catalogues/roof.en';
 import { roomFinishesEn } from '../catalogues/room-finishes.en';
 import { roomLayoutEn } from '../catalogues/room-layout.en';
 import { roomScheduleEn } from '../catalogues/room-schedule.en';
+import { regionSelectEn } from '../catalogues/region-select.en';
 import { roomSummaryEn } from '../catalogues/room-summary.en';
 import { roomToolEn } from '../catalogues/room-tool.en';
 
@@ -102,6 +103,7 @@ export const enMR = {
   ...reviewEn,
   ...revisionsEn,
   ...ribbonToolbarEn,
+  ...regionSelectEn,
   ...roofBlockEn,
   ...roofEn,
   ...roomFinishesEn,

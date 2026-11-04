@@ -38,6 +38,7 @@ PAPER_MM: value
 PER_SHEET: value
 PROJECT_FILE_FORMAT: value
 PROJECT_FILE_VERSION: value
+PROPOSAL_WALL_TYPES: value
 PlanBandOptions: type (type-only)
 PlanBandsInput: type (type-only)
 Point3: type (type-only)

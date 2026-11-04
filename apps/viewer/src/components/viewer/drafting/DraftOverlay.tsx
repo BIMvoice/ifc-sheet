@@ -26,6 +26,8 @@ import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { useTranslation } from '@/i18n';
 import { tagOverrideOf } from '@/drafting/tag-override';
 import { AnnotationGraphics } from './AnnotationGraphics';
+import type { TrackingView } from './useDraftingPointer';
+import { TrackingMarks } from './TrackingMarks';
 
 /** The shape as an SVG path in screen coordinates. */
 export function shapePath(shape: DraftShape, t: ViewTransform, axis: SectionAxisName): string {
@@ -52,10 +54,14 @@ interface DraftOverlayProps {
   hoverId: string | null;
   preview: readonly DraftShape[];
   snap: SnapHit | null;
+  /** The acquired points and the tracking lines near the cursor (#667); absent shows none. */
+  tracking?: TrackingView;
   cursor: Pt | null;
   /** The ortho lock beside the cursor while a point is being drawn from a base point (#454): null shows nothing. */
   orthoLabel?: string | null;
   window: { a: Pt; b: Pt } | null;
+  /** The freehand loop being drawn (#666). */
+  lasso?: readonly Pt[] | null;
   /** Outlines of the selected model elements. */
   highlight: readonly DraftShape[];
   /** User-imported hatch patterns (built-ins are always available). */
@@ -124,7 +130,7 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
-  const { orthoLabel = null, entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
+  const { tracking, orthoLabel = null, entities, layers, selection, hoverId, preview, snap, cursor, window, lasso, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
   const clipId = useId().replace(/:/g, '');
   const clipPoints = crop ? [crop.min, { x: crop.max.x, y: crop.min.y }, crop.max, { x: crop.min.x, y: crop.max.y }].map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : null;
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -187,6 +193,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
         <path key={`p${i}`} d={shapePath(shape, t, axis)} fill="none" stroke="#2563eb" strokeWidth={1.25} strokeDasharray="4 3" />
       ))}
       {window ? <SelectionWindow window={window} t={t} axis={axis} /> : null}
+      {lasso && lasso.length > 1 ? <LassoLoop path={lasso} t={t} axis={axis} /> : null}
+      {tracking ? <TrackingMarks tracking={tracking} t={t} axis={axis} /> : null}
       {snap ? <SnapMarker snap={snap} t={t} axis={axis} /> : null}
       {cursor ? <Crosshair p={drawingToScreen(cursor, t, axis)} /> : null}
       {cursor && orthoLabel ? <text data-testid="ortho-cursor-label" x={drawingToScreen(cursor, t, axis).x + 18} y={drawingToScreen(cursor, t, axis).y - 10} fontSize={11} fill="#52525b" stroke="#fff" strokeWidth={3} paintOrder="stroke">{orthoLabel}</text> : null}
@@ -217,6 +225,12 @@ function SelectionWindow({ window, t, axis }: { window: { a: Pt; b: Pt }; t: Vie
       strokeDasharray={crossing ? '5 3' : undefined}
     />
   );
+}
+
+/** The loop being dragged (#666): dashed, closed back to where it began, as it will select. */
+function LassoLoop({ path, t, axis }: { path: readonly Pt[]; t: ViewTransform; axis: SectionAxisName }) {
+  const pts = path.map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x},${p.y}`).join(' ');
+  return <polygon points={pts} fill="rgba(37,99,235,0.08)" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="6 3" />;
 }
 
 function Crosshair({ p }: { p: Pt }) {

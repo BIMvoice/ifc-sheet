@@ -21,7 +21,7 @@ import type { MissingMode } from '@/labels/label-resolve';
 export const ANNOTATION_TOOLS = ['text', 'leader', 'tag', 'label', 'dimaligned', 'dimlinear', 'dimradius', 'dimdiameter', 'dimangular', 'level', 'axis', 'hatch'] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
-export const TAG_FIELDS = ['mark', 'name', 'class', 'classification', 'classificationTitle'] as const;
+export const TAG_FIELDS = ['mark', 'name', 'typeName', 'class', 'classification', 'classificationTitle'] as const;
 export type TagFieldName = (typeof TAG_FIELDS)[number];
 
 /**

@@ -33,16 +33,19 @@ function tagAllTypes() {
 
 /** TAGALL on the plan `ctx` is on, labels read through `read`; `parts` limits it to some kinds (an annotation preset, #497). */
 export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts): void {
-  if (ctx.viewKind() !== 'plan') {
+  const kind = ctx.viewKind();
+  if (kind === null) {
     ctx.say('drafting.msg.tagAllPlanOnly');
     return;
   }
+  // A section or an elevation tags the rooms its plane cuts (#677); doors and windows are tagged on plans.
+  const onPlan = kind === 'plan';
   const types = tagAllTypes();
   if (!types.mark?.label || !types.room?.label) {
     ctx.say('drafting.msg.tagAllNeedsTypes');
     return;
   }
-  const elements = ctx.viewElements();
+  const elements = onPlan ? ctx.viewElements() : [];
   const { drafts, summary } = planTagAll({
     elements,
     targets: labelTargets(elements),
@@ -51,16 +54,17 @@ export function tagAll(ctx: DraftContext, read: ElementReader, parts?: TagParts)
     placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId), locale: currentSheetLocale(getLocale()) },
     types: { mark: types.mark, room: types.room },
     read,
-    parts,
+    parts: onPlan ? parts : { doors: false, windows: false, rooms: parts?.rooms ?? true },
     crop: ctx.view()?.detail,
-    obstacles: ctx.planObstacles(),
+    obstacles: onPlan ? ctx.planObstacles() : [],
   });
   if (drafts.length) editDrafts({ add: drafts });
   ctx.say(drafts.length ? 'drafting.msg.tagAllDone' : 'drafting.msg.tagAllHave', { marks: summary.marks, rooms: summary.rooms, already: summary.already });
   if (summary.numbered > 0) ctx.say('drafting.msg.tagAllNumbered', { count: summary.numbered });
   if (summary.rooms > 0) ctx.say('drafting.msg.tagAllAreas', { model: summary.areaFromModel, footprint: summary.areaFromFootprint });
   if (summary.roomsTooSmall > 0) ctx.say('drafting.msg.tagAllTooSmall', { count: summary.roomsTooSmall });
-  if (summary.noRooms) ctx.say('drafting.msg.tagAllNoRooms');
+  if (summary.roomsOverLines > 0) ctx.say('drafting.msg.tagAllOverLines', { count: summary.roomsOverLines });
+  if (summary.noRooms) ctx.say(onPlan ? 'drafting.msg.tagAllNoRooms' : 'drafting.msg.tagAllNoRoomsCut');
 }
 
 export const tagAllCommand: DraftCommandDef = {

@@ -20,6 +20,7 @@ import { creditsRo } from '../catalogues/credits.ro';
 import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { documentRo } from '../catalogues/document.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
+import { drawOrderRo } from '../catalogues/draw-order.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { joineryDraftRo } from '../catalogues/joinery-draft.ro';
@@ -29,9 +30,11 @@ import { exportToastsRo } from '../catalogues/export-toasts.ro';
 import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
+import { fillMaskRo } from '../catalogues/fill-mask.ro';
 import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { germanyRo } from '../catalogues/germany.ro';
 import { handoverRo } from '../catalogues/handover.ro';
+import { hatchAddRo } from '../catalogues/hatch-add.ro';
 import { hierarchyRo } from '../catalogues/hierarchy.ro';
 import { idsPanelRo } from '../catalogues/ids-panel.ro';
 import { ionUploadRo } from '../catalogues/ion-upload.ro';
@@ -44,7 +47,9 @@ import { joineryCellRo } from '../catalogues/joinery-cell.ro';
 import { joineryBlockRo } from '../catalogues/joinery-block.ro';
 import { joineryHeadRo } from '../catalogues/joinery-head.ro';
 import { joineryReachRo } from '../catalogues/joinery-reach.ro';
+import { joinLinesRo } from '../catalogues/join-lines.ro';
 import { landxmlRo } from '../catalogues/landxml.ro';
+import { layerDuplicateRo } from '../catalogues/layer-duplicate.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
@@ -67,6 +72,7 @@ export const roAL = {
   ...cutawayAxoRo,
   ...documentRo,
   ...draftingRo,
+  ...drawOrderRo,
   ...draftingStandardsRo,
   ...elementGraphicsRo,
   ...joineryDraftRo,
@@ -77,9 +83,11 @@ export const roAL = {
   ...featuresRo,
   ...feedbackRo,
   ...ifcClassRo,
+  ...fillMaskRo,
   ...geometryExportDialogsRo,
   ...germanyRo,
   ...handoverRo,
+  ...hatchAddRo,
   ...hierarchyRo,
   ...idsPanelRo,
   ...ionUploadRo,
@@ -91,6 +99,8 @@ export const roAL = {
   ...joineryHeadRo,
   ...joineryBlockRo,
   ...joineryReachRo,
+  ...joinLinesRo,
   ...landxmlRo,
+  ...layerDuplicateRo,
   ...listScheduleRo,
 } as const;

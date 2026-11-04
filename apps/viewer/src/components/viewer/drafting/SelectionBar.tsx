@@ -27,6 +27,7 @@ import { isElementTag, tagOverrideOf } from '@/drafting/tag-override';
 import { overrideTagText, resetTagText } from '@/project/tag-override-actions';
 import { openStandards } from '@/project/standards-dialog-store';
 import { flipDimensionSide } from '@/drafting/dimension-flip';
+import { inputTypeOf, onTypedText } from '@/drafting/unit-superscript';
 import { isDimensional, useStyleBook } from './AnnotationStyleFields';
 
 const BTN = 'h-7 whitespace-nowrap rounded-sm px-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800';
@@ -153,12 +154,12 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
     onPointerDown: (e: ReactPointerEvent) => e.stopPropagation(),
     onBlur: commit,
   };
-  // A label of several lines (a room's number, name and area) opens as it is written: Enter commits, Shift+Enter breaks a line (#542).
-  if (value.includes('\n')) {
+  // A label of several lines (a room's number, name and area) opens as it is written, and a drafted text always can take another: Enter commits, Shift+Enter breaks a line (#542, #673).
+  if (value.includes('\n') || entity.shape.type === 'text') {
     return (
       <textarea
-        {...shared} ref={areaRef} rows={Math.min(value.split('\n').length + 1, 6)} className={`${shared.className} py-1`}
-        onChange={(e) => setText(e.target.value)}
+        {...shared} ref={areaRef} rows={Math.min(Math.max(text.split('\n').length, value.split('\n').length), 6)} className={`${shared.className} py-1`}
+        onChange={(e) => onTypedText(e.target, inputTypeOf(e), text, setText)}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
@@ -170,7 +171,7 @@ function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; valu
   return (
     <input
       {...shared} ref={ref} className={`${shared.className} h-8`}
-      onChange={(e) => setText(e.target.value)}
+      onChange={(e) => onTypedText(e.target, inputTypeOf(e), text, setText)}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Enter') commit();

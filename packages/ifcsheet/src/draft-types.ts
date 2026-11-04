@@ -50,7 +50,22 @@ export type AnnotationShape =
   | { type: 'level'; p: Pt; value: number; height: number; ref?: LevelRef }
   | AxisShape
   | SymbolInstanceShape
-  | { type: 'hatch'; loops: Pt[][]; pattern: string; scale: number; angle: number; color?: string };
+  | HatchShape;
+
+/**
+ * A hatch. A solid one is see-through (0.85 opacity) unless `opaque` is set (#681): then it is a masking fill, fully opaque in
+ * `fill` (absent: white), which hides whatever is drawn before it in the draw order, on screen, the sheet, the PDF and the DXF.
+ */
+export interface HatchShape {
+  type: 'hatch';
+  loops: Pt[][];
+  pattern: string;
+  scale: number;
+  angle: number;
+  color?: string;
+  opaque?: true;
+  fill?: string;
+}
 
 /**
  * What a level mark measures. `at` is the measured point in drawing
@@ -134,6 +149,8 @@ export interface DraftLayer {
   print?: boolean;
   /** The layer group it belongs to (`LayerGroup.id`). */
   group?: string;
+  /** Where the layer stands in the stack of what is drafted (`draw-order.ts`): a higher number draws above a lower one. Absent: 0. */
+  order?: number;
 }
 
 export type SnapMode = 'endpoint' | 'midpoint' | 'center' | 'quadrant' | 'intersection' | 'perpendicular' | 'nearest';

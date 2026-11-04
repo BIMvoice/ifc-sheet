@@ -21,6 +21,7 @@ import { reviewRo } from '../catalogues/review.ro';
 import { revisionsRo } from '../catalogues/revisions.ro';
 import { roofRo } from '../catalogues/roof.ro';
 import { roomScheduleRo } from '../catalogues/room-schedule.ro';
+import { regionSelectRo } from '../catalogues/region-select.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
@@ -37,9 +38,11 @@ import { splitToolRo } from '../catalogues/split-tool.ro';
 import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
+import { tagShowsRo } from '../catalogues/tag-shows.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
+import { textLinesRo } from '../catalogues/text-lines.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -48,11 +51,14 @@ import { visibilityReasonsRo } from '../catalogues/visibility-reasons.ro';
 import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
 import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
+import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
+import { sectionRoomTagsRo } from '../catalogues/section-room-tags.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
+import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
@@ -80,6 +86,7 @@ export const roMZ = {
   ...revisionsRo,
   ...roofRo,
   ...roomScheduleRo,
+  ...regionSelectRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
   ...selectionBarRo,
@@ -96,9 +103,11 @@ export const roMZ = {
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,
+  ...tagShowsRo,
   ...titleBlockParamsRo,
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
+  ...textLinesRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,
@@ -108,10 +117,13 @@ export const roMZ = {
   ...wallExitsRo,
   ...wallKeyPresetsRo,
   ...wallKeysRo,
+  ...wallRectangleRo,
   ...wallMaterialsRo,
   ...wallReviewRo,
+  ...sectionRoomTagsRo,
   ...wallSectionsRo,
   ...wallRelayoutRo,
+  ...trackingRo,
   ...underlayRo,
   ...wallZoomRo,
   ...wallCompareRo,

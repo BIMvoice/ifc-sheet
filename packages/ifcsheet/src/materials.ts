@@ -57,7 +57,7 @@ export const normaliseMaterialName = (name: string): string => name.trim().toLow
 const GUESSES: readonly [RegExp, Partial<ProjectMaterial>][] = [
   [/vapou?r|barrier|membrane|foil|\bdpc\b|damp|bitum|sheet|folie|barier/, { membrane: true, hatch: null }],
   [/insul|wool|eps\b|xps\b|polystyren|pir\b|pur\b|vata|izola/, { hatch: 'INSULATION', fill: null }],
-  [/brick|masonry|block|caramid|zidari|bca|aac/, { hatch: 'BRICK' }],
+  [/brick|masonry|block|caramid|zidari|bca|aac/, { hatch: 'BRICKCUT' }],
   [/concrete|beton|screed|sapa|c\d\d\//, { hatch: 'CONCRETE' }],
   [/timber|wood|clt|osb|plywood|lemn/, { hatch: 'WOOD' }],
   [/steel|metal|otel|alumin/, { hatch: 'STEEL' }],

@@ -40,7 +40,7 @@ function counting(offer: (id: WallKeyId) => boolean = () => true): { handlers: W
 
 /** The drafting view's command line, wired as `DraftingView` wires it. */
 function Drafting({ handlers, cursor = null }: { handlers: WallHandlers; cursor?: Pt | null }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', cursor) });
   useWallKeys(handlers);
@@ -55,13 +55,13 @@ function Drafting({ handlers, cursor = null }: { handlers: WallHandlers; cursor?
   );
 }
 
-function mount(handlers = counting().handlers, cursor: Pt | null = null): HTMLInputElement {
+function mount(handlers = counting().handlers, cursor: Pt | null = null): HTMLTextAreaElement {
   const ui = render(<Drafting handlers={handlers} cursor={cursor} />);
-  return ui.querySelector('input[aria-label="Command line"]') as HTMLInputElement;
+  return ui.querySelector('textarea[aria-label="Command line"]') as HTMLTextAreaElement;
 }
 
 /** Type a line on the page (CAD style, with no click into the line first) and press Enter. */
-function enter(line: HTMLInputElement, text: string): void {
+function enter(line: HTMLTextAreaElement, text: string): void {
   for (const ch of text) press(document.body, ch);
   press(line, 'Enter');
 }

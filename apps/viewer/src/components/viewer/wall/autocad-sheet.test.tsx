@@ -21,7 +21,7 @@ import { SteppedSheet } from './SteppedSheet.js';
 /** AutoCAD mode (#168) on a real sheet stepped into: the command line is there to type into, and aliases run the sheet's actions. */
 
 const HOUSE: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 6, z: 7 } };
-const commandLine = (ui: HTMLElement) => ui.querySelector<HTMLInputElement>(`input[aria-label="${t('drafting.commandLine')}"]`);
+const commandLine = (ui: HTMLElement) => ui.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${t('drafting.commandLine')}"]`);
 
 function sheet(): HTMLElement {
   return render(<SteppedSheet sheet={useProjectStore.getState().sheets[1]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);

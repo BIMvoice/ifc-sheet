@@ -139,11 +139,12 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.
   const levels = useProjectStore((s) => s.levels);
+  const draftLayers = useProjectStore((s) => s.draftLayers);
   const settledDrafts = useCallback((viewId: string) => {
     const view = views.find((v) => v.id === viewId);
-    const own = draftsOfView(viewId, drafts);
+    const own = draftsOfView(viewId, drafts, draftLayers);
     return view ? settleLevelDrafts(own, levelResolverFor(view, levels, drawingOf.get(viewId)?.config.plane)) : own;
-  }, [views, drafts, levels, drawingOf]);
+  }, [views, drafts, draftLayers, levels, drawingOf]);
   const placedLegends = useSheetLegends(sheet);
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
   const rawDrawing = useCallback((viewId: string) => drawingOf.get(viewId) ?? null, [drawingOf]);

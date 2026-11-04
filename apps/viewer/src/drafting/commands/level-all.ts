@@ -41,6 +41,7 @@ export const levelAllCommand: DraftCommandDef = {
       bounds,
       existing: here.flatMap((d) => (d.shape.type === 'level' ? [d.shape as LevelShape] : [])),
       taken: rectsOf(here.filter((d) => d.shape.type !== 'level')),
+      heightAt: (p) => ctx.levelAt(p),
       textHeight: ctx.settings.textHeight,
       paperUnit: paperUnitOf(ctx.viewId),
     });

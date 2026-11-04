@@ -22,7 +22,7 @@ export type AnnotatedKind = 'plan' | 'elevation' | 'section';
 export type AnnotateChoices = Record<AnnotatedKind, readonly AnnotateCommand[]>;
 
 /** Every command on every kind it is made for: what "Annotate the set" starts with. */
-export const ALL_CHOICES: AnnotateChoices = { plan: ['tagall', 'dimall'], elevation: ['levelall'], section: ['levelall'] };
+export const ALL_CHOICES: AnnotateChoices = { plan: ['tagall', 'dimall'], elevation: ['tagall', 'levelall'], section: ['tagall', 'levelall'] };
 
 /** TAGALL before DIMALL, as one types them: DIMALL keeps its strings clear of the tags already there. */
 export const COMMAND_ORDER: readonly AnnotateCommand[] = ['tagall', 'dimall', 'levelall'];

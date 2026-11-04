@@ -114,7 +114,9 @@ export function drawHatch(shape: Extract<AnnotationShape, { type: 'hatch' }>, c:
     return cut.length >= 3 ? [[...cut, cut[0]]] : [];
   });
   if (!pattern || pattern.solid) {
-    c.out.strokes.push({ colour: c.colour, width: 0, runs: shown, fill: true, region: true, opacity: pattern ? 0.85 : 0.15 });
+    // A masking fill (#681) is opaque, in its own colour; any other solid keeps its old translucency.
+    const mask = shape.opaque === true && !!pattern;
+    c.out.strokes.push({ colour: mask ? shape.fill ?? '#ffffff' : c.colour, width: 0, runs: shown, fill: true, region: true, opacity: mask ? 1 : pattern ? 0.85 : 0.15 });
     c.out.strokes.push({ colour: c.colour, width: 0.75 * K, runs: loops.flatMap((l) => c.clip([...l, l[0]])) });
     return;
   }

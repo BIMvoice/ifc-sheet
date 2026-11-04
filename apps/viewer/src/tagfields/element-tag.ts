@@ -29,6 +29,8 @@ export function elementLabel(globalId: string, field: TagField): string | null {
   if (!el) return null;
   // The classification (#89) is the engine's one answer (`classificationOf`), read through the label element like the {Classification} placeholder.
   if (field === 'classification' || field === 'classificationTitle') return el.classification?.()?.[field === 'classification' ? 'code' : 'title'] || '?';
+  // The Name of the type the element is defined by (IfcRelDefinesByType): where a model names the element only by its class (#676).
+  if (field === 'typeName') return el.typeName() || '?';
   const kind = tagKindOf(el.className());
   const read = (f: TagFieldId): string => String(firstValue(tagToolSourcesOf(el.tagFields, kind, f), (ref) => readStored(ref, el)).value ?? '');
   const name = read('name');

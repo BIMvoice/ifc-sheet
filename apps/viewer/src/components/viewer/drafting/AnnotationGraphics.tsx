@@ -139,7 +139,11 @@ function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<Ann
     () => (pattern && !pattern.solid ? hatchSegments(shape.loops, pattern, { scale: shape.scale * HATCH_UNIT_M, angleDeg: shape.angle }).segments : []),
     [shape.loops, shape.scale, shape.angle, pattern],
   );
-  if (!pattern || pattern.solid) return <path d={outline} data-dxf-fill={pattern ? 'solid' : undefined} fill={color} fillOpacity={pattern ? 0.85 : 0.15} fillRule="evenodd" stroke={color} strokeWidth={0.75 * k} />;
+  if (!pattern || pattern.solid) {
+    // A masking fill (#681) is opaque and in its own colour, so it hides what is drawn before it; the DXF reads the fill colour.
+    const mask = shape.opaque === true && !!pattern;
+    return <path d={outline} data-dxf-fill={pattern ? 'solid' : undefined} fill={mask ? shape.fill ?? '#ffffff' : color} fillOpacity={mask ? 1 : pattern ? 0.85 : 0.15} fillRule="evenodd" stroke={color} strokeWidth={0.75 * k} />;
+  }
   const d = segments.map((s) => {
     const a = drawingToScreen(s.a, t, axis);
     const b = drawingToScreen(s.b, t, axis);

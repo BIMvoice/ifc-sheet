@@ -28,8 +28,10 @@ import type { ViewElement } from '@/labels/view-elements';
 import { clipLoop } from '@/project/drawing-crop';
 import { pieceRects, symbolPieces } from '@/dimall/avoid';
 import { RectIndex } from '@/labels/rect-index';
-import { ringArea, type RoomFootprint } from './footprint';
+import { ringArea, type RoomOfPlan } from './footprint';
 import { roomLabelPoint } from './room-point';
+import { roomLabelPointLeast } from './room-point-least';
+import { roomLabelOutside } from './room-outside';
 import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types';
 
 export interface TagAllInput {
@@ -37,7 +39,7 @@ export interface TagAllInput {
   elements: readonly ViewElement[];
   targets: readonly LabelTarget[];
   /** Each room of the plan: its footprint and the GlobalId of its space. */
-  rooms: readonly (RoomFootprint & { guid: string })[];
+  rooms: readonly RoomOfPlan[];
   existing: readonly DraftEntity[];
   placement: LabelPlacement;
   types: { mark: AnnotationType; room: AnnotationType };
@@ -81,7 +83,7 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     const shown = input.crop ? clipLoop(room.ring, input.crop) : room.ring;
     return shown.length >= 3 ? [{ room, shown }] : [];
   });
-  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0 };
+  const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0, roomsOverLines: 0, roomsOutside: 0 };
   const drafts: DraftEntity[] = [];
   const clear = LABEL_CLEAR_MM * at.paperUnit;
 
@@ -139,11 +141,32 @@ export function planTagAll(input: TagAllInput): { drafts: DraftEntity[]; summary
     seen.add(room.guid);
     if (roomed.has(room.guid)) { summary.already++; continue; }
     const fromModel = modelArea(read, room.guid) !== undefined;
-    const extras: LabelExtras = fromModel ? {} : { computedArea: ringArea(room.ring) };
+    // A plan's footprint is the floor; a section's outline (`floorArea` present) is a slice, so its area is the space's own floor area or none.
+    const computed = room.floorArea === undefined ? ringArea(room.ring) : room.floorArea;
+    const extras: LabelExtras = fromModel || computed === null ? {} : { computedArea: computed };
     const size = labelSize(input.types.room, room.guid, at.textHeight, at.locale, extras, read);
     if (!size) continue;
-    const spot = roomLabelPoint(shown, size.w, size.h, { rects: [], rings: [], rectIndex: roomIndex, ringIndex }, clear);
-    const draft = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
+    // On a section the lines the drawing shows in the room are kept clear of when there is room to; when there is not, the label goes over the fewest of them (`room-point-least.ts`) and the run says so.
+    const hard = { rects: [], rings: [], rectIndex: roomIndex, ringIndex };
+    const wanted = room.preferClear?.length ? roomLabelPoint(shown, size.w, size.h, { ...hard, rects: room.preferClear }, clear) : null;
+    let spot = wanted?.fits ? wanted : roomLabelPoint(shown, size.w, size.h, hard, clear);
+    let tip: Pt | undefined;
+    if (wanted && !wanted.fits) {
+      // No place inside the room clear of the lines: outside it, with a short leader into the room; failing that, over the fewest lines, and the run says so.
+      const outside = room.outside ? roomLabelOutside(shown, size.w, size.h, room.outside, roomIndex, clear) : null;
+      if (outside) {
+        spot = { centre: outside.centre, fits: true };
+        tip = outside.tip;
+        summary.roomsOutside++;
+      } else {
+        const least = roomLabelPointLeast(shown, size.w, size.h, room.preferClear ?? [], roomIndex);
+        if (least) spot = { centre: least.centre, fits: true };
+        summary.roomsOverLines++;
+      }
+    }
+    const placed = labelDraft(input.types.room, room.guid, spot.centre, at, undefined, extras, read);
+    // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).
+    const draft = placed && tip && placed.shape.type === 'text' ? { ...placed, shape: { ...placed.shape, leader: tip }, params: { ...placed.params, leaderFixed: true } } : placed;
     if (!draft) continue;
     drafts.push(draft);
     roomIndex.add(growRect(rectAround(spot.centre, size.w, size.h), 0));

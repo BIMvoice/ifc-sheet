@@ -14,6 +14,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { IFC_FILL } from '@bimvoice/ifcsheet/materials';
 import { resetMaterial, setMaterial, type MaterialGraphics } from '@/project/materials';
+import { AddHatchPatternButton } from './AddHatchPatternButton';
 import { ColourInput } from './ColourSchemeCard';
 import { MaterialSwatchGraphic } from './MaterialSwatchGraphic';
 import { WALL_FIELD } from './wall-type';
@@ -70,6 +71,7 @@ export function MaterialRow({ material, patterns, hatchNames }: { material: Mate
             {names.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
+        <AddHatchPatternButton className="col-span-2 justify-self-start" onAdded={(n) => setMaterial(name, { hatch: n })} />
         <label>
           {t('materials.col.scale')}
           <ScaleInput value={material.hatchScale ?? 1} label={t('materials.scaleOf', { name })} onCommit={(v) => setMaterial(name, { hatchScale: v })} />

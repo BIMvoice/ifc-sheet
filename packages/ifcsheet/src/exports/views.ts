@@ -40,3 +40,5 @@ export {
   type ItemStyle, type PenKind, type PenTable, type StyleItem, type ViewStyleInputs, type ViewStyler, type WeightPair,
 } from '../view-style.js';
 export { penGroups, penOrder, type PenGroup, type PenLayer } from '../drawing-pens.js';
+export { inDrawOrder, layerOrder, movedInOrder } from '../draw-order.js';
+export { fillColourOf, fillLoopsOf, maskingFill } from '../fill-mask.js';
