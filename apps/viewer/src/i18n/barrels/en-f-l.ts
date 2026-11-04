@@ -26,12 +26,14 @@ import { issueEn } from '../catalogues/issue.en';
 import { joineryEn } from '../catalogues/joinery.en';
 import { keyboardShortcutsEn } from '../catalogues/keyboard-shortcuts.en';
 import { landXmlEn } from '../catalogues/landxml.en';
+import { layerDuplicateEn } from '../catalogues/layer-duplicate.en';
 import { layersPanelEn } from '../catalogues/layers-panel.en';
 import { lensPanelEn } from '../catalogues/lens-panel.en';
 import { joineryCellEn } from '../catalogues/joinery-cell.en';
 import { joineryBlockEn } from '../catalogues/joinery-block.en';
 import { joineryHeadEn } from '../catalogues/joinery-head.en';
 import { joineryReachEn } from '../catalogues/joinery-reach.en';
+import { joinLinesEn } from '../catalogues/join-lines.en';
 import { listScheduleEn } from '../catalogues/list-schedule.en';
 import { listsEn } from '../catalogues/lists.en';
 
@@ -61,12 +63,14 @@ export const enFL = {
   ...joineryEn,
   ...keyboardShortcutsEn,
   ...landXmlEn,
+  ...layerDuplicateEn,
   ...layersPanelEn,
   ...lensPanelEn,
   ...joineryCellEn,
   ...joineryHeadEn,
   ...joineryBlockEn,
   ...joineryReachEn,
+  ...joinLinesEn,
   ...listScheduleEn,
   ...listsEn,
 } as const;

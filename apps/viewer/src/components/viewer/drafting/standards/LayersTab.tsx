@@ -9,7 +9,8 @@
  * marks the current layer new drafting goes on.
  */
 
-import { Eye, EyeOff, FolderPlus, Lock, LockOpen, Plus, Trash2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, FolderPlus, Lock, LockOpen, Plus, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
@@ -19,6 +20,7 @@ import {
   addLayer, addLayerGroup, removeLayer, removeLayerGroup, toggleViewLayers, updateLayer, updateLayerGroup,
 } from '@/project/drafting-standards';
 import { currentLayerId, setCurrentLayer, useDraftingSession } from '@/drafting/session';
+import { duplicateLayer } from '@/project/layer-duplicate';
 import { LineTypesEditor } from './LineTypesEditor';
 import type { DraftLayer } from '@/drafting/types';
 
@@ -43,6 +45,14 @@ export function LayersTab() {
   const view = useProjectStore((s) => s.views.find((v) => v.id === activeId && v.kind !== '3d'));
   const lineTypes = useProjectStore((s) => s.lineTypes) ?? [];
   const current = currentLayerId();
+  /** The layer just duplicated: its name box takes the focus when it mounts, so the new name can be typed straight away. */
+  const focusNext = useRef<string | null>(null);
+  const duplicate = (l: DraftLayer) => {
+    focusNext.current = duplicateLayer(l.id, {
+      first: (name) => t('layerDuplicate.name', { name }),
+      nth: (name, n) => t('layerDuplicate.nameN', { name, n }),
+    });
+  };
   const sections = [
     ...groups.map((g) => ({ group: g, layers: layers.filter((l) => l.group === g.id) })),
     { group: null, layers: layers.filter((l) => !l.group || !groups.some((g) => g.id === l.group)) },
@@ -55,6 +65,7 @@ export function LayersTab() {
       </td>
       <td className="py-1 pr-2">
         <input aria-label={t('standards.layer.name')} className={`${INPUT} w-36`} defaultValue={l.name} key={l.name}
+          ref={(el) => { if (el && focusNext.current === l.id) { focusNext.current = null; el.focus(); el.select(); } }}
           onBlur={(e) => e.target.value.trim() && e.target.value !== l.name && updateLayer(l.id, { name: e.target.value.trim() })} />
       </td>
       <td className="py-1"><input type="color" aria-label={`${l.name} · ${t('standards.layer.color')}`} className="h-7 w-9 cursor-pointer rounded-sm border border-zinc-300 dark:border-zinc-700" value={l.color} onChange={(e) => updateLayer(l.id, { color: e.target.value })} /></td>
@@ -92,7 +103,8 @@ export function LayersTab() {
             onChange={(e) => toggleViewLayers(view.id, [l.id], !e.target.checked)} />
         </td>
       ) : null}
-      <td className="py-1 text-right">
+      <td className="py-1 text-right whitespace-nowrap">
+        <IconButton label={t('layerDuplicate.button', { name: l.name })} className="size-7" onClick={() => duplicate(l)}><Copy className="size-3.5" /></IconButton>
         {l.id !== '0' ? (
           <IconButton label={t('standards.layer.delete', { name: l.name })} className="size-7" onClick={() => removeLayer(l.id)}><Trash2 className="size-3.5" /></IconButton>
         ) : null}
