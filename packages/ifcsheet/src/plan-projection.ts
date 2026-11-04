@@ -128,3 +128,11 @@ export function planProjectionBands(i: PlanBandsInput): PlanBandOptions {
   if (i.reflected) above = 1e-3; // a reflected ceiling plan sees only above its cut
   return { projectionDepth: bounded ? below : (i.axisMax - i.axisMin) * 0.5, clipProjectionBands: bounded, projectionBelowDepth: below, projectionAboveDepth: above };
 }
+
+/** Half the model's depth along the cut (its diagonal for a plane that is not along an axis). */
+export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
+
+/** How far a section or elevation with no depth of its own looks behind its cut, from the model's `span` along the cut: the app's `automaticViewDepth` and the engine's sheets both read it here (#627). */
+export function automaticDepthOfSpan(span: number): number {
+  return Math.max(span * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+}

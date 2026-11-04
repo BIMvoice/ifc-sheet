@@ -66,7 +66,7 @@ const CASES: Case[] = [
     name: 'AC20-FZK-Haus (ArchiCAD 20, KIT)', file: here('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'),
     storeys: ['Erdgeschoss', 'Dachgeschoss'], doors: 5, windows: 11, rooms: 7,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, elevationDoorSymbols: 8, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 1, sectionCuts: ['IfcSlab', 'IfcWallStandardCase'], notDrawn: [],
   },
   {
     name: 'bloc-p4 (residential block, five storeys)', file: here('../../../../apps/viewer/public/samples/bloc-p4.ifc'),
@@ -78,7 +78,7 @@ const CASES: Case[] = [
     name: 'federated arch.ifc (hand-written, two levels)', file: here('../../../../apps/viewer/src/test/fixtures/federated/arch.ifc'),
     storeys: ['Level 0', 'Level 1'], doors: 1, windows: 0, rooms: 0,
     sheets: [['A-101', 'Floor plans'], ['A-201', 'Elevations, south and north'], ['A-202', 'Elevations, east and west'], ['A-301', 'Sections']],
-    emptyPlans: [], sections: 2, elevationDoorSymbols: 2, sectionCuts: ['IfcWall'], notDrawn: [],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcWall'], notDrawn: [],
   },
   {
     // ara3d ISSUE_068, a Norwegian school (ARK NUS skolebygg): 56 MB, no redistribution licence stated, so it is never committed.
