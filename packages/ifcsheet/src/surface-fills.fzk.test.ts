@@ -66,8 +66,8 @@ describe.skipIf(missing !== null)('the coloured elevations of AC20-FZK-Haus (#49
     expect(sheetOf(plain).pens).toEqual(sheetOf(on).pens);
   });
 
-  it('paints the face nearest the viewer last at every point of each elevation (#646)', () => {
-    for (const view of set.document.views.filter((v) => v.kind === 'elevation')) {
+  it('paints the face nearest the viewer last at every point of each elevation and section (#646)', () => {
+    for (const view of set.document.views.filter((v) => v.kind === 'elevation' || v.kind === 'section')) {
       // Faces closer than a layer (1 cm) are ordered by colour inside it on purpose (the runs of one colour), so the check allows 1.5 cm.
       const { points, wrong } = misPainted(paintedSurfaces(model.buildingMeshes, drawings.get(view.id)!.config), 0.05, 0.015);
       expect(points, view.name).toBeGreaterThan(1000);

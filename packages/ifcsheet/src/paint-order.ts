@@ -188,13 +188,27 @@ function constraints(base: readonly PaintItem[]): { first: number[][]; split: Ma
   }
   // A triangle held back past some later ones is painted over them: those of them in front of it on the drawing wait for it, as the
   // mean order would have had them. (Flat faces never pair in the sweep, so nothing else would say so.)
-  const held = first.map((f, v) => [v, f.length === 0 ? v : Math.max(...f)]).filter(([v, m]) => m > v);
-  for (const [v, m] of held) {
-    for (let w = v + 1; w < m; w++) {
-      if (lo[w] >= hi[v] - LAYER || base[w].colour === base[v].colour || first[v].includes(w) || box[v][0] >= box[w][2] || box[w][0] >= box[v][2] || box[v][1] >= box[w][3] || box[w][1] >= box[v][3]) continue;
-      const r = against(base[w], base[v]);
-      if (r && r.mid < -LAYER) first[w].push(v);
+  // A triangle waits as long as the ones it waits for do, so the reach is followed through them (later ones first: they only wait further on).
+  // The new waits can hold others back in turn, so this repeats a few passes until nothing is added.
+  const reach = Array.from({ length: n }, (_, v) => v);
+  const scanned = new Array<number>(n).fill(0);
+  for (let pass = 0; pass < 4; pass++) {
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let v = n - 1; v >= 0; v--) for (const f of first[v]) if (reach[f] > reach[v]) { reach[v] = reach[f]; changed = true; }
     }
+    let added = false;
+    for (let v = 0; v < n; v++) {
+      // Only the part of the reach not looked at in an earlier pass.
+      const from = Math.max(v + 1, scanned[v]);
+      scanned[v] = Math.max(scanned[v], reach[v]);
+      for (let w = from; w < reach[v]; w++) {
+        if (lo[w] >= hi[v] - LAYER || base[w].colour === base[v].colour || first[v].includes(w) || first[w].includes(v) || box[v][0] >= box[w][2] || box[w][0] >= box[v][2] || box[v][1] >= box[w][3] || box[w][1] >= box[v][3]) continue;
+        const r = against(base[w], base[v]);
+        if (r && r.mid < -LAYER) { first[w].push(v); added = true; }
+      }
+    }
+    if (!added) break;
   }
   return { first, split };
 }
@@ -239,13 +253,20 @@ export function paintOrder<T extends PaintItem>(
   const ready = indexHeap();
   for (let v = 0; v < n; v++) if (waits[v] === 0) ready.push(v);
   const out: T[] = [];
-  for (let v = ready.pop(); v !== undefined; v = ready.pop()) {
+  const emitted = new Array<boolean>(n).fill(false);
+  let stuck = 0;
+  for (;;) {
+    let v = ready.pop();
+    if (v === undefined) {
+      // A cycle: break it at the earliest of the mean order still waiting, and go on, so what follows it is not all pushed to the end.
+      while (stuck < n && emitted[stuck]) stuck++;
+      if (stuck >= n) break;
+      v = stuck;
+    }
+    if (emitted[v]) continue;
+    emitted[v] = true;
     out.push(base[v]);
     for (const w of then[v]) if (--waits[w] === 0) ready.push(w);
-  }
-  if (out.length < n) {
-    const done = new Set(out);
-    for (const t of base) if (!done.has(t)) out.push(t);
   }
   return out;
 }
