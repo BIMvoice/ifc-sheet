@@ -59,25 +59,31 @@ export const sameSide = (p: FilletSide, q: FilletSide): boolean =>
   p.entity && q.entity ? p.entity.id === q.entity.id : !!p.model && !!q.model && near(p.model.a, q.model.a) && near(p.model.b, q.model.b);
 
 /**
- * FILLET where a side is a model line (#189): each model line is hidden in the view and its shortened line is drafted in its place,
- * a drafted side is updated in place, the arc is drafted. One undo step. False when the lines cannot be rounded.
+ * The result of rounding or cutting a corner (FILLET, CHAMFER) where a side is a model line (#189): each model line is hidden in the
+ * view and its shortened line is drafted in its place, a drafted side is updated in place, `joint` (the arc or the chamfer line) is
+ * drafted. One undo step.
  */
-export function filletSides(ctx: DraftContext, first: FilletSide, second: FilletSide, radius: number): boolean {
-  const result = filletLines(first.shape, first.at, second.shape, second.at, radius);
-  if (!result) return false;
+export function commitSides(ctx: DraftContext, first: FilletSide, second: FilletSide, shapes: { first: DraftShape; second: DraftShape; joint: DraftShape | null }): void {
   const update = new Map<string, DraftShape>();
   const add: DraftEntity[] = [];
   runAsOneUndoStep(() => {
-    for (const [side, shape] of [[first, result.first], [second, result.second]] as const) {
+    for (const [side, shape] of [[first, shapes.first], [second, shapes.second]] as const) {
       if (side.entity) update.set(side.entity.id, shape);
       else if (side.model) {
         hideLine(ctx.viewId, side.model.globalId, { start: side.model.a, end: side.model.b });
         add.push(newDraft(ctx.viewId, ctx.layerId, shape, {}));
       }
     }
-    if (result.arc) add.push(newDraft(ctx.viewId, first.entity?.layerId ?? ctx.layerId, result.arc, { ...first.entity?.params }));
+    if (shapes.joint) add.push(newDraft(ctx.viewId, first.entity?.layerId ?? ctx.layerId, shapes.joint, { ...first.entity?.params }));
     editDrafts({ update, add });
   });
+}
+
+/** FILLET where a side is a model line (#189). False when the lines cannot be rounded. */
+export function filletSides(ctx: DraftContext, first: FilletSide, second: FilletSide, radius: number): boolean {
+  const result = filletLines(first.shape, first.at, second.shape, second.at, radius);
+  if (!result) return false;
+  commitSides(ctx, first, second, { first: result.first, second: result.second, joint: result.arc });
   return true;
 }
 

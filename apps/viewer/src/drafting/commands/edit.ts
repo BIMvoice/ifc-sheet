@@ -15,7 +15,8 @@ import { useProjectStore } from '@/project/project-store';
 import { isLockedToView, withoutSectionLink } from '../section-symbol';
 import { isGeometry, type DraftEntity, type DraftShape } from '../types';
 import { editModelLine, filletSides, modelFilletSide, offsetModelLine, sameSide, type FilletSide } from './edit-model-line';
-import type { DraftCommandDef, DraftContext, ModelLinePick } from './types';
+import { chamferSides, cornerPreview } from './edit-corner';
+import type { DraftCommandDef, DraftContext, ModelLinePick, Prompt } from './types';
 
 /** Every other drafted shape of the view plus the generated drawing lines around `shape`. */
 export function boundariesFor(ctx: DraftContext, entity: DraftEntity | { id: null; shape: DraftShape }, margin: number): DraftShape[] {
@@ -139,46 +140,61 @@ function cutCommand(id: 'trim' | 'extend'): DraftCommandDef {
 export const trimCommand = cutCommand('trim');
 export const extendCommand = cutCommand('extend');
 
-export const filletCommand: DraftCommandDef = {
-  id: 'fillet',
-  aliases: ['FILLET', 'F'],
-  labelKey: 'drafting.cmd.fillet',
-  create(ctx) {
-    let first: FilletSide | null = null;
-    /** The first or second pick: a drafted line or a line of the generated drawing. */
-    const take = (side: FilletSide): 'continue' | 'done' => {
-      if (!first) {
-        first = side;
-        return 'continue';
-      }
-      if (sameSide(first, side)) return 'continue';
-      if (!filletSides(ctx, first, side, ctx.settings.filletRadius)) {
-        ctx.say('drafting.msg.filletFailed');
-        first = null;
-        return 'continue';
-      }
-      return 'done';
-    };
-    return {
-      prompt: () => ({ key: first ? 'drafting.prompt.filletSecond' : 'drafting.prompt.filletFirst', params: { radius: ctx.settings.filletRadius } }),
-      input: () => 'pick',
-      basePoint: () => null,
-      wantsValue: () => !first,
-      onValue(r) {
-        if (r >= 0) ctx.settings.filletRadius = r;
-        return 'continue';
-      },
-      onPick(entity, at) {
-        if (entity.shape.type !== 'line') {
-          ctx.say('drafting.msg.filletLinesOnly');
+/** FILLET and CHAMFER: two lines, then the corner between them is rounded or cut. A radius or a distance typed first is kept. */
+function cornerCommand(kind: 'fillet' | 'chamfer'): DraftCommandDef {
+  const size = (ctx: DraftContext) => (kind === 'fillet' ? ctx.settings.filletRadius : ctx.settings.chamferDistance);
+  return {
+    id: kind,
+    aliases: kind === 'fillet' ? ['FILLET', 'F'] : ['CHAMFER', 'CHA'],
+    labelKey: kind === 'fillet' ? 'drafting.cmd.fillet' : 'drafting.cmd.chamfer',
+    create(ctx) {
+      let first: FilletSide | null = null;
+      /** The first or second pick: a drafted line or a line of the generated drawing. */
+      const take = (side: FilletSide): 'continue' | 'done' => {
+        if (!first) {
+          first = side;
           return 'continue';
         }
-        if (lockedSymbol(ctx, entity)) return 'continue';
-        return take({ shape: entity.shape, at, entity });
-      },
-      onPickModelLine: (pick, at) => take(modelFilletSide(pick, at)),
-    };
-  },
-};
+        if (sameSide(first, side)) return 'continue';
+        const ok = kind === 'fillet' ? filletSides(ctx, first, side, size(ctx)) : chamferSides(ctx, first, side, size(ctx));
+        if (!ok) {
+          ctx.say(kind === 'fillet' ? 'drafting.msg.filletFailed' : 'drafting.msg.chamferFailed');
+          first = null;
+          return 'continue';
+        }
+        return 'done';
+      };
+      return {
+        prompt: (): Prompt =>
+          kind === 'fillet'
+            ? { key: first ? 'drafting.prompt.filletSecond' : 'drafting.prompt.filletFirst', params: { radius: size(ctx) } }
+            : { key: first ? 'drafting.prompt.chamferSecond' : 'drafting.prompt.chamferFirst', params: { distance: size(ctx) } },
+        input: () => 'pick',
+        basePoint: () => null,
+        wantsValue: () => !first,
+        onValue(r) {
+          if (r >= 0) {
+            if (kind === 'fillet') ctx.settings.filletRadius = r;
+            else ctx.settings.chamferDistance = r;
+          }
+          return 'continue';
+        },
+        onPick(entity, at) {
+          if (entity.shape.type !== 'line') {
+            ctx.say(kind === 'fillet' ? 'drafting.msg.filletLinesOnly' : 'drafting.msg.chamferLinesOnly');
+            return 'continue';
+          }
+          if (lockedSymbol(ctx, entity)) return 'continue';
+          return take({ shape: entity.shape, at, entity });
+        },
+        onPickModelLine: (pick, at) => take(modelFilletSide(pick, at)),
+        preview: (cursor) => (first ? cornerPreview(ctx, first, cursor, kind, size(ctx)) : []),
+      };
+    },
+  };
+}
 
-export const EDIT_COMMANDS: readonly DraftCommandDef[] = [offsetCommand, trimCommand, extendCommand, filletCommand];
+export const filletCommand = cornerCommand('fillet');
+export const chamferCommand = cornerCommand('chamfer');
+
+export const EDIT_COMMANDS: readonly DraftCommandDef[] = [offsetCommand, trimCommand, extendCommand, filletCommand, chamferCommand];

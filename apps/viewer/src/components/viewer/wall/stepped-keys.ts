@@ -52,6 +52,7 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.draw.extend': tool('extend'),
     'wall.draw.fillet': tool('fillet'),
     'wall.draw.offset': tool('offset'),
+    'wall.draw.chamfer': tool('chamfer'),
     'wall.addDrawing': a.toggleAdd,
     'wall.fit': a.fit,
     'wall.print': a.print,
