@@ -110,8 +110,10 @@ describe('the engine draws the door and window symbols of the elevations and sec
     const onElevations = rs.filter((r) => r.row.kind === 'elevation').flatMap((r) => r.symbols.filter((s) => s.kind === 'door').map(() => r.row.name));
     assert.deepEqual(onElevations, ['South Elevation'], 'the terrace door, on the elevation that faces it');
     assert.ok(rs.some((r) => r.row.kind === 'section' && r.symbols.some((s) => s.kind === 'door')), 'a section that cuts a door draws its opening lines over the cut');
-    // An unconfigured window has no type, so the elevation draws nothing for it (the app's rule).
-    assert.equal(of(rs, 'window').length, 0);
+    // An unconfigured window has no type, so it is drawn as the plain window of its measured box (#651): frame and glass, the same on both sides.
+    const windows = of(rs, 'window');
+    assert.ok(windows.length > 0, 'the untyped windows are drawn');
+    assert.ok(windows.every((s) => strokes(s) > 0), 'each untyped window has its frame and glass');
   });
 
   it('a configured window type draws its frame, panels and opening lines on the elevations and on the section that cuts it', () => {

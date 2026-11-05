@@ -252,23 +252,24 @@ describe.skipIf(missingWasm)('Milestone 1 acceptance set (#557)', () => {
         const project = { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING };
         expect(r.elevations.length, 'elevations').toBe(4);
         let doors = 0;
+        let all = 0;
         for (const view of r.set.document.views.filter((v) => v.kind === 'elevation')) {
           const drawing = r.elevations.find((e) => e.name === view.name)!.drawing;
           const symbols = viewOpeningSymbols(r.model.buildingMeshes, drawing.config.plane, drawing, { live: { dataStore: r.model.dataStore, view: null }, project }, resolveViewGraphics(view, r.set.document.viewTemplates));
           const seen = visibleEntities(drawing);
-          // A symbol is the symbol of a door or window the elevation shows, and is strokes, not an empty mark; an untyped window has none.
+          // A symbol is the symbol of a door or window the elevation shows, and is strokes, not an empty mark; an untyped window gets the plain window of its measured box (#651).
           for (const s of symbols) {
             expect(seen.has(s.id), `${view.name}: ${s.kind} ${s.id} has a symbol but the elevation does not show it`).toBe(true);
             expect(s.shapes.length + (s.dashed?.length ?? 0) + (s.heavy?.length ?? 0), `${view.name}: ${s.kind} ${s.id} symbol`).toBeGreaterThan(0);
-            expect(s.kind, `${view.name}: ${s.id} is an untyped door, as no type is configured here`).toBe('door');
           }
-          doors += symbols.length;
+          doors += symbols.filter((s) => s.kind === 'door').length;
+          all += symbols.length;
         }
         expect(doors, 'door symbols on the elevations').toBeGreaterThanOrEqual(c.elevationDoorSymbols);
         // The sheets carry them: the elevation sheets (A-2xx) have a SYMBOLS pen exactly when the elevations have symbols.
         const sheets = await sheetGraphics(r.set, r.model);
         const onElevations = sheets.filter((sh) => /^A-20/.test(sh.number)).reduce((n, sh) => n + sh.pens.filter((p) => p.layer === 'SYMBOLS').reduce((m, p) => m + p.runs.length, 0), 0);
-        expect(onElevations > 0, 'symbol runs on the elevation sheets').toBe(doors > 0);
+        expect(onElevations > 0, 'symbol runs on the elevation sheets').toBe(all > 0);
       }, 600_000);
 
       it.skipIf(c.windows === 0)('cuts the windows and draws them on the plans', () => {
