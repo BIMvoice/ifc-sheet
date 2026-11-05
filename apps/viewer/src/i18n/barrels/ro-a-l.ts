@@ -24,6 +24,7 @@ import { draftingRo } from '../catalogues/drafting.ro';
 import { drawOrderRo } from '../catalogues/draw-order.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { dxfViewRo } from '../catalogues/dxf-view.ro';
+import { dxfSiteRo } from '../catalogues/dxf-site.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { joineryDraftRo } from '../catalogues/joinery-draft.ro';
 import { exportChangesReviewRo } from '../catalogues/export-changes-review.ro';
@@ -78,6 +79,7 @@ export const roAL = {
   ...drawOrderRo,
   ...draftingStandardsRo,
   ...dxfViewRo,
+  ...dxfSiteRo,
   ...elementGraphicsRo,
   ...joineryDraftRo,
   ...exportChangesReviewRo,

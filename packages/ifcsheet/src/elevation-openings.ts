@@ -17,6 +17,7 @@ import type { DrawnJoinery } from './joinery-schedule.js';
 import { statedDoorElevationSymbol, typedElevationSymbol } from './joinery-elevation-placement.js';
 import type { OpeningConvention } from './joinery-symbols.js';
 import type { OpeningSymbol } from './opening-symbols.js';
+import { measuredWindowSpec } from './elevation-measured-window.js';
 
 /** Door and window classes, by the mesh's IFC type. */
 const JOINERY_CLASS = /^IFC(DOOR|WINDOW)(STANDARDCASE)?$/i;
@@ -59,6 +60,10 @@ export function elevationOpeningSymbols(
     const drawn = entry.l2w ? reads.typedOf(id) : null;
     const placed = drawn && entry.l2w ? typedElevationSymbol(drawn.spec, entry.world, entry.l2w, plane, drawn.flips, { convention }) : null;
     if (placed) { out.push({ id, kind: entry.kind, shapes: placed.thin, dashed: placed.dashed }); continue; }
+    // A window with no type (mesh-only): the plain window of its measured box, so it has its frame and glazing (#651).
+    const measured = entry.kind === 'window' && !drawn && entry.l2w ? measuredWindowSpec(entry.world, entry.l2w) : null;
+    const plain = measured && entry.l2w ? typedElevationSymbol(measured, entry.world, entry.l2w, plane, 0, { convention }) : null;
+    if (plain) { out.push({ id, kind: 'window', shapes: plain.thin, dashed: plain.dashed }); continue; }
     // No configured type: a door's stated operation, turned by the drawing's own flips as its plan symbol is (a configured type wins, above).
     const stated = entry.kind === 'door' && entry.l2w && !drawn ? reads.operationOf(id) : null;
     const own = stated && entry.l2w ? statedDoorElevationSymbol(stated, entry.world, entry.l2w, plane, reads.flipsOf(id), { convention }) : null;
