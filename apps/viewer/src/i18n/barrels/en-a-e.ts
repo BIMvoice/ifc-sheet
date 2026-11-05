@@ -32,6 +32,7 @@ import { bcfEn } from '../catalogues/bcf.en';
 import { boqEn } from '../catalogues/boq.en';
 import { byggesaksbimEn } from '../catalogues/byggesaksbim.en';
 import { bulkPropertyEditorEn } from '../catalogues/bulk-property-editor.en';
+import { contoursEn } from '../catalogues/contours.en';
 import { cadLayersEn } from '../catalogues/cad-layers.en';
 import { catalogueEn } from '../catalogues/catalogue.en';
 import { cesiumGeoEn } from '../catalogues/cesium-geo.en';
@@ -85,6 +86,7 @@ export const enAE = {
   ...alignmentSectionEn,
   ...analysisPanelEn,
   ...addDrawingKindsEn,
+  ...contoursEn,
   ...annotateAllEn,
   ...annotateSetEn,
   ...annotatedIfcEn,

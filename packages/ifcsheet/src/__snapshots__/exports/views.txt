@@ -1,6 +1,9 @@
 AxonometricPreset: type (type-only)
 CLASSIFICATION_BY: value
 COARSE_FROM_SCALE: value
+CONTOUR_DEFAULT_INTERVAL: value
+CONTOUR_IFC_TYPE: value
+CONTOUR_MAJOR_EVERY: value
 CameraViewpoint: type (type-only)
 CategoryGraphics: type (type-only)
 CategoryLineWeight: type (type-only)
@@ -15,6 +18,7 @@ ClassificationRule: type (type-only)
 ClassificationSystem: type (type-only)
 ClassifiedElement: type (type-only)
 ClassifiedType: type (type-only)
+ContourLine: type (type-only)
 CustomPaper: type (type-only)
 DASH_MM: value
 DEFAULT_FACE_FILL: value
@@ -38,6 +42,7 @@ HIDDEN_DASH_MM: value
 InteriorElevation: type (type-only)
 ItemRules: type (type-only)
 ItemStyle: type (type-only)
+MAX_CONTOUR_LEVELS: value
 MakeDraftOptions: type (type-only)
 ModelClassificationRef: type (type-only)
 NumberGroup: type (type-only)
@@ -96,6 +101,9 @@ classKey: value
 classificationOf: value
 classificationRuleOf: value
 classifiedTypes: value
+contourIntervalOf: value
+contourLevels: value
+contourLines: value
 defaultDetailLevel: value
 defaultViewTemplates: value
 elementProperties: value
@@ -108,6 +116,7 @@ hiddenElementIds: value
 hiddenLineElement: value
 hiddenLineEntry: value
 inDrawOrder: value
+isTerrainMesh: value
 itemRules: value
 layerOrder: value
 lineHidden: value
@@ -141,5 +150,6 @@ untemplatedGraphics: value
 viewOverrideRules: value
 viewStyler: value
 viewportHiddenLayers: value
+withContours: value
 withRule: value
 withoutElements: value

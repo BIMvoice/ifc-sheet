@@ -82,6 +82,7 @@ export function readView(v: unknown, path: string): ProjectView {
     ...(isString(v.templateId) && v.templateId ? { templateId: v.templateId } : {}),
     ...(isNumber(v.scale) && v.scale > 0 ? { scale: v.scale } : {}),
     ...(Array.isArray(v.hiddenLayers) ? { hiddenLayers: v.hiddenLayers.filter(isString) } : {}),
+    ...(isNumber(v.contourInterval) && v.contourInterval >= 0 ? { contourInterval: v.contourInterval } : {}),
   };
   switch (v.kind) {
     case 'plan':
