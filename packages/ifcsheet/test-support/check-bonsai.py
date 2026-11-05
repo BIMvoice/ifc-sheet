@@ -76,6 +76,7 @@ for e in f.by_type("IfcAnnotation"):
         "scale": pset.get("Scale"),
         "human_scale": pset.get("HumanScale"),
         "flags": [pset.get(k) for k in ("HasUnderlay", "HasLinework", "HasAnnotation", "GlobalReferencing")],
+        "resources": {k: pset.get(k) for k in ("Stylesheet", "Markers", "Symbols", "Patterns", "ShadingStyles", "CurrentShadingStyle")},
         "group": group.Name if group is not None else None,
         "group_parents": parent,
         "grouped": members,
