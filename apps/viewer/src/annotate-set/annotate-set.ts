@@ -16,37 +16,18 @@
  *   undo step, as the set it annotates is none.
  */
 
-import type { TranslationKey } from '@/i18n';
-import { openUndoSpan, runAsStartingState } from '@/drafting/draft-store';
+import { getLocale } from '@/i18n';
+import { openUndoSpan, runAsStartingState, editDrafts } from '@/drafting/draft-store';
+import { currentSheetLocale } from '@/project/units-and-numbers';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { useProjectStore } from '@/project/project-store';
-import type { TagParts } from '@bimvoice/ifcsheet';
+import { freshProjectId } from '@/project/view-defaults';
+import { annotateViews, type AnnotateProgress, type SetSummary, type TagParts, type ViewSummary } from '@bimvoice/ifcsheet';
 import { commandsFor, type AnnotateChoices } from './choices';
 import { demandDrawings, waitForDrawing, type DrawingResult } from './drawing-demand';
-import { runCommandOnView, type AnnotatableView, type CommandResult } from './run-view';
+import { appReaders, type AnnotatableView } from './run-view';
 
-/** What happened to one view: each command that was asked of it, or why none ran. */
-export interface ViewSummary {
-  viewId: string;
-  name: string;
-  kind: AnnotatableView['kind'];
-  /** Set when no command ran: the drawing could not be made. */
-  skipped?: { key: TranslationKey; params?: Record<string, string | number> };
-  results: CommandResult[];
-}
-
-export interface SetSummary {
-  views: ViewSummary[];
-  /** Drafted entities added over the whole set. */
-  added: number;
-  /** The run was stopped before every view was done. */
-  cancelled: boolean;
-}
-
-export interface AnnotateProgress {
-  done: number;
-  total: number;
-  viewName: string;
-}
+export type { AnnotateProgress, SetSummary, ViewSummary };
 
 export interface AnnotateRun {
   choices: AnnotateChoices;
@@ -74,55 +55,39 @@ export function targetViews(choices: AnnotateChoices, only?: ReadonlySet<string>
   return useProjectStore.getState().views.filter((v): v is AnnotatableView => isAnnotatable(v) && (!only || only.has(v.id)) && commandsFor(v, choices).length > 0);
 }
 
-/** The error a drawing ended with, as the reason a view was skipped. */
-function noDrawing(error: string): NonNullable<ViewSummary['skipped']> {
-  return { key: 'wall.annotate.reason.noDrawing', params: { error } };
-}
-
 export async function annotateSet(run: AnnotateRun): Promise<SetSummary> {
-  const targets = targetViews(run.choices, run.viewIds);
   const drawingOf = run.drawingOf ?? ((view: AnnotatableView) => waitForDrawing(view.id));
   const span = run.mode === 'undoable' ? openUndoSpan() : null;
   const draft = (change: () => void) => (span ? span.run(change) : runAsStartingState(change));
-  const summary: SetSummary = { views: [], added: 0, cancelled: false };
   const releases = new Map<string, () => void>();
   const ask = (view: AnnotatableView) => { if (!releases.has(view.id)) releases.set(view.id, demandDrawings([view.id])); };
   try {
-    for (const [i, planned] of targets.entries()) {
-      if (run.signal?.aborted) { summary.cancelled = true; break; }
+    const { summary } = await annotateViews<AnnotatableView, Drawing2D>({
+      views: targetViews(run.choices, run.viewIds),
+      choices: run.choices,
+      presets: { tagParts: run.tagParts },
+      readers: appReaders,
+      drawingOf,
+      newId: () => freshProjectId('draft'),
+      locale: currentSheetLocale(getLocale()),
+      signal: run.signal,
       // The view as it is now: one deleted, or a project opened since, is not annotated.
-      const view = useProjectStore.getState().views.find((v) => v.id === planned.id);
-      if (!view || !isAnnotatable(view)) continue;
-      run.onProgress?.({ done: i, total: targets.length, viewName: view.name });
-      for (const next of targets.slice(i, i + 1 + LOOKAHEAD)) ask(next);
-      const got = await drawingOf(view);
-      const entry: ViewSummary = { viewId: view.id, name: view.name, kind: view.kind, results: [] };
-      if (got.drawing) {
-        const drawing = got.drawing;
-        // One command at a time, the page free between them: DIMALL after TAGALL on a big plan is a second long.
-        for (const command of commandsFor(view, run.choices)) {
-          try {
-            draft(() => { entry.results.push(runCommandOnView(view, drawing, command, run.tagParts)); });
-          } catch (error) {
-            // A command that cannot handle a view does not stop the set: it is said, and the rest go on.
-            console.warn(`[annotate-set] ${command} could not run on ${view.name}`, error);
-            entry.results.push({ command, outcome: 'skipped', added: 0, ms: 0, messages: [{ key: 'wall.annotate.reason.failed', params: { error: error instanceof Error ? error.message : String(error) } }] });
-          }
-          await yieldToPage();
-        }
-        summary.added += entry.results.reduce((n, r) => n + r.added, 0);
-      } else {
-        entry.skipped = noDrawing(got.error);
-      }
-      summary.views.push(entry);
+      refresh: (planned) => {
+        const now = useProjectStore.getState().views.find((v) => v.id === planned.id);
+        return now && isAnnotatable(now) ? now : null;
+      },
+      onProgress: run.onProgress,
+      beforeView: (_view, i, targets) => { for (const next of targets.slice(i, i + 1 + LOOKAHEAD)) ask(next); },
+      afterCommand: (_view, _command, change) => {
+        if (change.add.length > 0) draft(() => { editDrafts({ add: [...change.add], update: new Map(change.update) }); });
+      },
+      pause: yieldToPage,
       // The view's drawing is let go, unless a tab or a sheet on the screen holds it.
-      releases.get(view.id)?.();
-      releases.delete(view.id);
-    }
-    run.onProgress?.({ done: summary.views.length, total: targets.length, viewName: '' });
+      afterView: (view) => { releases.get(view.id)?.(); releases.delete(view.id); },
+    });
+    return summary;
   } finally {
     for (const release of releases.values()) release();
     span?.close();
   }
-  return summary;
 }

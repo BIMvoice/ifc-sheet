@@ -10,12 +10,27 @@
  */
 
 import { rectsOf } from '@/labels/label-annotations';
-import { planLevelAll } from '@bimvoice/ifcsheet';
+import { planLevelAll, type LevelAllInputs } from '@bimvoice/ifcsheet';
 import { paperUnitOf, styledParams } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
 import { editDrafts } from '../draft-store';
-import type { DraftCommandDef } from './types';
+import type { DraftCommandDef, DraftContext } from './types';
+
+/** LEVELALL's complete inputs on the view `ctx` is on. */
+export function levelAllInputs(ctx: DraftContext, newId: () => string): LevelAllInputs {
+  return {
+    kind: ctx.viewKind(),
+    elements: ctx.viewElements(),
+    levels: useProjectStore.getState().levels,
+    existing: ctx.entities(),
+    rectsOf,
+    heightAt: (p) => ctx.levelAt(p),
+    placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId) },
+    styled: styledParams,
+    newId,
+  };
+}
 
 export const levelAllCommand: DraftCommandDef = {
   id: 'levelall',
@@ -23,17 +38,7 @@ export const levelAllCommand: DraftCommandDef = {
   labelKey: 'drafting.cmd.levelAll',
   create: () => ({ prompt: () => ({ key: 'drafting.cmd.levelAll' }), input: () => 'point', basePoint: () => null, onEnter: () => 'done' }),
   run(ctx) {
-    const result = planLevelAll({
-      kind: ctx.viewKind(),
-      elements: ctx.viewElements(),
-      levels: useProjectStore.getState().levels,
-      existing: ctx.entities(),
-      rectsOf,
-      heightAt: (p) => ctx.levelAt(p),
-      placement: { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, paperUnit: paperUnitOf(ctx.viewId) },
-      styled: styledParams,
-      newId: () => freshProjectId('draft'),
-    });
+    const result = planLevelAll(levelAllInputs(ctx, () => freshProjectId('draft')));
     if (result.add.length) editDrafts({ add: result.add });
     for (const m of result.messages) ctx.say(m.key, m.params);
   },
