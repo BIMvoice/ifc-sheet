@@ -16,7 +16,7 @@ import { isLockedToView, withoutSectionLink } from '../section-symbol';
 import { isGeometry, type DraftEntity, type DraftShape } from '../types';
 import { editModelLine, filletSides, modelFilletSide, offsetModelLine, sameSide, type FilletSide } from './edit-model-line';
 import { chamferSides, cornerPreview } from './edit-corner';
-import type { DraftCommandDef, DraftContext, ModelLinePick } from './types';
+import type { DraftCommandDef, DraftContext, ModelLinePick, Prompt } from './types';
 
 /** Every other drafted shape of the view plus the generated drawing lines around `shape`. */
 export function boundariesFor(ctx: DraftContext, entity: DraftEntity | { id: null; shape: DraftShape }, margin: number): DraftShape[] {
@@ -165,7 +165,7 @@ function cornerCommand(kind: 'fillet' | 'chamfer'): DraftCommandDef {
         return 'done';
       };
       return {
-        prompt: () =>
+        prompt: (): Prompt =>
           kind === 'fillet'
             ? { key: first ? 'drafting.prompt.filletSecond' : 'drafting.prompt.filletFirst', params: { radius: size(ctx) } }
             : { key: first ? 'drafting.prompt.chamferSecond' : 'drafting.prompt.chamferFirst', params: { distance: size(ctx) } },
