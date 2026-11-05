@@ -36,7 +36,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   let parsed;
   try {
     parsed = parseArgs({
-      args: [...argv],
+      // `--annotate` alone is every command (`--annotate=all`); parseArgs has no optional value.
+      args: argv.map((a) => (a === '--annotate' ? '--annotate=all' : a)),
       allowPositionals: true,
       options: {
         out: { type: 'string' },
@@ -55,6 +56,7 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
         detail: { type: 'boolean' },
         locale: { type: 'string' },
         'include-far-elements': { type: 'boolean' },
+        annotate: { type: 'string' },
         pac: { type: 'boolean' },
         intervention: { type: 'string' },
         'pac-mode': { type: 'string' },
@@ -87,6 +89,10 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
   }
   if (values.standard !== undefined && command !== 'build' && command !== 'materials') {
     io.stderr(`ifcsheet ${command} has no --standard; it is an option of build and materials (known: ${COMMAND_LINE_STANDARD_IDS.join(', ')}).\n`);
+    return EXIT.usage;
+  }
+  if (values.annotate !== undefined && command !== 'build') {
+    io.stderr(`ifcsheet ${command} has no --annotate; it is an option of build.\n`);
     return EXIT.usage;
   }
   if (values.ids !== undefined && command !== 'check') {

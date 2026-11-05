@@ -68,6 +68,7 @@ You need `--out`, `--handover`, or both. The options:
 | `--project file` | A saved project, `.ifclite-project.json`. Uses its pens and title block layout. |
 | `--standard ro` | The Romanian pack: its pens and its title block with Romanian captions. |
 | `--template office.bvset` | Make the sheets by the rules of your office's set template. |
+| `--annotate` | Draft the dimensions, tags and level marks of "Annotate the set" before writing: dimension strings and door, window and room tags on the plans, level marks on the elevations and sections. `--annotate=dimension,tag` picks commands (`dimension`, `tag`, `level`); `--annotate="Name"` runs an annotation preset of the `--project`. What the project already drew is kept, and a second run adds only what is missing. |
 | `--include-far-elements` | Frame the views on everything, including small objects far from the building. |
 
 ### With a project and the Romanian standard

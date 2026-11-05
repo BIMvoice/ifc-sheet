@@ -14,3 +14,4 @@
           viewports where they were put, the dimensions and texts drawn on the views, the schedules placed: lists, rooms, bill of
           quantities, drawing register);
           a project with no sheet gets the starting set. Which one is printed is said on stderr.
+          With --annotate, the dimension strings, tags and level marks of "Annotate the set" are drafted on the views first (see Options).

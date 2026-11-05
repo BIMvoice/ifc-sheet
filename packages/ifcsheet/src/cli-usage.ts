@@ -22,6 +22,10 @@ const OPTIONS = `Options:
   --pac-mode <m>   With --pac: the permit project, full (Anexa 2, default) or rural (Anexa 3, the simplified one for a rural house). Wins over the --project's.
   --standard <id>  A drawing standard for build: its pens and title block (known: ro, the Romanian pack of the app's "Install standard").
                    Wins over the project's own graphic standard and title block layout; without it a --project's are used.
+  --annotate[=<what>] For build, annotate the views before writing: dimension strings and tags on the plans, level marks on the elevations and
+                   sections, as "Annotate the set" does in the app. <what> is all (default), a list of dimension, tag and level
+                   (dimension,tag), or the name of an annotation preset of the --project. What the project already drew is kept; a second
+                   run adds only what is missing.
   --name <name>    The project name for the title blocks (default: the model's).
   --project <file> A saved project (.ifclite-project.json): for check, its schedules, joinery catalogue and symbol mapping; for build, its list
                    schedules are printed after the build (the PDF has no schedule sheet; the app draws those); for rooms, its number format.

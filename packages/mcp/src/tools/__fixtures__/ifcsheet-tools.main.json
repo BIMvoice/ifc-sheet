@@ -599,7 +599,7 @@
  },
  {
   "name": "ifcsheet_undo",
-  "description": "Undo the last edit made to a drawing set by ifcsheet_add_view, ifcsheet_place_view, ifcsheet_set_title_block, ifcsheet_add_schedule or ifcsheet_renumber: the set (views, sheets, title block, schedules) goes back to exactly what it was before that call. Call again to go back further. Dry runs are never in the history, and a call that failed changed nothing, so it has nothing to undo. The last 50 edits of a set are kept. When there is nothing to undo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.",
+  "description": "Undo the last edit made to a drawing set by ifcsheet_add_view, ifcsheet_place_view, ifcsheet_set_title_block, ifcsheet_add_schedule, ifcsheet_renumber or ifcsheet_annotate: the set (views, sheets, title block, schedules) goes back to exactly what it was before that call. Call again to go back further. Dry runs are never in the history, and a call that failed changed nothing, so it has nothing to undo. The last 50 edits of a set are kept. When there is nothing to undo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.",
   "scope": "read",
   "inputSchema": {
    "type": "object",
@@ -807,6 +807,64 @@
      "description": "A classification system of the project, by name or id. Default: the first."
     }
    },
+   "additionalProperties": false
+  },
+  "handler": "function"
+ },
+ {
+  "name": "ifcsheet_annotate",
+  "description": "Annotate a drawing set the way the app's \"Annotate the set\" does: dimension strings and door, window and room tags on the plans, level marks on the elevations and sections. The annotation is drafted into the set (ifcsheet_export_pdf, ifcsheet_export_dxf and ifcsheet_issue print it) and a second call adds only what is missing. One undo step (ifcsheet_undo). Choose the commands with commands (any of dimension, tag, level; default all) or with preset, the name of an annotation preset the loaded project saved; tag_parts limits the tags to doors, windows and rooms; views limits the views (names or ids of plans, elevations and sections; default all). Needs the model's geometry: a view with no drawing is left out. With dry_run true nothing is kept: the same result, as a plan. Returns, per view, its commands each with outcome (added, already: the view had everything, skipped), added (drafts) and messages [{key, params}] saying why a command did nothing, and what was added by kind (dimension, text, level, ...); a view that was left out has left_out {key, params}. Also the total added.",
+  "scope": "read",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "document_id": {
+     "type": "string",
+     "description": "The document_id returned by ifcsheet_generate_set, ifcsheet_apply_template or ifcsheet_load_project."
+    },
+    "dry_run": {
+     "type": "boolean",
+     "description": "Report what the call would change, and change nothing in the session. The result is the real call's, with dry_run true."
+    },
+    "commands": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "dimension",
+       "tag",
+       "level"
+      ]
+     },
+     "description": "dimension (DIMALL, plans), tag (TAGALL, plans), level (LEVELALL, elevations and sections). Default: all three."
+    },
+    "preset": {
+     "type": "string",
+     "description": "The name of an annotation preset of the loaded project (its commands and the kinds of tag). Not with commands."
+    },
+    "tag_parts": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "doors",
+       "windows",
+       "rooms"
+      ]
+     },
+     "description": "Which tags TAGALL places. Default: all (with a preset: its)."
+    },
+    "views": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Names or ids of the views to annotate. Default: every plan, elevation and section."
+    }
+   },
+   "required": [
+    "document_id"
+   ],
    "additionalProperties": false
   },
   "handler": "function"
