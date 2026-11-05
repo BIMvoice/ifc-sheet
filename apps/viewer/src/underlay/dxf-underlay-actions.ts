@@ -19,7 +19,7 @@ function commit(next: ViewDxfUnderlay[]): void {
   useProjectStore.setState({ dxfUnderlays: next.length > 0 ? next : undefined, dirty: true });
 }
 
-function change(id: string, edit: (u: ViewDxfUnderlay) => ViewDxfUnderlay | null): boolean {
+export function changeDxfUnderlay(id: string, edit: (u: ViewDxfUnderlay) => ViewDxfUnderlay | null): boolean {
   const current = all();
   const found = current.find((u) => u.id === id);
   const next = found ? edit(found) : null;
@@ -50,18 +50,18 @@ export function removeDxfUnderlay(id: string): boolean {
   return true;
 }
 
-export const setDxfLayerVisible = (id: string, layer: string, visible: boolean): boolean => change(id, (u) => withDxfLayerVisible(u, layer, visible));
+export const setDxfLayerVisible = (id: string, layer: string, visible: boolean): boolean => changeDxfUnderlay(id, (u) => withDxfLayerVisible(u, layer, visible));
 
 /** Two points where the DXF shows now and where they belong; refused when it is locked or the points do not make a line. */
-export const alignDxfUnderlay = (id: string, from: readonly [Pt, Pt], to: readonly [Pt, Pt]): boolean => change(id, (u) => (u.locked ? null : alignDxfByTwoPoints(u, from, to)));
+export const alignDxfUnderlay = (id: string, from: readonly [Pt, Pt], to: readonly [Pt, Pt]): boolean => changeDxfUnderlay(id, (u) => (u.locked ? null : alignDxfByTwoPoints(u, from, to)));
 
-export const setDxfOpacity = (id: string, opacity: number): boolean => Number.isFinite(opacity) && change(id, (u) => ({ ...u, opacity: Math.min(1, Math.max(0, opacity)) }));
+export const setDxfOpacity = (id: string, opacity: number): boolean => Number.isFinite(opacity) && changeDxfUnderlay(id, (u) => ({ ...u, opacity: Math.min(1, Math.max(0, opacity)) }));
 
-export const setDxfLocked = (id: string, locked: boolean): boolean => change(id, (u) => ({ ...u, locked }));
+export const setDxfLocked = (id: string, locked: boolean): boolean => changeDxfUnderlay(id, (u) => ({ ...u, locked }));
 
 /** Whether a sheet prints the DXF (it is not printed anywhere until chosen). */
 export function setDxfPrintsOn(id: string, sheetId: string, prints: boolean): boolean {
-  return change(id, (u) => {
+  return changeDxfUnderlay(id, (u) => {
     const others = (u.printOnSheets ?? []).filter((s) => s !== sheetId);
     const sheets = prints ? [...others, sheetId] : others;
     const { printOnSheets: _old, ...rest } = u;
