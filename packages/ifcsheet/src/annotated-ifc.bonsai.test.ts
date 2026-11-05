@@ -19,6 +19,7 @@ import { buildAnnotatedIfc, type AnnotatedIfcInput, type AnnotatedView } from '.
 import { generateViewDrawings, openModel } from './headless.js';
 import { levelsFromStoreys } from './view-defaults.js';
 import type { PlanProjectView } from './document.js';
+import { BONSAI_RESOURCES } from '../test-support/bonsai-resources.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const SCRIPT = fileURLToPath(new URL('../test-support/check-bonsai.py', import.meta.url));
@@ -40,6 +41,10 @@ const view = (id: string, name: string, storey: string, scale: number): Annotate
   curves: [{ type: 'polyline', points: [{ x: 2, y: 3 }, { x: 3, y: 4 }] }, { type: 'polyline', points: [{ x: 1, y: 0.6 }, { x: 5, y: 0.6 }] }],
   texts: [{ position: { x: 3, y: 4 }, text: 'W1', width: 0.9, height: 0.25 }, { position: { x: 2.5, y: 0.7 }, text: '4,00', width: 0.8, height: 0.25 }],
 });
+
+/** The IfcPropertySingleValue entities named in BONSAI_RESOURCES, as [name, label] pairs in file order. */
+const resourceProperties = (out: string): [string, string][] =>
+  [...out.matchAll(/IFCPROPERTYSINGLEVALUE\('([^']+)',\$,IFCLABEL\('([^']*)'\),\$\)/g)].map((m): [string, string] => [m[1], m[2]]).filter(([n]) => n in BONSAI_RESOURCES);
 
 const added = (source: string, out: string): string => {
   const had = new Set([...source.matchAll(/^#(\d+)\s*=/gm)].map((m) => m[1]));
@@ -64,9 +69,7 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     expect(out).toContain("IFCPROPERTYSINGLEVALUE('Scale',$,IFCLABEL('1/50'),$)");
     expect(out.match(/IFCPROPERTYSINGLEVALUE\('TargetView',\$,IFCLABEL\('PLAN_VIEW'\),\$\)/g)).toHaveLength(2);
     // The paths Bonsai reads its stylesheet and symbol files from, with its defaults (core.drawing.add_drawing).
-    for (const [name, value] of [['Stylesheet', 'drawings/assets/default.css'], ['Markers', 'drawings/assets/markers.svg'], ['Symbols', 'drawings/assets/symbols.svg'], ['Patterns', 'drawings/assets/patterns.svg'], ['ShadingStyles', 'drawings/assets/shading_styles.json'], ['CurrentShadingStyle', 'Blender Default']]) {
-      expect(out.match(new RegExp(`IFCPROPERTYSINGLEVALUE\\('${name}',\\$,IFCLABEL\\('${value}'\\),\\$\\)`, 'g'))).toHaveLength(2);
-    }
+    expect(resourceProperties(out)).toEqual([...Object.entries(BONSAI_RESOURCES), ...Object.entries(BONSAI_RESOURCES)]);
     // The camera looks down: a rectangle extruded along -Z, in the model's Body context.
     expect(out.match(/IFCEXTRUDEDAREASOLID\(#\d+,#\d+,#\d+,1\.2\)/g)).toHaveLength(2);
     expect(out).toMatch(/IFCDIRECTION\(\(0\.,0\.,-1\.\)\)/);
@@ -148,9 +151,7 @@ describe.skipIf(missing !== null)('AC20-FZK-Haus with two views and a sheet, wri
     // The view's own extent: its annotations (4 m wide, 3.4 m tall) and a metre around them.
     expect(seen.drawings[0].camera.slice(0, 3)).toEqual([6, 5.4, 1.2]);
     // EPset_Drawing, read back by ifcopenshell, names the files Bonsai's svgwriter opens (default.css, markers.svg, ...).
-    for (const d of seen.drawings) {
-      expect(d.resources).toEqual({ Stylesheet: 'drawings/assets/default.css', Markers: 'drawings/assets/markers.svg', Symbols: 'drawings/assets/symbols.svg', Patterns: 'drawings/assets/patterns.svg', ShadingStyles: 'drawings/assets/shading_styles.json', CurrentShadingStyle: 'Blender Default' });
-    }
+    expect(seen.drawings.map((d) => d.resources)).toEqual([BONSAI_RESOURCES, BONSAI_RESOURCES]);
     expect(seen.sheets).toEqual([expect.objectContaining({ identification: 'A01', name: 'Plans', drawings: ['Ground floor', 'Roof floor'], project: ['IfcProject'] })]);
     expect(seen.plan_annotations).toEqual(['Ground floor', 'Roof floor']);
   }, 60_000);
