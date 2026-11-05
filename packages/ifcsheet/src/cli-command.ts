@@ -37,6 +37,7 @@ export interface CliValues {
   locale?: string;
   'include-far-elements'?: boolean;
   pac?: boolean;
+  annotate?: string;
   intervention?: string;
   'pac-mode'?: string;
   help?: boolean;

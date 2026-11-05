@@ -118,6 +118,8 @@ The assistant tells you where the PDF is. The title block fields are kept in the
 
 ### Try before you change: dry run
 
+`ifcsheet_annotate` adds the dimensions, tags and level marks of "Annotate the set" to the views (`commands`: `dimension`, `tag`, `level`, or a project `preset`). They are kept in the set, so the next PDF, DXF or issue prints them, and a second call adds only what is missing. The reply lists per view what was added and what was left out and why. It is one undo step.
+
 Six editing tools accept `"dry_run": true`: `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_add_schedule`, `ifcsheet_apply_template` and `ifcsheet_renumber`. A dry run reports what the call would do and changes nothing.
 
 ```text
@@ -159,6 +161,7 @@ The folder `issue/` holds the PDF, `dxf/` with a DXF per sheet, `register.csv` (
 | `ifcsheet_load_project` | A set from a saved `.ifclite-project.json`. |
 | `ifcsheet_list_sheets` | The sheets, their views and scales, the views not yet on a sheet. |
 | `ifcsheet_add_view` | Adds a plan, elevation, section or axonometric view. |
+| `ifcsheet_annotate` | Annotates the set: dimensions and tags on plans, level marks on elevations and sections. |
 | `ifcsheet_place_view` | Puts a view on a sheet at a scale. |
 | `ifcsheet_set_title_block` | Sets title block fields for the project or one sheet. |
 | `ifcsheet_renumber` | Renumbers sheets (`default` A-101 or `sequential` A01). |
