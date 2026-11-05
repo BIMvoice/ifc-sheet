@@ -38,9 +38,11 @@ async function build(...extra: string[]): Promise<Built> {
   const err: string[] = [];
   const code = await run(['build', FZK, '--out', join(dir, `set-${n}.pdf`), '--dxf', dxf, ...extra], { stdout: () => undefined, stderr: (t) => void err.push(t) });
   expect(code, err.join('')).toBe(EXIT.ok);
+  // @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
   const dxfTexts = readdirSync(dxf).reduce((sum, f) => sum + (readFileSync(join(dxf, f), 'utf8').match(/^\s*M?TEXT\s*$/gm) ?? []).length, 0);
   return { texts: printed.sheets.flatMap((s) => s.texts.map((t) => t.text)), dxfTexts, stderr: err.join('') };
 }
+// @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
 const figures = (texts: readonly string[]) => texts.filter((t) => /^\d+([.,]\d+)?$/.test(t.trim()));
 
 describe.skipIf(missing !== null)('ifcsheet build --annotate on AC20-FZK-Haus (#707)', () => {
@@ -49,7 +51,9 @@ describe.skipIf(missing !== null)('ifcsheet build --annotate on AC20-FZK-Haus (#
     const dimensioned = await build('--annotate=dimension');
     expect(figures(dimensioned.texts).length).toBeGreaterThan(figures(plain.texts).length + 5);
     expect(dimensioned.dxfTexts).toBeGreaterThan(plain.dxfTexts + 5);
+    // @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
     expect(dimensioned.stderr).toMatch(/annotated .*: dimall \+\d+/);
+    // @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
     expect(plain.stderr).not.toMatch(/annotated/);
   }, 300_000);
 
@@ -57,7 +61,9 @@ describe.skipIf(missing !== null)('ifcsheet build --annotate on AC20-FZK-Haus (#
     const dimensioned = await build('--annotate=dimension');
     const all = await build('--annotate');
     expect(all.texts.length).toBeGreaterThan(dimensioned.texts.length);
+    // @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
     expect(all.stderr).toMatch(/tagall \+\d+/);
+    // @source-text-assertion-ok asserts the CLI's own output (its stderr and the DXFs it wrote), not source text
     expect(all.stderr).toMatch(/levelall \+\d+/);
   }, 300_000);
 
