@@ -12,6 +12,7 @@ import { viewShowsHidden } from '@/project/view-appearance';
 import { useEffect, useState } from 'react';
 import { FlipHorizontal2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { CONTOUR_DEFAULT_INTERVAL } from '@bimvoice/ifcsheet';
 import { IconButton } from '@/components/ui/icon-button';
 import { useProjectStore, updateProjectView } from '@/project/project-store';
 import { useDocumentTabs } from '@/project/document-tabs';
@@ -93,6 +94,11 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
       <Row label={t('projectNavigator.props.viewDepth')}>
         <MetresField value={view.viewDepth ?? null} placeholder={depthHint} label={t('projectNavigator.props.viewDepth')} allowEmpty onCommit={(v) => edit(view, { viewDepth: v })} />
       </Row>
+      {view.kind === 'plan' && !view.reflected && !view.discipline && (view.site === true || view.level.storeyGlobalIds.length === 0) ? (
+        <Row label={t('contours.interval')}>
+          <MetresField value={view.contourInterval ?? CONTOUR_DEFAULT_INTERVAL} placeholder={t('contours.intervalHint')} label={t('contours.interval')} allowEmpty onCommit={(v) => edit(view, { contourInterval: v === null ? undefined : Math.max(0, v) })} />
+        </Row>
+      ) : null}
       <Row label={t('projectNavigator.props.showHidden')}>
         <input
           type="checkbox"

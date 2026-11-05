@@ -123,11 +123,11 @@ import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { viewMaterials } from '@/project/material-resolver';
 
 import { membraneOverlays } from '@/project/membrane-overlays';
-
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { withViewContours } from '@/project/view-contours';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
@@ -210,7 +210,8 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
-  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(drawing, graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view.kind, detail]);
+  const runtimeGeometry = useDrawingRuntime().geometryResult;
+  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(drawing, view, models, runtimeGeometry), graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view, runtimeGeometry, detail]);
   const references = useSnapReferences(viewDrawing, view.id);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
@@ -221,7 +222,6 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
     return phaseViewOf(graphics, phaseSource);
   }, [graphics, phaseSource, mutationVersionForMaterials]);
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
-  const runtimeGeometry = useDrawingRuntime().geometryResult;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
     return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;

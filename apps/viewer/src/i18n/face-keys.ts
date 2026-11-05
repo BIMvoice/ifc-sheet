@@ -33,7 +33,7 @@ const FACE_SOURCES = [
   'drafting', 'components/viewer/drafting/CommandLine.tsx', 'components/viewer/KeyboardShortcutsDialog.tsx', 'components/viewer/KeyboardShortcutsDialogTabs.tsx', 'components/viewer/KeyboardShortcutsWhatsNewTab.tsx', 'components/viewer/ShortcutsTab.tsx', 'components/tours/LearnTab.tsx', 'project/model-command-bridge.ts', 'project/useLinkedElementSync.ts',
 ];
 /** #707: the command-line planners that moved into the engine return message keys the app then says (DIMALL, TAGALL, LEVELALL), so their folders are face sources too. */
-const ENGINE_FACE_SOURCES = ['dimall', 'tagall', 'levelall'];
+const ENGINE_FACE_SOURCES = ['annotate', 'dimall', 'tagall', 'levelall'];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ENGINE_ROOT = fileURLToPath(new URL('../../../../packages/ifcsheet/src/', import.meta.url));
 function faceFiles(rel: string, root = SRC_ROOT): string[] {

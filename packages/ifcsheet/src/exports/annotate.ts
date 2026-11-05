@@ -6,3 +6,4 @@
 
 export { ALL_CHOICES, COMMAND_ORDER, choicesFrom, choicesOfTemplate, commandsFor, hasChoices, type AnnotateChoices, type AnnotateCommand, type AnnotatedKind } from '../annotate/choices.js';
 export { effectiveOptions, readAnnotationPresets, withPreset, withoutPreset, type AnnotationOptions, type AnnotationPreset } from '../annotate/presets.js';
+export { annotateViews, runAnnotateCommand, type AnnotateKey, type AnnotateProgress, type AnnotateReaders, type AnnotateView, type AnnotateViewsInput, type AnnotateViewsResult, type CommandResult, type DraftChange, type DrawingResult, type Outcome, type ReadCall, type ReasonKey, type Said, type SetSummary, type ViewDrafts, type ViewSummary } from '../annotate/views.js';

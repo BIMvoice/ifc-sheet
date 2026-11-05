@@ -109,6 +109,8 @@ export interface ProjectViewBase {
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
   hiddenLayers?: string[];
+  /** A site plan's terrain contours (#182): metres between two contours, 0 for none; absent: 0.5 (`CONTOUR_DEFAULT_INTERVAL`), every fifth a major one. */
+  contourInterval?: number;
 }
 
 /** The area a detail view shows of its source view. */

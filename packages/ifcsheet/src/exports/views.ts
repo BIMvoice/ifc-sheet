@@ -44,3 +44,6 @@ export { inDrawOrder, layerOrder, movedInOrder } from '../draw-order.js';
 export { fillColourOf, fillLoopsOf, maskingFill } from '../fill-mask.js';
 export { makeDraft } from '../make-draft.js';
 export type { MakeDraftOptions } from '../make-draft.js';
+// Terrain contours on a site plan (#182): marching triangles over a TIN, and the one function that puts them on a plan drawing
+export { CONTOUR_DEFAULT_INTERVAL, CONTOUR_MAJOR_EVERY, MAX_CONTOUR_LEVELS, contourLevels, contourLines, isTerrainMesh, type ContourLine } from '../contours.js';
+export { CONTOUR_IFC_TYPE, contourIntervalOf, withContours } from '../contour-drawing.js';

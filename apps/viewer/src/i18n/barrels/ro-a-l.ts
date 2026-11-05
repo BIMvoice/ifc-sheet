@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { addDrawingKindsRo } from '../catalogues/add-drawing-kinds.ro';
+import { contoursRo } from '../catalogues/contours.ro';
 import { lengthUnitsFootRo } from '../catalogues/length-units-foot.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
@@ -59,6 +60,7 @@ import { listScheduleRo } from '../catalogues/list-schedule.ro';
 export const roAL = {
   ...lengthUnitsFootRo,
   ...addDrawingKindsRo,
+  ...contoursRo,
   ...annotateAllRo,
   ...annotateSetRo,
   ...annotatedIfcRo,
