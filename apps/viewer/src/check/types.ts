@@ -12,7 +12,7 @@ export type FindingKind =
   | 'untaggedOpenings' | 'unlabelledRooms' | 'planNotDrawn'
   | 'planNoDimensions' | 'viewNoLevelMarks'
   | 'viewOffSheet' | 'emptySheet' | 'titleBlockEmpty' | 'duplicateNumber'
-  | 'sectionMarkOffSheet' | 'detailOffSheet' | 'danglingAnnotation' | 'orphanedOverride' | 'orphanedJoineryOverride';
+  | 'sectionMarkOffSheet' | 'detailOffSheet' | 'danglingAnnotation' | 'orphanedOverride' | 'orphanedJoineryOverride' | 'orphanedLineEdit';
 
 /** What can be done about a finding on an annotation: take it off the drawing, or point it at another element. */
 export type Remedy = 'delete' | 'reattach';
@@ -49,7 +49,7 @@ export interface PlanElement { guid: string; className: string }
 
 /** Everything the checks read; the app fills it from its stores (`collect.ts`). */
 export interface CheckInput {
-  views: readonly { id: string; name: string; kind: string; detail?: unknown; interior?: unknown }[];
+  views: readonly { id: string; name: string; kind: string; detail?: unknown; interior?: unknown; graphics?: { hiddenLines?: readonly string[] } }[];
   sheets: readonly ProjectSheet[];
   /** The project's title block and name: what a sheet prints where it does not say otherwise (`titleBlockOf`). */
   titleBlock?: Record<string, string>;
@@ -57,6 +57,8 @@ export interface CheckInput {
   drafts: readonly DraftEntity[];
   /** The doors, windows and rooms a plan shows; null when the plan has not been drawn (it is open in no tab yet). */
   planElements(viewId: string): PlanElement[] | null;
+  /** The lines of the generated drawing of a view, by element, before any hiding; null while the view has no drawing (an edit cannot be judged then). */
+  modelLines?(viewId: string): { globalId: string; line: { start: { x: number; y: number }; end: { x: number; y: number } } }[] | null;
   elementExists(guid: string): boolean;
   /** The project's schedules: the list schedules' typed cell values are checked against the model (#446). */
   schedules?: readonly ProjectSchedule[];

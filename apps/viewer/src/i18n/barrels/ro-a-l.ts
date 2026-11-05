@@ -14,6 +14,7 @@ import { boqRo } from '../catalogues/boq.ro';
 import { byggesaksbimRo } from '../catalogues/byggesaksbim.ro';
 import { cadLayersRo } from '../catalogues/cad-layers.ro';
 import { catalogueRo } from '../catalogues/catalogue.ro';
+import { checkLineEditRo } from '../catalogues/check-line-edit.ro';
 import { checkRo } from '../catalogues/check.ro';
 import { classificationRo } from '../catalogues/classification.ro';
 import { colourSchemeRo } from '../catalogues/colour-scheme.ro';
@@ -70,6 +71,7 @@ export const roAL = {
   ...byggesaksbimRo,
   ...cadLayersRo,
   ...catalogueRo,
+  ...checkLineEditRo,
   ...checkRo,
   ...classificationRo,
   ...colourSchemeRo,
