@@ -16,6 +16,8 @@ import { extractAllEntityAttributes } from '@ifc-lite/parser';
 import type { DefaultSet } from '../default-set.js';
 import { annotationRects } from '../dimall/annotation-rects.js';
 import { openingObstacles, type ObstacleBox } from '../dimall/plan-obstacles.js';
+import { gridAxesOfModel, gridObstacles, gridShapesOf } from '../grid-overlay.js';
+import { DEFAULT_VIEW_SCALE } from '../viewport-annotation.js';
 import { planOpeningSymbols } from '../plan-openings.js';
 import { resolveViewGraphics } from '../view-templates.js';
 import { tableMeasure } from '../dimall/measure.js';
@@ -49,7 +51,7 @@ import { annotateViews, type AnnotateReaders, type AnnotateView, type AnnotateVi
 /** The layer the drafted annotation is on when a set has none of its own: the app's layer "0". */
 export const DEFAULT_DRAFT_LAYER: DraftLayer = { id: '0', name: '0', color: '#18181b', visible: true, locked: false };
 
-type AnnotateModel = Pick<OpenedModel, 'buildingMeshes' | 'meshes' | 'extent' | 'dataStore'>;
+type AnnotateModel = Pick<OpenedModel, 'buildingMeshes' | 'meshes' | 'extent' | 'dataStore' | 'coordinateInfo'>;
 type AnnotatedView = Extract<ProjectView, { kind: 'plan' | 'elevation' | 'section' }>;
 type HeadlessView = AnnotateView & { scale?: number | undefined };
 
@@ -155,7 +157,14 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
     const plan = plans.get(c.view.id);
     if (!plan || !ds) return [];
     const sources = { live: { dataStore: ds, view: null }, project: { joineryTypes: joinery?.joineryTypes ?? [], joineryMapping: joinery?.joineryMapping ?? DEFAULT_JOINERY_MAPPING } };
-    const boxes = openingObstacles(planOpeningSymbols(model.buildingMeshes, c.drawing.config.plane, sources, resolveViewGraphics(plan, set.document.viewTemplates), plan.level));
+    const graphics = resolveViewGraphics(plan, set.document.viewTemplates);
+    const boxes = openingObstacles(planOpeningSymbols(model.buildingMeshes, c.drawing.config.plane, sources, graphics, plan.level));
+    // The grid, as the app's `gridOverlays` draws it: on unless the view hides it, its bubbles at the ends the view sets, at the view's scale.
+    if (graphics?.grid?.visible ?? true) {
+      const scale = plan.scale && plan.scale > 0 ? plan.scale : DEFAULT_VIEW_SCALE;
+      const axes = gridAxesOfModel(ds, model.coordinateInfo, plan.level.storeyGlobalIds);
+      boxes.push(...gridObstacles(gridShapesOf(axes, 'plan', c.drawing.config.plane, graphics?.grid?.ends ?? 'both', scale / 1000, c.drawing.bounds)));
+    }
     obstacleMemo.set(c.view.id, boxes);
     return boxes;
   };
