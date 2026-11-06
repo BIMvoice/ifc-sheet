@@ -14,6 +14,7 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { extractAllEntityAttributes } from '@ifc-lite/parser';
 import type { DefaultSet } from '../default-set.js';
+import { annotationRects } from '../dimall/annotation-rects.js';
 import { tableMeasure } from '../dimall/measure.js';
 import { planParts } from '../dimall/parts.js';
 import { DEFAULT_DIM_STYLE } from '../draft-styles.js';
@@ -30,7 +31,13 @@ import type { SheetAnnotations } from '../sheet-annotations.js';
 import { paperUnitFor, styledParamsIn, styleBookOf } from '../style-fit.js';
 import { roomsOfPlan } from '../tagall/rooms.js';
 import { TAGALL_TYPES, type TagParts } from '../tagall/types.js';
-import { tagMark } from '../element-mark.js';
+import { elementMark, markIndex, markKey } from '../element-mark.js';
+import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
+import type { JoinerySpec } from '@ifc-lite/create';
+import type { JoineryMapping } from '../joinery-mapping.js';
+import type { JoineryCellOverride } from '../joinery-overrides.js';
+import { joineryScheduleData } from '../joinery-schedule.js';
+import { scheduleModelsOf } from '../schedule-models.js';
 import type { SheetLocale } from '../units-and-numbers.js';
 import { generateViewDrawings } from '../view-drawings.js';
 import type { AnnotateChoices } from './choices.js';
@@ -53,6 +60,8 @@ export interface HeadlessAnnotateInput {
   existing?: readonly DraftEntity[];
   /** Only these views (by id); absent: every plan, elevation and section the choices give a command. */
   viewIds?: ReadonlySet<string>;
+  /** The joinery catalogue, symbol mapping and typed marks the schedule numbers the openings by; default: the model's own types and the default mapping. */
+  joinery?: { joineryTypes?: readonly JoinerySpec[]; joineryMapping?: JoineryMapping; joineryOverrides?: readonly JoineryCellOverride[] };
   /** The language of the labels and figures; default English. */
   locale?: SheetLocale;
   /** Where ids come from; default fresh project ids. */
@@ -70,7 +79,7 @@ const withLengths = (set: QuantitySet): QuantitySetLike => ({
 });
 
 /** An element of the model as a label reads it, by GlobalId, from the same list provider the schedules use. */
-function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, renderIdOf: (guid: string) => number | undefined): (guid: string) => LabelElement | null {
+function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, renderIdOf: (guid: string) => number | undefined, markOf: (id: number, tag: string) => string): (guid: string) => LabelElement | null {
   const p = createHeadlessListProvider(dataStore);
   const longNames = new Map<number, string>();
   const longNameOf = (id: number): string => {
@@ -91,7 +100,7 @@ function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, rende
           case 'Tag': return p.getEntityTag(id);
           case 'LongName': return longNameOf(id);
           case 'RoomNumber': return longNameOf(id) ? p.getEntityName(id) : '';
-          case 'Mark': return tagMark(p.getEntityTag(id));
+          case 'Mark': return markOf(id, p.getEntityTag(id));
           case 'TagName': return '';
           case 'ObjectType': return p.getEntityObjectType(id);
           case 'Description': return p.getEntityDescription(id);
@@ -113,13 +122,24 @@ function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, rende
 }
 
 /** What the commands read from a view of `model`: its drawing's parts and elements, the plan's rooms, the labels of the elements. */
-function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[]): AnnotateReaders<HeadlessView, Drawing2D> {
+function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[], joinery: HeadlessAnnotateInput['joinery']): AnnotateReaders<HeadlessView, Drawing2D> {
   const book = styleBookOf(undefined, undefined);
   const current = { textStyle: DEFAULT_TEXT_STYLE.id, dimStyle: DEFAULT_DIM_STYLE.id };
   const ds = model.dataStore;
   const guidOf = (renderId: number) => ds?.entities.getGlobalId(renderId) || null;
   const byGuid = new Map<string, number>();
-  const read = ds ? elementReader(ds, (guid) => byGuid.get(guid)) : () => null;
+  // A door or window carries the mark the joinery schedule gives it (typed mark, its Tag, else its type's D1/W1), as the app's plan tag does.
+  let marks: Map<string, string> | undefined;
+  const markOf = (id: number, tag: string): string => {
+    if (!ds) return elementMark({ tag, typeMark: '' });
+    if (!marks) {
+      const project = { joineryTypes: joinery?.joineryTypes ?? [], joineryMapping: joinery?.joineryMapping ?? DEFAULT_JOINERY_MAPPING };
+      marks = markIndex(joineryScheduleData(scheduleModelsOf({ dataStore: ds, meshes: model.meshes }), project, 'all').entries, joinery?.joineryOverrides);
+    }
+    return marks.get(markKey('model', id)) ?? elementMark({ tag, typeMark: '' });
+  };
+  const read = ds ? elementReader(ds, (guid) => byGuid.get(guid), markOf) : () => null;
+  const rectsOf = annotationRects(tableMeasure);
   const plans = new Map(set.document.views.filter((v): v is PlanProjectView => v.kind === 'plan').map((v) => [v.id, v]));
   const paperUnit = (c: ReadCall<HeadlessView, Drawing2D>) => paperUnitFor(c.view.id, set.document.sheets, [{ id: c.view.id, scale: c.view.scale }]);
   // Annotation sizes are paper sizes at the view's scale, as the open view reads them.
@@ -133,7 +153,7 @@ function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'lev
     dimall: (c) => ({
       ...placement(c), placed: c.placed, parts: planParts(c.drawing, model.buildingMeshes), rooms: roomsOf(c), obstacles: [], newId: c.newId, book,
       firstMm: undefined, settings: { textHeight: placement(c).textHeight, textStyle: current.textStyle, dimStyle: current.dimStyle },
-      reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf: () => [],
+      reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
     }),
     tagall: (c) => {
       const onPlan = c.view.kind === 'plan';
@@ -150,11 +170,11 @@ function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'lev
       return {
         onPlan, elements, targets, rooms, existing: c.placed, placement: { ...placement(c), locale: c.locale }, types: { mark, room },
         env: { read, up: 1, styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId },
-        reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf: () => [],
+        reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
       };
     },
     levelall: (c) => ({
-      kind: c.view.kind, elements: viewElementsOf(c.drawing), levels: set.levels, existing: c.placed, rectsOf: () => [], placement: placement(c),
+      kind: c.view.kind, elements: viewElementsOf(c.drawing), levels: set.levels, existing: c.placed, rectsOf, placement: placement(c),
       styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId,
     }),
   };
@@ -175,7 +195,7 @@ export async function annotateSetHeadless(input: HeadlessAnnotateInput): Promise
     ? await generateViewDrawings(all, model.buildingMeshes, set.levels, model.extent, undefined, undefined, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy))
     : new Map<string, Drawing2D>();
   const result = await annotateViews<HeadlessView, Drawing2D>({
-    views, choices, ...(input.tagParts ? { presets: { tagParts: input.tagParts } } : {}), readers: readersOf(model, set, existing),
+    views, choices, ...(input.tagParts ? { presets: { tagParts: input.tagParts } } : {}), readers: readersOf(model, set, existing, input.joinery),
     drawingOf: async (view) => {
       const drawing = drawings.get(view.id);
       return drawing ? { drawing } : { drawing: null, error: 'the view has nothing to draw' };
