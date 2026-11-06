@@ -5,7 +5,8 @@
 /**
  * Annotating the set headlessly matches the app on AC20-FZK-Haus (#707): a door or window is tagged with the mark the joinery schedule
  * gives it (the app's `openingMarkOf`, the engine's `markIndex` over the schedule's entries), and no label overlaps another label or a
- * dimension figure, because `rectsOf` measures the annotations placed before it.
+ * dimension figure, because `rectsOf` measures the annotations placed before it. It also keeps tags and dimension figures off the door swings
+ * and window frames of the plan, the obstacles the app's reader passes (`planSymbolObstacles`).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -17,12 +18,15 @@ import { dimensionLayout } from '../dimension-figure.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
 import type { DraftEntity } from '../draft-types.js';
 import { markIndex } from '../element-mark.js';
-import { openModel, type OpenedModel } from '../headless.js';
+import { generateViewDrawings, openModel, sectionConfigFor, type OpenedModel } from '../headless.js';
+import { openingObstacles } from '../dimall/plan-obstacles.js';
+import { planOpeningSymbols } from '../plan-openings.js';
+import type { DraftShape } from '../draft-types.js';
 import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
 import { joineryScheduleData } from '../joinery-schedule.js';
 import { scheduleModelsOf } from '../schedule-models.js';
 import { ALL_CHOICES } from './choices.js';
-import { annotateSetHeadless, type HeadlessAnnotateResult } from './headless.js';
+import { annotateSetHeadless, readersOf, type HeadlessAnnotateResult } from './headless.js';
 
 const FZK = fileURLToPath(new URL('../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -91,4 +95,58 @@ describe.skipIf(missing !== null)('annotateSetHeadless matches the app on AC20-F
     expect(again.all.some((d) => d.id !== 'obstacle' && d.shape.type === 'text'), 'the run still tags the view').toBe(true);
     expect(hits.map((d) => d.shape.type === 'text' ? d.shape.text : '')).toEqual([]);
   });
+
+  /** The tags and dimension figures of `drafts` that touch a solid stroke of a door or window symbol of the plans of `plans`; the plans must have swings and labels. */
+  function touchingSymbols(plans: DefaultSet, drafts: readonly DraftEntity[]): { swings: number; checked: number; touching: string[] } {
+    const rectsOf = annotationRects(tableMeasure);
+    const figure = (d: DraftEntity) => {
+      if (d.shape.type !== 'dimension') return rectsOf([d])[0]!;
+      const layout = dimensionLayout(d.shape, {}, tableMeasure.frame, tableMeasure.widthOf);
+      const pts = textBoxIn(tableMeasure, layout.textAt, layout.label, d.shape.height, layout.textAngle);
+      return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
+    };
+    const sources = { live: { dataStore: model.dataStore!, view: null }, project: { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
+    let swings = 0, checked = 0;
+    const touching: string[] = [];
+    for (const view of plans.document.views) {
+      if (view.kind !== 'plan') continue;
+      const plane = sectionConfigFor(view, plans.levels, model.extent!)!.plane;
+      const symbols = planOpeningSymbols(model.buildingMeshes, plane, sources, undefined, view.level);
+      const arcs = (list: DraftShape[] | undefined) => (list ?? []).filter((sh) => sh.type === 'arc').length;
+      swings += symbols.reduce((n, s) => n + arcs(s.shapes) + arcs(s.heavy) + arcs(s.dashed), 0);
+      const solid = openingObstacles(symbols).filter((b) => !b.dashed);
+      for (const d of drafts.filter((e) => e.viewId === view.id && (e.shape.type === 'dimension' || (e.shape.type === 'text' && !e.shape.leader)))) {
+        const r = figure(d);
+        checked++;
+        if (solid.some((b) => Math.min(r.x1, b.x1) - Math.max(r.x0, b.x0) > 1e-6 && Math.min(r.y1, b.y1) - Math.max(r.y0, b.y0) > 1e-6)) touching.push(`${view.name}: ${d.shape.type === 'text' ? d.shape.text : 'dimension'}`);
+      }
+    }
+    return { swings, checked, touching };
+  }
+
+  it('keeps every tag and dimension figure off the door swings and window frames of the plan (#707)', () => {
+    const { swings, checked, touching } = touchingSymbols(set, result.all);
+    expect(swings, 'the plans have door swings').toBeGreaterThan(0);
+    expect(checked, 'the plans have tags and dimension figures').toBeGreaterThan(0);
+    expect(touching).toEqual([]);
+  });
+
+  it('hands DIMALL and TAGALL the door swings and window frames of each plan as obstacles, the boxes the app\'s planSymbolObstacles reads (#707)', async () => {
+    // On FZK the labels clear the swings with or without them (the layout already keeps tags off a door's swing ring), so the wiring is read at the readers: what each command is given.
+    const readers = readersOf(model, set, [], undefined);
+    const plans = set.document.views.filter((v) => v.kind === 'plan');
+    const drawings = await generateViewDrawings(plans, model.buildingMeshes, set.levels, model.extent!);
+    const sources = { live: { dataStore: model.dataStore!, view: null }, project: { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
+    let counted = 0;
+    for (const view of plans) {
+      const drawing = drawings.get(view.id);
+      if (!drawing) continue;
+      const call = { view: { id: view.id, name: view.name, kind: view.kind, scale: view.scale }, drawing, placed: [], newId: () => 'x', locale: 'en' as const };
+      const expected = openingObstacles(planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, undefined, view.level));
+      counted += expected.length;
+      expect(readers.dimall(call).obstacles, `${view.name}: DIMALL obstacles`).toEqual(expected);
+      expect(readers.tagall(call).obstacles, `${view.name}: TAGALL obstacles`).toEqual(expected);
+    }
+    expect(counted, 'the plans have symbol boxes').toBeGreaterThan(0);
+  }, 120_000);
 });
