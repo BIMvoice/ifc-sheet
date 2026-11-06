@@ -3,6 +3,7 @@ CLASSIFICATION_BY: value
 COARSE_FROM_SCALE: value
 CONTOUR_DEFAULT_INTERVAL: value
 CONTOUR_IFC_TYPE: value
+CONTOUR_LABEL_MM: value
 CONTOUR_MAJOR_EVERY: value
 CameraViewpoint: type (type-only)
 CategoryGraphics: type (type-only)
@@ -18,7 +19,9 @@ ClassificationRule: type (type-only)
 ClassificationSystem: type (type-only)
 ClassifiedElement: type (type-only)
 ClassifiedType: type (type-only)
+ContourLabel: type (type-only)
 ContourLine: type (type-only)
+ContourText: type (type-only)
 CustomPaper: type (type-only)
 DASH_MM: value
 DEFAULT_FACE_FILL: value
@@ -102,6 +105,7 @@ classificationOf: value
 classificationRuleOf: value
 classifiedTypes: value
 contourIntervalOf: value
+contourLabelsOf: value
 contourLevels: value
 contourLines: value
 defaultDetailLevel: value
@@ -119,6 +123,7 @@ inDrawOrder: value
 isTerrainMesh: value
 itemRules: value
 layerOrder: value
+layoutContourLabels: value
 lineHidden: value
 lineKey: value
 makeDraft: value

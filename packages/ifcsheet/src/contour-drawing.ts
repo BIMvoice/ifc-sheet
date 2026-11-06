@@ -14,9 +14,9 @@ import { projectPointForPlane, type Drawing2D, type DrawingLine } from '@ifc-lit
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ProjectView } from './document.js';
 import { CONTOUR_DEFAULT_INTERVAL, contourLines } from './contours.js';
+import { CONTOUR_IFC_TYPE, labelPlaces, type ContourLabel, type WithContourLabels } from './contour-labels.js';
 
-/** The class the contours carry: the terrain's own. */
-export const CONTOUR_IFC_TYPE = 'IfcGeographicElement';
+export { CONTOUR_IFC_TYPE };
 
 /**
  * The interval a view draws its terrain at, metres; `null` when it draws none. Only a site plan, or the plan of a model
@@ -42,11 +42,13 @@ export function withContours<T extends Drawing2D>(drawing: T, view: ProjectView 
   if (interval === null || terrain.length === 0) return drawing;
   const plane = drawing.config.plane;
   const lines: DrawingLine[] = [];
+  const rings: { ring: { x: number; y: number }[]; height: number }[] = [];
   const ids = new Map(terrain.map((m) => [keyOf({ entityId: m.expressId, modelIndex: m.modelIndex }), m]));
   const first = terrain[0];
   for (const contour of contourLines(terrain, interval, datum)) {
     const pts = contour.points.map((p) => projectPointForPlane({ x: p.x, y: contour.height - datum, z: p.z }, plane));
     const ring = contour.closed ? [...pts, pts[0]] : pts;
+    if (contour.major) rings.push({ ring, height: contour.height });
     for (let i = 0; i + 1 < ring.length; i++) {
       lines.push({
         line: { start: ring[i], end: ring[i + 1] }, category: contour.major ? 'silhouette' : 'projection', visibility: 'visible',
@@ -64,5 +66,9 @@ export function withContours<T extends Drawing2D>(drawing: T, view: ProjectView 
   const projectionPolygons = drawing.projectionPolygons.filter((p) => !terrainItem(p));
   for (const p of [...cutPolygons, ...projectionPolygons]) { p.polygon.outer.forEach(take); p.polygon.holes.forEach((h) => h.forEach(take)); }
   const bounds = Number.isFinite(minX) ? { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } } : drawing.bounds;
-  return { ...drawing, lines: all, cutPolygons, projectionPolygons, bounds, stats: { ...drawing.stats, projectionLineCount: all.filter((l) => l.category === 'projection').length } };
+  // Height labels on the major contours (#182), spaced a third of the plan's longer side along each; a sheet places them once it knows its scale.
+  const extent = Math.max(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y);
+  const contourLabels: ContourLabel[] = rings.flatMap((r) => labelPlaces(r.ring, r.height, extent / 3));
+  const labelled: WithContourLabels = contourLabels.length ? { contourLabels } : {};
+  return { ...drawing, ...labelled, lines: all, cutPolygons, projectionPolygons, bounds, stats: { ...drawing.stats, projectionLineCount: all.filter((l) => l.category === 'projection').length } };
 }
