@@ -20,7 +20,7 @@ export function AnnotatedIfcButton({ skin }: { skin: SetSkin }) {
       const result = await runAnnotatedIfc();
       const said = result.lines.map((l) => t(l.key, l.params));
       const delivered = deliverAnnotatedIfc(result);
-      setLines(delivered && result.files.length > 1 ? [...said, t('annotatedIfc.msg.files', { count: result.files.length, name: delivered })] : said);
+      setLines(delivered && delivered.endsWith('.zip') ? [...said, t('annotatedIfc.msg.files', { count: result.files.length + result.support.length, name: delivered })] : said);
     } catch (error) {
       setLines([error instanceof Error ? error.message : String(error)]);
     } finally {
