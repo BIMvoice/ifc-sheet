@@ -18,7 +18,7 @@
  * element is taken off the list.
  */
 
-import type { CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, ViewGraphics } from './view-graphics-types.js';
+import type { CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, LineStyleOverride, ViewGraphics } from './view-graphics-types.js';
 import { VIEW_CATEGORY_CLASSES } from './view-templates.js';
 
 const CATEGORY_OF = new Map<string, string>(VIEW_CATEGORY_CLASSES.flatMap((c) => c.classes.map((k) => [k.toUpperCase(), c.id] as const)));
@@ -84,7 +84,7 @@ function indexOf(graphics: ViewGraphics): Index {
 
 /** Whether `graphics` says anything about single elements or lines (a view that does not takes the cheap path everywhere). */
 export function hasElementGraphics(graphics: ViewGraphics | undefined): graphics is ViewGraphics {
-  return !!graphics && ((graphics.hiddenElements?.length ?? 0) > 0 || (graphics.hiddenLines?.length ?? 0) > 0 || Object.keys(graphics.elements ?? {}).length > 0);
+  return !!graphics && ((graphics.hiddenElements?.length ?? 0) > 0 || (graphics.hiddenLines?.length ?? 0) > 0 || Object.keys(graphics.lineStyles ?? {}).length > 0 || Object.keys(graphics.elements ?? {}).length > 0);
 }
 
 /**
@@ -146,6 +146,12 @@ export function lineHidden(graphics: ViewGraphics | undefined, globalId: GlobalI
   return indexOf(graphics).lines.has(hiddenLineEntry(globalId, line));
 }
 
+/** How this one line of `globalId`'s is drawn when the view overrides it (#189), or null. The key is the one `hiddenLines` uses, so it survives a rebuilt drawing. */
+export function lineOverride(graphics: ViewGraphics | undefined, globalId: GlobalId | null | undefined, line: { start: Pt; end: Pt }): LineStyleOverride | null {
+  if (!graphics?.lineStyles || !globalId) return null;
+  return graphics.lineStyles[hiddenLineEntry(globalId, line)] ?? null;
+}
+
 /** What a view says about an element the model no longer has (or has under another GlobalId): kept, and listed so it can be looked at. */
 export interface OrphanElement {
   globalId: GlobalId;
@@ -177,14 +183,16 @@ export function orphanElements(graphics: ViewGraphics | undefined, present: (glo
 /** `graphics` with everything it says about `globalIds` taken off (the elements shown again, their overrides and hidden lines dropped). */
 export function withoutElements(graphics: ViewGraphics, globalIds: Iterable<GlobalId>): ViewGraphics {
   const drop = new Set(globalIds);
-  const { hiddenElements, elements, hiddenLines, ...rest } = graphics;
+  const { hiddenElements, elements, hiddenLines, lineStyles, ...rest } = graphics;
   const keptHidden = hiddenElements?.filter((id) => !drop.has(id));
   const keptElements = Object.entries(elements ?? {}).filter(([id]) => !drop.has(id));
   const keptLines = hiddenLines?.filter((e) => !drop.has(hiddenLineElement(e)));
+  const keptStyles = Object.entries(lineStyles ?? {}).filter(([e]) => !drop.has(hiddenLineElement(e)));
   return {
     ...rest,
     ...(keptHidden?.length ? { hiddenElements: keptHidden } : {}),
     ...(keptElements.length ? { elements: Object.fromEntries(keptElements) } : {}),
     ...(keptLines?.length ? { hiddenLines: keptLines } : {}),
+    ...(keptStyles.length ? { lineStyles: Object.fromEntries(keptStyles) } : {}),
   };
 }

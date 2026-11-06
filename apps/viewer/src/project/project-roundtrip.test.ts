@@ -79,6 +79,8 @@ const graphics: Required<ViewGraphics> = {
     },
   },
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
+  // One line of the model drawing in another pen (#189), keyed like a hidden line.
+  lineStyles: { '2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0': { weight: 'heavy', type: 'centre', color: '#cc0000' } },
   // A plan's switch for the model's own plan symbols (#489): only `false` is a setting, on is the default.
   usePlanSymbols: false,
   // A template's class and material mapping, kept on a view that was detached from it (#31).

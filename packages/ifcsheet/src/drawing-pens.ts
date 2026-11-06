@@ -53,7 +53,7 @@ export function penGroups<F extends StyleItem, L extends StyleItem>(
     if (!s.visible) continue;
     const who = split ? split(line) : '';
     const dash = s.dash.length ? s.dash.join(' ') : undefined;
-    const key = s.kind === 'hidden' ? `hidden:${s.stroke}${who}` : `${s.kind === 'cut' ? 'cut' : 'seen'}:${s.stroke}:${s.weight}:${dash ?? ''}${who}`;
+    const key = s.kind === 'hidden' ? `hidden:${s.stroke}:${s.weight}:${dash ?? ''}${who}` : `${s.kind === 'cut' ? 'cut' : 'seen'}:${s.stroke}:${s.weight}:${dash ?? ''}${who}`;
     const layer: PenLayer = s.kind === 'hidden' ? 'HIDDEN' : s.kind === 'cut' ? 'CUT' : 'SEEN';
     at(key, () => ({ layer, stroke: s.stroke, width: s.weight, fill: null, ...(dash ? { dash } : {}) })).lines.push(line);
   }
