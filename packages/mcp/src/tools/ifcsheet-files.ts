@@ -157,7 +157,7 @@ export const ifcsheetIssueSet: Tool = {
     const drawn = await drawSet(entry, entry.model);
     const pdf = await exportPdf(drawn.sheets, { title: doc.name });
     // Built before anything is written, so a copy that cannot be made leaves the directory as it was.
-    const annotated = annotate ? await annotatedCopy(entry) : undefined;
+    const annotated = annotate ? await annotatedCopy(entry, drawn.sheets) : undefined;
     const dxfs = drawn.sheets.map((sheet) => ({ sheet, text: exportDxf(sheet) }));
     const register = [REGISTER_HEADER, ...sheetsOf(entry).map((s) => [s.number, s.name, s.paper, [...new Set(s.views.map((v) => v.scale))].join(' '), s.views.map((v) => v.view ?? '').join('; ')])].map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')).join('\r\n') + '\r\n';
 
@@ -170,6 +170,8 @@ export const ifcsheetIssueSet: Tool = {
     for (const [i, d] of dxfs.entries()) await put('dxf', join('dxf', dxfNames[i]), d.text);
     await put('register', 'register.csv', register);
     if (annotated) files.push({ kind: 'annotated_ifc', ...(await write(join(directory, annotated.name), ctx, annotated.bytes, { extension: '.ifc' })) });
+    // The drawings and sheet layouts the copy's IfcDocumentReferences name, at their Locations next to it (#548).
+    for (const f of annotated?.files ?? []) await put('annotated_svg', f.path, f.text);
     const scheduleFiles: { schedule: SetSchedule; name: string; csv: string; sheetName: string; number: string }[] = [];
     for (const s of drawn.schedules) {
       const sheet = doc.sheets.find((x) => x.id === s.schedule.sheetId)!;
