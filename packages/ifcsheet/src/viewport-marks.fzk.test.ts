@@ -13,11 +13,12 @@
  * project +Y, so the arrow stands at -50° (counter-clockwise is positive).
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
+import { exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
 import { trueNorthOf } from './true-north.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
@@ -82,10 +83,10 @@ describe.skipIf(missing !== null)('north arrows and scale bars on the FZK-Haus p
     const [comma] = await sheetGraphics(asked, model, { units: { separator: 'comma' } });
     expect(plain.texts.map((t) => t.text)).toContain('2.5');
     expect(comma.texts.map((t) => t.text)).toContain('2,5');
-    const dxf = exportDxf(plain);
-    expect(dxf).toContain('SITE-SYMBOLS');
-    const bare = exportDxf((await sheetGraphics(set, model))[0]);
-    expect(bare).not.toContain('SITE-SYMBOLS');
+    const dxf = dxfText(plain);
+    expect(dxfLayers(dxf)).toContain('SITE-SYMBOLS');
+    const bare = dxfText((await sheetGraphics(set, model))[0]);
+    expect(dxfLayers(bare)).not.toContain('SITE-SYMBOLS');
     const pdf = await exportPdf([plain, comma]);
     expect(Buffer.from(pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
   });

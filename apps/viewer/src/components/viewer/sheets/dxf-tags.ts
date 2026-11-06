@@ -12,18 +12,10 @@
 
 import type { DraftLayer } from '@/drafting/types';
 import type { LineType } from '@/drafting/styles';
+import type { DxfTags } from '@bimvoice/ifcsheet/dxf';
 import type { CadKind } from '@/project/cad-layers';
 
-export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined> & Partial<Record<`data-dxf-${'own-lw' | 'own-ltype' | 'print'}`, string | undefined>> & Partial<Record<`data-dxf-${'class' | 'material' | 'kind'}`, string | undefined>>;
-
-/**
- * What the CAD layer standard (`project/cad-layers.ts`) matches on, beyond the
- * layer tag: the element's IFC class and material, or what a drafted annotation
- * is. Extra tags only; `data-dxf-layer` and the pen keep their values (the PDF
- * layers read them too), and the configured CAD names are applied at DXF write
- * time (`dxf-cad-layers.ts`).
- */
-export interface DxfSubject { ifcType?: string; material?: string; kind?: string }
+export { penTags, type DxfSubject, type DxfTags } from '@bimvoice/ifcsheet/dxf';
 
 /** A drafting layer's tags. */
 export function layerTags(layer: DraftLayer | undefined, kind?: string): DxfTags {
@@ -44,12 +36,6 @@ export function lineTags(layer: DraftLayer | undefined, own: { lineWeight?: numb
     'data-dxf-own-lw': own.lineWeight !== undefined ? String(own.lineWeight) : undefined,
     'data-dxf-own-ltype': own.lineType,
   };
-}
-
-/** A role layer's tags (the generated drawing's pens). */
-export function penTags(layer: string, widthMm: number, dashed: boolean | LineType = false, color = '#000000', subject: DxfSubject = {}): DxfTags {
-  const lineType = typeof dashed === 'string' ? dashed : dashed ? 'dashed' : 'continuous';
-  return { 'data-dxf-class': subject.ifcType, 'data-dxf-material': subject.material, 'data-dxf-kind': subject.kind, 'data-dxf-layer': layer, 'data-dxf-color': color, 'data-dxf-lw': String(widthMm), 'data-dxf-ltype': lineType };
 }
 
 /** What a drafted annotation is, for the CAD layer standard (`project/cad-layers.ts`): dimension, text or hatch; other shapes none. */

@@ -110,14 +110,14 @@ export const ifcsheetExportDxf: Tool = {
     const entry = getSheetSet(ctx, text(input, 'document_id'));
     const directory = await outputPath(input.directory, ctx);
     const one = optText(input, 'sheet');
-    const { exportDxf } = await import('@bimvoice/ifcsheet/headless');
+    const { sheetGraphicToDxf } = await import('@bimvoice/ifcsheet/headless');
     const drawn = await drawSet(entry, entry.model);
     const only = one === undefined ? undefined : findSheet(entry.set.document, one).id;
     const wanted = drawn.sheets.filter((g) => only === undefined || g.sheetId === only);
     const used = new Set<string>();
     const files = [];
     for (const sheet of wanted) {
-      const written = await write(join(directory, dxfName(sheet.number, used)), ctx, exportDxf(sheet));
+      const written = await write(join(directory, dxfName(sheet.number, used)), ctx, sheetGraphicToDxf(sheet));
       files.push({ sheet: sheet.number, ...written });
     }
     return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.${notedIn(drawn.notes)}`, { document_id: entry.id, directory, files, notes: drawn.notes });
@@ -153,12 +153,12 @@ export const ifcsheetIssueSet: Tool = {
     const pattern = optText(input, 'pattern');
     if (pattern !== undefined && !handover) throw invalid('pattern is for handover: true.');
     const annotate = optBoolean(input, 'annotated_ifc') ?? false;
-    const { exportDxf, exportPdf } = await import('@bimvoice/ifcsheet/headless');
+    const { sheetGraphicToDxf, exportPdf } = await import('@bimvoice/ifcsheet/headless');
     const drawn = await drawSet(entry, entry.model);
     const pdf = await exportPdf(drawn.sheets, { title: doc.name });
     // Built before anything is written, so a copy that cannot be made leaves the directory as it was.
     const annotated = annotate ? await annotatedCopy(entry, drawn.sheets) : undefined;
-    const dxfs = drawn.sheets.map((sheet) => ({ sheet, text: exportDxf(sheet) }));
+    const dxfs = drawn.sheets.map((sheet) => ({ sheet, data: sheetGraphicToDxf(sheet) }));
     const register = [REGISTER_HEADER, ...sheetsOf(entry).map((s) => [s.number, s.name, s.paper, [...new Set(s.views.map((v) => v.scale))].join(' '), s.views.map((v) => v.view ?? '').join('; ')])].map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')).join('\r\n') + '\r\n';
 
     const stem = asciiStem(doc.name) || 'drawing-set';
@@ -167,7 +167,7 @@ export const ifcsheetIssueSet: Tool = {
     await put('pdf', `${stem}.pdf`, pdf);
     const used = new Set<string>();
     const dxfNames = dxfs.map((d) => dxfName(d.sheet.number, used));
-    for (const [i, d] of dxfs.entries()) await put('dxf', join('dxf', dxfNames[i]), d.text);
+    for (const [i, d] of dxfs.entries()) await put('dxf', join('dxf', dxfNames[i]), d.data);
     await put('register', 'register.csv', register);
     if (annotated) files.push({ kind: 'annotated_ifc', ...(await write(join(directory, annotated.name), ctx, annotated.bytes, { extension: '.ifc' })) });
     // The drawings and sheet layouts the copy's IfcDocumentReferences name, at their Locations next to it (#548).
@@ -185,7 +185,7 @@ export const ifcsheetIssueSet: Tool = {
       const enc = new TextEncoder();
       const parts: HandoverPart[] = [
         { kind: 'pdf', extension: 'pdf', tokens: { ...tokens, sheet: doc.name }, data: pdf },
-        ...dxfs.map((d): HandoverPart => ({ kind: 'dxf', extension: 'dxf', tokens: { ...tokens, number: d.sheet.number, sheet: d.sheet.name }, data: enc.encode(d.text) })),
+        ...dxfs.map((d): HandoverPart => ({ kind: 'dxf', extension: 'dxf', tokens: { ...tokens, number: d.sheet.number, sheet: d.sheet.name }, data: d.data })),
         { kind: 'register', extension: 'csv', tokens: { ...tokens, sheet: 'Drawing register' }, data: enc.encode(register) },
         ...scheduleFiles.map((s): HandoverPart => ({ kind: 'schedule', extension: 'csv', tokens: { ...tokens, number: s.number, sheet: s.sheetName }, data: enc.encode(s.csv) })),
         { kind: 'ifc', extension: 'ifc', tokens: { ...tokens, sheet: entry.model.name.replace(/\.ifc$/i, '') }, data: entry.model.bytes },

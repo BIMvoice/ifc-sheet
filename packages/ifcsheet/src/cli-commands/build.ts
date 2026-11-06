@@ -11,7 +11,7 @@ import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTem
 import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
-import { annotateSetHeadless, annotationsOf, exportDxf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { annotateSetHeadless, annotationsOf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, sheetGraphicToDxf, type ProjectFacts } from '../headless.js';
 import { readAnnotateSpec, readAnnotationPresets, type AnnotateSpec } from '../exports/annotate.js';
 import { withTypedProjectName } from '../title-block-fields.js';
 import { projectSetOf } from '../project-set.js';
@@ -136,6 +136,8 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     for (const view of done.summary.views) io.stderr(`ifcsheet: annotated ${view.name}: ${view.skipped ? 'left out, the view has no drawing' : view.results.map((r) => `${r.command} ${r.outcome === 'added' ? `+${r.added}` : r.outcome === 'already' ? 'complete' : 'nothing to do'}`).join(', ')}\n`);
   }
   const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, ...(annotations ? { annotations } : {}), onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
+  // The DXF is written through the project's CAD layer standard and line types, as the app's is (#619).
+  const dxfOptions = { ...(project?.set.cadLayers ? { cadLayers: project.set.cadLayers } : {}), lineTypes: project?.set.lineTypes ?? [] };
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
@@ -149,7 +151,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     const tokens = { project: set.document.name, date: new Date().toISOString().slice(0, 10) };
     const parts: HandoverPart[] = [
       { kind: 'pdf', extension: 'pdf', tokens: { ...tokens, sheet: set.document.name }, data: pdf },
-      ...sheets.map((sheet) => ({ kind: 'dxf' as const, extension: 'dxf', tokens: { ...tokens, number: sheet.number, sheet: sheet.name }, data: new TextEncoder().encode(exportDxf(sheet)) })),
+      ...sheets.map((sheet) => ({ kind: 'dxf' as const, extension: 'dxf', tokens: { ...tokens, number: sheet.number, sheet: sheet.name }, data: sheetGraphicToDxf(sheet, dxfOptions) })),
       { kind: 'ifc', extension: 'ifc', tokens: { ...tokens, sheet: basename(args.model).replace(/\.ifc$/i, '') }, data: bytes },
     ];
     const built = buildHandoverZip(args.pattern, parts);
@@ -163,7 +165,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     const used = new Set<string>();
     for (const sheet of sheets) {
       const file = join(args.dxf, dxfName(sheet.number, used));
-      await writeFile(file, exportDxf(sheet));
+      await writeFile(file, sheetGraphicToDxf(sheet, dxfOptions));
       io.stdout(`${file}\n`);
     }
   }

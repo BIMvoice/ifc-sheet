@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { dxfLayerWeight } from './__fixtures__/dxf-text.js';
 import { EXIT, run } from './cli.js';
 import { buildStandard } from './cli-standard.js';
 import { DEFAULT_SCHEME } from './numbering.js';
@@ -45,14 +46,14 @@ async function pdfTexts(bytes: Uint8Array): Promise<string[]> {
   }
 }
 
-/** The DXF layers of the drawing pens of a sheet's file: `VIEW-CUT-070` is the cut line at 0.7 mm. */
-const penLayers = (dxf: string): string[] => [...new Set(dxf.match(/VIEW-[A-Z]+-\d+/g))].sort();
+/** The cut layer's line weights across a set's files, in hundredths of a millimetre: 70 is the cut line at 0.7 mm. */
+const penLayers = (dxf: string): string[] => { const w = dxfLayerWeight(dxf, 'CUT'); return w === undefined ? [] : [`CUT-${String(w).padStart(3, '0')}`]; };
 
 async function build(...extra: string[]): Promise<{ code: number; err: string; texts: string[]; layers: string[] }> {
   const dir = scratch();
   const c = capture();
   const code = await run(['build', FZK, '--out', join(dir, 'set.pdf'), '--dxf', join(dir, 'dxf'), ...extra], c.io);
-  const layers = existsSync(join(dir, 'dxf')) ? [...new Set(readdirSync(join(dir, 'dxf')).flatMap((f) => penLayers(readFileSync(join(dir, 'dxf', f), 'utf8'))))].sort() : [];
+  const layers = existsSync(join(dir, 'dxf')) ? [...new Set(readdirSync(join(dir, 'dxf')).flatMap((f) => penLayers(readFileSync(join(dir, 'dxf', f), 'latin1'))))].sort() : [];
   return { code, err: c.err(), texts: existsSync(join(dir, 'set.pdf')) ? await pdfTexts(new Uint8Array(readFileSync(join(dir, 'set.pdf')))) : [], layers };
 }
 
@@ -64,8 +65,8 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     for (const caption of ['Proiectant general', 'Șef proiect', 'Proiectat', 'Faza', 'Proiect nr.', 'Titlu proiect', 'Semnătura', 'Verificator / expert', 'Cerința', 'Planșa nr.']) {
       expect(ro.texts, caption).toContain(caption);
     }
-    expect(ro.layers).toContain('VIEW-CUT-070');
-    expect(ro.layers).not.toContain('VIEW-CUT-050');
+    expect(ro.layers).toContain('CUT-070');
+    expect(ro.layers).not.toContain('CUT-050');
   }, 120_000);
 
   it('de: the German title block captions are printed, and the Romanian ones are not', async () => {
@@ -74,16 +75,16 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     expect(de.code).toBe(EXIT.ok);
     for (const caption of ['Bauvorhaben', 'Bauherr', 'Entwurfsverfasser', 'Planinhalt', 'Maßstab']) expect(de.texts, caption).toContain(caption);
     expect(de.texts).not.toContain('Proiectant general');
-    expect(de.layers).toContain('VIEW-CUT-050');
-    expect(de.layers).not.toContain('VIEW-CUT-070');
+    expect(de.layers).toContain('CUT-050');
+    expect(de.layers).not.toContain('CUT-070');
   }, 120_000);
 
   it('without --standard the build is what it was: the standard title block and the cut line at 0.5', async () => {
     const plain = await build();
     expect(plain.code).toBe(EXIT.ok);
     expect(plain.texts).not.toContain('Proiectant general');
-    expect(plain.layers).toContain('VIEW-CUT-050');
-    expect(plain.layers).not.toContain('VIEW-CUT-070');
+    expect(plain.layers).toContain('CUT-050');
+    expect(plain.layers).not.toContain('CUT-070');
   }, 120_000);
 
   it('an unknown id fails with a usage error that names it and lists the known ids, and writes nothing', async () => {

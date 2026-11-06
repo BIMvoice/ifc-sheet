@@ -8,12 +8,13 @@
  * out on its sheet, written as PDF and DXF. The viewer test `project/view-colour-scheme.fzk.test.tsx` holds the app to the same colours.
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
+import { exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -94,8 +95,10 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus colour
     }
     // The fills come before the first stroke of the page: the lines are drawn over them.
     expect(pdf.indexOf('\nf*\n')).toBeLessThan(pdf.search(/\nS\n/));
-    const dxf = exportDxf(sheet);
-    for (const colour of new Set(sheet.fills.map((f) => f.colour))) expect(dxf).toContain(`COLOUR-${colour.slice(1).toUpperCase()}`);
+    const dxf = dxfText(sheet);
+    // A scheme's fills are solid HATCH entities on the COLOUR layer, each in its colour (true colour, group code 420).
+    expect(dxfLayers(dxf)).toContain('COLOUR');
+    for (const colour of new Set(sheet.fills.map((f) => f.colour))) expect(dxf).toMatch(new RegExp(`\\n420\\r?\\n${parseInt(colour.slice(1), 16)}\\r?\\n`));
   });
 
   it('leaves a set that is not coloured as it was', async () => {
@@ -105,6 +108,6 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus colour
     expect(other.fills).toEqual([]);
     expect(other.cut).toEqual(same.cut);
     expect(other.texts).toEqual(same.texts);
-    expect(exportDxf(plainSheets[0])).not.toContain('COLOUR-');
+    expect(dxfLayers(dxfText(plainSheets[0]))).not.toContain('COLOUR');
   });
 });

@@ -7,15 +7,20 @@
  * sheet of a set with the fields filled, and kept through the project file, the PDF and the DXF.
  */
 
+import { dxfText } from './__fixtures__/dxf-text.js';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import DxfParserModule from 'dxf-parser';
+import type { DxfParser as DxfParserInstance, IPolylineEntity } from 'dxf-parser';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { exportDxf, exportPdf } from './export.js';
+import { exportPdf } from './export.js';
 import { importTitleBlockDxf, importTitleBlockSvg, ownTitleBlockPack, placeField, placedFields, TitleBlockImportError } from './title-block-import.js';
 import { readProjectFile } from './project-read.js';
 import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION } from './project-version.js';
 import { sheetGraphic } from './sheet-graphic.js';
+
+const DxfParser = DxfParserModule as unknown as new () => DxfParserInstance;
 import { readTitleBlockTemplate } from './title-block-template-read.js';
 
 const dxf = (pairs: Array<[number, string | number]>): string => pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n';
@@ -133,12 +138,12 @@ describe('a project that keeps the imported block', () => {
       await task.destroy();
     }
     // The DXF carries the sheet's line work (its texts are the PDF's): every point of the block's lines is in it, y turned up.
-    const standard = doc.sheets.map((s) => exportDxf(sheetGraphic(s, set(undefined), new Map())));
+    const standard = doc.sheets.map((s) => dxfText(sheetGraphic(s, set(undefined), new Map())));
     graphics.forEach((g, i) => {
-      const out = exportDxf(g);
+      const out = dxfText(g);
+      const written = (new DxfParser().parseSync(out)?.entities ?? []).filter((e): e is IPolylineEntity => e.layer === 'FRAME' || e.layer === 'TITLEBLOCK').flatMap((e) => e.vertices);
       for (const poly of g.frame) for (const p of poly) {
-        expect(out, `${g.number} x`).toContain(p.x.toFixed(6));
-        expect(out, `${g.number} y`).toContain((g.paper.h - p.y).toFixed(6));
+        expect(written.some((v) => Math.abs(v.x - p.x) < 1e-3 && Math.abs(v.y - (g.paper.h - p.y)) < 1e-3), `${g.number} (${p.x}, ${p.y})`).toBe(true);
       }
       expect(out).not.toBe(standard[i]);
     });

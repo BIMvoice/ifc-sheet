@@ -4,7 +4,7 @@
 
 /**
  * A model's starting set laid out as sheets of shapes, ready for
- * `exportPdf` and `exportDxf`.
+ * `exportPdf` and `sheetGraphicToDxf`.
  */
 
 import type { DefaultSet } from './default-set.js';

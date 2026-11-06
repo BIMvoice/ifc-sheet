@@ -24,7 +24,7 @@ import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { northArrowRotation } from '@bimvoice/ifcsheet';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
-import { exportDxf } from '@bimvoice/ifcsheet/headless';
+import { sheetGraphicToDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';
 import { sheetDxf } from './sheet-dxf';
 
@@ -57,7 +57,7 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   const layout = sheetGraphic(sheet, doc, new Map([['v', shown.drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) },
     shown.drafts.length ? { annotations: { drafts: shown.drafts, layers: [], groups: [], book: { textStyles: [], dimStyles: [] }, site: siteFrameOf({ dataStore: store, coordinateInfo: undefined as never }), locale: sheetFormat('en', units) } } : undefined);
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
-  return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
+  return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: new TextDecoder('windows-1252').decode(sheetGraphicToDxf(layout)) };
 }
 
 describe('a viewport\'s north arrow and scale bar: the screen and the layout agree', () => {

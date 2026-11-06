@@ -8,12 +8,13 @@
  * the fills (and the legend) away, and a view template carries the same fills to the views that follow it.
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
+import { exportPdf, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
 import type { ColourScheme } from './colour-scheme.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
@@ -91,11 +92,10 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus with r
     expect(strokes(withPdf) - strokes(withoutPdf)).toBe(count);
   });
 
-  it('writes the hatch into the DXF on a layer of its pattern, beside the colour layers', () => {
-    const dxf = exportDxf(hatched);
-    expect(dxf).toContain('COLOUR-HATCH-PARQUET');
-    for (const colour of new Set(hatched.fills.map((f) => f.colour))) expect(dxf).toContain(`COLOUR-${colour.slice(1).toUpperCase()}`);
-    expect(exportDxf(flat)).not.toContain('COLOUR-HATCH');
+  it('writes the hatch into the DXF on the HATCH layer, beside the COLOUR layer of the fills', () => {
+    const dxf = dxfText(hatched);
+    expect(dxfLayers(dxf)).toEqual(expect.arrayContaining(['COLOUR', 'HATCH']));
+    expect(dxfLayers(dxfText(flat))).not.toContain('HATCH');
   });
 
   it('draws nothing of it when the view\'s switch is off: no fills, no legend, the plan as it was', async () => {
@@ -103,7 +103,7 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus with r
     expect(off.texts).toEqual(plain.texts);
     expect(off.pens).toEqual(plain.pens);
     expect(pdfContent(await exportPdf([off]))).toBe(pdfContent(await exportPdf([plain])));
-    expect(exportDxf(off)).not.toContain('COLOUR-');
+    expect(dxfLayers(dxfText(off))).not.toContain('COLOUR');
   });
 
   it('prints no fill, no hatch and no legend for rooms the view hides: the Spaces category switched off takes them all away (#516)', async () => {
@@ -112,7 +112,7 @@ describe.skipIf(missing !== null)('the ground-floor plan of AC20-FZK-Haus with r
     expect(hatched.fills.length).toBeGreaterThan(0);
     expect(hidden.fills).toEqual([]);
     expect(hidden.texts.filter((t) => ROOMS.includes(t.text))).toEqual([]);
-    expect(exportDxf(hidden)).not.toContain('COLOUR-');
+    expect(dxfLayers(dxfText(hidden))).not.toContain('COLOUR');
   });
 
   it('is carried by a view template: a view that follows it is filled as if the scheme were its own, and its own scheme wins', async () => {

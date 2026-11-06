@@ -17,6 +17,8 @@ export const viewerAliases = {
       '@bimvoice/ifcsheet/plan-symbols': path.resolve(__dirname, '../../packages/ifcsheet/src/plan-symbols.ts'),
       '@bimvoice/ifcsheet/readiness-read': path.resolve(__dirname, '../../packages/ifcsheet/src/readiness-read.ts'),
       '@bimvoice/ifcsheet/project': path.resolve(__dirname, '../../packages/ifcsheet/src/project.ts'),
+      '@bimvoice/ifcsheet/cli': path.resolve(__dirname, '../../packages/ifcsheet/src/cli.ts'),
+      '@bimvoice/ifcsheet/dxf': path.resolve(__dirname, '../../packages/ifcsheet/src/dxf.ts'),
       '@bimvoice/ifcsheet/headless': path.resolve(__dirname, '../../packages/ifcsheet/src/headless.ts'),
       '@bimvoice/ifcsheet': path.resolve(__dirname, '../../packages/ifcsheet/src'),
       '@ifc-lite/parser/browser': path.resolve(__dirname, '../../packages/parser/src/browser.ts'),

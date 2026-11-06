@@ -5,16 +5,14 @@
 /**
  * A set as files, from the sheet layouts (`sheet-graphic.ts`): one PDF with a
  * page per sheet, each page the sheet's paper size at true scale, and one DXF
- * per sheet in paper millimetres. Both run in Node: jsPDF draws vector lines
+ * per sheet (`sheet-dxf.ts`) in paper millimetres. The PDF runs in Node: jsPDF draws vector lines
  * and text in an embedded Inter (the font the app's issued PDFs embed, for
- * ș, ț and the rest of Latin Extended), needing no canvas or DOM, and the DXF
- * is written by `@ifc-lite/drawing-2d`'s exporter.
+ * ș, ț and the rest of Latin Extended), needing no canvas or DOM.
  *
  * Not yet what the app exports: the app prints its sheet SVG through svg2pdf
- * (with layers, embedded fonts and archival metadata, `issue/pdf-build.ts`)
- * and writes R2000 DXF with CAD layers and text (`sheet-dxf.ts`). Both need
- * the sheet SVG, which only the browser renders today. The DXF here carries
- * linework and the sheet's text (`SHEET-TEXT`, #619); its layers are still its own (`VIEW-CUT-050`, not the app's `CUT`/`SEEN`/`TITLEBLOCK`).
+ * (with layers, embedded fonts and archival metadata, `issue/pdf-build.ts`),
+ * which only the browser renders today. The DXF is `sheet-dxf.ts`'s: the app's
+ * R2000 writer and CAD layer standard, the same layers for the same things (#619).
  *
  * The underlays a sheet prints (#457) are drawn under its drawings, as the app's sheet draws them; the DXF leaves them out.
  *
@@ -25,7 +23,6 @@
  * paper-mm width, dash and fill the app's sheet gives the same item.
  */
 
-import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
 import type { Polyline, SheetGraphic, SheetPen, SheetText } from './sheet-graphic.js';
 import { FILL_HATCH } from './sheet-colours.js';
 
@@ -233,69 +230,4 @@ export function pdfFont(t: Pick<SheetText, 'text' | 'bold' | 'face'>, hasBold: b
     return [family, t.bold ? (face.italic ? 'bolditalic' : 'bold') : face.italic ? 'italic' : 'normal'];
   }
   return ['Inter', t.bold && hasBold ? 'bold' : 'normal'];
-}
-
-/** A drawing with nothing in it: the sheet's shapes travel as the exporter's extra layers. */
-function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
-  return {
-    config: { plane: { axis: 'y', position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 1 },
-    lines: [], cutPolygons: [], projectionPolygons: [],
-    bounds: { min: { x: 0, y: 0 }, max: { x: paper.w, y: paper.h } },
-    stats: { cutLineCount: 0, projectionLineCount: 0, hiddenLineCount: 0, silhouetteLineCount: 0, polygonCount: 0, totalTriangles: 0, processingTimeMs: 0 },
-  };
-}
-
-/**
- * A colour scheme's fills as DXF layers (#92), one per colour (`COLOUR-77AADD`): R12 has no hatch, so each region is the closed
- * polylines of its boundary, as the exporter writes a cut face's hatch region, in the colour's nearest ACI colour.
- */
-function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
-  const byColour = new Map<string, Polyline[]>();
-  for (const fill of sheet.fills.filter((f) => !f.surface)) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
-  const layers = [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
-  // A value's hatch (#493): R12 has no pattern either, so its strokes are lines on a layer named for the pattern (`COLOUR-HATCH-PARQUET`).
-  const byPattern = new Map<string, Polyline[]>();
-  for (const fill of sheet.fills) if (fill.hatch) byPattern.set(fill.hatch.pattern, [...(byPattern.get(fill.hatch.pattern) ?? []), ...fill.hatch.strokes]);
-  const hatches = [...byPattern].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([pattern, polylines]) => ({ name: `COLOUR-HATCH-${pattern.replace(/[^A-Za-z0-9_-]/g, '_').toUpperCase()}`, color: FILL_HATCH.ink, polylines, closed: false }));
-  return [...layers, ...hatches];
-}
-
-/**
- * The drawings' stroke pens as DXF layers: R12 has no line weight, so a pen's layer names its kind and width in hundredths of a
- * millimetre (`VIEW-CUT-050`, `VIEW-SEEN-025`, `VIEW-HIDDEN-018`), and a colour other than black (`VIEW-CUT-050-C62828`); the layer
- * carries the colour. The cut faces' grey fills are not written: R12 has no hatch, and their outlines are the cut lines already.
- */
-function penLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
-  const byName = new Map<string, { name: string; color: string; polylines: Polyline[]; closed: boolean }>();
-  for (const pen of sheet.pens.filter((p): p is SheetPen & { stroke: string } => p.stroke !== null && p.runs.length > 0)) {
-    const colour = pen.stroke.toLowerCase() === '#000000' ? '' : `-${pen.stroke.slice(1).toUpperCase()}`;
-    const name = `VIEW-${pen.layer}-${String(Math.round(pen.width * 100)).padStart(3, '0')}${colour}`;
-    const layer = byName.get(name) ?? { name, color: pen.stroke, polylines: [], closed: false };
-    // A loop, not a spread: a big sheet has more runs than a call can take arguments (a school's elevations overflowed the stack).
-    for (const run of pen.runs) layer.polylines.push(run);
-    byName.set(name, layer);
-  }
-  return [...byName.values()];
-}
-
-/** One sheet as DXF text (R12), paper millimetres with y up and the origin at the paper's bottom-left corner. */
-export function exportDxf(sheet: SheetGraphic): string {
-  const flip = (p: { x: number; y: number }) => ({ x: p.x, y: sheet.paper.h - p.y });
-  return exportToDXF(emptyDrawing(sheet.paper), {
-    metadataComment: `IfcSheet ${sheet.number} ${sheet.name}; units: paper millimetres`,
-    coordinateTransform: flip,
-    // Titles, dimensions, the title block's captions and the sheet number, as TEXT; a letter windows-1252 lacks (ă, ș, ț) is a `\U+XXXX` escape.
-    texts: sheet.texts.map((t) => ({ text: t.text, at: t.at, height: t.size, layer: 'SHEET-TEXT', ...(t.align ? { align: t.align } : {}), ...(t.angle ? { angle: t.angle } : {}) })),
-    polylineLayers: [
-      { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
-      ...penLayers(sheet),
-      { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
-      // R12 has no line weight: the project's drafts, dimensions and schedule rules on one layer, their outlines only.
-      ...(sheet.strokes?.length ? [{ name: 'SHEET-DRAFTS', color: '#000000', polylines: sheet.strokes.flatMap((s) => [...s.runs]), closed: false }] : []),
-      // The north arrows and scale bars, on the layer the app's DXF gives them (`SITE-SYMBOLS`); the solid halves are their closed outlines (R12 has no hatch).
-      // Only a sheet that has any gets the layer, so a sheet that asks for none writes the file it always did.
-      ...(sheet.symbols.strokes.length + sheet.symbols.solids.length > 0 ? [{ name: 'SITE-SYMBOLS', color: '#000000', polylines: [...sheet.symbols.strokes, ...sheet.symbols.solids], closed: false }] : []),
-      ...colourLayers(sheet),
-    ],
-  });
 }

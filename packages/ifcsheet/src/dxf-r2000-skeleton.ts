@@ -1,4 +1,9 @@
-999
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/** The DXF R2000 skeleton `dxf-r2000.ts` fills (tables, blocks, layouts), kept as a string so the engine needs no file loader in Node or the browser. */
+export const DXF_R2000_SKELETON = `999
 DXF R2000 skeleton for ifc-lite drawing exports (tables, blocks, layouts); dxf-r2000.ts fills the markers. MPL-2.0.
   0
 SECTION
@@ -2794,3 +2799,4 @@ DictionaryVariables
 ENDSEC
   0
 EOF
+`;
