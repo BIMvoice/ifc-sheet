@@ -10,6 +10,7 @@
  */
 
 import { memo } from 'react';
+import { DxfUnderlayTexts } from '@/underlay/DxfUnderlayTexts';
 import { dxfUnderlayRuns, dxfUnderlaysOfView } from '@bimvoice/ifcsheet/underlay';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { useProjectStore } from '@/project/project-store';
@@ -46,6 +47,7 @@ export const UnderlayLayer = memo(function UnderlayLayer({ viewId, transform, ax
           {dxfUnderlayRuns(u).map((run, i) => (
             <polyline key={i} data-dxf-layer={run.layer} fill="none" stroke={run.colour} strokeWidth={1} vectorEffect="non-scaling-stroke" points={run.points.map((p) => { const s = drawingToScreen(p, transform, axis); return `${s.x},${s.y}`; }).join(' ')} />
           ))}
+          <DxfUnderlayTexts underlay={u} toScreen={(p) => drawingToScreen(p, transform, axis)} />
         </svg>
       ))}
     </div>

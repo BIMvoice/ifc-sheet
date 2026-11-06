@@ -44,6 +44,7 @@ import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
 import { matrixText, printedUnderlays, underlayMatrix } from '@/underlay/underlay';
+import { DxfUnderlayTexts } from '@/underlay/DxfUnderlayTexts';
 import { DXF_UNDERLAY_PEN_MM, dxfUnderlayRuns, printedDxfUnderlays } from '@bimvoice/ifcsheet/underlay';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
@@ -197,7 +198,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
         {underlays.map((u) => <image key={u.id} data-underlay-id={u.id} data-export-ignore-dxf="true" href={u.href} x={0} y={0} width={u.widthPx} height={u.heightPx} preserveAspectRatio="none" opacity={u.opacity} transform={matrixText(underlayMatrix(u, t, axis))} />)}
-        {dxfUnderlays.map((u) => <g key={u.id} data-dxf-underlay-id={u.id} opacity={u.opacity}>{dxfUnderlayRuns(u).map((run, i) => <polyline key={i} data-dxf-layer={run.layer} fill="none" stroke={run.colour} strokeWidth={DXF_UNDERLAY_PEN_MM} points={run.points.map((p) => { const q = drawingToScreen(p, t, axis); return `${q.x},${q.y}`; }).join(' ')} />)}</g>)}
+        {dxfUnderlays.map((u) => <g key={u.id} data-dxf-underlay-id={u.id} opacity={u.opacity}>{dxfUnderlayRuns(u).map((run, i) => <polyline key={i} data-dxf-layer={run.layer} fill="none" stroke={run.colour} strokeWidth={DXF_UNDERLAY_PEN_MM} points={run.points.map((p) => { const q = drawingToScreen(p, t, axis); return `${q.x},${q.y}`; }).join(' ')} />)}<DxfUnderlayTexts underlay={u} toScreen={(p) => drawingToScreen(p, t, axis)} /></g>)}
         {content.raster ? <image data-raster-px={`${content.raster.widthPx}x${content.raster.heightPx}`} href={content.raster.href} x={left} y={top} width={box.width} height={box.height} preserveAspectRatio="xMidYMid slice" /> : null}
         {pens.map((p, i) => (
           <Fragment key={i}>

@@ -13,6 +13,7 @@
  */
 
 import type { Point2D } from '@ifc-lite/drawing-2d';
+import { labelsOfConverted, type ConvertedDxfText, type DxfLabel } from './dxf-underlay-text.js';
 
 /** The most points one DXF underlay may keep: the project file carries them all. */
 export const DXF_UNDERLAY_MAX_POINTS = 200_000;
@@ -27,6 +28,8 @@ export interface DxfUnderlayLayer {
   visible: boolean;
   /** Open runs of the layer's lines; a closed outline ends where it starts. */
   runs: Point2D[][];
+  /** The layer's TEXT and MTEXT, in the same frame as `runs`; absent: none. */
+  texts?: DxfLabel[];
 }
 
 export interface ViewDxfUnderlay {
@@ -65,6 +68,26 @@ export interface DxfRun {
 /** The lines of the layers that are on, in the view's drawing coordinates: what the screen, the sheet, the PDF and the snaps all use. */
 export function dxfUnderlayRuns(u: ViewDxfUnderlay): DxfRun[] {
   return u.layers.filter((l) => l.visible).flatMap((l) => l.runs.map((run) => ({ layer: l.name, colour: l.colour, points: run.map((p) => dxfPointToDrawing(u, p)) })));
+}
+
+export interface DxfPlacedText {
+  layer: string;
+  colour: string;
+  text: string;
+  /** View drawing coordinates, and the baseline's unit direction there. */
+  at: Point2D;
+  dir: Point2D;
+  /** Cap height in the view's drawing units (metres). */
+  height: number;
+  align: 'left' | 'center' | 'right';
+}
+
+/** The texts of the layers that are on, on the view's drawing: what the screen and the sheet use. */
+export function dxfUnderlayTexts(u: ViewDxfUnderlay): DxfPlacedText[] {
+  const turn = { at: { x: 0, y: 0 }, scale: 1, rotation: u.rotation };
+  return u.layers.filter((l) => l.visible).flatMap((l) =>
+    (l.texts ?? []).map((t) => ({ layer: l.name, colour: l.colour, text: t.text, at: dxfPointToDrawing(u, t.at), dir: dxfPointToDrawing(turn, t.dir), height: t.height * u.scale, align: t.align })),
+  );
 }
 
 /**
@@ -106,12 +129,21 @@ export const printedDxfUnderlays = (all: readonly ViewDxfUnderlay[] | undefined,
 /** What an import reads of a converted DXF (`@ifc-lite/drawing-2d`'s `DxfUnderlay`): layers of paths, in metres, +y north. */
 export interface ConvertedDxf {
   name: string;
-  layers: readonly { name: string; color: string; visible: boolean; paths: readonly { points: readonly Point2D[]; closed: boolean }[] }[];
+  layers: readonly {
+    name: string;
+    color: string;
+    visible: boolean;
+    paths: readonly { points: readonly Point2D[]; closed: boolean }[];
+    /** Solid and pattern hatches: only their boundaries are kept, as closed lines. */
+    fills?: readonly { polygon: { outer: readonly Point2D[]; holes: readonly (readonly Point2D[])[] } }[];
+    texts?: readonly ConvertedDxfText[];
+  }[];
 }
 
 /**
  * The linework of a converted DXF for a plan view: y flipped once (a plan's drawing y runs down), a closed path ending where it starts,
- * layers with no lines left out. Null when it has no line, or more than `DXF_UNDERLAY_MAX_POINTS` points.
+ * layers with no lines or text left out. A hatch keeps its boundary only. Null when it has
+ * nothing to draw, or more than `DXF_UNDERLAY_MAX_POINTS` points (a text counts as one).
  */
 export function dxfUnderlayFromPaths(dxf: ConvertedDxf, viewId: string, id: string): ViewDxfUnderlay | null {
   let count = 0;
@@ -125,7 +157,18 @@ export function dxfUnderlayFromPaths(dxf: ConvertedDxf, viewId: string, id: stri
       count += run.length;
       runs.push(run);
     }
-    if (runs.length > 0) layers.push({ name: layer.name, colour: layer.color, visible: layer.visible, runs });
+    for (const fill of layer.fills ?? []) {
+      for (const ring of [fill.polygon.outer, ...fill.polygon.holes]) {
+        if (ring.length < 3) continue;
+        const run = ring.map((p) => ({ x: p.x, y: 0 - p.y }));
+        run.push({ ...run[0] });
+        count += run.length;
+        runs.push(run);
+      }
+    }
+    const texts = labelsOfConverted(layer.texts ?? []);
+    count += texts.length;
+    if (runs.length > 0 || texts.length > 0) layers.push({ name: layer.name, colour: layer.color, visible: layer.visible, runs, ...(texts.length > 0 ? { texts } : {}) });
   }
   if (count === 0 || count > DXF_UNDERLAY_MAX_POINTS) return null;
   return { id, viewId, name: dxf.name, layers, at: { x: 0, y: 0 }, scale: 1, rotation: 0, opacity: 0.6, locked: false };
