@@ -15,6 +15,9 @@ import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { extractAllEntityAttributes } from '@ifc-lite/parser';
 import type { DefaultSet } from '../default-set.js';
 import { annotationRects } from '../dimall/annotation-rects.js';
+import { openingObstacles, type ObstacleBox } from '../dimall/plan-obstacles.js';
+import { planOpeningSymbols } from '../plan-openings.js';
+import { resolveViewGraphics } from '../view-templates.js';
 import { tableMeasure } from '../dimall/measure.js';
 import { planParts } from '../dimall/parts.js';
 import { DEFAULT_DIM_STYLE } from '../draft-styles.js';
@@ -122,7 +125,7 @@ function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, rende
 }
 
 /** What the commands read from a view of `model`: its drawing's parts and elements, the plan's rooms, the labels of the elements. */
-function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[], joinery: HeadlessAnnotateInput['joinery']): AnnotateReaders<HeadlessView, Drawing2D> {
+export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[], joinery: HeadlessAnnotateInput['joinery']): AnnotateReaders<HeadlessView, Drawing2D> {
   const book = styleBookOf(undefined, undefined);
   const current = { textStyle: DEFAULT_TEXT_STYLE.id, dimStyle: DEFAULT_DIM_STYLE.id };
   const ds = model.dataStore;
@@ -144,6 +147,18 @@ function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'lev
   const paperUnit = (c: ReadCall<HeadlessView, Drawing2D>) => paperUnitFor(c.view.id, set.document.sheets, [{ id: c.view.id, scale: c.view.scale }]);
   // Annotation sizes are paper sizes at the view's scale, as the open view reads them.
   const placement = (c: ReadCall<HeadlessView, Drawing2D>) => ({ viewId: c.view.id, layerId: DEFAULT_DRAFT_LAYER.id, textHeight: 0.25 * ((c.view.scale ?? 100) / 100), textStyle: current.textStyle, dimStyle: current.dimStyle, paperUnit: paperUnit(c) });
+  // What the plan draws over its cut that a label keeps clear of: its door leaves and swings and window frames, as the app's `planSymbolObstacles` reads them (#707).
+  const obstacleMemo = new Map<string, ObstacleBox[]>();
+  const obstaclesOf = (c: ReadCall<HeadlessView, Drawing2D>): ObstacleBox[] => {
+    const known = obstacleMemo.get(c.view.id);
+    if (known) return known;
+    const plan = plans.get(c.view.id);
+    if (!plan || !ds) return [];
+    const sources = { live: { dataStore: ds, view: null }, project: { joineryTypes: joinery?.joineryTypes ?? [], joineryMapping: joinery?.joineryMapping ?? DEFAULT_JOINERY_MAPPING } };
+    const boxes = openingObstacles(planOpeningSymbols(model.buildingMeshes, c.drawing.config.plane, sources, resolveViewGraphics(plan, set.document.viewTemplates), plan.level));
+    obstacleMemo.set(c.view.id, boxes);
+    return boxes;
+  };
   const roomsOf = (c: ReadCall<HeadlessView, Drawing2D>) => {
     const plan = plans.get(c.view.id);
     return plan && ds ? roomsOfPlan(plan, set.levels, { meshes: model.meshes }, guidOf) : [];
@@ -151,7 +166,7 @@ function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'lev
   return {
     draftsOf: (view) => existing.filter((d) => d.viewId === view.id),
     dimall: (c) => ({
-      ...placement(c), placed: c.placed, parts: planParts(c.drawing, model.buildingMeshes), rooms: roomsOf(c), obstacles: [], newId: c.newId, book,
+      ...placement(c), placed: c.placed, parts: planParts(c.drawing, model.buildingMeshes), rooms: roomsOf(c), obstacles: obstaclesOf(c), newId: c.newId, book,
       firstMm: undefined, settings: { textHeight: placement(c).textHeight, textStyle: current.textStyle, dimStyle: current.dimStyle },
       reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
     }),
@@ -168,7 +183,7 @@ function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'lev
       for (const r of rooms) byGuid.set(r.guid, r.renderId);
       const [mark, room] = TAGALL_TYPES;
       return {
-        onPlan, elements, targets, rooms, existing: c.placed, placement: { ...placement(c), locale: c.locale }, types: { mark, room },
+        onPlan, elements, targets, rooms, existing: c.placed, obstacles: onPlan ? obstaclesOf(c) : [], placement: { ...placement(c), locale: c.locale }, types: { mark, room },
         env: { read, up: 1, styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId },
         reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
       };

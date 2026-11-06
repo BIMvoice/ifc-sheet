@@ -6,6 +6,8 @@ DimAllResult: type (type-only)
 DimensionPlan: type (type-only)
 DimensionTarget: type (type-only)
 DraftReader: type (type-only)
+ObstacleBox: type (type-only)
+ObstacleOverlay: type (type-only)
 PartKind: type (type-only)
 PlanPart: type (type-only)
 PlannedString: type (type-only)
@@ -16,6 +18,8 @@ SymbolPiece: type (type-only)
 dimensionDrafts: value
 isDimAll: value
 kindOfClass: value
+openingObstacles: value
+overlayObstacleBoxes: value
 pieceRects: value
 planDimAll: value
 planDimensions: value

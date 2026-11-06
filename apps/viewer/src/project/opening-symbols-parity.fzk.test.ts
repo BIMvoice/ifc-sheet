@@ -15,7 +15,9 @@ import { before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { generateDefaultSet, planOpeningSymbols, type OpeningSymbol } from '@bimvoice/ifcsheet';
+import { generateDefaultSet, openingObstacles, planOpeningSymbols, type OpeningSymbol } from '@bimvoice/ifcsheet';
+import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
+import type { ProjectLevel, ProjectView } from '@/project/types';
 import { openModel, sectionConfigFor, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import { readDxfBlock } from '@bimvoice/ifcsheet/project';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
@@ -32,7 +34,7 @@ const DXF = readFileSync(new URL('../../../../packages/ifcsheet/src/__fixtures__
 const MODEL = 'm';
 
 type Level = Parameters<typeof planOpeningSymbols>[4];
-interface Row { storey: string; plane: SectionPlaneConfig; level: Level }
+interface Row { storey: string; plane: SectionPlaneConfig; level: Level; view: ProjectView }
 
 /** A symbol as compared: its element, kind and every shape, to a micrometre. */
 const shape = (s: OpeningSymbol) => JSON.parse(JSON.stringify({ id: s.id, kind: s.kind, shapes: s.shapes, heavy: s.heavy ?? [], dashed: s.dashed ?? [] }, (_k, x) => (typeof x === 'number' ? Math.round(x * 1e6) / 1e6 : x)));
@@ -41,13 +43,15 @@ const sorted = (list: readonly OpeningSymbol[]) => [...list].sort((a, b) => a.id
 describe('the engine draws the door and window symbols of AC20-FZK-Haus as the app does', { skip: planModelMissing(FZK_HAUS) }, () => {
   let engine: OpenedModel;
   let rows: Row[];
+  let levels: ProjectLevel[];
 
   before(async () => {
     await loadPlanModel(FZK_HAUS);
     engine = await openModel(new Uint8Array(readFileSync(FZK_HAUS)));
     const set = generateDefaultSet(engine);
     assert.ok(set && engine.extent, 'the engine lays out a set');
-    rows = set.document.views.filter((v) => v.kind === 'plan').map((v) => ({ storey: v.name, plane: sectionConfigFor(v, set.levels, engine.extent!)!.plane, level: v.level }));
+    levels = set.levels;
+    rows = set.document.views.filter((v) => v.kind === 'plan').map((v) => ({ storey: v.name, plane: sectionConfigFor(v, set.levels, engine.extent!)!.plane, level: v.level, view: v }));
     assert.ok(rows.length >= 2, 'a plan for each storey');
   });
   beforeEach(() => { resetProject(); invalidateJoineryReads(); });
@@ -128,5 +132,18 @@ describe('the engine draws the door and window symbols of AC20-FZK-Haus as the a
     // The block: its one closed leaf heavy, its swing arc thin, nothing dashed; not the generated symbol.
     assert.ok(custom.every((s) => s.heavy!.length === 1 && s.shapes.length === 1 && s.dashed!.length === 0), 'the block\'s own strokes');
     assert.notDeepEqual(sorted(custom), sorted(generated));
+  });
+
+  it('the obstacles DIMALL and TAGALL keep clear of are the same boxes in the app and in the headless run (#707)', () => {
+    let boxes = 0;
+    for (const r of rows) {
+      const a = planSymbolObstacles(r.view, levels, appMeshes(), useProjectStore.getState().symbolFlips);
+      const e = openingObstacles(eng(r.plane, r.level));
+      assert.equal(e.length, a.length, `${r.storey}: box count, engine vs app`);
+      const key = (b: { x0: number; y0: number; x1: number; y1: number; dashed?: boolean }) => [b.x0, b.y0, b.x1, b.y1].map((n) => Math.round(n * 1e3) / 1e3).join(',') + (b.dashed ? 'd' : '');
+      assert.deepEqual(e.map(key).sort(), a.map(key).sort(), `${r.storey}: boxes to a millimetre, engine vs app`);
+      boxes += a.length;
+    }
+    assert.ok(boxes > 0, 'the plans have door and window boxes');
   });
 });

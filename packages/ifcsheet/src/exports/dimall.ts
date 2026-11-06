@@ -12,3 +12,4 @@ export { kindOfClass, planParts } from '../dimall/parts.js';
 export { planDimensions } from '../dimall/plan.js';
 export { planRoomChains, type RoomPlan } from '../dimall/rooms.js';
 export type { DimensionPlan, PartKind, PlannedString, PlanPart } from '../dimall/types.js';
+export { openingObstacles, overlayObstacleBoxes, type ObstacleBox, type ObstacleOverlay } from '../dimall/plan-obstacles.js';

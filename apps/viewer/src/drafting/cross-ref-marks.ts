@@ -12,7 +12,7 @@
  * Pure.
  */
 
-import type { MarkStyle } from '@bimvoice/ifcsheet';
+import { overlayObstacleBoxes as engineObstacleBoxes, type MarkStyle } from '@bimvoice/ifcsheet';
 import type { ElevationDirection, ProjectView } from '@/project/types';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { groundPlan } from '@/project/drawing-set';
@@ -209,45 +209,14 @@ export function obstacleBoxes(drafts: readonly DraftEntity[]): Box[] {
   return out;
 }
 
-/** The longest stretch of a line one obstacle box stands for, drawing metres: a long slanting line is many boxes, so its corner is not an obstacle. */
-const OBSTACLE_PITCH = 0.2;
-
-/** The boxes along a segment, each at most {@link OBSTACLE_PITCH} long, so a slanting line is not taken for the corner of its bounding box. */
-function segmentBoxes(a: Pt, b: Pt, out: Box[]): void {
-  const n = Math.min(64, Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / OBSTACLE_PITCH)));
-  for (let i = 0; i < n; i++) {
-    out.push(boxOf([{ x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n }, { x: a.x + ((b.x - a.x) * (i + 1)) / n, y: a.y + ((b.y - a.y) * (i + 1)) / n }]));
-  }
-}
-
-function shapeBoxes(sh: DraftShape, out: Box[]): void {
-  if (sh.type === 'line') segmentBoxes(sh.a, sh.b, out);
-  else if (sh.type === 'polyline') {
-    for (let i = 0; i + 1 < sh.pts.length; i++) segmentBoxes(sh.pts[i], sh.pts[i + 1], out);
-    if (sh.closed && sh.pts.length > 2) segmentBoxes(sh.pts[sh.pts.length - 1], sh.pts[0], out);
-  } else if (sh.type === 'circle') out.push({ x0: sh.c.x - sh.r, y0: sh.c.y - sh.r, x1: sh.c.x + sh.r, y1: sh.c.y + sh.r });
-  else {
-    // An arc runs counter-clockwise from `start` to `end`; its swept chords, not the square round it, are what it occupies.
-    const sweep = (((sh.end - sh.start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI;
-    const steps = Math.max(2, Math.min(64, Math.ceil((sweep * sh.r) / OBSTACLE_PITCH)));
-    const at = (i: number): Pt => ({ x: sh.c.x + sh.r * Math.cos(sh.start + (sweep * i) / steps), y: sh.c.y + sh.r * Math.sin(sh.start + (sweep * i) / steps) });
-    for (let i = 0; i < steps; i++) out.push(boxOf([at(i), at(i + 1)]));
-  }
-}
-
 /**
  * The boxes of what a plan draws over its cut, the door leaves and swings, window frames, roof
  * lines and grid, that a cross-reference mark must keep clear of. They are not drafts, so
  * `obstacleBoxes` does not see them, and a swing opens past the wall into the margin the marks stand in.
+ * Cut into boxes by the engine's `overlayObstacleBoxes`, which the headless annotate run uses too.
  */
 export function overlayObstacleBoxes(overlays: readonly PlanOverlay[]): Box[] {
-  const out: Box[] = [];
-  for (const o of overlays) {
-    const from = out.length;
-    for (const sh of o.shapes) shapeBoxes(sh, out);
-    if (o.dashed || o.lineType) for (let i = from; i < out.length; i++) out[i] = { ...out[i], dashed: true };
-  }
-  return out;
+  return engineObstacleBoxes(overlays);
 }
 
 export interface ElevationMarkInput {
