@@ -31,6 +31,13 @@ function planElements(viewId: string): PlanElement[] | null {
   return [...openings, ...rooms];
 }
 
+/** The lines of a view's generated drawing (whole, before hiding), by GlobalId; null while the view has no drawing. */
+function modelLines(viewId: string): { globalId: string; line: { start: { x: number; y: number }; end: { x: number; y: number } } }[] | null {
+  const entry = useViewDrawings.getState().byView[viewId];
+  if (entry?.status !== 'ready' || !entry.drawing) return null;
+  return entry.drawing.lines.flatMap((l) => { const globalId = renderIdGlobalId(l.entityId); return globalId ? [{ globalId, line: l.line }] : []; });
+}
+
 /** What the recorded model state (the reference WHATCHANGED compares with) knew of an element: its name and class. */
 function lastKnown(guid: string): { name?: string; className?: string } | undefined {
   const state = useProjectStore.getState().modelState;
@@ -49,7 +56,7 @@ const modelsLoaded = (): boolean => [...useViewerStore.getState().models.values(
 export function collectInput(): CheckInput {
   const { views, sheets, drafts, name, schedules, joineryOverrides } = useProjectStore.getState();
   const titleBlock = effectiveTitleBlock();
-  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], ...(modelsLoaded() && joineryOverrides?.length ? { joinery: { overrides: joineryOverrides, entries: scheduleData('all').entries } } : {}), titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
+  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], ...(modelsLoaded() && joineryOverrides?.length ? { joinery: { overrides: joineryOverrides, entries: scheduleData('all').entries } } : {}), titleBlock, projectName: name, planElements, modelLines, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
 }
 
 /** What is missing from the project as it stands. */

@@ -10,6 +10,7 @@
 
 import { runAsOneUndoStep, editDrafts, newDraft } from '../draft-store';
 import { hideLine } from '@/project/element-graphics-actions';
+import { hiddenLineEntry } from '@bimvoice/ifcsheet';
 import { extendShape, trimShape } from '../trim';
 import { filletLines, type LineShape } from '../fillet';
 import { offsetShape } from '../offset';
@@ -17,13 +18,17 @@ import { isGeometry, type DraftEntity, type DraftShape, type Pt } from '../types
 import type { DraftContext, ModelLinePick } from './types';
 import { boundariesFor } from './edit';
 
+/** The param a drafted replacement carries: the `hiddenLines` entry of the model line it replaced, so the check can tell when that line is gone (#189). */
+export const REPLACES = 'replaces';
+const replacing = (pick: ModelLinePick): Record<string, string> => ({ [REPLACES]: hiddenLineEntry(pick.globalId, { start: pick.a, end: pick.b }) });
+
 const near = (p: Pt, q: Pt): boolean => Math.hypot(p.x - q.x, p.y - q.y) < 1e-6;
 
 /** Hide `pick` in the view and draw `shapes` on the current layer instead, as one undo step. */
 function replaceModelLine(ctx: DraftContext, pick: ModelLinePick, shapes: DraftShape[]): void {
   runAsOneUndoStep(() => {
     hideLine(ctx.viewId, pick.globalId, { start: pick.a, end: pick.b });
-    editDrafts({ add: shapes.map((shape) => newDraft(ctx.viewId, ctx.layerId, shape, {})) });
+    editDrafts({ add: shapes.map((shape) => newDraft(ctx.viewId, ctx.layerId, shape, replacing(pick))) });
   });
 }
 
@@ -71,7 +76,7 @@ export function commitSides(ctx: DraftContext, first: FilletSide, second: Fillet
       if (side.entity) update.set(side.entity.id, shape);
       else if (side.model) {
         hideLine(ctx.viewId, side.model.globalId, { start: side.model.a, end: side.model.b });
-        add.push(newDraft(ctx.viewId, ctx.layerId, shape, {}));
+        add.push(newDraft(ctx.viewId, ctx.layerId, shape, replacing(side.model)));
       }
     }
     if (shapes.joint) add.push(newDraft(ctx.viewId, first.entity?.layerId ?? ctx.layerId, shapes.joint, { ...first.entity?.params }));

@@ -42,6 +42,7 @@ import { chartsEn } from '../catalogues/charts.en';
 import { chatByokEn } from '../catalogues/chat-byok.en';
 import { chatEn } from '../catalogues/chat.en';
 import { checkAuthoringEn } from '../catalogues/check-authoring.en';
+import { checkLineEditEn } from '../catalogues/check-line-edit.en';
 import { checkReadyEn } from '../catalogues/check-ready.en';
 import { checkEn } from '../catalogues/check.en';
 import { civilDrawingsEn } from '../catalogues/civil-drawings.en';
@@ -122,6 +123,7 @@ export const enAE = {
   ...chatByokEn,
   ...chatEn,
   ...checkAuthoringEn,
+  ...checkLineEditEn,
   ...checkReadyEn,
   ...checkEn,
   ...civilDrawingsEn,
