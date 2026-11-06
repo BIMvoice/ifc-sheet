@@ -1,3 +1,5 @@
+AXIS_STUB_MM: value
+BUBBLE_RADIUS_MM: value
 DimAllInputs: type (type-only)
 DimAllKey: type (type-only)
 DimAllMeasure: type (type-only)
@@ -6,6 +8,7 @@ DimAllResult: type (type-only)
 DimensionPlan: type (type-only)
 DimensionTarget: type (type-only)
 DraftReader: type (type-only)
+GridShapes: type (type-only)
 ObstacleBox: type (type-only)
 ObstacleOverlay: type (type-only)
 PartKind: type (type-only)
@@ -15,7 +18,11 @@ RectsOf: type (type-only)
 RoomPlan: type (type-only)
 SectionLinkOf: type (type-only)
 SymbolPiece: type (type-only)
+ViewGridAxis: type (type-only)
 dimensionDrafts: value
+gridAxesOfModel: value
+gridObstacles: value
+gridShapesOf: value
 isDimAll: value
 kindOfClass: value
 openingObstacles: value
