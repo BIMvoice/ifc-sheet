@@ -144,8 +144,8 @@ describe.skipIf(missing !== null)('annotateSetHeadless matches the app on AC20-F
       const call = { view: { id: view.id, name: view.name, kind: view.kind, scale: view.scale }, drawing, placed: [], newId: () => 'x', locale: 'en' as const };
       const expected = openingObstacles(planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, undefined, view.level));
       counted += expected.length;
-      expect(readers.dimall(call).obstacles, `${view.name}: DIMALL obstacles`).toEqual(expected);
-      expect(readers.tagall(call).obstacles, `${view.name}: TAGALL obstacles`).toEqual(expected);
+      expect(readers.dimall(call)?.obstacles, `${view.name}: DIMALL obstacles`).toEqual(expected);
+      expect(readers.tagall(call)?.obstacles, `${view.name}: TAGALL obstacles`).toEqual(expected);
     }
     expect(counted, 'the plans have symbol boxes').toBeGreaterThan(0);
   }, 120_000);
