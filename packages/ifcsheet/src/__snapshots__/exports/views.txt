@@ -1,4 +1,5 @@
 AxonometricPreset: type (type-only)
+CENTRE_DASH_MM: value
 CLASSIFICATION_BY: value
 COARSE_FROM_SCALE: value
 CONTOUR_DEFAULT_INTERVAL: value
@@ -42,6 +43,8 @@ HIDDEN_DASH_MM: value
 InteriorElevation: type (type-only)
 ItemRules: type (type-only)
 ItemStyle: type (type-only)
+LineStyleOverride: type (type-only)
+LineStyleType: type (type-only)
 MAX_CONTOUR_LEVELS: value
 MakeDraftOptions: type (type-only)
 ModelClassificationRef: type (type-only)
@@ -121,6 +124,7 @@ itemRules: value
 layerOrder: value
 lineHidden: value
 lineKey: value
+lineOverride: value
 makeDraft: value
 mappingsFor: value
 maskingFill: value

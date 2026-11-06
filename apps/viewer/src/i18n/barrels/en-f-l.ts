@@ -26,6 +26,7 @@ import { issueEn } from '../catalogues/issue.en';
 import { joineryEn } from '../catalogues/joinery.en';
 import { keyboardShortcutsEn } from '../catalogues/keyboard-shortcuts.en';
 import { landXmlEn } from '../catalogues/landxml.en';
+import { lineStyleEn } from '../catalogues/line-style.en';
 import { lengthUnitsFootEn } from '../catalogues/length-units-foot.en';
 import { layerDuplicateEn } from '../catalogues/layer-duplicate.en';
 import { layersPanelEn } from '../catalogues/layers-panel.en';
@@ -65,6 +66,7 @@ export const enFL = {
   ...joineryEn,
   ...keyboardShortcutsEn,
   ...landXmlEn,
+  ...lineStyleEn,
   ...layerDuplicateEn,
   ...layersPanelEn,
   ...lensPanelEn,

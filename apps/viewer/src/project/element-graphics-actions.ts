@@ -11,7 +11,7 @@
  * elements. The layering and the rules are the engine's (`element-graphics.ts`); this only decides what is written where.
  */
 
-import { hiddenElementIds, hiddenLineElement, hiddenLineEntry, withoutElements, type ElementGraphics, type GlobalId } from '@bimvoice/ifcsheet';
+import { hiddenElementIds, hiddenLineElement, hiddenLineEntry, withoutElements, type ElementGraphics, type GlobalId, type LineStyleOverride } from '@bimvoice/ifcsheet';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { useProjectStore } from './project-store';
 import type { ProjectView, ViewGraphics } from './types';
@@ -24,6 +24,7 @@ const tidy = (graphics: ViewGraphics): ViewGraphics | undefined => {
   for (const key of Object.keys(out) as (keyof ViewGraphics)[]) if (out[key] === undefined) delete out[key];
   if (!out.hiddenElements?.length) delete out.hiddenElements;
   if (!out.hiddenLines?.length) delete out.hiddenLines;
+  if (out.lineStyles && Object.keys(out.lineStyles).length === 0) delete out.lineStyles;
   if (out.elements && Object.keys(out.elements).length === 0) delete out.elements;
   return Object.keys(out).length > 0 ? out : undefined;
 };
@@ -90,6 +91,26 @@ export function hideLine(viewId: string, globalId: GlobalId, line: { start: { x:
 /** Bring one hidden line back. */
 export function showLine(viewId: string, entry: string): void {
   edit(viewId, (g) => ({ ...g, hiddenLines: without(g.hiddenLines, new Set([entry])) }));
+}
+
+type LineEnds = { start: { x: number; y: number }; end: { x: number; y: number } };
+
+/**
+ * Draw one line of the model drawing in another pen (#189): `patch` is laid over what the line already says (a field set to `undefined`
+ * is taken off). The model's line is not edited; the view keeps the pen by the line's key, so it holds while the line exists.
+ */
+export function setLineStyle(viewId: string, globalId: GlobalId, line: LineEnds, patch: LineStyleOverride): void {
+  const key = hiddenLineEntry(globalId, line);
+  edit(viewId, (g) => {
+    const merged = Object.fromEntries(Object.entries({ ...g.lineStyles?.[key], ...patch }).filter(([, v]) => v !== undefined)) as LineStyleOverride;
+    const { [key]: _old, ...others } = g.lineStyles ?? {};
+    return { ...g, lineStyles: Object.keys(merged).length > 0 ? { ...others, [key]: merged } : others };
+  });
+}
+
+/** Take the pen override off one line ("Reset style"): it draws as its category says again. */
+export function resetLineStyle(viewId: string, globalId: GlobalId, line: LineEnds): void {
+  setLineStyle(viewId, globalId, line, { weight: undefined, type: undefined, color: undefined });
 }
 
 /** Drop the fields that are `undefined`, and the elements left with none. */

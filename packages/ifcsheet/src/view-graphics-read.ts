@@ -9,7 +9,7 @@
  */
 
 import { readColourScheme } from './colour-scheme.js';
-import { PHASES, type CategoryGraphics, type ElementGraphics, type PhaseId, type PhaseSource, type PhaseStyle, type StyleRule, type StyleRuleStyle, type ViewGraphics, type ViewGridGraphics } from './view-graphics-types.js';
+import { PHASES, type CategoryGraphics, type ElementGraphics, type LineStyleOverride, type PhaseId, type PhaseSource, type PhaseStyle, type StyleRule, type StyleRuleStyle, type ViewGraphics, type ViewGridGraphics } from './view-graphics-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -101,13 +101,25 @@ export function readGraphics(raw: Record<string, unknown>): ViewGraphics {
 const MAX_ABOUT = 200;
 
 /** A view's single elements (#32, #33): hidden ones, per-element overrides and hidden lines, all by GlobalId. Malformed entries are dropped, never fatal; GlobalIds the model no longer has are KEPT (they are listed on the Wall). */
-export function readElementGraphics(raw: Record<string, unknown>): Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines'> {
-  const out: Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines'> = {};
+export function readElementGraphics(raw: Record<string, unknown>): Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines' | 'lineStyles'> {
+  const out: Pick<ViewGraphics, 'hiddenElements' | 'elements' | 'hiddenLines' | 'lineStyles'> = {};
   const ids = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => isString(x) && x.length > 0))] : []);
   const hidden = ids(raw.hiddenElements);
   if (hidden.length > 0) out.hiddenElements = hidden;
   const lines = ids(raw.hiddenLines).filter((e) => e.includes('|') && e.indexOf('|') > 0);
   if (lines.length > 0) out.hiddenLines = lines;
+  if (isObject(raw.lineStyles)) {
+    const styles: Record<string, LineStyleOverride> = {};
+    for (const [key, value] of Object.entries(raw.lineStyles)) {
+      if (key.indexOf('|') <= 0 || !isObject(value)) continue;
+      const s: LineStyleOverride = {};
+      if (isString(value.weight) && WEIGHTS.has(value.weight)) s.weight = value.weight as LineStyleOverride['weight'];
+      if (value.type === 'solid' || value.type === 'dashed' || value.type === 'hidden' || value.type === 'centre') s.type = value.type;
+      if (isString(value.color) && HEX.test(value.color)) s.color = value.color;
+      if (Object.keys(s).length > 0) styles[key] = s;
+    }
+    if (Object.keys(styles).length > 0) out.lineStyles = styles;
+  }
   if (isObject(raw.elements)) {
     const elements: Record<string, ElementGraphics> = {};
     for (const [id, value] of Object.entries(raw.elements)) {

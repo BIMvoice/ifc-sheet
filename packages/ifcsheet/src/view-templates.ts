@@ -104,6 +104,7 @@ function layered(template: TemplateGraphics, own: ViewGraphics | undefined): Res
     ...(own?.hiddenElements ? { hiddenElements: own.hiddenElements } : {}),
     ...(own?.elements ? { elements: own.elements } : {}),
     ...(own?.hiddenLines ? { hiddenLines: own.hiddenLines } : {}),
+    ...(own?.lineStyles ? { lineStyles: own.lineStyles } : {}),
     ...(own?.usePlanSymbols === false ? { usePlanSymbols: false } : {}),
   };
 }
@@ -168,6 +169,7 @@ export function untemplatedGraphics(graphics: ViewGraphics | undefined): ViewGra
   if (graphics?.hiddenElements) out.hiddenElements = graphics.hiddenElements;
   if (graphics?.elements) out.elements = graphics.elements;
   if (graphics?.hiddenLines) out.hiddenLines = graphics.hiddenLines;
+  if (graphics?.lineStyles) out.lineStyles = graphics.lineStyles;
   if (graphics?.usePlanSymbols === false) out.usePlanSymbols = false;
   return Object.keys(out).length > 0 ? out : undefined;
 }
