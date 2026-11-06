@@ -16,6 +16,7 @@ export { generateViewDrawings, sectionConfigFor } from './view-drawings.js';
 export { sheetGraphic, type Polyline, type SheetGraphic, type SheetImage, type SheetPen, type SheetText, type SheetUnderlay } from './sheet-graphic.js';
 export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
 export { exportDxf, exportPdf } from './export.js';
+export { exportSvg } from './svg-export.js';
 export { projectSheetOptions, projectSheetOptionsWithViews, type LeftOut, type ProjectSheetSource } from './project-sheets.js';
 export { SCHEDULE_CONTINUED } from './sheet-schedules.js';
 export { readPlanSymbols, withPlanSymbols, type PlanSymbol, type PlanSymbolRead } from './plan-symbols.js';

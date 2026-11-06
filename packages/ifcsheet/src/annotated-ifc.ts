@@ -88,6 +88,8 @@ export interface AnnotatedView {
   cutHeight?: number;
   /** How far below the cut plane the view sees, metres; absent 0 (down to the storey's floor). */
   viewDepth?: number;
+  /** The view's drawing as SVG (`exportSvg` with `viewId`); written at the drawing's `Location` when the view is written as a Bonsai drawing (#548). */
+  svg?: string;
 }
 
 /** A sheet of the set and the views on it, written as a Bonsai sheet. */
@@ -96,7 +98,12 @@ export interface AnnotatedSheet {
   /** Bonsai's sheet number (`A01`); absent: numbered in order. */
   identification?: string;
   viewIds: readonly string[];
+  /** The sheet as SVG (`exportSvg`); written at the layout's `Location` when the sheet is written (#548). */
+  svg?: string;
 }
+
+/** A file the copy's `IfcDocumentReference.Location`s name, relative to the IFC: a drawing's or a sheet layout's SVG (#548). */
+export interface AnnotatedIfcFile { path: string; text: string }
 
 /** An element's mark as the drawings show it. */
 export interface ElementMark {
@@ -161,6 +168,8 @@ export interface WrittenDrawing {
 
 export interface AnnotatedIfcResult {
   bytes: Uint8Array;
+  /** The SVGs given, at the paths the copy's document references name, to be written next to the IFC. */
+  files: AnnotatedIfcFile[];
   schema: string;
   annotations: WrittenAnnotation[];
   /** The Bonsai drawings written, one per view (a view without annotations has one too). */
@@ -249,6 +258,7 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   const bonsai = (input.bonsai ?? true) && schema !== 'IFC2X3' ? new BonsaiWriter(editor, store, ownerHistoryOf(store), undefined) : null;
   if (input.bonsai === true && !bonsai && input.views.length > 0) notes.push({ key: 'bonsaiSchema', params: { schema } });
   const locations = new Map<string, string>();
+  const files: AnnotatedIfcFile[] = [];
   const annotations: WrittenAnnotation[] = [];
   let contextId: number | null = null;
   const drawings: WrittenDrawing[] = [];
@@ -291,6 +301,7 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
     }) : undefined;
     if (drawing) {
       locations.set(v.viewId, drawing.location);
+      if (v.svg !== undefined) files.push({ path: drawing.location, text: v.svg });
       drawings.push({ viewId: v.viewId, name: v.name, targetView, expressId: drawing.drawingId, groupExpressId: drawing.groupId });
     }
     if (written) annotations.push({ viewId: v.viewId, name: v.name, expressId: written.annotationId, storeyExpressId: storeyId, storeyGlobalId, curves: curves.length, texts: texts.length, drawingExpressId: drawing?.drawingId, drawingGroupExpressId: drawing?.groupId });
@@ -301,8 +312,9 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   for (const [i, sheet] of (bonsai ? input.sheets ?? [] : []).entries()) {
     const viewIds = sheet.viewIds.filter((id) => locations.has(id));
     if (viewIds.length === 0) { notes.push({ key: 'sheetNoDrawing', params: { sheet: sheet.name } }); continue; }
-    const expressId = bonsai!.addSheet({ identification: sheet.identification ?? `A${String(i + 1).padStart(2, '0')}`, name: sheet.name, locations: viewIds.map((id) => locations.get(id) as string) });
-    sheets.push({ name: sheet.name, expressId, viewIds });
+    const added = bonsai!.addSheet({ identification: sheet.identification ?? `A${String(i + 1).padStart(2, '0')}`, name: sheet.name, locations: viewIds.map((id) => locations.get(id) as string) });
+    if (sheet.svg !== undefined) files.push({ path: added.layout, text: sheet.svg });
+    sheets.push({ name: sheet.name, expressId: added.id, viewIds });
   }
 
   const marked: AnnotatedIfcResult['marked'] = [];
@@ -324,5 +336,5 @@ export async function buildAnnotatedIfc(input: AnnotatedIfcInput): Promise<Annot
   }
 
   const result = new StepExporter(store, view).export({ schema, applyMutations: true, ...(input.fileName ? { filename: input.fileName } : {}) });
-  return { bytes: result.content, schema, annotations, drawings, sheets, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
+  return { bytes: result.content, files, schema, annotations, drawings, sheets, marked, marks: markStates, notes, warnings: result.stats.warnings.map(String) };
 }
