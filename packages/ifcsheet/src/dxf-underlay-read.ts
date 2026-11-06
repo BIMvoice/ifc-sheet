@@ -5,6 +5,7 @@
 /** Reading the project file's `dxfUnderlays` (#547): a damaged entry fails the file with its path, a missing optional value takes its default. The one reader, the app's too. */
 
 import { DXF_UNDERLAY_MAX_POINTS, type DxfUnderlayLayer, type ViewDxfUnderlay } from './dxf-underlay.js';
+import type { DxfLabel } from './dxf-underlay-text.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -17,6 +18,16 @@ function fail(path: string, message: string): never {
 
 function readPoint(v: unknown, path: string): { x: number; y: number } {
   return isObject(v) && isNumber(v.x) && isNumber(v.y) ? { x: v.x, y: v.y } : fail(path, 'must be a point');
+}
+
+const ALIGNS = ['left', 'center', 'right'] as const;
+
+function readLabel(v: unknown, path: string, budget: { points: number }): DxfLabel {
+  if (!isObject(v) || !isString(v.text) || !isNumber(v.height) || !(v.height > 0)) return fail(path, 'must be a text with a height');
+  budget.points += 1;
+  if (budget.points > DXF_UNDERLAY_MAX_POINTS) fail(path, `goes over ${DXF_UNDERLAY_MAX_POINTS} points`);
+  const align = ALIGNS.find((a) => a === v.align) ?? 'left';
+  return { at: readPoint(v.at, `${path}/at`), text: v.text, height: v.height, dir: readPoint(v.dir, `${path}/dir`), align };
 }
 
 export function readDxfUnderlay(v: unknown, path: string, budget: { points: number }): ViewDxfUnderlay {
@@ -36,6 +47,7 @@ export function readDxfUnderlay(v: unknown, path: string, budget: { points: numb
         if (budget.points > DXF_UNDERLAY_MAX_POINTS) fail(`${lp}/runs/${j}`, `goes over ${DXF_UNDERLAY_MAX_POINTS} points`);
         return run.map((p: unknown, k) => readPoint(p, `${lp}/runs/${j}/${k}`));
       }),
+      ...(l.texts === undefined ? {} : { texts: Array.isArray(l.texts) ? l.texts.map((t: unknown, j) => readLabel(t, `${lp}/texts/${j}`, budget)) : fail(`${lp}/texts`, 'must be an array') }),
     };
   });
   const num = (key: string, ok: (n: number) => boolean, fallback: number): number => {

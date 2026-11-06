@@ -115,4 +115,5 @@ export function omittedUnderlayViewNames(
 
 // The DXF linework laid under a plan view (#547) is its own module; this subpath carries it too.
 export * from './dxf-underlay.js';
+export type { ConvertedDxfText, DxfLabel } from './dxf-underlay-text.js';
 export * from './dxf-underlay-georef.js';

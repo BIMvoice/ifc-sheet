@@ -50,7 +50,7 @@ import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } fro
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
-import { dxfSheetStrokes } from './dxf-underlay-sheet.js';
+import { dxfSheetStrokes, dxfSheetTexts } from './dxf-underlay-sheet.js';
 
 export type Polyline = readonly Point2D[];
 
@@ -265,6 +265,7 @@ export function sheetGraphic(
         for (const u of printedUnderlays(doc.underlays, vp.viewId, sheet.id)) out.underlays.push({ viewId: vp.viewId, src: u.href, widthPx: u.widthPx, heightPx: u.heightPx, matrix: underlayMatrix(u, at), opacity: u.opacity, clip: box });
         // The DXF linework under the view (#547): its layers that are on, clipped to the box.
         strokes.push(...dxfSheetStrokes(doc.dxfUnderlays, vp.viewId, sheet.id, at, box));
+        out.texts.push(...dxfSheetTexts(doc.dxfUnderlays, vp.viewId, sheet.id, at, box));
       }
       // The rooms the view hides keep neither colour nor pattern, as in the app's sheets (`shownRooms`).
       const scheme = shownRooms(schemes.get(vp.viewId), graphics, globalIdOf) ?? undefined;
