@@ -17,7 +17,7 @@
 
 import type { Pt } from '../draft-types.js';
 import { contentOf, facadeEnds, facadesOf, inFacade, type Facade } from './facades.js';
-import { closingBoxes } from './close.js';
+import { closingBoxes, closingTolerance, filledGaps } from './close.js';
 import { wallGaps } from './layers.js';
 import { boxOf, outlinesOf, pointInRing, ringOfBox, rotate, type Box } from './outline.js';
 import { readPlan } from './read.js';
@@ -48,11 +48,14 @@ const key = (f: Facade, kind: StringKind) => `${kind}:${Math.round(f.n.x)},${Mat
 
 export function planDimensions(parts: readonly PlanPart[], settings: DimensionSettings): DimensionPlan {
   const empty: DimensionPlan = { strings: [], skippedFacades: 0, droppedStrings: 0, droppedOpenings: 0, angle: 0, outline: [] };
-  const { angle, walls, wholeWalls, wallBoxes, offAxis, bridged } = readPlan(parts);
+  const { angle, walls, wholeWalls, wallBoxes, offAxis, bridged, fillers } = readPlan(parts);
   const inexact = bridged.filter((o) => !o.exact);
   const leftOut = new Set<number>();
   // A plan that cuts only bare walls: two gable walls under a roof, with nothing cut between them. Each wall gets its own facades, and a face turned towards another wall is an inner face, not a facade. A plan with an enclosed mass is that mass; what stands apart from it (a boundary wall) is not the building.
-  const masses = outlinesOf([...walls, ...wholeWalls.flatMap(wallGaps).map(ringOfBox), ...closingBoxes(wallBoxes).map(ringOfBox), ...bridged.map((o) => ringOfBox(o.box))]);
+  // A door or window in its gap is the wall to the outline: a door against a corner leaves the corner's gap at its frame. A wider gap that something else the plan cuts stands in and fills is closed as the walls' own, and a facade can end on it.
+  const shut = [...wallBoxes, ...bridged.map((o) => o.box)], tol = closingTolerance(wallBoxes);
+  const filled = filledGaps(shut, fillers, tol);
+  const masses = outlinesOf([...walls, ...wholeWalls.flatMap(wallGaps).map(ringOfBox), ...closingBoxes(shut, tol).map(ringOfBox), ...filled.map(ringOfBox), ...bridged.map((o) => ringOfBox(o.box))]);
   if (masses.length === 0) return empty;
   const loop = masses[0];
   const loops = isBareWall(loop) ? masses.filter((m) => isBareWall(m)) : [loop];
@@ -67,7 +70,7 @@ export function planDimensions(parts: readonly PlanPart[], settings: DimensionSe
       skipped++;
       continue;
     }
-    const ends = facadeEnds(run, wallBoxes);
+    const ends = facadeEnds(run, filled.length ? [...wallBoxes, ...filled] : wallBoxes);
     if (!ends) {
       // A run with no wall's outer face on it: round a wall at an angle it is a facade the plan cannot measure, and is reported. Otherwise it is the far side of a wall seen through a gap in the outline, not a facade at all.
       if (offAxis.some((ring) => ring.some((p) => touchesRun(run, p)))) dropped++;
