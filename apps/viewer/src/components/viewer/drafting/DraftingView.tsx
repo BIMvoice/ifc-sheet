@@ -102,6 +102,7 @@ import { MembraneLayer } from './MembraneLayer';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
+import { ContourLabelsLayer, useContourOverlays, useViewDrawing } from './useViewDrawing';
 import { UnderlayLayer, useSnapReferences } from './UnderlayLayer';
 import { RegionSelectHint } from './RegionSelectHint';
 import { UnderlayPanel } from './UnderlayPanel';
@@ -117,7 +118,6 @@ import { exportViewDxf } from './view-dxf';
 import { viewOmits } from '@/project/discipline-facts';
 
 import { planOverlays } from '@/project/plan-overlays';
-import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 
 import { viewMaterials } from '@/project/material-resolver';
@@ -126,13 +126,12 @@ import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
-import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
-import { withViewContours } from '@/project/view-contours';
+import { resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
 import { renderIdGlobalId } from '@/project/element-guid';
-import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
+import { withoutHiddenElementMeshes } from '@/project/view-element-filter';
 import { useHiddenElementsUi } from './useHiddenElementsUi';
 import { ElementGraphicsBar } from './ElementGraphicsBar';
 import { HiddenGhostLayer } from './HiddenGhostLayer';
@@ -211,7 +210,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
   const runtimeGeometry = useDrawingRuntime().geometryResult;
-  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(drawing, view, models, runtimeGeometry), graphics, renderIdGlobalId), view, graphics), detail) : null), [drawing, graphics, models, view, runtimeGeometry, detail]);
+  const viewDrawing = useViewDrawing(drawing, view, models, runtimeGeometry, graphics, detail); const contourLabels = useContourOverlays(viewDrawing, view);
   const references = useSnapReferences(viewDrawing, view.id);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
@@ -290,7 +289,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...contourLabels, ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
@@ -360,6 +359,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
         <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} detail={detail} level={view.kind === 'plan' ? view.level : undefined} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
+        <ContourLabelsLayer overlays={contourLabels} view={view} transform={viewTransform} axis={axis} />
         </div>
         <DraftOverlay
           entities={entities}

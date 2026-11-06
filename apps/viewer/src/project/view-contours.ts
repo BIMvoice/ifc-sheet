@@ -11,7 +11,8 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { GeometryResult, MeshData } from '@ifc-lite/geometry';
-import { isTerrainMesh, withContours } from '@bimvoice/ifcsheet';
+import { isTerrainMesh, layoutContourLabels, withContours } from '@bimvoice/ifcsheet';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ProjectView } from './types';
 
 /** What of a loaded model the terrain is read from: its source semantics (present for LandXML) and its meshes. */
@@ -30,7 +31,10 @@ export function terrainMeshes(models: ReadonlyMap<string, TerrainSource>, runtim
 /** `drawing` with the terrain drawn as contours when `view` takes them (a site plan, or the plan of a model with no storeys); the same object otherwise. */
 export function withViewContours<T extends Drawing2D>(
   drawing: T, view: ProjectView | undefined, models: ReadonlyMap<string, TerrainSource>, geometry: (Pick<GeometryResult, 'meshes'> & Partial<Pick<GeometryResult, 'coordinateInfo'>>) | null | undefined,
+  /** The scale and number format the drawing is shown at: with them the contour lines are broken under their height labels (`layoutContourLabels`). */
+  shown?: { scale: number; locale: SheetLocale },
 ): T {
   if (view?.kind !== 'plan') return drawing;
-  return withContours(drawing, view, terrainMeshes(models, geometry?.meshes), geometry?.coordinateInfo?.originShift?.y ?? 0);
+  const out = withContours(drawing, view, terrainMeshes(models, geometry?.meshes), geometry?.coordinateInfo?.originShift?.y ?? 0);
+  return shown && out !== drawing ? layoutContourLabels(out, shown.scale, shown.locale).drawing : out;
 }

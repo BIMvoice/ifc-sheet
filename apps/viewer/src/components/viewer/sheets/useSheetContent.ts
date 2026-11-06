@@ -43,6 +43,8 @@ import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
+import { contourOverlays } from '@/project/contour-overlay';
+import { useSheetLocale } from '@/project/units-and-numbers';
 import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { entityStyles } from '@/project/model-styles';
@@ -103,6 +105,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const phaseSource = useProjectStore((s) => s.phaseSource);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const { geometryResult } = useDrawingRuntime();
+  const sheetLocale = useSheetLocale();
   // Linked models in their own style (#96): follows the loaded models and the project's model list.
   const loadedModels = useViewerStore((s) => s.models);
   const projectModels = useProjectStore((s) => s.models);
@@ -122,20 +125,20 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
         // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
         const detail = resolveDetailLevel(graphics, vp.scale);
-        const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(raw, view, loadedModels, geometryResult), graphics, renderIdGlobalId), view, graphics), detail) : null;
+        const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(raw, view, loadedModels, geometryResult, { scale: vp.scale, locale: sheetLocale }), graphics, renderIdGlobalId), view, graphics), detail) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
         const styledKept = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
         // The coloured style of an elevation or section (#499): the visible surfaces in the materials' colours, under the linework.
         const drawing = styledKept ? withSurfaceFills(styledKept, view, graphics, symbolMeshes, hiddenClasses(graphics), materialsTable ?? []) : null;
-        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...(view?.kind === 'plan' ? contourOverlays(kept, vp.scale, sheetLocale) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw
-        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
+        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale], style)
         : style());
     }
     return out;
-  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
+  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.

@@ -35,8 +35,8 @@ export interface PlanOverlay {
   /** A line type of its own (the grid's dash-dot); wins over `dashed`. */
   lineType?: LineType;
   shapes: DraftShape[];
-  /** Labels, drawing coordinates, drawn horizontally in a small paper size. */
-  texts?: { at: Pt; text: string }[];
+  /** Labels, drawing coordinates, drawn in a small paper size: level, or turned `angle` degrees clockwise on the screen (a contour's height). */
+  texts?: { at: Pt; text: string; angle?: number }[];
 }
 
 type Pens = GraphicStandard['pens'];

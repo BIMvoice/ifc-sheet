@@ -30,7 +30,7 @@ export function OverlayPaths({ overlays, transform, axis, textScale = 1, ink = '
           <path d={o.shapes.map((s) => shapePath(s, transform, axis)).join('')} stroke={ink} strokeWidth={o.width * textScale} strokeDasharray={dash || undefined} fill="none" />
           {o.texts?.map((l, k) => {
             const p = drawingToScreen(l.at, transform, axis);
-            return <text key={k} x={p.x} y={p.y} fontSize={LABEL_MM * textScale} textAnchor="middle" dominantBaseline="middle" fill={ink} stroke="none" fontFamily="sans-serif">{l.text}</text>;
+            return <text key={k} x={p.x} y={p.y} fontSize={LABEL_MM * textScale} textAnchor="middle" dominantBaseline="middle" fill={ink} stroke="none" fontFamily="sans-serif" transform={l.angle ? `rotate(${l.angle} ${p.x} ${p.y})` : undefined}>{l.text}</text>;
           })}
         </g>
         );

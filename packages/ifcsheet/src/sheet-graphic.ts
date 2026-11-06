@@ -21,6 +21,7 @@
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
+import { layoutContourLabels, type ContourText } from './contour-labels.js';
 import { clipPolygon, clipPolyline } from './clip.js';
 import { activeColourScheme, shownRooms, type SchemeResult } from './colour-fills.js';
 import { parsePat } from './hatch.js';
@@ -187,6 +188,13 @@ export function placer(drawing: Pick<Drawing2D, 'bounds'> & { config: Pick<Drawi
   return (p) => ({ x: vp.x + (p.x - cx) * kx * k, y: vp.y + (p.y - cy) * ky * k });
 }
 
+/** A contour label as sheet text: centred on `at` (the baseline moved down by a third of the height, along the text's own down), turned to follow the contour (the sheet's angle runs counter-clockwise). */
+function contourSheetText(label: ContourText, at: Point2D): SheetText {
+  const rad = (label.angle * Math.PI) / 180;
+  const drop = label.size / 3;
+  return { at: { x: at.x - Math.sin(rad) * drop, y: at.y + Math.cos(rad) * drop }, text: label.text, size: label.size, align: 'center', ...(label.angle === 0 ? {} : { angle: -label.angle }) };
+}
+
 const closeRing = (pts: Point2D[]): Point2D[] => (pts.length > 2 ? [...pts, pts[0]] : pts);
 
 /**
@@ -253,7 +261,10 @@ export function sheetGraphic(
     const symbols = openings.get(vp.viewId);
     const detailed = made && atDetailLevel(made, detail);
     // A plan draws its doors and windows from their symbols, not their cut (a roof plan keeps them: its skylights have no symbol).
-    const drawing = detailed && symbols && view?.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
+    const plain = detailed && symbols && view?.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
+    // The major contours' height labels (#182): the contour lines are broken under each, and the figures printed below.
+    const contoured = plain ? layoutContourLabels(plain, vp.scale, marks.locale) : null;
+    const drawing = contoured ? contoured.drawing : plain;
     const size = view && extent ? viewExtent(view, extent)
       : drawing ? { w: drawing.bounds.max.x - drawing.bounds.min.x, h: drawing.bounds.max.y - drawing.bounds.min.y } : null;
     const box: Rect | null = size && Number.isFinite(size.w + size.h) ? { x: vp.x - (size.w * k) / 2, y: vp.y - (size.h * k) / 2, w: size.w * k, h: size.h * k } : null;
@@ -294,6 +305,10 @@ export function sheetGraphic(
       }
       out.pens.push(...materialPens(faces, styler, at, box, pens, patterns));
       if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
+      for (const label of contoured?.texts ?? []) {
+        const p = at(label.at);
+        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) out.texts.push(contourSheetText(label, p));
+      }
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
