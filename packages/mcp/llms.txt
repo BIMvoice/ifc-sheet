@@ -26,6 +26,7 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 - `ifcsheet_load_project`: a set from a saved `.ifclite-project.json` on an opened model.
 - `ifcsheet_list_sheets`: the sheets (number, name, paper, views with slot and scale), the views not placed, the title block fields.
 - `ifcsheet_add_view`: add a plan (by `level`), elevation (by `direction`), section (by `axis` and `offset_m`, or a line `from`/`to`) or axonometric (by `preset`, optionally cut away); not on a sheet until placed.
+- `ifcsheet_annotate`: "Annotate the set": dimension strings and tags on the plans, level marks on the elevations and sections (`commands`, or a project `preset`; `tag_parts`, `views`, `dry_run`); drafted into the set, so exports print them; returns per view what was added and what was left out and why; one undo step.
 - `ifcsheet_place_view`: put a view on a sheet at a scale; without `sheet` the engine's rule chooses or makes one; errors when the views do not fit.
 - `ifcsheet_set_title_block`: set title block fields, project-wide or for one sheet (client, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, address...); returns the fields in force and the ones that changed.
 - `ifcsheet_renumber`: renumber the sheets by a scheme (`default` A-101 style, `sequential` A01, A02...).

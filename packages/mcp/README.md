@@ -121,7 +121,7 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | bSDD | `bsdd_search`, `bsdd_class`, `bsdd_property_sets`, `bsdd_match` |
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
-| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
+| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_annotate`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
 | Quantity takeoff | `ifcsheet_rooms`, `ifcsheet_materials`, `ifcsheet_boq`, `ifcsheet_list`, `ifcsheet_classify` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
@@ -220,6 +220,7 @@ file when `annotated_ifc` is true.
 | `ifcsheet_apply_template` | `model_id`, `template_path` or `template_json` (a `.bvset`), optional `name`, `dry_run` | a new `document_id`, the sheets and the notes of what the rules met; as `ifcsheet build --template` |
 | `ifcsheet_list_sheets` | `document_id` | per sheet: id, number, name, paper, the views on it (slot, kind, scale); the views not placed; the title block fields |
 | `ifcsheet_add_view` | `document_id`, `kind` (`plan` with `level`, `elevation` with `direction`, `section` by `axis` and `offset_m` or by a line `from`/`to`, `axonometric` with `preset`, optionally cut away by `cut_level` and `cut_height_m` or a box), optional `dry_run` | the new view; it is not on a sheet yet |
+| `ifcsheet_annotate` | `document_id`, optional `commands` (`dimension`, `tag`, `level`) or `preset`, `tag_parts`, `views`, `dry_run` | per view what was added (dimensions, tags, level marks) and what was left out and why, as message keys; the annotation is kept in the set and printed by the exports; one undo step |
 | `ifcsheet_place_view` | `document_id`, `view`, optional `sheet`, `scale`, `slot`, `dry_run` | the sheet it is on; without `sheet` the engine's rule picks or makes one; errors when the views do not fit at the scale |
 | `ifcsheet_set_title_block` | `document_id`, `fields` (client, drawnBy, project, date, phase, projectNumber...), optional `sheet`, `dry_run` | the fields in force and the ones that changed; project-wide, or one sheet's own |
 | `ifcsheet_renumber` | `document_id`, optional `preset` (`default`, `sequential`), `discipline`, `overrides`, `dry_run` | the old to new numbers |

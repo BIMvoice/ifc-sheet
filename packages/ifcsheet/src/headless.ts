@@ -25,3 +25,4 @@ export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
 export * from './project.js';
 export { createHeadlessListProvider } from './list-provider.js';
 export { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, runListScheduleOn, type HeadlessListOptions } from './list-headless.js';
+export { DEFAULT_DRAFT_LAYER, annotatableViews, annotateSetHeadless, annotationsOf, withDrafts, type HeadlessAnnotateInput, type HeadlessAnnotateResult } from './annotate/headless.js';

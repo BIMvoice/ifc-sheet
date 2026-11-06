@@ -11,7 +11,8 @@ import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTem
 import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
-import { exportDxf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { annotateSetHeadless, annotationsOf, exportDxf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { readAnnotateSpec, readAnnotationPresets, type AnnotateSpec } from '../exports/annotate.js';
 import { withTypedProjectName } from '../title-block-fields.js';
 import { projectSetOf } from '../project-set.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
@@ -44,6 +45,8 @@ interface BuildArgs {
   includeFarElements?: boolean;
   /** A drawing standard by id (`ro`): its pens and title block layout. */
   standard?: string;
+  /** What to annotate before writing (`--annotate=`): all, commands, or a preset of the project. */
+  annotate?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -65,18 +68,28 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   // The project is read first: its graphic standard and title block layout are what the sheets are drawn with.
   let project: ProjectFacts | undefined;
+  let presets: ReturnType<typeof readAnnotationPresets> = [];
   if (args.project !== undefined) {
     let projectText: string;
     try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
       io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
       return EXIT.failed;
     }
-    try { project = readProjectFile(projectText); } catch (error) {
+    try { project = readProjectFile(projectText); presets = readAnnotationPresets((JSON.parse(projectText) as { annotationPresets?: unknown }).annotationPresets); } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
   }
   // The one language of the run: the project's recorded language, else --locale, else Romanian for a PAC submission and English otherwise. It names the sheets and views, and with --pac the PAC words and the opis.
+  let annotate: AnnotateSpec | undefined;
+  if (args.annotate !== undefined) {
+    const spec = readAnnotateSpec(args.annotate, presets);
+    if ('error' in spec) {
+      io.stderr(`ifcsheet build --annotate: ${spec.error}\n`);
+      return EXIT.usage;
+    }
+    annotate = spec;
+  }
   const { language, notes } = resolveLanguage({ project, locale: args.locale, pac: args.pac });
   for (const note of notes) io.stderr(note);
   // The permit project: --pac-mode, else the project file's (the mode the app saved), else the full one.
@@ -113,8 +126,16 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   const underlayWarnings = underlayNotes(document, { dxf: Boolean(args.dxf || args.handover) });
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
   // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
-  const extras = own && project ? await projectSheetOptionsWithViews(project, model, language, sheetFormat(language, standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
+  const extras: Partial<Awaited<ReturnType<typeof projectSheetOptionsWithViews>>> = own && project ? await projectSheetOptionsWithViews(project, model, language, sheetFormat(language, standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
+  // "Annotate the set" (#707): dimensions and tags on the plans, level marks on the elevations and sections, drafted over what the project already drew.
+  const format = sheetFormat(language, standard.unitsAndNumbers);
+  let annotations = extras.annotations;
+  if (annotate) {
+    const done = await annotateSetHeadless({ model, set: { document, levels: set.levels }, choices: annotate.choices, ...(annotate.tagParts ? { tagParts: annotate.tagParts } : {}), existing: annotations?.drafts ?? [], locale: format });
+    annotations = annotations ? { ...annotations, drafts: done.all } : annotationsOf(done.all, format);
+    for (const view of done.summary.views) io.stderr(`ifcsheet: annotated ${view.name}: ${view.skipped ? 'left out, the view has no drawing' : view.results.map((r) => `${r.command} ${r.outcome === 'added' ? `+${r.added}` : r.outcome === 'already' ? 'complete' : 'nothing to do'}`).join(', ')}\n`);
+  }
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, ...(annotations ? { annotations } : {}), onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
@@ -161,7 +182,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements] [--annotate[=<all|dimension,tag,level|preset>]]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -178,7 +199,8 @@ export const buildCommand: CliCommand = {
           With --project, the sheets are the project's own when it holds any (its views, its sheets with the
           viewports where they were put, the dimensions and texts drawn on the views, the schedules placed: lists, rooms, bill of
           quantities, drawing register);
-          a project with no sheet gets the starting set. Which one is printed is said on stderr.`,
+          a project with no sheet gets the starting set. Which one is printed is said on stderr.
+          With --annotate, the dimension strings, tags and level marks of "Annotate the set" are drafted on the views first (see Options).`,
   async run(rest, values, io) {
     if (values.csv || values.detail) {
       io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
@@ -216,7 +238,7 @@ export const buildCommand: CliCommand = {
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, ...(values.annotate !== undefined ? { annotate: values.annotate } : {}), includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;
