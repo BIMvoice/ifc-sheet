@@ -22,7 +22,8 @@
  * A SHEET (`core.drawing.add_sheet`, `add_drawing_to_sheet`): an `IfcDocumentInformation` with `Scope` `SHEET`, `Identification` and
  * `Name`, associated to the project, with one `IfcDocumentReference` of `Description` `LAYOUT` and one per drawing of `Description`
  * `DRAWING`, `Identification` its running number and the same `Location` as the drawing's own reference (that equality is how
- * Bonsai finds the sheets of a drawing). IfcSheet writes no SVG (the drawing is rendered by the app, not the engine): Bonsai makes the drawing and sheet files itself, and finds its own
+ * Bonsai finds the sheets of a drawing). The files those Locations name are the caller's SVGs when it gives them (`annotated-ifc.ts`,
+ * `svg-export.ts`); without, Bonsai makes the drawing and sheet files itself. It finds its own
  * stylesheet, markers, symbols, patterns and shading styles through the `EPset_Drawing` paths written with its defaults.
  *
  * IFC4 and IFC4X3 only: Bonsai's IFC2X3 document attributes differ and are not written.
@@ -278,11 +279,12 @@ export class BonsaiWriter {
   }
 
   /** One sheet: the document, its layout reference and a reference to each drawing placed on it. */
-  addSheet(params: BonsaiSheetParams): number {
+  addSheet(params: BonsaiSheetParams): { id: number; layout: string } {
     const sheet = this.information(params.identification, params.name, 'SHEET');
     this.associateToProject(sheet);
-    this.reference(`layouts/${fileSafe(params.identification)} - ${fileSafe(params.name)}.svg`, null, 'LAYOUT', sheet);
+    const layout = `layouts/${fileSafe(params.identification)} - ${fileSafe(params.name)}.svg`;
+    this.reference(layout, null, 'LAYOUT', sheet);
     params.locations.forEach((location, i) => this.reference(location, String(i + 1), 'DRAWING', sheet));
-    return sheet;
+    return { id: sheet, layout };
   }
 }

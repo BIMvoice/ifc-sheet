@@ -5,7 +5,7 @@
 
 Drawings of every TargetView (PLAN_VIEW, ELEVATION_VIEW, SECTION_VIEW) are listed with the camera's box and its place.
 
-usage: check-bonsai.py <file.ifc> <highest express id of the source>
+usage: check-bonsai.py <file.ifc> <highest express id of the source> [<directory the Locations are relative to>]
 
 Each rule below is the one Bonsai's own code applies (v0.8.0), named in its comment, so the answer is what Bonsai would list:
 `tool.Drawing.import_drawings`, `get_drawing_target_view`, `get_drawing_group`, `get_drawing_document`, `import_sheets`,
@@ -14,7 +14,9 @@ Also validates the file against the schema and reports only the findings on enti
 Run it on a file you exported to check it without Blender:  python3 check-bonsai.py exported.ifc 0
 """
 import json
+import os
 import sys
+import xml.etree.ElementTree as ET
 
 import ifcopenshell
 import ifcopenshell.util.element as element
@@ -98,5 +100,23 @@ for d in f.by_type("IfcDocumentInformation"):
     sheets.append({"identification": d.Identification, "name": d.Name, "references": refs, "drawings": on_sheet,
                    "project": [p.is_a() for rel in d.DocumentInfoForObjects or [] for p in rel.RelatedObjects]})
 
+# With a directory: every Location a DRAWING or LAYOUT reference names must be a file there that parses as SVG, as Bonsai opens it.
+svg_problems = None
+if len(sys.argv) > 3:
+    svg_problems = []
+    wanted = {x["location"] for x in drawings if x["location"]}
+    wanted |= {loc for d in f.by_type("IfcDocumentInformation") if d.Scope == "SHEET"
+               for r in d.HasDocumentReferences or [] if r.Description in ("DRAWING", "LAYOUT") for loc in [r.Location]}
+    for loc in sorted(wanted):
+        target = os.path.join(sys.argv[3], loc)
+        if not os.path.isfile(target):
+            svg_problems.append(loc + ": no such file")
+            continue
+        try:
+            if not ET.parse(target).getroot().tag.endswith("}svg"):
+                svg_problems.append(loc + ": not an svg root")
+        except ET.ParseError as e:
+            svg_problems.append(loc + ": " + str(e))
+
 plans = [a.Name for a in f.by_type("IfcAnnotation") if a.ObjectType == "IfcSheet:PlanAnnotations"]
-print(json.dumps({"schema": f.schema, "new_findings": new_findings, "drawings": drawings, "sheets": sheets, "plan_annotations": plans}))
+print(json.dumps({"schema": f.schema, "new_findings": new_findings, "drawings": drawings, "sheets": sheets, "plan_annotations": plans, "svg_problems": svg_problems}))
