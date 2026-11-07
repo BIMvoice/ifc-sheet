@@ -326,14 +326,14 @@ let endedByUser = false;
 
 /**
  * Done: the visible way to end the running command or the object selection it waits for, for
- * a person without Esc or Enter at hand (an iPad, #166). What the command has drafted stays,
- * as Enter leaves it; a command that Enter would only advance is cancelled. Does nothing when
- * nothing runs (Enter on an idle line would repeat the last command).
+ * a person without Esc or Enter at hand (an iPad, #166). A command that says how (`onDone`) finishes with what is drawn (a Note
+ * keeps its leader, #168); else Enter, and a step that Enter would only advance is cancelled. Does nothing when nothing runs
+ * (Enter on an idle line would repeat the last command).
  */
 export function endCommand(): void {
   if (!command && !pending) return;
   endedByUser = true;
-  pressEnter();
+  if (command?.onDone) finish(command.onDone()); else pressEnter();
   if (command || pending) cancelCommand();
 }
 

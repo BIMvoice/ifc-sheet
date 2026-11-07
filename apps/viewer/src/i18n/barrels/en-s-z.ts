@@ -43,6 +43,7 @@ import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
 import { titleBlockSourcesEn } from '../catalogues/title-block-sources.en';
 import { textLinesEn } from '../catalogues/text-lines.en';
+import { textOnDrawingEn } from '../catalogues/text-on-drawing.en';
 import { toursEn } from '../catalogues/tours.en';
 import { trimExtendEn } from '../catalogues/trim-extend.en';
 import { unitsNumbersEn } from '../catalogues/units-numbers.en';
@@ -115,6 +116,7 @@ export const enSZ = {
   ...titleBlockRoEn,
   ...titleBlockSourcesEn,
   ...textLinesEn,
+  ...textOnDrawingEn,
   ...toursEn,
   ...trimExtendEn,
   ...unitsNumbersEn,

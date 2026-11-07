@@ -43,6 +43,7 @@ import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
 import { textLinesRo } from '../catalogues/text-lines.ro';
+import { textOnDrawingRo } from '../catalogues/text-on-drawing.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -114,6 +115,7 @@ export const roMZ = {
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
   ...textLinesRo,
+  ...textOnDrawingRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,

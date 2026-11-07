@@ -21,7 +21,7 @@ interface CommandLineProps {
 }
 
 /** The prompts that ask for the words of a text, which may run to several lines. */
-const TEXT_PROMPTS: readonly string[] = ['textLines.prompt', 'tbparams.text.prompt'];
+const TEXT_PROMPTS: readonly string[] = ['textLines.prompt', 'textOnDrawing.prompt', 'tbparams.text.prompt'];
 const MAX_ROWS = 5;
 
 export const CommandLine = forwardRef<HTMLTextAreaElement, CommandLineProps>(function CommandLine({ value, onChange, onSubmit, onEscape }, ref) {
