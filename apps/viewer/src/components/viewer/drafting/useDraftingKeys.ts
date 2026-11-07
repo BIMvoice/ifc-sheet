@@ -126,7 +126,12 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         submitRef.current();
         return;
       }
-      if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key) && input) {
+      if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key)) {
+        // With AutoCAD mode off the drawing has no command line to type into (#168): a bare letter does nothing unless bound to a key.
+        if (!input) {
+          if (!textFirst && claimWallKey(e)) e.preventDefault();
+          return;
+        }
         e.preventDefault();
         // A bare key the person bound to a Wall action runs it at once (#166), unless text is being
         // typed or AutoCAD mode is on. Any other key reaches the Wall's handlers on its own; the
