@@ -122,8 +122,8 @@
      "dash": "",
      "paths": 17,
      "regions": 0,
-     "points": 86,
-     "hash": "769d344aa4e36e1f"
+     "points": 91,
+     "hash": "198563794fa285ca"
     },
     "SYMBOLS stroke=#000000 fill=- #2": {
      "width": 0.13,
@@ -136,10 +136,10 @@
     "SYMBOLS stroke=#000000 fill=- #3": {
      "width": 0.5,
      "dash": "",
-     "paths": 7,
+     "paths": 6,
      "regions": 0,
      "points": 30,
-     "hash": "237f62ddebfb4452"
+     "hash": "d9a6d2671b8d36a0"
     }
    },
    "texts": [
