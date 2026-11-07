@@ -100,6 +100,14 @@ function clearOfWalls(walls: readonly Footprint[], axis: 'x' | 'z', lo: number, 
 
 interface Thing { key: string; label: string; through: string; f: Footprint }
 
+/** The box around `footprints`, or `null` when there are none. */
+function enclosing(footprints: readonly Footprint[]): Footprint | null {
+  if (footprints.length === 0) return null;
+  const xs = footprints.flatMap((f) => [f.min.x, f.max.x]);
+  const zs = footprints.flatMap((f) => [f.min.z, f.max.z]);
+  return { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } };
+}
+
 /**
  * The cuts, best first. The first is across the building's short side, so it
  * shows the depth of the plan and the storeys stacked; the second runs the
@@ -107,8 +115,12 @@ interface Thing { key: string; label: string; through: string; f: Footprint }
  * different directions (#665). Each looks toward the far end. The stair comes
  * first, then rooms by size; the second cut starts at the next thing, so the
  * two do not show the same room. A cut too close to one already proposed in
- * its direction is dropped, and none is left to run along a wall. The rest
- * follow, short-side cuts first.
+ * its direction is dropped, and none is left to run along a wall. A cut that
+ * would stand outside the building's walls and rooms is dropped too: an
+ * entrance step or a balcony outside the facade is no place to cut the
+ * building (bloc-p4's lengthwise cut through its entrance steps drew only the
+ * balconies); a direction left with no cut is cut through the middle. The
+ * rest follow, short-side cuts first.
  */
 export function proposeSections(input: ProposalInput): SectionProposal[] {
   const { building } = input;
@@ -135,8 +147,11 @@ export function proposeSections(input: ProposalInput): SectionProposal[] {
     usedKeys.add(key);
     things.push({ key, label: labels[i], through: room.name, f: room });
   });
+  // Where a cut passes through the building itself: within its walls and rooms, else (neither known) its footprint.
+  const inside = enclosing([...walls, ...input.rooms]) ?? building;
+  const middle: Thing = { key: 'middle', label: 'Through the middle', through: 'middle', f: inside };
   // A model with no rooms and no stair still gets a cut each way: through the middle.
-  if (things.length === 0) things.push({ key: 'middle', label: 'Through the middle', through: 'middle', f: building });
+  if (things.length === 0) things.push(middle);
 
   /** The cuts in one direction, over `order`: across the short side, else along the long side. */
   const cuts = (across: boolean, order: readonly Thing[]): SectionProposal[] => {
@@ -150,8 +165,11 @@ export function proposeSections(input: ProposalInput): SectionProposal[] {
       : { a: { x: lo, z: t }, b: { x: hi, z: t }, side: { x: (lo + hi) / 2, z: t + 1 } });
     const out: SectionProposal[] = [];
     const taken: number[] = [];
-    for (const thing of order) {
+    for (const thing of [...order, ...(order.includes(middle) ? [] : [middle])]) {
+      // The middle is the cut of last resort: only when nothing else gave this direction a cut.
+      if (thing === middle && out.length > 0) break;
       const t = clearOfWalls(walls, axis, thing.f.min[axis], thing.f.max[axis]);
+      if (t <= inside.min[axis] || t >= inside.max[axis]) continue;
       if (taken.some((u) => Math.abs(u - t) < SAME_CUT_M)) continue;
       taken.push(t);
       out.push({ key: across ? thing.key : `long-${thing.key}`, label: across ? thing.label : `${thing.label}, lengthwise`, through: thing.through, ...cutAt(t) });
