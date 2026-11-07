@@ -503,6 +503,10 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # pull-requests: read lets the no-stack step list the open PRs and their commits.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -565,6 +569,27 @@ jobs:
       - name: Changesets name workspace packages
         if: ${{ !cancelled() }}
         run: node scripts/check-changesets.mjs
+
+      - name: The no-stack check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-no-stack.test.mjs
+
+      # Fails a PR whose base is not main or that carries another open PR's
+      # commits (#561). On merge_group it skips with a log line. Add this
+      # job's check to the main ruleset by hand: a maintainer does that.
+      - name: No stacked pull requests
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: node scripts/check-no-stack.mjs
+
+      - name: The queue guard decision itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/queue-guard.test.mjs
 
   # Runs the scripts/*.test.mjs files listed below when `changes` reports code
   # (anything but a docs-only pull request, and every push to main). It is part

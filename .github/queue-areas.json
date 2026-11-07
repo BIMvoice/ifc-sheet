@@ -1,0 +1,12 @@
+{
+  "comment": "Path to area map for the queue-guard (scripts/queue-guard.mjs). A file takes the first area, in this order, with a matching prefix (path starts with it) or fragment (path contains it). A PR takes the area with the most changed files; the first in this order wins a tie. A label area:<name> on the PR overrides the map. Files that match nothing belong to no area.",
+  "areas": [
+    { "name": "permits", "fragments": ["permit"] },
+    { "name": "standards", "prefixes": ["apps/viewer/src/standards/"], "fragments": ["/standards/"] },
+    { "name": "joinery", "prefixes": ["apps/viewer/src/joinery/"], "fragments": ["/joinery/"] },
+    { "name": "drafting", "prefixes": ["apps/viewer/src/drafting/"], "fragments": ["/drafting/"] },
+    { "name": "i18n", "prefixes": ["apps/viewer/src/i18n/"] },
+    { "name": "ci", "prefixes": [".github/", "scripts/"] },
+    { "name": "engine/CLI", "prefixes": ["packages/ifcsheet/", "packages/cli/", "packages/mcp/", "rust/"] }
+  ]
+}
