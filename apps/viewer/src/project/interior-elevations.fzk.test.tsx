@@ -142,9 +142,10 @@ describe('facade elevations and sections are unchanged', () => {
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
     // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
+    // north-deep, south-deep and s1 to s3 re-recorded for #749: a line behind the plane inside a cut face is hidden, so it is split at the face's outline and the hidden pieces of the deep views are left out. The cut faces are the same.
     north: '193/0/0/781551425', south: '241/0/0/-1142268376', east: '363/0/0/288291549', west: '421/0/0/-514462133',
-    'north-deep': '200/0/0/-1472118032', 'south-deep': '258/0/0/-109971380', 'east-deep': '371/0/0/-493559164', 'west-deep': '371/0/0/316887504',
-    s1: '712/84/0/1814603118', s2: '2008/32/0/1592352504', s3: '1901/43/0/-787997569',
+    'north-deep': '196/0/0/-1930063936', 'south-deep': '255/0/0/2033466520', 'east-deep': '371/0/0/-493559164', 'west-deep': '371/0/0/316887504',
+    s1: '712/84/0/-1630223532', s2: '1972/32/0/-2107930648', s3: '1880/43/0/916164795',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };
