@@ -36,6 +36,7 @@ export const pTextCommand: DraftCommandDef = {
         return 'continue';
       },
       wantsText: () => at !== null,
+      textAt: () => at,
       onText(text): StepResult {
         if (at && text) {
           const shape = { type: 'text' as const, p: at, text, height: ctx.settings.textHeight, rotation: 0 };

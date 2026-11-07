@@ -16,6 +16,7 @@ import { searchModalEn } from '../catalogues/search-modal.en';
 import { section2dEn } from '../catalogues/section-2d.en';
 import { sectionCreatedDocsEn } from '../catalogues/section-created-docs.en';
 import { sectionToolEn } from '../catalogues/section-tool.en';
+import { selectionTurnEn } from '../catalogues/selection-turn.en';
 import { semanticIdentityEn } from '../catalogues/semantic-identity.en';
 import { semanticResultsEn } from '../catalogues/semantic-results.en';
 import { semanticEn } from '../catalogues/semantic.en';
@@ -45,6 +46,7 @@ import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
 import { titleBlockSourcesEn } from '../catalogues/title-block-sources.en';
 import { textLinesEn } from '../catalogues/text-lines.en';
+import { textOnDrawingEn } from '../catalogues/text-on-drawing.en';
 import { toursEn } from '../catalogues/tours.en';
 import { trimExtendEn } from '../catalogues/trim-extend.en';
 import { unitsNumbersEn } from '../catalogues/units-numbers.en';
@@ -91,6 +93,7 @@ export const enSZ = {
   ...searchModalEn,
   ...section2dEn,
   ...sectionToolEn,
+  ...selectionTurnEn,
   ...semanticIdentityEn,
   ...semanticResultsEn,
   ...semanticEn,
@@ -120,6 +123,7 @@ export const enSZ = {
   ...titleBlockRoEn,
   ...titleBlockSourcesEn,
   ...textLinesEn,
+  ...textOnDrawingEn,
   ...toursEn,
   ...trimExtendEn,
   ...unitsNumbersEn,

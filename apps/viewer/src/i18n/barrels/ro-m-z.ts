@@ -26,6 +26,7 @@ import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { scaleFieldRo } from '../catalogues/scale-field.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
+import { selectionTurnRo } from '../catalogues/selection-turn.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { settingsRo } from '../catalogues/settings.ro';
 import { sharedCommandsRo } from '../catalogues/shared-commands.ro';
@@ -45,6 +46,7 @@ import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
 import { textLinesRo } from '../catalogues/text-lines.ro';
+import { textOnDrawingRo } from '../catalogues/text-on-drawing.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -100,6 +102,7 @@ export const roMZ = {
   ...scheduleExportRo,
   ...scaleFieldRo,
   ...selectionBarRo,
+  ...selectionTurnRo,
   ...setTemplateRo,
   ...settingsRo,
   ...sharedCommandsRo,
@@ -119,6 +122,7 @@ export const roMZ = {
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
   ...textLinesRo,
+  ...textOnDrawingRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,
