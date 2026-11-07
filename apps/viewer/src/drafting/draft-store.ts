@@ -53,7 +53,7 @@ type Step =
  * `heldByUndo: true` (`project/fields/define.ts`, see `germanyLandField`), so two PRs adding one never edit this line.
  */
 const FROZEN_STEP_FIELDS: readonly FieldKey[] = ['titleBlockParams', 'titleBlockTemplate', 'titleBlock', 'titleBlockSources', 'graphicStandard', 'openingLines', 'textStyles', 'dimStyles', 'unitsAndNumbers', 'sheetNumbering', 'installedStandard', 'symbolFlips'];
-const STEP_FIELDS: readonly FieldKey[] = [...FROZEN_STEP_FIELDS, ...DOCUMENT_FIELDS.filter((f) => f.heldByUndo && !FROZEN_STEP_FIELDS.includes(f.key)).map((f) => f.key)];
+export const STEP_FIELDS: readonly FieldKey[] = [...FROZEN_STEP_FIELDS, ...DOCUMENT_FIELDS.filter((f) => f.heldByUndo && !FROZEN_STEP_FIELDS.includes(f.key)).map((f) => f.key)];
 type StepField = FieldKey;
 type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; after: ProjectDocument[K] } }[StepField];
 
@@ -62,7 +62,7 @@ type FieldChange = { [K in StepField]: { key: K; before: ProjectDocument[K]; aft
  * a legend leaves the sheets, a sheet takes its comments. Kept as deltas like the views and sheets, so undo brings back what the step took
  * and leaves what was added after it.
  */
-const LIST_FIELDS = ['schedules', 'legends', 'civilDrawings', 'comments', 'viewTemplates', 'materials'] as const;
+export const LIST_FIELDS = ['schedules', 'legends', 'civilDrawings', 'comments', 'viewTemplates', 'materials'] as const;
 type ListField = (typeof LIST_FIELDS)[number];
 type ListChange = { [K in ListField]: { key: K; delta: Delta<NonNullable<ProjectDocument[K]>[number]> } }[ListField];
 
