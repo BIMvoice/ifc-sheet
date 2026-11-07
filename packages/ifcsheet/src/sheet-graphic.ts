@@ -53,6 +53,7 @@ import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } fro
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
+import { runsPaperBox, textPaperBox, titleDrop, type PaperBox } from './title-clear.js';
 import { dxfSheetStrokes, dxfSheetTexts } from './dxf-underlay-sheet.js';
 
 export type Polyline = readonly Point2D[];
@@ -321,6 +322,7 @@ export function sheetGraphic(
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
+    const markBoxes: PaperBox[] = [];
     const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale }) : null;
     if (drawing && (project?.annotations || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
@@ -329,6 +331,10 @@ export function sheetGraphic(
       for (const drafted of printed) {
         strokes.push(...drafted.strokes);
         out.texts.push(...drafted.texts);
+      }
+      if (crossRefs) {
+        const marksPrinted = printed[printed.length - 1];
+        markBoxes.push(...marksPrinted.texts.map(textPaperBox), ...marksPrinted.strokes.map((s) => runsPaperBox(s.runs)).filter((b): b is PaperBox => b !== null));
       }
     }
     const flags = viewportMarkFlags(vp, view);
@@ -349,7 +355,12 @@ export function sheetGraphic(
         }
       }
     }
-    if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center', layer: 'VIEWPORT-LABELS' });
+    if (view) {
+      // Under the drawing's box, and under the elevation and section marks that stand there (`titleDrop`).
+      const title = { at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' as const };
+      const drop = titleDrop(textPaperBox(title), markBoxes);
+      out.texts.push({ ...title, at: { x: title.at.x, y: title.at.y + drop }, layer: 'VIEWPORT-LABELS' });
+    }
   }
   // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.
   const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
