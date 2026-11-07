@@ -20,7 +20,7 @@ afterEach(() => cleanup());
 
 describe('the ring of a drawing number on the sheet', () => {
   it('is where viewTitleLayout puts it, with the number in it and the title after it', () => {
-    const sheet: ProjectSheet = { id: 's', number: 'A-901', name: 'Plans', createdAt: 0, viewports: [{ id: 'v', viewId: 'none', center: undefined, x: 100, y: 100, width: 120, height: 80, scale: 100 }] };
+    const sheet: ProjectSheet = { id: 's', number: 'A-901', name: 'Plans', createdAt: 0, viewports: [{ id: 'v', viewId: 'none', center: null, x: 100, y: 100, width: 120, height: 80, scale: 100 }] };
     const ui = render(
       <SheetPaper sheet={sheet} projectName="House" content={() => ({ view: undefined, drawing: null, drafts: [], drawingNumber: 'A-12' })} layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />,
     );

@@ -40,7 +40,7 @@ import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './vi
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
 import { crossRefAnnotations } from './sheet-cross-refs.js';
-import { penTags, type DxfTags } from './dxf-pen-tags.js';
+import type { DxfTags } from './dxf-pen-tags.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
