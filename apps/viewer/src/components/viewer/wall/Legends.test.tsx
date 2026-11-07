@@ -231,9 +231,9 @@ describe('Legends on the Wall: the viewport card', () => {
 
   it('offers a legend in the place list and places it on the sheet', () => {
     const { id, ui } = setup();
-    const list = [...ui.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === id));
-    assert.ok(list, 'the legend is in the list next to views and schedules');
-    choose(list, id);
+    const item = ui.querySelector<HTMLButtonElement>(`[data-place-item="${id}"]`);
+    assert.ok(item, 'the legend is in the list next to views and schedules');
+    click(item);
     assert.equal(sheetNo('A-101').viewports?.filter((v) => v.viewId === id).length, 1);
     assert.ok(ui.querySelector('input[value="Key"]'), 'the placed legend is chosen: its card shows');
   });
@@ -252,9 +252,9 @@ describe('Legends on the Wall: the viewport card', () => {
     const { id, ui } = setup();
     const other = sheetNo('A-201');
     placeLegend(other.id, id, LABELS);
-    const list = [...ui.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === id));
-    assert.ok(list);
-    choose(list, id);
+    const item = ui.querySelector<HTMLButtonElement>(`[data-place-item="${id}"]`);
+    assert.ok(item);
+    click(item);
 
     const title = ui.querySelector<HTMLInputElement>('input[value="Key"]');
     assert.ok(title);
@@ -276,8 +276,9 @@ describe('Legends on the Wall: the viewport card', () => {
 
   it('shows no scale for a legend (it prints at paper size)', () => {
     const { id, ui } = setup();
-    const list = [...ui.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === id));
-    choose(list!, id);
+    const item = ui.querySelector<HTMLButtonElement>(`[data-place-item="${id}"]`);
+    assert.ok(item);
+    click(item);
     assert.equal([...ui.querySelectorAll('label')].some((l) => l.textContent?.startsWith('Scale')), false);
   });
 });
