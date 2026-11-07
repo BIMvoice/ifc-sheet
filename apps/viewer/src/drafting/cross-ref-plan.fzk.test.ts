@@ -16,7 +16,7 @@ import { resetProject, syncProjectWithModels, useProjectStore } from '@/project/
 import { annotationFactor } from '@/project/viewport-annotation';
 import type { DraftEntity, DraftShape, Pt } from './types';
 import { textBox, withAnnotationScreenUp } from './annotation';
-import { elevationMarkPlan } from './cross-ref-marks';
+import { elevationMarkPlan } from '@bimvoice/ifcsheet';
 import { withCrossReferences } from './cross-ref-plan';
 import { draftsOfView } from './draft-store';
 

@@ -25,6 +25,7 @@ import { planParts } from '../dimall/parts.js';
 import { DEFAULT_DIM_STYLE } from '../draft-styles.js';
 import { DEFAULT_TEXT_STYLE } from '../draft-look.js';
 import type { DraftEntity, DraftLayer } from '../draft-types.js';
+import { DEFAULT_DRAFT_LAYER } from '../default-draft-layer.js';
 import type { PlanProjectView, ProjectDocument, ProjectView } from '../document.js';
 import { freshProjectId } from '../ids.js';
 import type { LabelElement, QuantitySetLike } from '../labels/label-resolve.js';
@@ -48,8 +49,7 @@ import { generateViewDrawings } from '../view-drawings.js';
 import type { AnnotateChoices } from './choices.js';
 import { annotateViews, type AnnotateReaders, type AnnotateView, type AnnotateViewsResult, type ReadCall } from './views.js';
 
-/** The layer the drafted annotation is on when a set has none of its own: the app's layer "0". */
-export const DEFAULT_DRAFT_LAYER: DraftLayer = { id: '0', name: '0', color: '#18181b', visible: true, locked: false };
+export { DEFAULT_DRAFT_LAYER };
 
 type AnnotateModel = Pick<OpenedModel, 'buildingMeshes' | 'meshes' | 'extent' | 'dataStore' | 'coordinateInfo'>;
 type AnnotatedView = Extract<ProjectView, { kind: 'plan' | 'elevation' | 'section' }>;

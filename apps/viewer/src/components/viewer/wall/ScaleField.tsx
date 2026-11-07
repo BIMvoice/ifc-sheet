@@ -9,7 +9,7 @@
  * which it fits.
  */
 
-import { useState } from 'react';
+import { useState, type FocusEvent } from 'react';
 import { useTranslation } from '@/i18n';
 import { detailedScaleThatFits, overrun } from '@/project/drawing-set';
 import { useProjectStore } from '@/project/project-store';
@@ -50,6 +50,7 @@ export function ScaleField({ sheet, slot, view, bounds, extent = null }: ScaleFi
   const offered = (SHEET_SCALES as readonly number[]).includes(slot.scale);
   const [typing, setTyping] = useState(false);
   const [bad, setBad] = useState(false);
+  const [text, setText] = useState('');
   // On a sheet the person arranged, the scale of the one drawing changed and the rest stayed: the layout is offered, not forced.
   const [offer, setOffer] = useState<number | null>(null);
 
@@ -60,6 +61,21 @@ export function ScaleField({ sheet, slot, view, bounds, extent = null }: ScaleFi
     // The box fits the drawing again at the new scale; the view's annotation sizes follow it.
     if (!extent) { setViewportScale(sheet.id, slot.id, view?.id ?? null, scale); return; }
     setOffer(changeViewportScale(sheet.id, slot.id, view?.id ?? null, scale, extent) === 'kept' ? scale : null);
+  };
+  const close = (): void => { setTyping(false); setBad(false); setText(''); };
+  // A valid value applies and closes; an invalid one stays open with the alert.
+  const commit = (): void => {
+    const scale = parseScale(text);
+    setBad(scale === null);
+    if (scale === null) return;
+    apply(scale);
+    close();
+  };
+  // Leaving the field: a valid value applies, an empty one closes with nothing changed, an invalid one stays.
+  const leave = (e: FocusEvent<HTMLDivElement>): void => {
+    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+    if (text.trim() === '') close();
+    else commit();
   };
   const box = viewportBox(slot, bounds);
   const area = bounds ? overrun(box, sheet) : null;
@@ -87,29 +103,32 @@ export function ScaleField({ sheet, slot, view, bounds, extent = null }: ScaleFi
         </select>
       </label>
       {typing ? (
-        <label className="mt-2 block text-xs text-sky-200">
-          {t('wall.vp.scaleTyped')}
-          <input
-            // The field is what "Other…" asked for: it takes the keys at once.
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
-            inputMode="numeric"
-            className={field}
-            placeholder="1 : 33"
-            aria-invalid={bad}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setTyping(false);
-              if (e.key !== 'Enter') return;
-              const scale = parseScale((e.target as HTMLInputElement).value);
-              setBad(scale === null);
-              if (scale !== null) {
-                apply(scale);
-                setTyping(false);
-              }
-            }}
-          />
+        <div className="mt-2" onBlur={leave}>
+          <label className="block text-xs text-sky-200">
+            {t('wall.vp.scaleTyped')}
+            <input
+              // The field is what "Other…" asked for: it takes the keys at once.
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              inputMode="numeric"
+              className={field}
+              placeholder="1 : 33"
+              aria-invalid={bad}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') close();
+                if (e.key === 'Enter') commit();
+              }}
+            />
+          </label>
           {bad ? <span role="alert" className="mt-1 block text-xs text-amber-300">{t('wall.vp.scaleBad', { max: MAX_SCALE })}</span> : null}
-        </label>
+          <div className="mt-2 flex gap-2">
+            {/* A press on a button must not take focus from the field: that blur would apply (or close) before the click lands. */}
+            <button type="button" className={quiet} onMouseDown={(e) => e.preventDefault()} onClick={commit}>{t('scaleField.apply')}</button>
+            <button type="button" className={quiet} onMouseDown={(e) => e.preventDefault()} onClick={close}>{t('scaleField.cancel')}</button>
+          </div>
+        </div>
       ) : null}
       {offer !== null && extent ? (
         <output className="mt-2 block rounded-md border border-sky-300/40 bg-sky-300/10 p-2 text-sm text-sky-100">

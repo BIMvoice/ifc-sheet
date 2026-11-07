@@ -4,8 +4,9 @@
 
 /**
  * Symbol commands. SYMBOL places instances of the current symbol at picked
- * points (S types the next size factor, R the rotation in degrees; Enter
- * ends). MAKESYMBOL turns the selection into a symbol about a picked
+ * points (size and rotation come from the fields on the tool card, which set
+ * `symbolScale` and `symbolRotation`; S and R type the same two in AutoCAD mode
+ * and on the command line; Enter ends). MAKESYMBOL turns the selection into a symbol about a picked
  * insertion point and puts an instance in its place (with a symbol being
  * edited, it redefines that symbol instead). EXPLODESYMBOL turns selected
  * instances back into plain shapes to edit them.
@@ -13,6 +14,7 @@
 
 import { explodeSymbols, makeSymbolFromEntities, projectSymbols, symbolInstance } from '@/catalogue/symbol-actions';
 import { resolve } from '@/i18n/registry';
+import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { annotationScreenUp, entitySkeleton } from '../annotation';
 import { editDrafts } from '../draft-store';
 import { allSymbols, findSymbol } from '@bimvoice/ifcsheet';
@@ -30,7 +32,7 @@ export const symbolCommand: DraftCommandDef = {
     const current = () => findSymbol(s.symbolId ?? '') ?? allSymbols()[0];
     return {
       prompt: () => ({
-        key: waiting === 'scale' ? 'drafting.prompt.symbolScale' : waiting === 'rotation' ? 'drafting.prompt.symbolRotation' : 'drafting.prompt.symbolPoint',
+        key: waiting === 'scale' ? 'drafting.prompt.symbolScale' : waiting === 'rotation' ? 'drafting.prompt.symbolRotation' : autocadModeOn() ? 'drafting.prompt.symbolPoint' : 'drafting.prompt.symbolPointFields',
         params: { name: current()?.name ?? '', scale: s.symbolScale, rotation: s.symbolRotation },
       }),
       input: () => 'point',

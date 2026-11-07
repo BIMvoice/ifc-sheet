@@ -150,3 +150,39 @@ describe('SectionCutter — plane-side classification epsilon (candidate a)', ()
     expect(result.segments).toHaveLength(1);
   });
 });
+
+describe('SectionCutter — a vertex on the plane counts on the side the drawing does not look at (#749)', () => {
+  // One triangle with its edge (0,0,0)-(1,0,0) on the plane y = 0 and its third vertex 1 m off it.
+  const triangle = (y: number): MeshData => ({
+    expressId: 11,
+    ifcType: 'IfcWall',
+    modelIndex: 0,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0.5, y, 1]),
+    normals: new Float32Array(3 * 3),
+    indices: new Uint32Array([0, 1, 2]),
+    color: [1, 1, 1, 1],
+    origin: [0, 0, 0],
+  } as unknown as MeshData);
+
+  it('cuts the edge on the plane once: from the triangle on the side it looks at, not from the one beyond', () => {
+    // Not flipped, the drawing looks toward -y.
+    const cutter = new SectionCutter({ axis: 'y', position: 0, flipped: false });
+    expect(cutter.cutSingleMesh(triangle(-1)).segments).toHaveLength(1);
+    expect(cutter.cutSingleMesh(triangle(1)).segments).toHaveLength(0);
+    // Flipped, it looks toward +y.
+    const flipped = new SectionCutter({ axis: 'y', position: 0, flipped: true });
+    expect(flipped.cutSingleMesh(triangle(1)).segments).toHaveLength(1);
+    expect(flipped.cutSingleMesh(triangle(-1)).segments).toHaveLength(0);
+  });
+
+  it('a vertex within 0.1 µm of the plane on either side is cut through, where the edge it ends lies', () => {
+    const cutter = new SectionCutter({ axis: 'y', position: 0, flipped: false });
+    for (const off of [-1e-7, 1e-7]) {
+      const mesh = triangle(-1);
+      mesh.positions[1] = off;
+      mesh.positions[4] = off;
+      const [segment] = cutter.cutSingleMesh(mesh).segments;
+      expect([segment.p0.y, segment.p1.y]).toEqual([off, off].map((v) => Math.fround(v)));
+    }
+  });
+});

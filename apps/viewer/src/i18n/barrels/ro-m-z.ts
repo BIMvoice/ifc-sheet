@@ -24,6 +24,7 @@ import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { regionSelectRo } from '../catalogues/region-select.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
+import { scaleFieldRo } from '../catalogues/scale-field.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { settingsRo } from '../catalogues/settings.ro';
@@ -39,6 +40,7 @@ import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
 import { tagShowsRo } from '../catalogues/tag-shows.ro';
+import { symbolToolFieldsRo } from '../catalogues/symbol-tool-fields.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
@@ -54,6 +56,7 @@ import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
 import { wallEditToolsRo } from '../catalogues/wall-edit-tools.ro';
 import { wallChamferRo } from '../catalogues/wall-chamfer.ro';
+import { wallEditFieldsRo } from '../catalogues/wall-edit-fields.ro';
 import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
@@ -96,6 +99,7 @@ export const roMZ = {
   ...regionSelectRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
+  ...scaleFieldRo,
   ...selectionBarRo,
   ...setTemplateRo,
   ...settingsRo,
@@ -110,6 +114,7 @@ export const roMZ = {
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,
+  ...symbolToolFieldsRo,
   ...tagShowsRo,
   ...titleBlockParamsRo,
   ...titleBlockRoRo,
@@ -127,6 +132,7 @@ export const roMZ = {
   ...wallKeysRo,
   ...wallEditToolsRo,
   ...wallChamferRo,
+  ...wallEditFieldsRo,
   ...wallRectangleRo,
   ...wallMaterialsRo,
   ...wallReviewRo,

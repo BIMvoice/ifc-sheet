@@ -8,6 +8,7 @@ import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
 import { sceneActionsEn } from '../catalogues/scene-actions.en';
 import { scheduleExportEn } from '../catalogues/schedule-export.en';
+import { scaleFieldEn } from '../catalogues/scale-field.en';
 import { scheduleEn } from '../catalogues/schedule.en';
 import { scriptPanelEn } from '../catalogues/script-panel.en';
 import { searchFiltersEn } from '../catalogues/search-filters.en';
@@ -38,6 +39,7 @@ import { sweptDiskInspectionEn } from '../catalogues/swept-disk-inspection.en';
 import { tableCorrectionsEn } from '../catalogues/table-corrections.en';
 import { tagFieldsEn } from '../catalogues/tag-fields.en';
 import { tagShowsEn } from '../catalogues/tag-shows.en';
+import { symbolToolFieldsEn } from '../catalogues/symbol-tool-fields.en';
 import { terrainImageryEn } from '../catalogues/terrain-imagery.en';
 import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
@@ -64,6 +66,7 @@ import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
 import { wallEditToolsEn } from '../catalogues/wall-edit-tools.en';
 import { wallChamferEn } from '../catalogues/wall-chamfer.en';
+import { wallEditFieldsEn } from '../catalogues/wall-edit-fields.en';
 import { wallRectangleEn } from '../catalogues/wall-rectangle.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
 import { wallMaterialsEn } from '../catalogues/wall-materials.en';
@@ -82,6 +85,7 @@ export const enSZ = {
   ...scanToBimEn,
   ...sceneActionsEn,
   ...scheduleExportEn,
+  ...scaleFieldEn,
   ...scheduleEn,
   ...scriptPanelEn,
   ...searchFiltersEn,
@@ -110,6 +114,7 @@ export const enSZ = {
   ...sweptDiskInspectionEn,
   ...tableCorrectionsEn,
   ...tagFieldsEn,
+  ...symbolToolFieldsEn,
   ...tagShowsEn,
   ...terrainImageryEn,
   ...titleBlockParamsEn,
@@ -139,6 +144,7 @@ export const enSZ = {
   ...wallKeysEn,
   ...wallEditToolsEn,
   ...wallChamferEn,
+  ...wallEditFieldsEn,
   ...wallRectangleEn,
   ...wallMaterialsEn,
   ...wallReviewEn,

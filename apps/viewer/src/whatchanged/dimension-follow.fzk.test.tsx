@@ -19,7 +19,7 @@ import { modelLevels } from '@/project/model-levels';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { loadProjectDocument, projectDocument, resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
 import { parseProjectFile, serializeProject } from '@/project/project-file';
-import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { elevationMarkPlan } from '@bimvoice/ifcsheet';
 import { dimensionLayout } from '@/drafting/annotation';
 import { dimAlignedCommand } from '@/drafting/commands/annotate';
 import type { DraftContext } from '@/drafting/commands/types';

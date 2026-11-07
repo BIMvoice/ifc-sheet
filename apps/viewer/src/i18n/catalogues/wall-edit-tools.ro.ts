@@ -12,7 +12,7 @@ export const wallEditToolsRo = {
   'wall.draw.extend': 'Prelungire',
   'wall.draw.extend.body': 'Faceți clic lângă capătul unei linii ca să o prelungiți până la următoarea linie din cale. Merge pe liniile desenate și pe liniile modelului.',
   'wall.draw.fillet': 'Racordare',
-  'wall.draw.fillet.body': 'Faceți clic pe două linii ca să rotunjiți colțul lor. Scrieți mai întâi o rază; 0 dă un colț ascuțit. Merge pe liniile desenate și pe liniile modelului.',
+  'wall.draw.fillet.body': 'Faceți clic pe două linii ca să rotunjiți colțul lor. Setați raza în câmpul de mai jos; 0 dă un colț ascuțit. Merge pe liniile desenate și pe liniile modelului.',
   'wall.draw.offset': 'Decalare',
-  'wall.draw.offset.body': 'Scrieți o distanță, faceți clic pe o linie, apoi pe partea spre care se copiază. Linia modelului rămâne și se desenează copia.',
+  'wall.draw.offset.body': 'Setați distanța în câmpul de mai jos, faceți clic pe o linie, apoi pe partea spre care se copiază. Linia modelului rămâne și se desenează copia.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
