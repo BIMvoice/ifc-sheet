@@ -571,6 +571,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node scripts/check-changeset-required.mjs --base "$BASE_SHA"
 
+      - name: Added source files carry the MPL-2.0 header
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node scripts/check-license-header.mjs --base "$BASE_SHA"
+
       - name: Nothing outside the allowlist can be published to npm
         if: ${{ !cancelled() }}
         run: node scripts/check-publish-allowlist.mjs
@@ -714,6 +720,7 @@ jobs:
           q --test scripts/check-jsx-a11y.test.mjs
           q --test scripts/check-lint-ran.test.mjs
           q --test scripts/check-publish-allowlist.test.mjs
+          q --test scripts/check-license-header.test.mjs
           q --test scripts/check-loader-hook-specifier-match.test.mjs
           q --test scripts/check-module-size.test.mjs
           q --test scripts/check-overlay-palette.test.mjs
