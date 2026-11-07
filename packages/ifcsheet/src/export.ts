@@ -23,7 +23,7 @@
  * paper-mm width, dash and fill the app's sheet gives the same item.
  */
 
-import type { Polyline, SheetGraphic, SheetPen, SheetText } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic, SheetText } from './sheet-graphic.js';
 import { FILL_HATCH } from './sheet-colours.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */

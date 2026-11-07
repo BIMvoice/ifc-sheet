@@ -11,7 +11,6 @@
  */
 
 import type { DraftLayer } from '@/drafting/types';
-import type { LineType } from '@/drafting/styles';
 import type { DxfTags } from '@bimvoice/ifcsheet/dxf';
 import type { CadKind } from '@/project/cad-layers';
 
