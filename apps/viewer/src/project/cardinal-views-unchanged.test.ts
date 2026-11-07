@@ -24,8 +24,10 @@ const FZK = join(ROOT, 'tests', 'models', 'ara3d', 'AC20-FZK-Haus.ifc');
 const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 
 const ON_MAIN = {
-  plan: { axis: 'y', position: 1.2, lines: 2194, hidden: 999, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 2643, hidden: 2304, polygons: 58 },
+  // plan and section re-recorded for #749 (were 2194/999 and 2643/2304): a line behind the plane inside a cut face is hidden, so
+  // the pieces the depth buffer had left visible inside cut walls are hidden and merge with their hidden neighbours. The cut faces are the same.
+  plan: { axis: 'y', position: 1.2, lines: 2011, hidden: 1032, polygons: 229 },
+  section: { axis: 'z', position: 0, lines: 2550, hidden: 2269, polygons: 58 },
   elevation: { axis: 'z', position: 20, lines: 474, hidden: 447, polygons: 0 },
 } as const;
 

@@ -90,9 +90,10 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
 
   // The default 1.2 m cut: the ground slab's top sits exactly 1.2 m under it, and the app's cut position is 1.2000000000000002 (#628).
   const ground = (extra: Partial<PlanProjectView> = {}) => named(fzk, /Erdgeschoss/) && { ...named(fzk, /Erdgeschoss/)!, id: `fzk-eg-${JSON.stringify(extra)}`, ...extra };
-  it('FZK Erdgeschoss, the default 1.2 m cut: 553 projection lines on both sides (#628)', async (t) => {
-    await row(t, () => [fzk, ground()], 553);
-    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 553);
+  it('FZK Erdgeschoss, the default 1.2 m cut: 555 projection lines on both sides (#628)', async (t) => {
+    // 553 before #749: a line that crosses a cut wall below the cut is now split at the wall, its piece under the wall hidden.
+    await row(t, () => [fzk, ground()], 555);
+    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 555);
   });
   it('FZK Dachgeschoss', (t) => row(t, () => [fzk, named(fzk, /Dachgeschoss/)], 100));
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));
