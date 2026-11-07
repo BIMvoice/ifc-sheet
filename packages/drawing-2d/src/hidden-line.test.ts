@@ -527,3 +527,48 @@ describe('HiddenLineClassifier edge tolerance (axonometric outlines, issue #49)'
     expect(tolerant.classifyLines([makeLine(7)])[0].overallVisibility).toBe('hidden');
   });
 });
+
+describe('HiddenLineClassifier, an edge on the outline of the surface in front of it (Bonsai house north elevation)', () => {
+  // Viewed down z with the cut at z = 0: a vertex at z = -d rasterizes at view depth d.
+  const plane = { axis: 'z', position: 0, flipped: false } as const;
+  const quad = (expressId: number, corners: readonly (readonly [number, number, number])[]): MeshData => ({
+    expressId,
+    positions: new Float32Array(corners.flatMap(([x, y, depth]) => [x, y, -depth])),
+    normals: new Float32Array(corners.length * 3),
+    indices: new Uint32Array(corners.length === 3 ? [0, 1, 2] : [0, 1, 2, 0, 2, 3]),
+    color: [1, 1, 1, 1],
+  });
+  const bounds = { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } };
+
+  it('draws a gable wall\'s top edge whole under the edge-on verge of its roof', () => {
+    // A gable wall at view depth 5 whose top edge rises from (0, 0) to (10, 4); right above it, nearer the viewer, the
+    // verge of the roof seen edge-on: a band 0.3 thick at view depth 2. The edge is where the wall is seen meeting the
+    // roof. A point sample lands in a verge pixel part of the time; on the Bonsai house that printed the gable as dashes.
+    const wall = quad(1, [[0, 0, 5], [10, 0, 5], [10, 4, 5]]);
+    const verge = quad(2, [[0, 0, 2], [10, 4, 2], [10, 4.3, 2], [0, 0.3, 2]]);
+    const classifier = new HiddenLineClassifier({ resolution: 64, samplesPerLine: 40 });
+    classifier.buildDepthBuffer([wall, verge], plane, 10, bounds);
+    const edge: DrawingLine = {
+      line: { start: { x: 0.5, y: 0.2 }, end: { x: 9.5, y: 3.8 } },
+      category: 'projection', visibility: 'visible', entityId: 1, ifcType: 'IfcWall', modelIndex: 0, depth: 5,
+    };
+    const [result] = classifier.classifyLines([edge]);
+    expect(result.overallVisibility).toBe('visible');
+  });
+
+  it('keeps a wall top tucked under a roof that slopes away from the viewer hidden', () => {
+    // The roof's face runs over the wall top 0.02 nearer than the wall and turns deeper than the wall within a pixel
+    // above it (view depth 4.98 + 2 * (y - 5)). Pixels above the edge are deeper than the wall, but the wall is not
+    // seen in any of them, so the edge stays hidden, as the wall top under the eave of the Bonsai house does.
+    const wall = quad(1, [[0, 0, 5], [10, 0, 5], [10, 5, 5], [0, 5, 5]]);
+    const roof = quad(2, [[0, 3, 0.98], [10, 3, 0.98], [10, 10, 14.98], [0, 10, 14.98]]);
+    const classifier = new HiddenLineClassifier({ resolution: 64, samplesPerLine: 40 });
+    classifier.buildDepthBuffer([wall, roof], plane, 20, bounds);
+    const top: DrawingLine = {
+      line: { start: { x: 0.5, y: 5 }, end: { x: 9.5, y: 5 } },
+      category: 'projection', visibility: 'visible', entityId: 1, ifcType: 'IfcWall', modelIndex: 0, depth: 5,
+    };
+    const [result] = classifier.classifyLines([top]);
+    expect(result.overallVisibility).toBe('hidden');
+  });
+});

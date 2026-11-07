@@ -110,6 +110,23 @@ function lineDepthAt(line: DrawingLine): (t: number) => number {
   return (t: number) => depthStart + (depthEnd - depthStart) * t;
 }
 
+/**
+ * Whether a pixel next to (`ix`, `iy`) shows a surface at the line's own depth (within `depthBias`): the line is then on
+ * the edge of a surface that is seen, even though its own pixel is covered by something in front. A gable wall's top
+ * edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge pixel about half the time
+ * and the edge printed as dashes along the roof of an elevation. A neighbour that is merely deeper does not count:
+ * above a wall top tucked under a roof that slopes away from the viewer every pixel is deeper than the wall, and the
+ * wall top stays hidden.
+ */
+function ownSurfaceBeside(buffer: Float32Array, width: number, height: number, ix: number, iy: number, lineDepth: number, depthBias: number): boolean {
+  for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
+    for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) {
+      if (Math.abs(buffer[y * width + x] - lineDepth) <= depthBias) return true;
+    }
+  }
+  return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HIDDEN LINE CLASSIFIER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -349,9 +366,10 @@ export class HiddenLineClassifier {
     // buffer's by up to `reach` pixels' worth of model: a pixel's centre sits up
     // to half a pixel off the edge that was sampled, and across a sloped face
     // that is a depth step larger than the bias, which would hide the inner
-    // corner of a wall and a slab.
+    // corner of a wall and a slab. Without a tolerance a covered sample is still
+    // visible when its own surface shows in a pixel beside it (`ownSurfaceBeside`).
     const reach = this.edgeTolerancePx;
-    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias;
+    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias || ownSurfaceBeside(buffer, width, height, ix, iy, lineDepth, depthBias);
     const pixel = Math.max((bounds.max.x - bounds.min.x) / (width - 1), (bounds.max.y - bounds.min.y) / (height - 1));
     const slack = depthBias + reach * pixel;
     for (let y = iy - reach; y <= iy + reach; y++) {
