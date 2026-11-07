@@ -293,7 +293,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   });
 
   const command = runningCommand();
-  const preview = command && state.cursor && command.preview ? command.preview(state.cursor) : [];
+  const preview = state.selectionDrag?.preview ?? (command && state.cursor && command.preview ? command.preview(state.cursor) : []);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -386,12 +386,12 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
         />
         <RegionSelectHint hidden={!!command} />
         {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
-        {selected.length === 1 && !state.gripDrag ? (
+        {selected.length === 1 && !state.gripDrag && !state.selectionDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
         {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
         {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
-        {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
       <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
