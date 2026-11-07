@@ -82,14 +82,17 @@ export function decideQueue(prs, { subject, limit = QUEUE_LIMIT } = {}) {
   return out;
 }
 
-export function commentFor(decision) {
+/** `drafted: false` is the wording when GitHub refused the conversion. */
+export function commentFor(decision, { drafted = true } = {}) {
   const refs = decision.holders.map((n) => `#${n}`).join(', ');
   const why =
     decision.reason === 'area'
       ? `${refs} already holds the slot for the ${decision.area} area, and the rule is one open PR per area.`
       : `${QUEUE_LIMIT} PRs are already open (${refs}), and the rule is at most ${QUEUE_LIMIT}.`;
   return [
-    `Converted to draft by the queue guard. ${why}`,
+    drafted
+      ? `Converted to draft by the queue guard. ${why}`
+      : `The queue guard would convert this PR to draft, but GitHub refused the conversion, so it is still open. ${why} Please mark it as a draft by hand.`,
     '',
     'Mark this PR ready for review when a slot is free. The guard checks it again then. A maintainer can add the `queue-exempt` label to skip the guard, or an `area:<name>` label to correct the area.',
     'See AGENTS.md, "Keep the queue small".',
@@ -117,17 +120,45 @@ async function main() {
     prs.push({ number: p.number, nodeId: p.node_id, draft: p.draft, login: p.user.login, labels, area: areaOf({ labels, files }, map) });
   }
   const decisions = decideQueue(prs, { subject });
-  console.log(`queue-guard: ${decisions.length} counted PRs, ${decisions.filter((d) => d.action === 'draft').length} to draft.`);
+  const countedTotal = prs.filter((p) => !p.draft && !isDependabot(p.login) && !p.labels.includes(EXEMPT_LABEL)).length;
+  console.log(`queue-guard: ${countedTotal} counted PRs, ${decisions.length} checked, ${decisions.filter((d) => d.action === 'draft').length} to draft.`);
+  return enforce(decisions, prs, {
+    draft: (nodeId) =>
+      graphql(
+        GH_TOKEN,
+        'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { number } } }',
+        { id: nodeId },
+      ),
+    comment: (number, body) => post(GH_TOKEN, `/repos/${GH_REPO}/issues/${number}/comments`, { body }),
+  });
+}
+
+/**
+ * Applies the decisions. A refused draft conversion must not stop the comment
+ * naming the PR that holds the slot: the comment is posted either way, the
+ * wording says which happened, and the run exits 1 with one reason line.
+ * @returns {Promise<number>} the exit code.
+ */
+export async function enforce(decisions, prs, { draft, comment }) {
+  const refused = [];
   for (const d of decisions) {
     console.log(`  #${d.number}: ${d.action}${d.reason ? ` (${d.reason}, held by ${d.holders.join(', ')})` : ''}`);
     if (d.action !== 'draft') continue;
     const pr = prs.find((p) => p.number === d.number);
-    await graphql(
-      GH_TOKEN,
-      'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { number } } }',
-      { id: pr.nodeId },
+    let drafted = true;
+    try {
+      await draft(pr.nodeId);
+    } catch (err) {
+      drafted = false;
+      refused.push(`#${d.number}: ${err.message}`);
+    }
+    await comment(d.number, commentFor(d, { drafted }));
+  }
+  if (refused.length > 0) {
+    console.error(
+      `queue-guard: GitHub refused convertPullRequestToDraft (${refused.join('; ')}). The comment was posted. Set the QUEUE_GUARD_TOKEN secret, see .github/workflows/queue-guard.yml.`,
     );
-    await post(GH_TOKEN, `/repos/${GH_REPO}/issues/${d.number}/comments`, { body: commentFor(d) });
+    return 1;
   }
   return 0;
 }
