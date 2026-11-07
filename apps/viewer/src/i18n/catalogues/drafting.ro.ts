@@ -39,7 +39,6 @@ export const draftingRo = {
   'drafting.sel.copy': 'Copiază',
   'drafting.sel.move': 'Mută',
   'drafting.sel.rotate': 'Rotește',
-  'drafting.sel.mirror': 'Oglindește',
   'drafting.sel.bar': 'Modifică elementele desenate selectate',
   'drafting.cmd.offset': 'OFFSET',
   'drafting.cmd.trim': 'TRIM',

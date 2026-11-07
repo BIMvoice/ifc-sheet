@@ -15,6 +15,7 @@ import { searchModalEn } from '../catalogues/search-modal.en';
 import { section2dEn } from '../catalogues/section-2d.en';
 import { sectionCreatedDocsEn } from '../catalogues/section-created-docs.en';
 import { sectionToolEn } from '../catalogues/section-tool.en';
+import { selectionTurnEn } from '../catalogues/selection-turn.en';
 import { semanticIdentityEn } from '../catalogues/semantic-identity.en';
 import { semanticResultsEn } from '../catalogues/semantic-results.en';
 import { semanticEn } from '../catalogues/semantic.en';
@@ -87,6 +88,7 @@ export const enSZ = {
   ...searchModalEn,
   ...section2dEn,
   ...sectionToolEn,
+  ...selectionTurnEn,
   ...semanticIdentityEn,
   ...semanticResultsEn,
   ...semanticEn,
