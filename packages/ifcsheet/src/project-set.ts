@@ -17,6 +17,8 @@ import type { NumberingScheme, ProjectSheet, ProjectView, ProjectViewTemplate } 
 import type { DimStyle, TextStyle } from './draft-styles.js';
 import type { CustomLineType, LayerGroup } from './draft-look.js';
 import { readLineType } from './line-types-read.js';
+import { readCadLayerRule } from './cad-layers-read.js';
+import type { CadLayerRule } from './cad-layers.js';
 import { readDraft, readDraftLayer } from './draft-read.js';
 import type { DraftEntity, DraftLayer } from './draft-types.js';
 import { parsePat, type HatchPattern } from './hatch-pattern.js';
@@ -45,6 +47,8 @@ export interface ProjectSet {
   layerGroups: LayerGroup[];
   /** The project's own line types (#496); empty when it has none. */
   lineTypes: CustomLineType[];
+  /** The project's CAD layer standard (`cadLayers`, #84): the layer, colour and pen each drawn thing goes on in a DXF; absent: none. */
+  cadLayers?: CadLayerRule[];
   /** The sets sent out and the revisions of the set: what the drawing register's date and revision columns read. */
   issues: ProjectIssue[];
   revisions: ProjectRevision[];
@@ -63,6 +67,7 @@ export function readProjectSet(raw: Json): ProjectSet {
   const sheets = at('sheets', readSheet);
   const drafts = at('drafts', readDraft);
   const draftLayers = at('draftLayers', readDraftLayer);
+  const cadLayers = at('cadLayers', readCadLayerRule);
   const sheetNumbering = raw.sheetNumbering !== undefined ? readNumberingScheme(raw.sheetNumbering) : undefined;
   return {
     views, sheets, drafts, draftLayers, lineTypes: at('lineTypes', readLineType),
@@ -71,6 +76,7 @@ export function readProjectSet(raw: Json): ProjectSet {
     viewTemplates: readViewTemplates(raw.viewTemplates),
     hatchPatterns: typeof raw.hatchPatterns === 'string' ? parsePat(raw.hatchPatterns).patterns : [],
     symbols: at('symbols', readSymbol),
+    ...(cadLayers.length > 0 ? { cadLayers } : {}),
     ...(sheetNumbering ? { sheetNumbering } : {}),
   };
 }

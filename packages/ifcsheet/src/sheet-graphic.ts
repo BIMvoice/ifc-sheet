@@ -69,7 +69,11 @@ export interface SheetText {
   face?: { font: 'sans' | 'serif' | 'mono'; italic: boolean };
   /** CSS colour (a drafted text's style colour or its layer's); absent: black. */
   colour?: string;
+  /** The DXF layer the app's sheet puts this text on (`TITLEBLOCK`, `VIEWPORT-LABELS`, `SITE-SYMBOLS`); absent: the sheet's own (#619). */
+  layer?: 'TITLEBLOCK' | 'VIEWPORT-LABELS' | 'SITE-SYMBOLS';
 }
+
+const onLayer = (texts: readonly SheetText[], layer: NonNullable<SheetText['layer']>): SheetText[] => texts.map((t) => ({ ...t, layer }));
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
 export interface SheetPen {
@@ -238,7 +242,7 @@ export function sheetGraphic(
     const shapes = viewportMarks({ area, scale, arrowDegrees, bar, locale: marks.locale });
     out.symbols.strokes.push(...shapes.strokes);
     out.symbols.solids.push(...shapes.solids);
-    out.texts.push(...shapes.texts);
+    out.texts.push(...onLayer(shapes.texts, 'SITE-SYMBOLS'));
   };
   /** A site plan's marks, placed once every viewport on the sheet is known (`siteMarks`; `own`: its index in `out.viewports`). */
   const siteJobs: { box: Rect; own: number; scale: number; arrowDegrees: number | null; bar: boolean; obstacles: Obstacle[] }[] = [];
@@ -336,7 +340,7 @@ export function sheetGraphic(
         }
       }
     }
-    if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' });
+    if (view) out.texts.push({ at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center', layer: 'VIEWPORT-LABELS' });
   }
   // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.
   const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
@@ -348,7 +352,7 @@ export function sheetGraphic(
     const shapes = siteMarks({ box: m.box, drawingArea, scale: m.scale, arrowDegrees: m.arrowDegrees, bar: m.bar, locale: marks.locale, obstacles: m.obstacles, taken: others });
     out.symbols.strokes.push(...shapes.strokes);
     out.symbols.solids.push(...shapes.solids);
-    out.texts.push(...shapes.texts);
+    out.texts.push(...onLayer(shapes.texts, 'SITE-SYMBOLS'));
   }
   // The legend of each coloured view, in the free place of the drawing area nearest its bottom-right corner.
   for (const vp of vps) {
@@ -365,8 +369,8 @@ export function sheetGraphic(
   out.pens.sort((a, b) => penOrder(a, pens.pens.cut) - penOrder(b, pens.pens.cut));
   const block = titleBlock(sheet, doc, paper, sheetScaleLine(sheet, doc.views), projectFields, language);
   out.frame.push(...block.frame);
-  out.texts.push(...block.texts);
-  out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size })));
+  out.texts.push(...onLayer(block.texts, 'TITLEBLOCK'));
+  out.texts.push(...sheetNoteLines(sheet).map(({ at, text, size }): SheetText => ({ at, text, size, layer: 'VIEWPORT-LABELS' })));
   out.images.push(...block.images);
   if (strokes.length) out.strokes = strokes;
   return out;

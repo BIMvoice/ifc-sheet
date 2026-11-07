@@ -120,7 +120,7 @@ describe('the surfaces of a coloured elevation (#499)', () => {
 
 describe('the coloured surfaces and the headless DXF (#499)', () => {
   it('keeps the DXF to the lines: a surface fill is on the sheet and in the PDF, not a COLOUR layer of the DXF', async () => {
-    const { exportDxf } = await import('./export.js');
+    const { dxfLayers, dxfText } = await import('./__fixtures__/dxf-text.js');
     const { sheetGraphic } = await import('./sheet-graphic.js');
     const { surfaceFills } = await import('./surface-fills.js');
     const config = createSectionConfig('z', 10, { projectionDepth: 20, includeHiddenLines: false });
@@ -134,6 +134,6 @@ describe('the coloured surfaces and the headless DXF (#499)', () => {
     const fills = surfaceFills([quad(1, 2, [0.8, 0.2, 0.1, 1])], config);
     const graphic = sheetGraphic(sheet as never, doc as never, new Map([['v1', drawing]]), undefined, new Map(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Map([['v1', fills]]));
     expect(graphic.fills.some((f) => f.colour === '#cc331a')).toBe(true);
-    expect(exportDxf(graphic)).not.toContain('COLOUR-CC331A');
+    expect(dxfLayers(dxfText(graphic))).not.toContain('COLOUR');
   });
 });

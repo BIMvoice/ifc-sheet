@@ -9,11 +9,12 @@
  * make the symbols alike (`apps/viewer/src/project/opening-symbols-parity.fzk.test.ts`).
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
+import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
 import { sheetGraphic } from './sheet-graphic.js';
 import { drawnBySymbol, planOpeningSymbols, withoutOpeningBodies } from './plan-openings.js';
 import { DEFAULT_JOINERY_MAPPING } from './joinery-mapping.js';
@@ -43,7 +44,7 @@ describe.skipIf(missing !== null)('the sheets of AC20-FZK-Haus draw the door and
     // The pens of the app's overlays: thin is the hatch pen, a configured type's cut parts the cut pen. A door's leaf is cut-pen weight, its swing and a window's lines thin.
     expect(new Set(pens.map((p) => p.width))).toEqual(new Set([PEN_TABLE.pens.hatch, PEN_TABLE.pens.cut]));
     const withSymbols = sheets.find((s) => s.pens.some((p) => p.layer === 'SYMBOLS'))!;
-    expect(exportDxf(withSymbols)).toContain('VIEW-SYMBOLS-013');
+    expect(dxfLayers(dxfText(withSymbols))).toContain('SYMBOLS');
   });
 
   it('leaves the bodies of the doors and windows off the plan: they are drawn from their symbols, as the app\'s plans do', async () => {

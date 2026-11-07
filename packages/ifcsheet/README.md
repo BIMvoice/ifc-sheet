@@ -41,7 +41,7 @@ MPL-2.0. IfcSheet derives from [ifc-lite](https://github.com/LTplus-AG/ifc-lite)
 ```ts
 import { readFileSync, writeFileSync } from 'node:fs';
 import { generateDefaultSet } from '@bimvoice/ifcsheet';
-import { exportDxf, exportPdf, openModel, sheetGraphics } from '@bimvoice/ifcsheet/headless';
+import { sheetGraphicToDxf, exportPdf, openModel, sheetGraphics } from '@bimvoice/ifcsheet/headless';
 
 const model = await openModel(new Uint8Array(readFileSync('house.ifc')));
 const set = generateDefaultSet(model);
@@ -49,7 +49,7 @@ if (!set) throw new Error('The model has no geometry to lay a set out on.');
 
 const sheets = await sheetGraphics(set, model);
 writeFileSync('house.pdf', await exportPdf(sheets));
-for (const sheet of sheets) writeFileSync(`${sheet.number}.dxf`, exportDxf(sheet));
+for (const sheet of sheets) writeFileSync(`${sheet.number}.dxf`, sheetGraphicToDxf(sheet));
 writeFileSync('house.drawing-set.json', JSON.stringify(set.document, null, 2));
 ```
 
@@ -79,7 +79,7 @@ Exit code 0 on success, 1 when the work failed (unreadable file, a model with no
 ## What the output is today
 
 - **PDF**: one page per sheet at its paper size, vector lines and text in Inter (shipped in `fonts/`, SIL Open Font License; ș and ț print), true to scale. Each drawing is clipped to its viewport. Unstyled: no pens, hatches, symbols or annotation yet.
-- **DXF**: one R12 file per sheet in paper millimetres, with the frame, the title block's lines and each drawing's linework on their own layers. The sheet's text (title block, view titles, notes) is TEXT on `SHEET-TEXT`, with ă, ș, ț as `\U+XXXX` escapes; the layers are still the engine's own, not the app's CAD layers (#619).
+- **DXF**: one R2000 file per sheet in paper millimetres, written by the same code and the same layer names as the app's DXF button: `FRAME`, `TITLEBLOCK`, `CUT`, `SEEN`, `HIDDEN`, `SYMBOLS`, `VIEWPORT-LABELS` and the rest. With `--project`, the project's CAD layer standard (`cadLayers`) and line types apply. The sheet's text is TEXT, with ă, ș, ț as `\U+XXXX` escapes. A drafted line or text goes on `SHEET` (the app puts it on its drafting layer's name; a sheet layout does not carry that yet).
 
 ## Names
 
