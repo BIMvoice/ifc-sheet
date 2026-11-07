@@ -14,7 +14,7 @@ import {
   type MarkStyle,
 } from '@bimvoice/ifcsheet';
 import { registeredTranslations, resolveName } from '@/i18n/registry';
-import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
+import type { AnnotationShape, DraftEntity, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
 import { detailLink, isDetailMark } from './detail-mark';
 
