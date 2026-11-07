@@ -6,7 +6,7 @@ import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';
-import { cleanup, click, press, render, type } from '@/test/render.js';
+import { blur, cleanup, click, press, render, type } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
@@ -87,5 +87,80 @@ describe('ScaleField (in the drawing card)', () => {
   it('says nothing while the drawing fits', () => {
     const ui = card();
     assert.equal(ui.querySelector('output'), null);
+  });
+
+  describe('typed scale: Apply, Cancel and leaving the field (#168)', () => {
+    function open(): { ui: HTMLElement; input: HTMLInputElement } {
+      const ui = card();
+      choose(ui.querySelector('select')!, 'other');
+      return { ui, input: ui.querySelector<HTMLInputElement>('input[inputmode="numeric"]')! };
+    }
+    const button = (ui: HTMLElement, name: string) => [...ui.querySelectorAll('button')].find((b) => b.textContent === name)!;
+
+    it('Apply sets the typed scale and closes the field', () => {
+      const { ui, input } = open();
+      type(input, '1:33');
+      click(button(ui, 'Apply'));
+      assert.equal(slot().scale, 33);
+      assert.equal(!!ui.querySelector('input[inputmode="numeric"]'), false, 'the field closed');
+    });
+
+    it('leaving the field with a valid value applies it', () => {
+      const { ui, input } = open();
+      type(input, '50');
+      blur(input);
+      assert.equal(slot().scale, 50);
+      assert.equal(!!ui.querySelector('input[inputmode="numeric"]'), false, 'the field closed');
+    });
+
+    it('leaving the field empty closes it and changes nothing', () => {
+      const before = slot().scale;
+      const { ui, input } = open();
+      blur(input);
+      assert.equal(slot().scale, before);
+      assert.equal(!!ui.querySelector('input[inputmode="numeric"]'), false, 'the field closed');
+    });
+
+    it('leaving the field with an invalid value keeps it open with the alert', () => {
+      const before = slot().scale;
+      const { ui, input } = open();
+      type(input, 'abc');
+      blur(input);
+      assert.equal(slot().scale, before);
+      assert.ok(ui.querySelector('input[inputmode="numeric"]'));
+      assert.ok(ui.querySelector('[role="alert"]'));
+    });
+
+    it('Cancel leaves the scale unchanged, even when the field blurs toward it first', () => {
+      const before = slot().scale;
+      const { ui, input } = open();
+      type(input, '40');
+      const cancel = button(ui, 'Cancel');
+      act(() => {
+        input.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true, relatedTarget: cancel }));
+      });
+      click(cancel);
+      assert.equal(slot().scale, before);
+      assert.equal(!!ui.querySelector('input[inputmode="numeric"]'), false, 'the field closed');
+    });
+
+    it('Apply with an invalid value shows the alert and applies nothing', () => {
+      const before = slot().scale;
+      const { ui, input } = open();
+      type(input, '0');
+      click(button(ui, 'Apply'));
+      assert.equal(slot().scale, before);
+      assert.ok(ui.querySelector('[role="alert"]'));
+      assert.ok(ui.querySelector('input[inputmode="numeric"]'));
+    });
+
+    it('Escape closes the field without applying', () => {
+      const before = slot().scale;
+      const { ui, input } = open();
+      type(input, '40');
+      press(input, 'Escape');
+      assert.equal(slot().scale, before);
+      assert.equal(!!ui.querySelector('input[inputmode="numeric"]'), false, 'the field closed');
+    });
   });
 });
