@@ -389,9 +389,8 @@ export function openingSymbols(
     const rect = hostMeshes.length === 0 ? read : entry.kind === 'door' ? fitToHostWall(read, hostMeshes, plane) : fitWindowToHostWall(read, footprintRect(hostMeshes, plane), hostMeshes, plane);
     if (entry.kind === 'door') {
       const stated = operationOf(id);
-      // A door that states no operation is read as Bonsai and IfcOpenShell make one (`UNSTATED_DOOR_OPERATION`), against its own placement, not the footprint's arbitrary axes (#679).
+      // A door that states no operation is read as Bonsai and IfcOpenShell make one (`UNSTATED_DOOR_OPERATION`), against its own placement, not the footprint's arbitrary axes (#679); the manual flips toggle that hand.
       const own = entry.l2w ? statedFlips(stated ?? UNSTATED_DOOR_OPERATION, entry.l2w, plane, rect) : null;
-      // The manual flips toggle the stated hand, as they toggle the default one.
       // A placement whose X does not run along the opening leaves the hand unknown, but a sliding, folding or revolving door is still not a swinging one.
       const door = doorSymbol(rect, (own ?? 0) ^ flipsOf(id), stated && (own !== null || stated.motion !== 'swing') ? stated : undefined);
       out.push({ id, kind: 'door', shapes: door.thin, heavy: door.heavy, dashed: door.dashed });
