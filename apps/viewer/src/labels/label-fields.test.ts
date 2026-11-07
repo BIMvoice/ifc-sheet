@@ -5,8 +5,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { listFields } from './label-fields.js';
-import { resolveTemplate } from './label-resolve.js';
-import { parseTemplate, templateFields } from './label-template.js';
+import { resolveTemplate } from '@bimvoice/ifcsheet';
+import { parseTemplate, labelTemplateFields } from '@bimvoice/ifcsheet';
 import { wall } from './label-fixture.js';
 
 describe('listFields', () => {
@@ -40,7 +40,7 @@ describe('listFields', () => {
     for (const token of tokens) {
       const t = parseTemplate(token);
       assert.equal(t.issues.length, 0, token);
-      assert.equal(templateFields(t).length, 1, token);
+      assert.equal(labelTemplateFields(t).length, 1, token);
       assert.notEqual(resolveTemplate(t, wall(), 'empty'), '', token);
     }
   });

@@ -76,3 +76,17 @@ const CUT_AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 export function screenSigns(axis: SectionAxisName): { kx: 1 | -1; ky: 1 | -1 } {
   return paperSigns(CUT_AXIS[axis]);
 }
+
+/**
+ * The world direction a view looks FROM, out of the drawing toward the
+ * viewer: the custom plane's normal when the view has one (the frame
+ * `drawingToWorld` uses), else the cardinal axis; reversed for a flipped view.
+ */
+export function viewNormal(plane: SectionPlaneConfig): Vec3 {
+  const sign = plane.flipped ? -1 : 1;
+  const custom = plane.customPlane;
+  if (custom) return { x: custom.normal.x * sign, y: custom.normal.y * sign, z: custom.normal.z * sign };
+  const n: Vec3 = { x: 0, y: 0, z: 0 };
+  n[plane.axis] = sign;
+  return n;
+}

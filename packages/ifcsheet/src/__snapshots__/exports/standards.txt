@@ -32,10 +32,14 @@ conventionOfDirection: value
 germanyPack: value
 graphicStandardOf: value
 hasPackMaterials: value
+isSizedShape: value
 knownGraphicStandard: value
 markStyleOf: value
 packForCommandLine: value
 packPartsOf: value
+paperUnitFor: value
 romaniaPack: value
 standardValues: value
+styleBookOf: value
+styledParamsIn: value
 withPackMaterials: value

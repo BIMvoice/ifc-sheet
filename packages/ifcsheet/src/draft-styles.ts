@@ -11,7 +11,7 @@
 export type FontKind = 'sans' | 'serif' | 'mono';
 export type TextPlacement = 'above' | 'centered' | 'below';
 export type ArrowKind = 'tick' | 'arrow' | 'dot' | 'none';
-export type DraftLengthUnit = 'm' | 'cm' | 'mm';
+export type DraftLengthUnit = 'm' | 'cm' | 'mm' | 'ft' | 'ftUS';
 
 export interface TextStyle {
   id: string;

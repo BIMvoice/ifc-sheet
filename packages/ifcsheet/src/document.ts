@@ -23,8 +23,9 @@ import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
 import type { ViewUnderlay } from './underlay.js';
+import type { ViewDxfUnderlay } from './dxf-underlay.js';
 
-export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, LineStyleOverride, LineStyleType, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
 export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types.js';
@@ -108,6 +109,8 @@ export interface ProjectViewBase {
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
   hiddenLayers?: string[];
+  /** A site plan's terrain contours (#182): metres between two contours, 0 for none; absent: 0.5 (`CONTOUR_DEFAULT_INTERVAL`), every fifth a major one. */
+  contourInterval?: number;
 }
 
 /** The area a detail view shows of its source view. */
@@ -333,4 +336,6 @@ export interface ProjectDocument {
   unitsAndNumbers?: UnitsAndNumbers;
   /** PDF pages and images laid under views (#457); a sheet prints those that name it in `printOnSheets` (`underlay.ts`). */
   underlays?: ViewUnderlay[];
+  /** DXF drawings laid under plan views as linework (#547); a sheet prints those that name it in `printOnSheets` (`dxf-underlay.ts`). */
+  dxfUnderlays?: ViewDxfUnderlay[];
 }

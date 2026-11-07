@@ -32,6 +32,7 @@ import { bcfEn } from '../catalogues/bcf.en';
 import { boqEn } from '../catalogues/boq.en';
 import { byggesaksbimEn } from '../catalogues/byggesaksbim.en';
 import { bulkPropertyEditorEn } from '../catalogues/bulk-property-editor.en';
+import { contoursEn } from '../catalogues/contours.en';
 import { cadLayersEn } from '../catalogues/cad-layers.en';
 import { catalogueEn } from '../catalogues/catalogue.en';
 import { cesiumGeoEn } from '../catalogues/cesium-geo.en';
@@ -41,6 +42,7 @@ import { chartsEn } from '../catalogues/charts.en';
 import { chatByokEn } from '../catalogues/chat-byok.en';
 import { chatEn } from '../catalogues/chat.en';
 import { checkAuthoringEn } from '../catalogues/check-authoring.en';
+import { checkLineEditEn } from '../catalogues/check-line-edit.en';
 import { checkReadyEn } from '../catalogues/check-ready.en';
 import { checkEn } from '../catalogues/check.en';
 import { civilDrawingsEn } from '../catalogues/civil-drawings.en';
@@ -69,6 +71,8 @@ import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import { draftingEn } from '../catalogues/drafting.en';
 import { drawOrderEn } from '../catalogues/draw-order.en';
 import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
+import { dxfViewEn } from '../catalogues/dxf-view.en';
+import { dxfSiteEn } from '../catalogues/dxf-site.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
 import { exportDialogEn } from '../catalogues/export-dialog.en';
@@ -83,6 +87,7 @@ export const enAE = {
   ...alignmentSectionEn,
   ...analysisPanelEn,
   ...addDrawingKindsEn,
+  ...contoursEn,
   ...annotateAllEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
@@ -118,6 +123,7 @@ export const enAE = {
   ...chatByokEn,
   ...chatEn,
   ...checkAuthoringEn,
+  ...checkLineEditEn,
   ...checkReadyEn,
   ...checkEn,
   ...civilDrawingsEn,
@@ -146,6 +152,8 @@ export const enAE = {
   ...draftingEn,
   ...drawOrderEn,
   ...drawingUnderlayEn,
+  ...dxfViewEn,
+  ...dxfSiteEn,
   ...elementGraphicsEn,
   ...elementTypesEn,
   ...exportDialogEn,

@@ -7,13 +7,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { wall } from '@/labels/label-fixture.js';
-import { readFieldValue, resolveTemplate, type LabelElement } from '@/labels/label-resolve.js';
-import { parseTemplate } from '@/labels/label-template.js';
+import { readFieldValue, resolveTemplate, type LabelElement } from '@bimvoice/ifcsheet';
+import { parseTemplate } from '@bimvoice/ifcsheet';
 import { parseCatalogue, serializeCatalogue, emptyCatalogue } from '@/catalogue/catalogue-file.js';
 import { mergeCatalogues } from '@/catalogue/catalogue-merge.js';
-import { defaultSources, isCustom, sourcesOf, tagKindOf, withSources, type TagFieldConfig, type TagSource } from './tag-fields.js';
+import { defaultSources, isCustom, sourcesOf, tagKindOf, withSources, type TagFieldConfig, type TagSource } from '@bimvoice/ifcsheet/tag-fields';
 import { readTagFields } from './tag-fields-file.js';
-import { LEGACY_ROOM_TEMPLATE, ROOM_TEMPLATE, ROOM_TYPE_ID, TAGALL_TYPES, upgradeTagAllTypes } from '@/tagall/types.js';
+import { LEGACY_ROOM_TEMPLATE, ROOM_TEMPLATE, ROOM_TYPE_ID, TAGALL_TYPES, upgradeTagAllTypes } from '@bimvoice/ifcsheet';
 import { moved } from './tag-fields-actions.js';
 import { parseSourcePath, previewSources, sourcePath } from './tag-preview.js';
 import { importCatalogueText } from '@/catalogue/catalogue-store.js';

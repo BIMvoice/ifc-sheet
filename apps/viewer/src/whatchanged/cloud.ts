@@ -14,7 +14,7 @@ import { newDraft } from '@/drafting/draft-store';
 import type { DraftEntity, DraftParamValue, Pt } from '@/drafting/types';
 import { resolve } from '@/i18n/registry';
 import { useProjectStore } from '@/project/project-store';
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { ModelChange } from './compare';
 import { boxInView, drawingRect, type ViewBand } from './visibility';
 

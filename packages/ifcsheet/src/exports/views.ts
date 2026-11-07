@@ -13,7 +13,7 @@ export type {
   ProjectView, ProjectViewBase, ProjectViewKind, SectionCustomPlane, SectionPlaneAxis, SectionProjectPlane, SectionProjectView,
   SheetFrame, SheetTemplate, SheetViewport, TemplateSeries, ThreeDProjection, ThreeDProjectView, TitleBlockPosition, ViewDetail,
   ViewGraphics, ViewGridGraphics, ViewPhases, ViewRaster, ProjectViewTemplate, TemplateGraphics, ViewTemplateKind,
-  ElementGraphics, ElementLineStyle, GlobalId, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
+  ElementGraphics, ElementLineStyle, GlobalId, LineStyleOverride, LineStyleType, ResolvedViewGraphics, StyleRule, StyleRuleStyle,
 } from '../document.js';
 // Detail level per view (#444): coarse / medium / fine, the scale's default, and the one function that simplifies a drawing by it
 export { COARSE_FROM_SCALE, DETAIL_LEVELS, FINE_UP_TO_SCALE, atDetailLevel, defaultDetailLevel, resolveDetailLevel, type DetailLevel } from '../detail-level.js';
@@ -31,14 +31,20 @@ export {
 } from '../view-templates.js';
 // Single elements in a view (#32, #33): hidden, drawn differently, one line hidden; all by GlobalId
 export {
-  categoryIdOf, elementShown, hasElementGraphics, hiddenElementIds, hiddenLineElement, hiddenLineEntry, lineHidden, lineKey, orphanElements, resolveElementGraphics, withoutElements,
+  categoryIdOf, elementShown, hasElementGraphics, hiddenElementIds, hiddenLineElement, hiddenLineEntry, lineHidden, lineKey, lineOverride, orphanElements, resolveElementGraphics, withoutElements,
   type ElementStyle, type OrphanElement,
 } from '../element-graphics.js';
 // The style of every face and line of a view (#34): one styler and one pen table for the drafting view, the sheets and every export
 export {
-  DASH_MM, DEFAULT_FACE_FILL, DEFAULT_INK, DEFAULT_VIEW_PRESET, HIDDEN_DASH_MM, PEN_TABLE, elementProperties, presetRules, rulesReadProperties, viewOverrideRules, viewStyler,
+  CENTRE_DASH_MM, DASH_MM, DEFAULT_FACE_FILL, DEFAULT_INK, DEFAULT_VIEW_PRESET, HIDDEN_DASH_MM, PEN_TABLE, elementProperties, presetRules, rulesReadProperties, viewOverrideRules, viewStyler,
   type ItemStyle, type PenKind, type PenTable, type StyleItem, type ViewStyleInputs, type ViewStyler, type WeightPair,
 } from '../view-style.js';
 export { penGroups, penOrder, type PenGroup, type PenLayer } from '../drawing-pens.js';
 export { inDrawOrder, layerOrder, movedInOrder } from '../draw-order.js';
 export { fillColourOf, fillLoopsOf, maskingFill } from '../fill-mask.js';
+export { makeDraft } from '../make-draft.js';
+export type { MakeDraftOptions } from '../make-draft.js';
+// Terrain contours on a site plan (#182): marching triangles over a TIN, and the one function that puts them on a plan drawing
+export { CONTOUR_DEFAULT_INTERVAL, CONTOUR_MAJOR_EVERY, MAX_CONTOUR_LEVELS, contourLevels, contourLines, isTerrainMesh, type ContourLine } from '../contours.js';
+export { contourIntervalOf, withContours } from '../contour-drawing.js';
+export { CONTOUR_IFC_TYPE, CONTOUR_LABEL_MM, contourLabelsOf, layoutContourLabels, type ContourLabel, type ContourText } from '../contour-labels.js';

@@ -11,13 +11,14 @@
 import type { Tool } from './types.js';
 import type { ToolGroup } from './ifcsheet-tool-group.js';
 import { toolGroup as core } from './ifcsheet.js';
+import { toolGroup as annotate } from './ifcsheet-annotate.js';
 import { toolGroup as edit } from './ifcsheet-edit.js';
 import { toolGroup as files } from './ifcsheet-files.js';
 import { toolGroup as schedule } from './ifcsheet-schedule.js';
 import { toolGroup as takeoff } from './ifcsheet-takeoff.js';
 import { toolGroup as undo } from './ifcsheet-undo.js';
 
-const GROUPS: readonly ToolGroup[] = [core, edit, files, schedule, takeoff, undo];
+const GROUPS: readonly ToolGroup[] = [core, edit, files, schedule, takeoff, undo, annotate];
 
 /** The tools of `groups` in group order; two groups with one `order` would make the list depend on import order, so that throws. */
 export function assembleTools(groups: readonly ToolGroup[]): Tool[] {

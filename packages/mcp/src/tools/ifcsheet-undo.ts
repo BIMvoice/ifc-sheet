@@ -32,7 +32,7 @@ function walk(verb: 'undo' | 'redo', step: typeof undoEdit): Tool['handler'] {
 export const ifcsheetUndo: Tool = {
   name: 'ifcsheet_undo',
   description:
-    `Undo the last edit made to a drawing set by ifcsheet_add_view, ifcsheet_place_view, ifcsheet_set_title_block, ifcsheet_add_schedule or ifcsheet_renumber: the set (views, sheets, title block, schedules) goes back to exactly what it was before that call. Call again to go back further. Dry runs are never in the history, and a call that failed changed nothing, so it has nothing to undo. ${KEPT} When there is nothing to undo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.`,
+    `Undo the last edit made to a drawing set by ifcsheet_add_view, ifcsheet_place_view, ifcsheet_set_title_block, ifcsheet_add_schedule, ifcsheet_renumber or ifcsheet_annotate: the set (views, sheets, title block, schedules) goes back to exactly what it was before that call. Call again to go back further. Dry runs are never in the history, and a call that failed changed nothing, so it has nothing to undo. ${KEPT} When there is nothing to undo the result says so (changed false) and is not an error. Returns changed, undo_steps and redo_steps left, and the sheet numbers now in the set.`,
   scope: 'read',
   inputSchema: { type: 'object', properties: { document_id: DOCUMENT_ID }, required: ['document_id'], additionalProperties: false },
   handler: walk('undo', undoEdit),

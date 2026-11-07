@@ -12,16 +12,15 @@
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { viewShowsHidden } from '@bimvoice/ifcsheet';
 import { cropDrawing } from './drawing-crop';
 import { interiorCropRect } from './interior-crop';
 import { outlineLines } from './elevation-outline';
 import { drawingWithGround } from './ground';
 import type { InteriorElevation, ProjectView } from './types';
 
-/** Whether a view draws the lines the hidden-line pass found occluded (dashed). */
-export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>): boolean {
-  return view.showHidden ?? (view.kind !== 'elevation' && view.kind !== '3d');
-}
+// One rule for the app and the engine's sheets (#627).
+export { viewShowsHidden };
 
 const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';
 

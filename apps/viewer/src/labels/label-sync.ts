@@ -24,9 +24,9 @@ import { useViewerStore } from '@/store';
 import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
-import { extrasOf, resolveWithExtras } from './label-extras';
-import type { LabelElement } from './label-resolve';
-import { parseTemplate, type ParsedTemplate } from './label-template';
+import { extrasOf, resolveWithExtras } from '@bimvoice/ifcsheet';
+import type { LabelElement } from '@bimvoice/ifcsheet';
+import { parseTemplate, type ParsedTemplate } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useSheetLocale } from '@/project/units-and-numbers';
 

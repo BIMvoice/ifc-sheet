@@ -20,7 +20,7 @@ import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import type { LabelElement, QuantitySetLike } from './label-resolve';
+import type { LabelElement, QuantitySetLike } from '@bimvoice/ifcsheet';
 
 interface Cached {
   version: number;

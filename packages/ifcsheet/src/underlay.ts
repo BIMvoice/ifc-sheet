@@ -112,3 +112,8 @@ export function omittedUnderlayViewNames(
   const shown = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   return views.filter((v) => shown.has(v.id) && printedUnderlays(all, v.id, sheet.id).length > 0).map((v) => v.name);
 }
+
+// The DXF linework laid under a plan view (#547) is its own module; this subpath carries it too.
+export * from './dxf-underlay.js';
+export type { ConvertedDxfText, DxfLabel } from './dxf-underlay-text.js';
+export * from './dxf-underlay-georef.js';

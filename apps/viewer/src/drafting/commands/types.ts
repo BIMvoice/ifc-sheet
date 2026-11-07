@@ -11,13 +11,20 @@
 import type { TranslationKey } from '@/i18n';
 import type { TagFieldName } from '@/catalogue/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { ViewElement } from '@/labels/view-elements';
-import type { PlanPart } from '@/dimall/types';
-import type { RoomOfPlan } from '@/tagall/footprint';
+import type { ViewElement } from '@bimvoice/ifcsheet';
+import type { PlanPart } from '@bimvoice/ifcsheet';
+import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { ProjectView } from '@/project/types';
 import type { Box } from '../cross-ref-marks';
 import type { ElementBox } from '../dimension-anchor';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
+
+/** A line of the generated drawing picked by a command: its element and where it lies (drawing space). */
+export interface ModelLinePick {
+  globalId: string;
+  a: Pt;
+  b: Pt;
+}
 
 export type StepResult = 'continue' | 'done';
 
@@ -76,6 +83,8 @@ export interface DraftContext {
 
 export interface DraftSettings {
   filletRadius: number;
+  /** CHAMFER: how far along each line the corner is cut. */
+  chamferDistance: number;
   offsetDistance: number | null;
   /** Annotation text height, model metres. */
   textHeight: number;
@@ -125,6 +134,8 @@ export interface DraftCommand {
   basePoint(): Pt | null;
   onPoint?(p: Pt): StepResult;
   onPick?(entity: DraftEntity, at: Pt): StepResult;
+  /** A pick step that found no drafted entity under the click: the model's drawing line there, if the command works on those (TRIM, EXTEND). */
+  onPickModelLine?(line: ModelLinePick, at: Pt): StepResult;
   /** A bare typed number when the step wants a value (radius, angle, distance) rather than a point. */
   wantsValue?(): boolean;
   onValue?(value: number): StepResult;

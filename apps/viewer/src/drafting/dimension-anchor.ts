@@ -17,7 +17,7 @@
  * `r` is the element's box in the view when it last followed, so following twice is not following twice. Pure.
  */
 
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from './types';
 
 export type Side = 'min' | 'max' | 'mid';

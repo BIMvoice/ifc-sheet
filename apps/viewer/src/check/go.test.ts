@@ -11,7 +11,7 @@ import { clearDraftHistory } from '@/drafting/draft-store.js';
 import { attachDraftingView, cancelCommand, runningCommand, setPlanPartsProvider, setWorkPlaneProvider, startDraftCommand, useDraftingSession } from '@/drafting/session.js';
 import { EMPTY_VIEW_DRAWING, patchViewDrawing, useViewDrawings } from '@/project/view-drawings';
 import type { ProjectView } from '@/project/types';
-import { house } from '@/dimall/fixture.js';
+import { house } from '@bimvoice/ifcsheet/dimall-fixture';
 import { fixFinding, fixOutcome, goToFinding, removeFindingAnnotation, waitForView, type FindingNav } from './go.js';
 import { danglingAnnotations } from './findings.js';
 import { newDraft } from '@/drafting/draft-store.js';

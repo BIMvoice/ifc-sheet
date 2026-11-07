@@ -19,9 +19,8 @@ import { attachDraftingView, cancelCommand, setPlanPartsProvider, setWorkPlanePr
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectView } from '@/project/types';
 import type { Pt } from '@/drafting/types';
-import { layeredHouse, notched } from './fixture.js';
-import { planDimensions } from './plan';
-import { pointInRing } from './outline';
+import { layeredHouse, notched } from '@bimvoice/ifcsheet/dimall-fixture';
+import { planDimensions, pointInRing } from '@bimvoice/ifcsheet';
 
 const view = { id: 'view-1', kind: 'plan', scale: 100 } as unknown as ProjectView;
 const HEIGHT = 0.25;
@@ -163,7 +162,7 @@ describe('DIMALL on a plan with a notch (#632)', () => {
       const a = s.points[0], b = s.points[s.points.length - 1];
       for (let i = 0; i <= 20; i++) {
         const p = { x: a.x + ((b.x - a.x) * i) / 20 + s.outward.x * s.offset, y: a.y + ((b.y - a.y) * i) / 20 + s.outward.y * s.offset };
-        assert.ok(!pointInRing(p, loop), `${s.key} runs through the building at ${JSON.stringify(p)}`);
+        assert.ok(!pointInRing(loop, p), `${s.key} runs through the building at ${JSON.stringify(p)}`);
       }
     }
   });

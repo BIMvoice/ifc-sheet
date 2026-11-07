@@ -9,7 +9,7 @@
 
 import { create } from 'zustand';
 import { annotateSet, type AnnotateProgress, type SetSummary } from './annotate-set';
-import { ALL_TAG_PARTS, type TagParts } from '@/tagall/types';
+import { ALL_TAG_PARTS, type TagParts } from '@bimvoice/ifcsheet';
 import { choicesFrom, hasChoices, type AnnotateCommand } from './choices';
 import { effectiveOptions, presetsOfProject } from './presets';
 

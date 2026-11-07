@@ -12,14 +12,17 @@
  *
  * The triangles are painted far to near, so a nearer face covers a farther one (the painter's order: a vector fill cannot be
  * resolved per pixel). Triangles within a centimetre of depth form one layer and are ordered by colour inside it, so a facade is a
- * few runs of one colour, not one run per triangle. Each triangle is wound the same way in the drawing, so a path of them can be
- * filled non-zero without overlapping triangles cancelling out.
+ * few runs of one colour, not one run per triangle. Where a face spanning a long run of depth (a roof slope) overlaps another, the
+ * one in front where they overlap is painted last, whatever their mean depths say (#646, `paint-order.ts`).
+ * Each triangle is wound the same way in the drawing, so a path of them can be filled non-zero without overlapping triangles
+ * cancelling out.
  *
  * The app (`project/view-surface-fills.ts`) and the headless sheets (`sheet-graphic.ts`) both draw from {@link surfaceFills}.
  */
 
 import { projectPointForPlane, signedDepth, type DrawingPolygon, type SectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
+import { paintOrder, type PaintItem } from './paint-order.js';
 
 /** A visible surface of the drawing, `#rrggbb`. */
 export type SurfaceFill = DrawingPolygon & { surfaceColour: string };
@@ -63,6 +66,9 @@ function beyondPlane(corners: readonly Corner[]): Corner[] {
   return out;
 }
 
+/** A triangle of {@link paintedSurfaces}: its fill, and the view depths of the fill's corners (`corners`), in their order. */
+export type PaintedSurface = PaintItem & { fill: SurfaceFill };
+
 /**
  * The surfaces `meshes` show in `config`'s view, nearest last. `shown` leaves out what the view hides (an element, a class).
  * Empty for a view with no depth to look into (a plan that shows its cut).
@@ -72,10 +78,18 @@ export function surfaceFills(
   /** The colour a mesh is painted in (`#rrggbb`), `null` to leave it out; default: its own, `surfaceColourOf`. */
   colourOf: (mesh: MeshData) => string | null = (mesh) => surfaceColourOf(mesh.color),
 ): SurfaceFill[] {
+  return paintedSurfaces(meshes, config, shown, colourOf).map((f) => f.fill);
+}
+
+/** {@link surfaceFills} with the view depths of each triangle's corners, in the painted order. */
+export function paintedSurfaces(
+  meshes: readonly MeshData[], config: SectionConfig, shown: (entityId: number, ifcType: string | undefined) => boolean = () => true,
+  colourOf: (mesh: MeshData) => string | null = (mesh) => surfaceColourOf(mesh.color),
+): PaintedSurface[] {
   const depth = config.projectionDepth;
   if (!(depth > 0)) return [];
   const plane = config.plane;
-  const found: { layer: number; colour: string; fill: SurfaceFill }[] = [];
+  const found: PaintedSurface[] = [];
   for (const mesh of meshes) {
     if (mesh.ifcType && notSurface(mesh.ifcType)) continue;
     if (!shown(mesh.expressId, mesh.ifcType)) continue;
@@ -98,14 +112,18 @@ export function surfaceFills(
         const [a, b, c] = tri.map((v) => projectPointForPlane(v.p, plane));
         const area = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
         if (!(Math.abs(area) >= MIN_AREA)) continue;
+        const corners: PaintItem['corners'] = area > 0 ? [a, b, c] : [a, c, b];
         found.push({
-          layer: Math.round(Math.max(0, (tri[0].d + tri[1].d + tri[2].d) / 3) / LAYER), colour,
-          fill: { polygon: { outer: area > 0 ? [a, b, c] : [a, c, b], holes: [] }, entityId: mesh.expressId, ifcType: mesh.ifcType ?? '', modelIndex: mesh.modelIndex ?? 0, isCut: false, surfaceColour: colour },
+          layer: Math.round(Math.max(0, (tri[0].d + tri[1].d + tri[2].d) / 3) / LAYER), colour, corners,
+          depths: area > 0 ? [tri[0].d, tri[1].d, tri[2].d] : [tri[0].d, tri[2].d, tri[1].d],
+          fill: { polygon: { outer: [...corners], holes: [] }, entityId: mesh.expressId, ifcType: mesh.ifcType ?? '', modelIndex: mesh.modelIndex ?? 0, isCut: false, surfaceColour: colour },
         });
       }
     }
   }
-  // Far first; inside a layer by colour, so equal colours run together.
-  found.sort((x, y) => y.layer - x.layer || (x.colour < y.colour ? -1 : x.colour > y.colour ? 1 : 0));
-  return found.map((f) => f.fill);
+  // A face that crosses another is cut along it: each piece is its own fill, with the part's corners.
+  return paintOrder(found, (from, corners, depths) => ({
+    ...from, corners, depths, layer: Math.round(Math.max(0, (depths[0] + depths[1] + depths[2]) / 3) / LAYER),
+    fill: { ...from.fill, polygon: { outer: [...corners], holes: [] } },
+  }));
 }

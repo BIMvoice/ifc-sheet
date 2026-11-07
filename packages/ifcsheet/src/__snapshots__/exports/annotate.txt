@@ -1,0 +1,36 @@
+ALL_CHOICES: value
+ANNOTATE_WORDS: value
+AnnotateChoices: type (type-only)
+AnnotateCommand: type (type-only)
+AnnotateKey: type (type-only)
+AnnotateProgress: type (type-only)
+AnnotateReaders: type (type-only)
+AnnotateSpec: type (type-only)
+AnnotateView: type (type-only)
+AnnotateViewsInput: type (type-only)
+AnnotateViewsResult: type (type-only)
+AnnotatedKind: type (type-only)
+AnnotationOptions: type (type-only)
+AnnotationPreset: type (type-only)
+COMMAND_ORDER: value
+CommandResult: type (type-only)
+DraftChange: type (type-only)
+DrawingResult: type (type-only)
+Outcome: type (type-only)
+ReadCall: type (type-only)
+ReasonKey: type (type-only)
+Said: type (type-only)
+SetSummary: type (type-only)
+ViewDrafts: type (type-only)
+ViewSummary: type (type-only)
+annotateViews: value
+choicesFrom: value
+choicesOfTemplate: value
+commandsFor: value
+effectiveOptions: value
+hasChoices: value
+readAnnotateSpec: value
+readAnnotationPresets: value
+runAnnotateCommand: value
+withPreset: value
+withoutPreset: value

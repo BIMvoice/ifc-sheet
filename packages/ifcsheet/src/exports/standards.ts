@@ -17,3 +17,4 @@ export {
   type PackNotSet, type PackPart, type StandardPack,
 } from '../standard-pack.js';
 export { hasPackMaterials, withPackMaterials } from '../standard-pack-materials.js';
+export { isSizedShape, paperUnitFor, styleBookOf, styledParamsIn } from '../style-fit.js';

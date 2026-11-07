@@ -17,7 +17,7 @@
  * (`labels/label-resolve.ts`'s sets), the styles through `ViewGraphics`.
  */
 
-import type { PropertySetLike } from '@/labels/label-resolve';
+import type { PropertySetLike } from '@bimvoice/ifcsheet';
 import { DASH_MM, PEN_TABLE, PHASES, type PhaseMapping, type PhaseSource } from '@bimvoice/ifcsheet';
 import type { PhaseId, PhaseStyle, ViewGraphics, ViewPhases } from './types';
 

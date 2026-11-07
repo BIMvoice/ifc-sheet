@@ -32,11 +32,14 @@ const FACE_SOURCES = [
   // #314: the drawing command line (its prompts, results and errors), the commands behind it, and the Info dialog the Keyboard button opens. Command names (LINE, TAGALL) are typed aliases and stay as they are.
   'drafting', 'components/viewer/drafting/CommandLine.tsx', 'components/viewer/KeyboardShortcutsDialog.tsx', 'components/viewer/KeyboardShortcutsDialogTabs.tsx', 'components/viewer/KeyboardShortcutsWhatsNewTab.tsx', 'components/viewer/ShortcutsTab.tsx', 'components/tours/LearnTab.tsx', 'project/model-command-bridge.ts', 'project/useLinkedElementSync.ts',
 ];
+/** #707: the command-line planners that moved into the engine return message keys the app then says (DIMALL, TAGALL, LEVELALL), so their folders are face sources too. */
+const ENGINE_FACE_SOURCES = ['annotate', 'dimall', 'tagall', 'levelall'];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
-function faceFiles(rel: string): string[] {
-  const path = join(SRC_ROOT, rel);
+const ENGINE_ROOT = fileURLToPath(new URL('../../../../packages/ifcsheet/src/', import.meta.url));
+function faceFiles(rel: string, root = SRC_ROOT): string[] {
+  const path = join(root, rel);
   if (/\.tsx?$/.test(path)) return [path];
-  return readdirSync(path, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? faceFiles(join(rel, e.name)) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(path, e.name)] : []));
+  return readdirSync(path, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? faceFiles(join(rel, e.name), root) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(path, e.name)] : []));
 }
 
 /**
@@ -68,6 +71,14 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
       for (const key of named) {
         if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
         found.set(key, (found.get(key) ?? new Set()).add(file.slice(SRC_ROOT.length)));
+      }
+    }
+  }
+  for (const rel of ENGINE_FACE_SOURCES) {
+    for (const file of faceFiles(rel, ENGINE_ROOT)) {
+      for (const key of keysNamedBy(file)) {
+        if (Object.hasOwn(cat, key)) continue;
+        found.set(key, (found.get(key) ?? new Set()).add(`packages/ifcsheet/src/${file.slice(ENGINE_ROOT.length)}`));
       }
     }
   }

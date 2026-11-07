@@ -36,3 +36,8 @@ export * from './exports/set-templates.js';
 export * from './exports/quantities.js';
 export * from './exports/project-set.js';
 export * from './exports/opening-symbols.js';
+export * from './exports/labels.js';
+export * from './exports/dimall.js';
+export * from './exports/tagall.js';
+export * from './exports/levelall.js';
+export * from './exports/annotate.js';

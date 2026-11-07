@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { starEn } from '../catalogues/star.en';
 import { trackingEn } from '../catalogues/tracking.en';
 import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
@@ -12,6 +13,7 @@ import { scriptPanelEn } from '../catalogues/script-panel.en';
 import { searchFiltersEn } from '../catalogues/search-filters.en';
 import { searchModalEn } from '../catalogues/search-modal.en';
 import { section2dEn } from '../catalogues/section-2d.en';
+import { sectionCreatedDocsEn } from '../catalogues/section-created-docs.en';
 import { sectionToolEn } from '../catalogues/section-tool.en';
 import { semanticIdentityEn } from '../catalogues/semantic-identity.en';
 import { semanticResultsEn } from '../catalogues/semantic-results.en';
@@ -58,11 +60,14 @@ import { wallFindEn } from '../catalogues/wall-find.en';
 import { wallZoomEn } from '../catalogues/wall-zoom.en';
 import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
+import { wallEditToolsEn } from '../catalogues/wall-edit-tools.en';
+import { wallChamferEn } from '../catalogues/wall-chamfer.en';
 import { wallRectangleEn } from '../catalogues/wall-rectangle.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
 import { wallMaterialsEn } from '../catalogues/wall-materials.en';
 import { wallRelayoutEn } from '../catalogues/wall-relayout.en';
 import { wallReviewEn } from '../catalogues/wall-review.en';
+import { wallPhasesEn } from '../catalogues/wall-phases.en';
 import { sectionRoomTagsEn } from '../catalogues/section-room-tags.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
 import { wallEn } from '../catalogues/wall.en';
@@ -128,12 +133,17 @@ export const enSZ = {
   ...wallCompareEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,
+  ...wallEditToolsEn,
+  ...wallChamferEn,
   ...wallRectangleEn,
   ...wallMaterialsEn,
   ...wallReviewEn,
+  ...wallPhasesEn,
+  ...starEn,
   ...trackingEn,
   ...underlayEn,
   ...sectionRoomTagsEn,
+  ...sectionCreatedDocsEn,
   ...wallSectionsEn,
   ...wallEn,
   ...webgpuTroubleshootingEn,

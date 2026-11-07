@@ -8,20 +8,38 @@
  * dimensions, one undo step, and a second run adds only what is missing.
  */
 
-import { dimensionDrafts, isDimAll } from '@/dimall/apply';
-import { isRoomDim, roomDrafts } from '@/dimall/apply-rooms';
-import { planRoomChains } from '@/dimall/rooms';
-import { clearTags } from '@/dimall/tag-clear';
-import { pieceRects, stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
-import { planDimensions } from '@/dimall/plan';
-import { sectionLink } from '@/drafting/section-symbol';
+import { dimStyleOf, planDimAll, type DimAllInputs } from '@bimvoice/ifcsheet';
+import { draftReader } from '@/dimall/reader';
 import { rectsOf } from '@/labels/label-annotations';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { paperUnitOf, styleBook } from '@/project/drafting-standards';
-import { dimStyleOf } from '../styles';
 import { useProjectStore } from '@/project/project-store';
+import { freshProjectId } from '@/project/view-defaults';
 import { draftsOfView, editDrafts } from '../draft-store';
-import type { DraftCommandDef } from './types';
+import type { DraftEntity } from '../types';
+import type { DraftCommandDef, DraftContext } from './types';
+
+/** DIMALL's complete inputs on the plan `ctx` is on; `placed` is the view's drafts when the caller keeps them (default: the store's). */
+export function dimAllInputs(ctx: DraftContext, newId: () => string, placed?: readonly DraftEntity[]): DimAllInputs {
+  const book = styleBook();
+  return {
+    viewId: ctx.viewId,
+    layerId: ctx.layerId,
+    placed: placed ?? draftsOfView(ctx.viewId, useProjectStore.getState().drafts),
+    parts: ctx.planParts(),
+    rooms: ctx.rooms(),
+    obstacles: ctx.planObstacles(),
+    lines: ctx.planLines?.() ?? [],
+    newId,
+    book,
+    paperUnit: paperUnitOf(ctx.viewId),
+    firstMm: dimStyleOf(book, ctx.settings.currentDimStyle).allOffset,
+    settings: { textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle },
+    guidOf: renderIdGlobalId,
+    reader: draftReader(),
+    rectsOf,
+  };
+}
 
 export const dimAllCommand: DraftCommandDef = {
   id: 'dimall',
@@ -38,46 +56,8 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllNotOnDetail');
       return;
     }
-    const placed = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    // Tags, notes and labels already on the plan (TAGALL runs first): the strings stand beyond the ones in front of a facade. A section symbol is its own case (`stringsThroughHeads`), dimensions are what is being drawn.
-    const clear = rectsOf(placed.filter((d) => d.shape.type !== 'dimension' && sectionLink(d) === null));
-    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight, firstMm: dimStyleOf(styleBook(), ctx.settings.currentDimStyle).allOffset, clear });
-    // A tag out on its leader in front of a facade slides along it clear of the strings' extension lines.
-    const tags = placed.filter((d) => d.shape.type !== 'dimension' && sectionLink(d) === null);
-    const moves = clearTags(plan, tags, [...rectsOf(placed.filter((d) => d.shape.type !== 'text' || !d.shape.leader)), ...ctx.planObstacles()], ctx.settings.textHeight);
-    const moved = moves.size ? placed.map((d) => (moves.has(d.id) ? { ...d, shape: moves.get(d.id)! } : d)) : placed;
-    // The rooms of the plan, from the model's spaces: each gets its clear width and depth, placed clear of everything the view carries (its own earlier room dimensions are what is being redrawn).
-    const others = moved.filter((d) => !isRoomDim(d));
-    const rooms = planRoomChains(ctx.planParts(), ctx.rooms().map((r) => ({ id: r.guid, ring: r.ring })), {
-      textHeight: ctx.settings.textHeight,
-      // The drawing's own lines and the cut lines of the section marks: a figure keeps clear of them, a dimension line may cross them.
-      lines: [...(ctx.planLines?.() ?? []), ...symbolPieces(others).filter((p) => p.kind === 'cut').map((p) => ({ a: p.a, b: p.b }))],
-      obstacles: [
-        ...rectsOf(others),
-        ...pieceRects(symbolPieces(others).filter((p) => p.kind === 'head'), ctx.settings.textHeight * 0.2),
-        ...ctx.planObstacles().map(({ dashed, ...r }) => ({ ...r, ...(dashed ? { crossable: true } : {}) })),
-      ],
-    });
-    if (plan.strings.length === 0 && rooms.chains.length === 0) {
-      ctx.say('drafting.msg.dimAllNone');
-      if (rooms.noRooms) ctx.say('drafting.msg.dimAllNoRooms');
-      return;
-    }
-    const here = placed;
-    const target = { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId, clear: rectsOf(moved.filter((d) => d.shape.type !== 'dimension' && sectionLink(d) === null)) };
-    const drafts = [...dimensionDrafts(plan, target, here.filter(isDimAll), here), ...roomDrafts(rooms, target, here.filter(isDimAll))];
-    if (drafts.length === 0) {
-      ctx.say('drafting.msg.dimAllHave');
-      return;
-    }
-    editDrafts({ add: drafts, update: moves });
-    const crossed = stringsThroughHeads(plan.strings, symbolPieces(here), ctx.settings.textHeight);
-    ctx.say('drafting.msg.dimAllDone', { count: drafts.length, strings: plan.strings.length + rooms.chains.length, skipped: plan.skippedFacades });
-    const left = plan.droppedStrings + rooms.dropped;
-    if (left > 0) ctx.say('drafting.msg.dimAllDropped', { count: left });
-    if (moves.size > 0) ctx.say('drafting.msg.dimAllTagsMoved', { count: moves.size });
-    if (rooms.noRooms) ctx.say('drafting.msg.dimAllNoRooms');
-    if (plan.droppedOpenings > 0) ctx.say('drafting.msg.dimAllOpenings', { count: plan.droppedOpenings });
-    if (crossed > 0) ctx.say('drafting.msg.dimAllHeads', { count: crossed });
+    const result = planDimAll(dimAllInputs(ctx, () => freshProjectId('draft')));
+    if (result.add.length > 0) editDrafts({ add: result.add, update: result.update });
+    for (const m of result.messages) ctx.say(m.key, m.params);
   },
 };

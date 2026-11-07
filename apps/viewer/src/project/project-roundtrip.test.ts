@@ -79,6 +79,8 @@ const graphics: Required<ViewGraphics> = {
     },
   },
   hiddenLines: ['2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0'],
+  // One line of the model drawing in another pen (#189), keyed like a hidden line.
+  lineStyles: { '2O2Fr$t4X7Zf8NOew3FLOH|0,0,1500,0': { weight: 'heavy', type: 'centre', color: '#cc0000' } },
   // A plan's switch for the model's own plan symbols (#489): only `false` is a setting, on is the default.
   usePlanSymbols: false,
   // A template's class and material mapping, kept on a view that was detached from it (#31).
@@ -86,7 +88,7 @@ const graphics: Required<ViewGraphics> = {
   detailLevel: 'coarse',
 };
 
-const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'], templateId: 'vt-plans' };
+const base = { auto: false, createdAt: 11, viewDepth: 4.5, showHidden: false, detail: { of: 'v-src', min: { x: -1.5, y: 2 }, max: { x: 3.25, y: 6 }, number: 3 }, graphics, scale: 50, hiddenLayers: ['L-hidden'], templateId: 'vt-plans', contourInterval: 0.25 };
 
 const VIEWS: { [K in ProjectViewKind]: Required<Extract<import('./types.js').ProjectView, { kind: K }>> } = {
   plan: {

@@ -10,7 +10,7 @@ import type { DraftEntity } from '@/drafting/types';
 import { settleLabels } from './label-sync.js';
 import { tagOverrideOf, withoutTagOverride, withTagOverride } from '@/drafting/tag-override';
 import { wall } from './label-fixture.js';
-import type { LabelElement } from './label-resolve.js';
+import type { LabelElement } from '@bimvoice/ifcsheet';
 
 const type = (over: Partial<AnnotationType['label'] & object> = {}): AnnotationType => ({ id: 'at1', name: 'Wall label', tool: 'label', label: { template: '{Name}\n{Qto_WallBaseQuantities.Length:0.00 m}', missing: 'question', ...over } });
 const label = (params: Record<string, string | number | boolean> = {}): DraftEntity => newDraft('v', '0', { type: 'text', p: { x: 1, y: 2 }, text: 'old', height: 0.25, rotation: 0 }, { labelOf: 'G1', atype: 'at1', ...params });

@@ -38,6 +38,7 @@ import { ListScheduleCard } from '../lists/ListScheduleCard';
 import { ThreeDControls } from './ThreeDControls';
 import { CutHeightControl, DepthControl } from './ViewControls';
 import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
+import { canBePhased, PhaseCard } from './PhaseCard';
 import { GraphicsCard } from './GraphicsCard';
 import { HiddenElementsSection } from './HiddenElementsSection';
 import { startWhenAttached } from './wall-actions';
@@ -127,6 +128,7 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {view ? <GraphicsCard key={`${view.id}:${slot.id}`} sheet={sheet} slot={slot} view={view} /> : null}
           {view && templateKindOf(view) !== null ? <HiddenElementsSection key={`${view.id}:hidden`} view={view} /> : null}
           {canBeColoured(view) ? <ColourSchemeCard key={view.id} sheet={sheet} view={view} /> : null}
+          {canBePhased(view) ? <PhaseCard key={`${view.id}:phases`} view={view} /> : null}
           {view?.kind === 'section' || view?.kind === 'elevation' ? <div className="mt-4"><DepthControl view={view} /></div> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {view ? <button type="button" className={quiet} onClick={() => onOpen(slot)}>{t('wall.vp.open')}</button> : null}

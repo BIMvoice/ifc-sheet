@@ -5,7 +5,7 @@
 /** The project as the checks read it: the stores' views, sheets and drafts, and what a drawn plan shows. */
 
 import { labelTargets } from '@/labels/label-all';
-import { viewElements } from '@/labels/view-elements';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
 import { snapshotElements } from '@/whatchanged/snapshot';
@@ -13,7 +13,8 @@ import { effectiveTitleBlock } from '@/project/title-block-model';
 import { useViewerStore } from '@/store';
 import { scheduleData } from '@/joinery/schedule-data';
 import { useViewDrawings } from '@/project/view-drawings';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { checkSet } from './findings';
 import type { CheckInput, Finding, PlanElement } from './types';
@@ -26,8 +27,15 @@ function planElements(viewId: string): PlanElement[] | null {
   if (!view || view.kind !== 'plan' || entry?.status !== 'ready' || !entry.drawing) return null;
   const openings = labelTargets(viewElements(entry.drawing)).filter((t) => /^ifc(door|window)/i.test(t.className)).map((t) => ({ guid: t.guid, className: t.className }));
   // The rooms TAGALL would label, read the way it reads them.
-  const rooms = roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult).map((r) => ({ guid: r.guid, className: 'IfcSpace' }));
+  const rooms = roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult, renderIdGlobalId).map((r) => ({ guid: r.guid, className: 'IfcSpace' }));
   return [...openings, ...rooms];
+}
+
+/** The lines of a view's generated drawing (whole, before hiding), by GlobalId; null while the view has no drawing. */
+function modelLines(viewId: string): { globalId: string; line: { start: { x: number; y: number }; end: { x: number; y: number } } }[] | null {
+  const entry = useViewDrawings.getState().byView[viewId];
+  if (entry?.status !== 'ready' || !entry.drawing) return null;
+  return entry.drawing.lines.flatMap((l) => { const globalId = renderIdGlobalId(l.entityId); return globalId ? [{ globalId, line: l.line }] : []; });
 }
 
 /** What the recorded model state (the reference WHATCHANGED compares with) knew of an element: its name and class. */
@@ -48,7 +56,7 @@ const modelsLoaded = (): boolean => [...useViewerStore.getState().models.values(
 export function collectInput(): CheckInput {
   const { views, sheets, drafts, name, schedules, joineryOverrides } = useProjectStore.getState();
   const titleBlock = effectiveTitleBlock();
-  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], ...(modelsLoaded() && joineryOverrides?.length ? { joinery: { overrides: joineryOverrides, entries: scheduleData('all').entries } } : {}), titleBlock, projectName: name, planElements, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
+  return { views, sheets, drafts, schedules: modelsLoaded() ? schedules ?? [] : [], ...(modelsLoaded() && joineryOverrides?.length ? { joinery: { overrides: joineryOverrides, entries: scheduleData('all').entries } } : {}), titleBlock, projectName: name, planElements, modelLines, elementExists: (guid) => elementByGlobalId(guid) !== null, lastKnown };
 }
 
 /** What is missing from the project as it stands. */

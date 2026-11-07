@@ -51,10 +51,14 @@ import { visibilityReasonsRo } from '../catalogues/visibility-reasons.ro';
 import { wallArrangeRo } from '../catalogues/wall-arrange.ro';
 import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
+import { wallEditToolsRo } from '../catalogues/wall-edit-tools.ro';
+import { wallChamferRo } from '../catalogues/wall-chamfer.ro';
 import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
 import { wallMaterialsRo } from '../catalogues/wall-materials.ro';
 import { wallReviewRo } from '../catalogues/wall-review.ro';
+import { wallPhasesRo } from '../catalogues/wall-phases.ro';
+import { sectionCreatedDocsRo } from '../catalogues/section-created-docs.ro';
 import { sectionRoomTagsRo } from '../catalogues/section-room-tags.ro';
 import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
@@ -62,6 +66,7 @@ import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
+import { starRo } from '../catalogues/star.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 
@@ -117,14 +122,19 @@ export const roMZ = {
   ...wallExitsRo,
   ...wallKeyPresetsRo,
   ...wallKeysRo,
+  ...wallEditToolsRo,
+  ...wallChamferRo,
   ...wallRectangleRo,
   ...wallMaterialsRo,
   ...wallReviewRo,
+  ...wallPhasesRo,
   ...sectionRoomTagsRo,
+  ...sectionCreatedDocsRo,
   ...wallSectionsRo,
   ...wallRelayoutRo,
   ...trackingRo,
   ...underlayRo,
+  ...starRo,
   ...wallZoomRo,
   ...wallCompareRo,
   ...wallRo,

@@ -4,8 +4,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveTemplate } from './label-resolve.js';
-import { parseTemplate } from './label-template.js';
+import { resolveTemplate } from '@bimvoice/ifcsheet';
+import { parseTemplate } from '@bimvoice/ifcsheet';
 import { wall } from './label-fixture.js';
 
 const run = (text: string, missing?: 'empty' | 'question' | 'field', el = wall()) => resolveTemplate(parseTemplate(text), el, 'en', missing);

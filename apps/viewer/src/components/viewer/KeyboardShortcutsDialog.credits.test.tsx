@@ -65,6 +65,8 @@ describe('About tab credits', () => {
     assert.ok(links.includes('https://github.com/LTplus-AG/ifc-lite'));
     assert.ok(links.includes('https://github.com/BIMvoice/ifcsheet'));
     assert.ok(links.includes('https://github.com/BIMvoice/ifcsheet/issues'));
+    assert.ok(links.includes('https://github.com/BIMvoice/ifc-sheet'), 'the star link is beside the GitHub link (#655)');
+    assert.match(text, /★ Star on GitHub/);
     assert.ok(!links.includes('https://github.com/LTplus-AG/ifc-lite/issues'), 'issues must not go upstream');
   });
 

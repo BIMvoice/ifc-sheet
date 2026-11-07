@@ -31,13 +31,13 @@ import { parseProjectFile, serializeProject } from '@/project/project-file.js';
 import type { ProjectSheet } from '@/project/types.js';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper.js';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
-import { planTagAll } from '@/tagall/plan.js';
-import { TAGALL_TYPES } from '@/tagall/types.js';
-import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import { planTagAllInApp } from '@/tagall/plan.js';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
+import type { LabelTarget } from '@bimvoice/ifcsheet';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import { previewElements } from './preview-elements.js';
 import { setFieldSources } from './tag-fields-actions.js';
-import type { TagKind } from './tag-fields.js';
+import type { TagKind } from '@bimvoice/ifcsheet/tag-fields';
 
 const box = (x: number, y: number, w = 0.9, h = 0.3): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
 const [markType, roomType] = TAGALL_TYPES;
@@ -70,7 +70,7 @@ function tagAll(viewId: string): DraftEntity[] {
   const targets: LabelTarget[] = openings.map((g, i) => ({ guid: g, className: el(g).className(), anchor: elements[i].anchor, renderId: i + 1, ring: elements[i].ring }));
   const rooms = guids.room.map((g, i) => ({ renderId: 100 + i, guid: g, ring: box(i * 12, 8, 10, 8), at: 'cut' as const }));
   const placement = { viewId, layerId: '0', textHeight: 0.25, textStyle: 'standard', dimStyle: 'standard', paperUnit: 0.1, locale: 'en' };
-  const { drafts } = planTagAll({ elements, targets, rooms, existing: [], placement, types: { mark: markType, room: roomType }, read: labelElementByGlobalId });
+  const { add: drafts } = planTagAllInApp({ elements, targets, rooms, existing: [], placement, types: { mark: markType, room: roomType }, read: labelElementByGlobalId });
   return drafts.map((d) => ({ ...d, id: `${viewId}:${d.id}` }));
 }
 /** The element tags (TAG tool) of the doors, on a view. */

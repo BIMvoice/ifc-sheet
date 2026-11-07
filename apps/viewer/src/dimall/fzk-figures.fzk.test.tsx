@@ -17,9 +17,9 @@ import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from 
 import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { defaultPlanCutHeight } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
-import { planParts } from './parts';
-import { planDimensions } from './plan';
-import type { DimensionPlan, PlannedString } from './types';
+import { planParts } from '@bimvoice/ifcsheet';
+import { planDimensions } from '@bimvoice/ifcsheet';
+import type { DimensionPlan, PlannedString } from '@bimvoice/ifcsheet';
 
 const MM = 0.001;
 const missing = planModelMissing(FZK_HAUS);

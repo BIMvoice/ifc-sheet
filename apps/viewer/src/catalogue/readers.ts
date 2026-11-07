@@ -17,8 +17,8 @@ import {
   type AnnotationTool, type AnnotationType, type LegendCategory, type ProjectLegend, type TagFieldName,
 } from './types';
 import { asTextFrame } from '@/drafting/text-block';
-import { asLeaderMode } from '@/labels/label-leader';
-import { MISSING_MODES } from '@/labels/label-resolve';
+import { asLeaderMode } from '@bimvoice/ifcsheet';
+import { MISSING_MODES } from '@bimvoice/ifcsheet';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

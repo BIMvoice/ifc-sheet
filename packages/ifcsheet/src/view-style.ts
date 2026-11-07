@@ -28,10 +28,10 @@
  */
 
 import { BUILT_IN_PRESETS, GraphicOverrideEngine, ifcTypeCriterion, type ElementData, type GraphicOverrideRule, type OverrideCriteria, type OverrideCriterion } from '@ifc-lite/drawing-2d';
-import { elementShown, lineHidden, resolveElementGraphics, type ElementStyle } from './element-graphics.js';
+import { elementShown, lineHidden, lineOverride, resolveElementGraphics, type ElementStyle } from './element-graphics.js';
 import { VIEW_CATEGORY_CLASSES } from './view-templates.js';
 import { itemRules } from './style-rules.js';
-import type { CategoryGraphics, CategoryLineWeight, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRuleStyle, ViewGraphics } from './view-graphics-types.js';
+import type { CategoryGraphics, CategoryLineWeight, LineStyleOverride, LineStyleType, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRuleStyle, ViewGraphics } from './view-graphics-types.js';
 
 /** A weight word as a pen pair: the cut line and the line seen beyond the cut, paper mm. */
 export interface WeightPair {
@@ -67,6 +67,9 @@ export const PEN_TABLE: PenTable = {
 export const HIDDEN_DASH_MM: readonly number[] = [1.5, 1];
 /** A dashed line's dash (a dashed phase, an element drawn dashed), paper mm. */
 export const DASH_MM: readonly number[] = [3, 1.5];
+/** A centre line's dash (long, short, long), paper mm. */
+export const CENTRE_DASH_MM: readonly number[] = [6, 1.5, 1, 1.5];
+const DASH_OF: Record<LineStyleType, readonly number[]> = { solid: [], dashed: DASH_MM, hidden: HIDDEN_DASH_MM, centre: CENTRE_DASH_MM };
 /** A cut face nothing gives a fill: light grey. */
 export const DEFAULT_FACE_FILL = '#d4d4d8';
 /** A line nothing gives a colour. */
@@ -207,6 +210,7 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
   const engine = rules.length ? new GraphicOverrideEngine(rules) : null;
   const readsProperties = rulesReadProperties(rules);
   const linesHidden = (graphics?.hiddenLines?.length ?? 0) > 0;
+  const linesRestyled = Object.keys(graphics?.lineStyles ?? {}).length > 0;
   const entities = new Map<number | undefined, Map<string, Entity>>();
 
   const byRules = (item: StyleItem): Ruled => {
@@ -250,10 +254,10 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
   };
   const mm = (weight: CategoryLineWeight | number, kind: 'cut' | 'projection') => (typeof weight === 'number' ? (kind === 'cut' ? weight : weight / 2) : pens.weights[weight][kind]);
 
-  const resolve = (e: Entity, item: StyleItem, isFace: boolean, kind: PenKind, visible: boolean): ItemStyle => {
+  const resolve = (e: Entity, item: StyleItem, isFace: boolean, kind: PenKind, visible: boolean, over?: LineStyleOverride): ItemStyle => {
     const { own, phase, category, viewCategory, classStyle, materialStyle, rule } = e;
     const colour = (c: string) => (ink ? ink(c, item.entityId) : c);
-    const stroke = colour(own.lineColor ?? phase?.lineColor ?? viewCategory?.lineColor ?? classStyle.lineColor ?? category?.lineColor ?? rule.stroke ?? DEFAULT_INK);
+    const stroke = colour(over?.color ?? own.lineColor ?? phase?.lineColor ?? viewCategory?.lineColor ?? classStyle.lineColor ?? category?.lineColor ?? rule.stroke ?? DEFAULT_INK);
     let weight: number;
     let dash: readonly number[];
     if (kind === 'hidden') {
@@ -264,6 +268,9 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
       weight = word !== undefined ? mm(word, kind) : kind === 'cut' ? pens.pens.cut : item.category === 'silhouette' ? pens.pens.outline : pens.pens.seen;
       dash = own.lineStyle ? (own.lineStyle === 'dashed' ? DASH_MM : []) : phase?.dashed ? DASH_MM : [];
     }
+    // A line restyled on its own (#189) draws with the pen the person chose, over everything above.
+    if (over?.weight) weight = mm(over.weight, kind === 'cut' ? 'cut' : 'projection');
+    if (over?.type) dash = DASH_OF[over.type];
     let fill: string | null = null;
     if (isFace) {
       const material = item.materialFill === undefined ? undefined : item.materialFill ?? '#ffffff';
@@ -277,6 +284,8 @@ export function viewStyler(inputs: ViewStyleInputs): ViewStyler {
     const kind: PenKind = isFace || item.category === 'cut' ? 'cut' : item.visibility === 'hidden' || item.category === 'hidden' ? 'hidden' : 'projection';
     // A single hidden line, a scheme's fill or a material's fill is the item's own: answered for it alone.
     const lineOff = linesHidden && !!item.line && lineHidden(graphics, e.globalId, item.line);
+    const over = !isFace && linesRestyled && item.line ? lineOverride(graphics, e.globalId, item.line) : null;
+    if (over && !lineOff) return resolve(e, item, isFace, kind, e.visible, over);
     if (lineOff || (isFace && (item.schemeColour !== undefined || item.materialFill !== undefined))) return resolve(e, item, isFace, kind, e.visible && !lineOff);
     // The halftone ink reads the entity; the slot is per entity already.
     const slot = isFace ? 'face' : kind === 'projection' ? (item.category === 'silhouette' ? 'silhouette' : 'projection') : kind;

@@ -20,7 +20,7 @@
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { worldToDrawing } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
-import type { Rect } from '@/labels/label-geometry';
+import type { LeaderRect as Rect } from '@bimvoice/ifcsheet';
 import type { ModelChange } from './compare';
 
 export interface ViewBand {

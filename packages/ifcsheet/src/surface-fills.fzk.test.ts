@@ -4,7 +4,8 @@
 
 /**
  * #499: an elevation of AC20-FZK-Haus in the coloured style shows the colours of the facade's materials, under the linework; the
- * plain style is unchanged, and the switch off takes the fills away again.
+ * plain style is unchanged, and the switch off takes the fills away again. #646: at every point of the elevation the colour painted
+ * last is the colour of the face nearest the viewer.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -14,7 +15,8 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { generateDefaultSet, type DefaultSet } from './index.js';
 import { generateViewDrawings, openModel, type OpenedModel } from './headless.js';
 import { sheetGraphics } from './set-sheets.js';
-import { surfaceFills } from './surface-fills.js';
+import { misPainted } from './mis-painted.test-support.js';
+import { paintedSurfaces, surfaceFills } from './surface-fills.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -62,5 +64,14 @@ describe.skipIf(missing !== null)('the coloured elevations of AC20-FZK-Haus (#49
     expect(sheetOf(plain).fills).toHaveLength(0);
     expect(sheetOf(plain).lines).toEqual(sheetOf(on).lines);
     expect(sheetOf(plain).pens).toEqual(sheetOf(on).pens);
+  });
+
+  it('paints the face nearest the viewer last at every point of each elevation and section (#646)', () => {
+    for (const view of set.document.views.filter((v) => v.kind === 'elevation' || v.kind === 'section')) {
+      // Faces closer than a layer (1 cm) are ordered by colour inside it on purpose (the runs of one colour), so the check allows 1.5 cm.
+      const { points, wrong } = misPainted(paintedSurfaces(model.buildingMeshes, drawings.get(view.id)!.config), 0.05, 0.015);
+      expect(points, view.name).toBeGreaterThan(1000);
+      expect(wrong, view.name).toBe(0);
+    }
   });
 });

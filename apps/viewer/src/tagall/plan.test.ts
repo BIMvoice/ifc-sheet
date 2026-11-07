@@ -7,17 +7,20 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject } from '@/project/project-store';
-import { pointInRing, rectAround, rectInsideRing } from '@/labels/label-geometry.js';
+import { pointInRing, rectAround, rectInsideRing } from '@bimvoice/ifcsheet';
 import { wall } from '@/labels/label-fixture.js';
 import { textBlock } from '@/drafting/text-block.js';
 import { settleLabels } from '@/labels/label-sync.js';
-import type { LabelElement } from '@/labels/label-resolve.js';
-import type { LabelTarget } from '@/labels/label-place.js';
-import type { ViewElement } from '@/labels/view-elements.js';
+import type { LabelElement } from '@bimvoice/ifcsheet';
+import type { LabelTarget } from '@bimvoice/ifcsheet';
+import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import { markOf } from '@/labels/label-element.js';
-import { planTagAll } from './plan.js';
-import { TAGALL_TYPES } from './types.js';
+import { planTagAllInApp } from './plan.js';
+
+/** The engine's result, its labels also as `drafts`. */
+const planTagAll = (input: Parameters<typeof planTagAllInApp>[0]) => { const r = planTagAllInApp(input); return { ...r, drafts: r.add }; };
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 
 const box = (x0: number, y0: number, x1: number, y1: number): Pt[] => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 const L: Pt[] = [{ x: 1, y: 1 }, { x: 11, y: 1 }, { x: 11, y: 3 }, { x: 3, y: 3 }, { x: 3, y: 11 }, { x: 1, y: 11 }];
