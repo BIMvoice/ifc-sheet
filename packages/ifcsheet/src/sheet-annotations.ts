@@ -22,6 +22,7 @@
 import type { Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView, SheetViewport } from './document.js';
 import { clipPolyline, pointInBox } from './clip.js';
+import { cadKindOf, layerTags, lineTags, type DxfTags } from './dxf-pen-tags.js';
 import { dimensionLayout } from './dimension-figure.js';
 import { entityPen, formatDimension, layerPrints, layerShows, lookOf, type CustomLineType, type LayerGroup, type StyleBook } from './draft-look.js';
 import { AXIS_NAME } from './drawing-frame.js';
@@ -90,8 +91,16 @@ export function viewportAnnotations(
     if (!layerPrints(layer)) continue;
     const colour = layer?.color ?? '#000';
     const shape = e.shape;
+    const [s0, t0] = [out.strokes.length, out.texts.length];
+    /** Everything this entity drew goes on its drafting layer in the DXF, as the app's sheet tags it (#619). */
+    const tagged = (tags: DxfTags) => {
+      for (let i = s0; i < out.strokes.length; i++) out.strokes[i] = { ...out.strokes[i], dxf: tags };
+      for (let i = t0; i < out.texts.length; i++) out.texts[i] = { ...out.texts[i], dxf: tags };
+    };
     if (isGeometry(shape)) {
-      drawCurve(shape, entityPen(layer, e.params, a.lineTypes), { at, clip, out });
+      const pen = entityPen(layer, e.params, a.lineTypes);
+      drawCurve(shape, pen, { at, clip, out });
+      tagged(lineTags(layer, pen.own));
       continue;
     }
     const mark = context(colour, lookOf(a.book, e.params));
@@ -128,6 +137,7 @@ export function viewportAnnotations(
       const shift = dim.placement === 'centered' ? px * 0.35 : dim.placement === 'below' ? dim.textGap + px * 0.8 : -dim.textGap;
       out.texts.push(label(at(layout.textAt), layout.label, Math.max(px, 1), readableAngle(layout.textAngle, frame), shift, 'center', textInk(look.text, look.text.color ?? dim.color ?? colour)));
     }
+    tagged(layerTags(layer, cadKindOf(shape)));
   }
   if (box) out.texts = out.texts.filter((t) => pointInBox(t.at, box));
   return out;

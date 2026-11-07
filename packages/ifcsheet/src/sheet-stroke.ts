@@ -10,6 +10,7 @@
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import { arrowMark } from './dimension-layout.js';
 import { readableDeg } from './draft-look.js';
+import type { DxfTags } from './dxf-pen-tags.js';
 import type { ArrowKind, TextStyle } from './draft-styles.js';
 import type { SheetText } from './sheet-graphic.js';
 
@@ -29,6 +30,8 @@ export interface SheetStroke {
   opacity?: number;
   /** Ends and dots drawn round: a hatch dot is a run of no length. */
   round?: boolean;
+  /** The DXF tags of the drafting layer this was drawn on (`layerTags`, `lineTags`); the DXF writes it on that layer as the app's sheet does (#619). */
+  dxf?: DxfTags;
 }
 
 /** The way a drawing's axes run on the paper (`paperSigns`): what a drawing angle reads as there. */
