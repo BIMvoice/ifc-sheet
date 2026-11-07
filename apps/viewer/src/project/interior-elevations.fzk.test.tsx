@@ -142,12 +142,15 @@ describe('facade elevations and sections are unchanged', () => {
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
     // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
-    north: '193/0/0/781551425', south: '241/0/0/-1142268376', east: '363/0/0/288291549', west: '421/0/0/-514462133',
-    'north-deep': '200/0/0/-1472118032', 'south-deep': '258/0/0/-109971380', 'east-deep': '371/0/0/-493559164', 'west-deep': '371/0/0/316887504',
+    north: '206/0/0/-2026439434', south: '252/0/0/-438183856', east: '390/0/0/121532692', west: '527/0/0/1838480406',
+    'north-deep': '201/0/0/1835734396', 'south-deep': '260/0/0/-1970112371', 'east-deep': '397/0/0/-1884172885', 'west-deep': '480/0/0/1551154980',
     // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
     // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
     // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
-    s1: '624/65/0/-881192568', s2: '2008/32/0/1592352504', s3: '1894/39/0/316627023',
+    // All eleven re-recorded for the edge-on-own-surface rule (hidden-line.ts sampleVisibility): an edge lying on the outline of a
+    // surface in front of it is drawn whole, and a covered sample next to a deeper surface no longer counts as visible. Before:
+    // north 193, south 241, east 363, west 421, north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
+    s1: '605/65/0/727434819', s2: '2038/32/0/1271030495', s3: '2060/39/0/-2056318895',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };
