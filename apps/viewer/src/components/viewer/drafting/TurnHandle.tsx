@@ -15,6 +15,8 @@ import { visibleEntities } from '@/drafting/session';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
 
+const PAPER = '#ffffff';
+
 interface Props {
   viewId: string;
   selection: ReadonlySet<string>;
@@ -38,13 +40,14 @@ export function TurnHandle({ viewId, selection, transform, axis, turn, cursor }:
         role="img"
         aria-label={t('drafting.turn.handle')}
         title={t('drafting.turn.handle')}
-        className="pointer-events-none absolute z-20 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sky-600 bg-white text-sky-700 shadow-sm"
-        style={{ left: at.x, top: at.y }}
+        className="pointer-events-none absolute z-20 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sky-600 text-sky-700 shadow-sm"
+        // On the paper, which stays white in dark mode (the theme remaps `bg-white`).
+        style={{ left: at.x, top: at.y, background: PAPER }}
       >
         <RotateCw className="size-3.5" />
       </div>
       {turn && label ? (
-        <div data-turn-angle className="pointer-events-none absolute z-20 rounded-sm bg-white/90 px-1 text-[11px] tabular-nums text-zinc-700 shadow-sm" style={{ left: label.x + 16, top: label.y - 24 }}>
+        <div data-turn-angle className="pointer-events-none absolute z-20 rounded-sm px-1 text-[11px] tabular-nums text-zinc-700 shadow-sm" style={{ left: label.x + 16, top: label.y - 24, background: PAPER }}>
           {t('drafting.turn.angle', { angle: turn.degrees })}
         </div>
       ) : null}

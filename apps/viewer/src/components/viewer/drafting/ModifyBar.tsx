@@ -22,7 +22,7 @@ import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import type { DraftEntity, Pt } from '@/drafting/types';
 
 /** Half the bar's width (px), roughly: it stays inside the drawing area. */
-const BAR_HALF = 170;
+const BAR_HALF = 210;
 
 type BarCommand = { id: string; labelKey: TranslationKey; icon: typeof Copy };
 
