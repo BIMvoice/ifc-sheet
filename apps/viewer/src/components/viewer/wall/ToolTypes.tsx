@@ -16,6 +16,7 @@ import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { WALL_FIELD } from './wall-type';
 import { TagShows } from './TagShows';
+import { EditToolField, isEditTool } from './EditToolField';
 
 const field = WALL_FIELD;
 
@@ -26,6 +27,7 @@ export function ToolTypes({ tool }: { tool: string }) {
   const symbols = useProjectStore((s) => s.symbols);
   const settings = baseDraftSettings();
 
+  if (isEditTool(tool)) return <EditToolField tool={tool} />;
   if (tool === 'symbol') {
     const all = allSymbols(symbols ?? []);
     return (

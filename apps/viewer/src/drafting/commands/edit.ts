@@ -41,21 +41,22 @@ export const offsetCommand: DraftCommandDef = {
   aliases: ['OFFSET', 'O'],
   labelKey: 'drafting.cmd.offset',
   create(ctx) {
-    let distance = ctx.settings.offsetDistance;
+    // Read from the session each time: the tool card's field changes it while the tool runs, as typing does.
+    const dist = () => ctx.settings.offsetDistance;
     let source: DraftEntity | null = null;
     // A line of the generated drawing picked instead of a drafted one (#189): the offset copy is drafted, the model's line stays.
     let model: ModelLinePick | null = null;
     return {
       prompt: () => {
-        if (distance === null) return { key: 'drafting.prompt.offsetDistance' };
-        return source || model ? { key: 'drafting.prompt.offsetSide' } : { key: 'drafting.prompt.offsetPick', params: { distance } };
+        const d = dist();
+        if (d === null) return { key: 'drafting.prompt.offsetDistance' };
+        return source || model ? { key: 'drafting.prompt.offsetSide' } : { key: 'drafting.prompt.offsetPick', params: { distance: d } };
       },
-      input: () => (distance !== null && !source && !model ? 'pick' : 'point'),
+      input: () => (dist() !== null && !source && !model ? 'pick' : 'point'),
       basePoint: () => null,
       wantsValue: () => !source && !model,
       onValue(v) {
         if (v <= 0) return 'continue';
-        distance = v;
         ctx.settings.offsetDistance = v;
         return 'continue';
       },
@@ -68,25 +69,27 @@ export const offsetCommand: DraftCommandDef = {
         return 'continue';
       },
       onPoint(p) {
-        if (model && distance !== null) {
-          offsetModelLine(ctx, model, distance, p);
+        const d = dist();
+        if (model && d !== null) {
+          offsetModelLine(ctx, model, d, p);
           model = null;
           return 'continue';
         }
-        if (!source || distance === null || !isGeometry(source.shape)) return 'continue';
-        const shape = offsetShape(source.shape, distance, p);
+        if (!source || d === null || !isGeometry(source.shape)) return 'continue';
+        const shape = offsetShape(source.shape, d, p);
         if (shape) editDrafts({ add: [newDraft(ctx.viewId, source.layerId, shape, withoutSectionLink(source.params))] });
         source = null;
         return 'continue';
       },
       onEnter: () => 'done',
       preview: (cursor) => {
-        if (model && distance !== null) {
-          const shape = offsetShape({ type: 'line', a: model.a, b: model.b }, distance, cursor);
+        const d = dist();
+        if (model && d !== null) {
+          const shape = offsetShape({ type: 'line', a: model.a, b: model.b }, d, cursor);
           return shape ? [shape] : [];
         }
-        if (!source || distance === null || !isGeometry(source.shape)) return [];
-        const shape = offsetShape(source.shape, distance, cursor);
+        if (!source || d === null || !isGeometry(source.shape)) return [];
+        const shape = offsetShape(source.shape, d, cursor);
         return shape ? [shape] : [];
       },
     };
