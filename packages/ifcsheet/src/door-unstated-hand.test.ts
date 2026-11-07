@@ -6,10 +6,11 @@
  * #679: a door that states no operation (IfcDoor and IfcDoorType OperationType unset or NOTDEFINED) is drawn the way Bonsai and IfcOpenShell
  * make its body: hinged at the placement's local x = 0, the leaf and the arc to local +Y (`UNSTATED_DOOR_OPERATION`). Stated invariant: that
  * holds for every turn of the placement, where the footprint's own axes (what the default used to follow) say nothing about the placement.
- * The second block is Lloyd's Bonsai 0.9.0 export, a private model that is not committed: it skips when the file is absent.
+ * The second block runs a small IFC file (`__fixtures__/door-unstated-hand.ifc`) through the whole headless path.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
@@ -52,20 +53,19 @@ describe('a door that states no operation hinges on its placement\'s local -X an
   }
 });
 
-const LLOYD = '/Users/petruc/dev/bimvoice/_workspace/models/lloyd/ifc-from-bonsai-2026-11-03.ifc';
+const FIXTURE = fileURLToPath(new URL('./__fixtures__/door-unstated-hand.ifc', import.meta.url));
 
-/** D1..D5 of Lloyd's export: [name, IFC X and Y of the hinge, IFC direction the leaf opens in], from each door's placement (Bonsai's body hinges at local x = 0 and opens to local +Y). */
-const BONSAI: [string, [number, number], [number, number]][] = [
-  ['D1', [4.36, 0.2], [0, 1]],
-  ['D2', [6.81, 4.68], [1, 0]],
-  ['D3', [6.82, 8.61], [1, 0]],
-  ['D4', [5.51, 8.8], [0, 1]],
-  ['D5', [4.98, 6.3], [0, -1]],
+/** Each door of the fixture: [name, IFC X and Y of the hinge, IFC direction the leaf opens in]; the hinge is the placement origin, the leaf opens along the placement's local +Y. */
+const DOORS: [string, [number, number], [number, number]][] = [
+  ['A', [1, 1], [0, 1]],
+  ['B', [5, 1], [-1, 0]],
+  ['C', [1, 5], [0, -1]],
+  ['D', [5, 5], [0, 1]],
 ];
 
-describe.skipIf(!existsSync(LLOYD))('every door of Lloyd\'s Bonsai export swings as Bonsai draws it (#679)', () => {
-  it('hinges and opens each of D1 to D5 on the side its body does', async () => {
-    const model = await openModel(new Uint8Array(readFileSync(LLOYD)));
+describe('doors of an IFC file with no OperationType swing as IfcOpenShell makes them (#679)', () => {
+  it('hinges at local x = 0 and opens to local +Y for each turn, and the same as a door that states SINGLE_SWING_LEFT', async () => {
+    const model = await openModel(new Uint8Array(readFileSync(FIXTURE)));
     const set = generateDefaultSet(model)!;
     const plans = set.document.views.filter((v) => v.kind === 'plan');
     const drawings = await generateViewDrawings(plans, model.buildingMeshes, set.levels, model.extent!);
@@ -80,11 +80,11 @@ describe.skipIf(!existsSync(LLOYD))('every door of Lloyd\'s Bonsai export swings
         found.set(name, { hinge: { x: h.x, y: -h.y }, open: { x: t.x - h.x, y: -(t.y - h.y) } });
       }
     }
-    for (const [name, hinge, open] of BONSAI) {
+    for (const [name, hinge, open] of DOORS) {
       const d = found.get(name);
       expect(d, `${name} is on a plan`).toBeDefined();
-      expect(Math.hypot(d!.hinge.x - hinge[0], d!.hinge.y - hinge[1]), `${name} hinge`).toBeLessThan(0.06);
-      expect(d!.open.x * open[0] + d!.open.y * open[1], `${name} opens the way its body does`).toBeGreaterThan(0.8);
+      expect(Math.hypot(d!.hinge.x - hinge[0], d!.hinge.y - hinge[1]), `${name} hinge (within one frame depth of the origin, the other jamb is 0.9 m away)`).toBeLessThan(0.15);
+      expect(d!.open.x * open[0] + d!.open.y * open[1], `${name} opens to its placement's +Y`).toBeGreaterThan(0.8);
     }
   }, 200_000);
 });
