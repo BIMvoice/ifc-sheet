@@ -16,7 +16,7 @@ import type { ProjectSheet, ProjectView, ViewDetail } from '@/project/types';
 import { drawingToScreen, type SectionAxisName, type ViewTransform } from './frame';
 import type { Grip } from './grips';
 import type { DraftEntity, EntityShape, Pt } from './types';
-import { viewReference, type ViewReference } from './cross-ref';
+import { DETAIL_LINK as LINK, DETAIL_PART, viewReference, type ViewReference } from '@bimvoice/ifcsheet';
 
 type Rect = Pick<ViewDetail, 'min' | 'max'>;
 
@@ -24,10 +24,8 @@ type Rect = Pick<ViewDetail, 'min' | 'max'>;
 export const MARK_CORNER_MM = 3;
 export const MARK_TEXT_MM = 3.5;
 
-/** The parameter that ties a drafted shape to the detail view whose mark it belongs to. */
-const LINK = 'detailOf';
-/** The parameter that says which part of the mark a shape is (its order in `detailMarkShapes`). */
-export const PART = 'detailPart';
+/** The parameters that tie a drafted shape to the detail view whose mark it belongs to, and say which part of the mark it is (the engine's, so its references read them too). */
+export const PART = DETAIL_PART;
 
 export const detailLink = (e: Pick<DraftEntity, 'params'>): string | null => {
   const id = e.params[LINK];

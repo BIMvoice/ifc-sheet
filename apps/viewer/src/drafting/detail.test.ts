@@ -14,7 +14,7 @@ import { addDetail, setDetailRect } from './commands/detail';
 import { eraseCommand, moveCommand, rotateCommand } from './commands/modify';
 import { detailGrips, markParts, moveDetailGrip, selectedDetailGrips } from './detail-mark';
 import { isLockedToView } from './section-symbol';
-import { drawingNumbers } from './cross-ref';
+import { drawingNumbers } from '@bimvoice/ifcsheet';
 import type { DraftContext } from './commands/types';
 
 const A = { x: 2, y: 3 };

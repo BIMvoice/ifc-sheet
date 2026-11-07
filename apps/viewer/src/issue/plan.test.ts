@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ProjectSheet, ProjectView } from '@/project/types.js';
 import type { DraftEntity } from '@/drafting/types.js';
-import { sectionReferenceDrafts } from '@/drafting/cross-ref-marks.js';
+import { sectionReferenceDrafts, tableMeasure } from '@bimvoice/ifcsheet';
 import { sectionSymbolShapes } from '@/drafting/section-symbol.js';
 import { issueRecord, nextIssueName, planIssue, scaleText } from './plan.js';
 import { readIssues } from './file.js';
@@ -107,7 +107,7 @@ describe('the fingerprint of a sheet whose marks name other sheets', () => {
   };
 
   it('changes when the sheet a section mark names is renumbered', () => {
-    const reference = (sheets: ProjectSheet[]) => sectionReferenceDrafts(symbol, views, sheets).map((d) => (d.shape.type === 'text' ? d.shape.text : ''));
+    const reference = (sheets: ProjectSheet[]) => sectionReferenceDrafts(symbol, views, sheets, { measure: tableMeasure }).map((d) => (d.shape.type === 'text' ? d.shape.text : ''));
     assert.deepEqual([...new Set(reference(all))], ['1 / A-201']);
     assert.deepEqual([...new Set(reference(all.map((x) => (x.id === 's2' ? { ...x, number: 'A-205' } : x))))], ['1 / A-205']);
     assert.notEqual(fingerprintAfter(sections, 'A-205'), sheetFingerprint(plans, sourcesWith(all)));

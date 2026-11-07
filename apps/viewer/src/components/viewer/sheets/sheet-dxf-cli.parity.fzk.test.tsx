@@ -6,8 +6,8 @@
  * #619: `ifcsheet build --dxf` and the app's sheet DXF for the same sheet of AC20-FZK-Haus. The CLI runs for real (`run(['build', ...])`, the
  * file it writes is read back); the app lays the default set out (`startDrawingSet`), draws A-101 (`SheetPaper` through `captureSheets`) and writes
  * it with `svgToDxf`. Both are DXF R2000, name their layers from the one CAD layer standard (`@bimvoice/ifcsheet/dxf`), and carry the same TEXT.
- * Two differences remain, both the app's own drawing and both explained below: the section and elevation reference marks on the plan
- * (drafts, on the drafting layer "0") and the drawing numbers in the rings before the view titles. A project's own CAD rules are held by the
+ * Two differences remain, both explained below: the drawing numbers in the rings before the view titles, and the marks of the two sections the
+ * app's default set holds and the CLI's generated set does not. A project's own CAD rules are held by the
  * engine's `sheet-dxf.test.ts`.
  */
 
@@ -131,19 +131,19 @@ describe('A-101 of AC20-FZK-Haus: ifcsheet build --dxf and the app write the sam
     return readFileSync(join(out, 'dxf', 'A-101.dxf')).toString('latin1');
   }
 
-  it('write DXF R2000, the same layers and the same TEXT but the reference marks and the drawing numbers', async () => {
+  it('write DXF R2000, the same layers and the same TEXT but the drawing numbers and the section marks', async () => {
     const app = entitiesOf(await appDxf());
     const cli = entitiesOf(await cliDxf());
     assert.equal(app.version, 'AC1015');
     assert.equal(cli.version, 'AC1015');
     assert.ok(cli.entities.length > 100, `the CLI file holds the drawing (${cli.entities.length} entities)`);
-    // The app's default A-101 also carries the plan's section and elevation reference marks (A, B, "1 / A-301", ...), drafted on the drafting layer
-    // "0". The engine's sheet does not draw them yet: they are the TEXT and the lines that remain open in #619, so they are set aside here, said
-    // aloud, and what is left must agree.
+    // Both sides draw the plan's elevation marks ("1 / A-201", ...) and its sections' marks now (the engine's `cross-ref/`, #619), as drafts on
+    // the drafting layer "0", so the layers are compared whole.
     const marks = app.entities.filter((e) => e.layer === '0');
     assert.ok(marks.every((e) => e.type === 'LINE' || e.type === 'TEXT'), 'the drafting layer holds only the reference marks (lines and their labels)');
-    const drawn = app.entities.filter((e) => e.layer !== '0');
-    assert.deepEqual(layersOf(cli.entities), layersOf(drawn));
+    assert.ok(cli.entities.some((e) => e.layer === '0'), 'the CLI draws the reference marks on the drafting layer "0" too');
+    assert.deepEqual(layersOf(cli.entities), layersOf(app.entities));
+    const drawn = app.entities;
     const appTexts = textsOf(drawn);
     const cliTexts = textsOf(cli.entities);
     assert.ok(cliTexts.length >= 18, `the CLI keeps the 18 TEXT values #624 wrote (${cliTexts.length})`);
@@ -155,7 +155,10 @@ describe('A-101 of AC20-FZK-Haus: ifcsheet build --dxf and the app write the sam
       assert.ok(at >= 0, `the CLI writes "${text}" and the app does not`);
       rest.splice(at, 1);
     }
-    assert.ok(rest.length > 0 && rest.every((t) => /^\d+$/.test(t)), `what only the app writes is the views' drawing numbers (${rest.join(', ')})`);
+    // The app's default set also holds two sections the CLI's generated set does not (A, B and "n / A-301" on the sheet that prints them); the
+    // elevation marks ("n / A-201") are the engine's on both sides. Stored sections reach the CLI through `--project`, compared in the next test.
+    const sectionMark = (t: string): boolean => /^[A-Z]$/.test(t) || /^\d+ \/ A-301$/.test(t);
+    assert.ok(rest.length > 0 && rest.every((t) => /^\d+$/.test(t) || sectionMark(t)), `what only the app writes is the views' drawing numbers and the section marks (${rest.join(', ')})`);
   });
 
   it('write the section marks and a drafted line on the layers the app gives them, from a saved project (#619)', async () => {

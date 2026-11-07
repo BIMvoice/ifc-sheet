@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { ProjectView } from '@/project/types';
 import { groundPlan } from '@/project/drawing-set';
 import { groundPlan as actionsGroundPlan } from '@/project/drawing-set-actions';
-import { elevationMarkPlan, viewsNamedOnPlan } from './cross-ref-marks';
+import { elevationMarkPlan, viewsNamedOnPlan } from '@bimvoice/ifcsheet';
 
 /** The plan that carries the elevation marks is the ground plan the engine puts the sections on (#244). */
 

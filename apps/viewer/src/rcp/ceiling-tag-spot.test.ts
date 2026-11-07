@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { textBox } from '@/drafting/annotation';
 import { centredAnchor } from '@bimvoice/ifcsheet';
 import { textWidthEm } from '@/drafting/text-width';
-import type { Box } from '@/drafting/cross-ref-marks';
+import type { ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import { clearTagSpot } from './ceiling-tag-spot';
 
 /** A 4 x 3 m ceiling with its tag at the centre; a door leaf and swing are drawn across that centre (#271). */

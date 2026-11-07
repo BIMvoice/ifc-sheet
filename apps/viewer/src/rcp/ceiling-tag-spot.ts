@@ -11,7 +11,7 @@
  */
 
 import { textBox } from '@/drafting/annotation';
-import { boxOf, overlaps, type Box } from '@/drafting/cross-ref-marks';
+import { boxesOverlap as overlaps, boxOfPoints as boxOf, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import type { Pt } from '@/drafting/types';
 import { centredAnchor } from '@bimvoice/ifcsheet';
 import { textWidthEm } from '@/drafting/text-width';

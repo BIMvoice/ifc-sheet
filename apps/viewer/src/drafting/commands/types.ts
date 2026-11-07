@@ -15,7 +15,7 @@ import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { PlanPart } from '@bimvoice/ifcsheet';
 import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { ProjectView } from '@/project/types';
-import type { Box } from '../cross-ref-marks';
+import type { ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import type { ElementBox } from '../dimension-anchor';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 

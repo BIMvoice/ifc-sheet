@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -26,8 +26,6 @@ import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
-import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
 import { viewScreenUp } from '@/project/view-screen-up';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
