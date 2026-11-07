@@ -145,18 +145,20 @@
    "texts": [
     "1 / A-201 @127.43,183 h2.5 left",
     "1 / A-202 @202,128.57 h2.5 left rot90",
+    "1 @69.75,183.3 h2.8 center",
     "1:100 @362,282.5 h4.5",
     "2 / A-201 @142.1,66.5 h2.5 left",
     "2 / A-202 @65.5,128.57 h2.5 left rot90",
+    "2 @224.75,183.3 h2.8 center",
     "2026-10-21 @232,285 h3.5",
     "A-101 @362,266.5 h9",
     "Address @297,240.2 h2",
     "Checked by @297,270.2 h2",
     "Client @232,250.2 h2",
-    "Dachgeschoss  1:100 @287.5,186.5 h3.5 center",
+    "Dachgeschoss  1:100 @229,183.5 h3.5",
     "Date @232,280.2 h2",
     "Drawn by @232,270.2 h2",
-    "Erdgeschoss  1:100 @132.5,186.5 h3.5 center",
+    "Erdgeschoss  1:100 @74,183.5 h3.5",
     "Floor plans @232,265 h3.5",
     "Organisation @297,250.2 h2",
     "Project @232,240.2 h2",
@@ -239,7 +241,9 @@
     }
    },
    "texts": [
+    "1 @69.75,160.89 h2.8 center",
     "1:100 @362,282.5 h4.5",
+    "2 @224.75,160.89 h2.8 center",
     "2026-10-21 @232,285 h3.5",
     "A-201 @362,266.5 h9",
     "Address @297,240.2 h2",
@@ -248,14 +252,14 @@
     "Date @232,280.2 h2",
     "Drawn by @232,270.2 h2",
     "Elevations, south and north @232,265 h3.5",
-    "North Elevation  1:100 @287.5,164.09 h3.5 center",
+    "North Elevation  1:100 @229,161.09 h3.5",
     "Organisation @297,250.2 h2",
     "Project @232,240.2 h2",
     "Projekt-FZK-Haus @232,245 h3.5",
     "Revision @297,280.2 h2",
     "Scale @362,274.2 h2",
     "Sheet no. @362,254.2 h2",
-    "South Elevation  1:100 @132.5,164.09 h3.5 center",
+    "South Elevation  1:100 @74,161.09 h3.5",
     "Title @232,260.2 h2"
    ],
    "images": 0
@@ -331,7 +335,9 @@
     }
    },
    "texts": [
+    "1 @89.75,160.89 h2.8 center",
     "1:100 @362,282.5 h4.5",
+    "2 @224.75,160.89 h2.8 center",
     "2026-10-21 @232,285 h3.5",
     "A-202 @362,266.5 h9",
     "Address @297,240.2 h2",
@@ -339,7 +345,7 @@
     "Client @232,250.2 h2",
     "Date @232,280.2 h2",
     "Drawn by @232,270.2 h2",
-    "East Elevation  1:100 @142.5,164.09 h3.5 center",
+    "East Elevation  1:100 @94,161.09 h3.5",
     "Elevations, east and west @232,265 h3.5",
     "Organisation @297,250.2 h2",
     "Project @232,240.2 h2",
@@ -348,7 +354,7 @@
     "Scale @362,274.2 h2",
     "Sheet no. @362,254.2 h2",
     "Title @232,260.2 h2",
-    "West Elevation  1:100 @277.5,164.09 h3.5 center"
+    "West Elevation  1:100 @229,161.09 h3.5"
    ],
    "images": 0
   },
@@ -455,7 +461,9 @@
     }
    },
    "texts": [
+    "1 @79.75,160.89 h2.8 center",
     "1:100 @362,282.5 h4.5",
+    "2 @214.75,160.89 h2.8 center",
     "2026-10-21 @232,285 h3.5",
     "A-301 @362,266.5 h9",
     "Address @297,240.2 h2",
@@ -468,8 +476,8 @@
     "Projekt-FZK-Haus @232,245 h3.5",
     "Revision @297,280.2 h2",
     "Scale @362,274.2 h2",
-    "Section A-A  1:100 @132.5,164.09 h3.5 center",
-    "Section B-B  1:100 @277.5,164.09 h3.5 center",
+    "Section A-A  1:100 @84,161.09 h3.5",
+    "Section B-B  1:100 @219,161.09 h3.5",
     "Sections @232,265 h3.5",
     "Sheet no. @362,254.2 h2",
     "Title @232,260.2 h2"
