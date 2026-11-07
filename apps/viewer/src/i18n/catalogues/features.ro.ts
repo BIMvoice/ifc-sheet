@@ -18,7 +18,7 @@ export const featuresRo = {
   'wall.sectionScale': 'Scara secțiunilor',
   'wall.shell.demo': 'Proiect demonstrativ',
   'wall.vp.scaleOther': 'Alta…',
-  'wall.vp.scaleTyped': 'Scara 1 : (Enter pentru a aplica)',
+  'wall.vp.scaleTyped': 'Scara 1 :',
   'wall.vp.scaleBad': 'Introduceți un număr întreg de la 1 la {max}, de exemplu 33 sau 1:33.',
   'wall.vp.overrun': 'La 1 : {scale} acest desen are {w} × {h} mm, mai mult decât zona de desen a planșei ({aw} × {ah} mm).',
   'wall.vp.useScale': 'Folosiți 1 : {scale}, încape',
