@@ -8,6 +8,7 @@ import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
 import { sceneActionsEn } from '../catalogues/scene-actions.en';
 import { scheduleExportEn } from '../catalogues/schedule-export.en';
+import { scaleFieldEn } from '../catalogues/scale-field.en';
 import { scheduleEn } from '../catalogues/schedule.en';
 import { scriptPanelEn } from '../catalogues/script-panel.en';
 import { searchFiltersEn } from '../catalogues/search-filters.en';
@@ -81,6 +82,7 @@ export const enSZ = {
   ...scanToBimEn,
   ...sceneActionsEn,
   ...scheduleExportEn,
+  ...scaleFieldEn,
   ...scheduleEn,
   ...scriptPanelEn,
   ...searchFiltersEn,

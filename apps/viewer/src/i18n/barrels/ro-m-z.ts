@@ -24,6 +24,7 @@ import { roomScheduleRo } from '../catalogues/room-schedule.ro';
 import { regionSelectRo } from '../catalogues/region-select.ro';
 import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
+import { scaleFieldRo } from '../catalogues/scale-field.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { settingsRo } from '../catalogues/settings.ro';
@@ -95,6 +96,7 @@ export const roMZ = {
   ...regionSelectRo,
   ...roomSummaryRo,
   ...scheduleExportRo,
+  ...scaleFieldRo,
   ...selectionBarRo,
   ...setTemplateRo,
   ...settingsRo,

@@ -27,8 +27,14 @@ on:
     - cron: '17 * * * *'
   workflow_dispatch:
 
+# convertPullRequestToDraft refuses a token with only pull-requests: write
+# ("Resource not accessible by integration", first run, #754). GitHub's docs
+# do not name the permission; user reports (delta-io/delta-rs#4748,
+# sw2m/bencher#21, agentmemoir/clio#298) suggest contents: write, and say a
+# PAT or App token is sometimes refused too. contents: write is granted here
+# without risk of running PR code: the only checkout is the base branch.
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -52,7 +58,8 @@ jobs:
 
       - name: Enforce the queue limits
         env:
-          GH_TOKEN: ${{ github.token }}
+          # QUEUE_GUARD_TOKEN: a token secret a maintainer may add if github.token is still refused.
+          GH_TOKEN: ${{ secrets.QUEUE_GUARD_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}

@@ -40,6 +40,7 @@ import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './vi
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
 import { crossRefAnnotations } from './sheet-cross-refs.js';
+import type { DxfTags } from './dxf-pen-tags.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
@@ -72,6 +73,8 @@ export interface SheetText {
   colour?: string;
   /** The DXF layer the app's sheet puts this text on (`TITLEBLOCK`, `VIEWPORT-LABELS`, `SITE-SYMBOLS`); absent: the sheet's own (#619). */
   layer?: 'TITLEBLOCK' | 'VIEWPORT-LABELS' | 'SITE-SYMBOLS';
+  /** A drafted text's drafting layer, as the app's sheet tags it (`layerTags`); it wins over `layer` and names the DXF layer (#619). */
+  dxf?: DxfTags;
 }
 
 const onLayer = (texts: readonly SheetText[], layer: NonNullable<SheetText['layer']>): SheetText[] => texts.map((t) => ({ ...t, layer }));

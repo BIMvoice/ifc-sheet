@@ -677,6 +677,7 @@ jobs:
           q --test scripts/check-collab-room-model-target.test.mjs
           q --test scripts/check-css-vars.test.mjs
           q --test scripts/check-csv-escaper-copies.test.mjs
+          q --test scripts/check-house-rules.test.mjs
           q --test scripts/check-i18n-literals.test.mjs
           q --test scripts/check-icon-button-adoption.test.mjs
           q --test scripts/check-isolate-expansion-routing.test.mjs

@@ -10,39 +10,4 @@
  * the model drawing on CUT / SEEN / HIDDEN / HATCH / SYMBOLS with its pens.
  */
 
-import type { DraftLayer } from '@/drafting/types';
-import type { DxfTags } from '@bimvoice/ifcsheet/dxf';
-import type { CadKind } from '@/project/cad-layers';
-
-export { penTags, type DxfSubject, type DxfTags } from '@bimvoice/ifcsheet/dxf';
-
-/** A drafting layer's tags. */
-export function layerTags(layer: DraftLayer | undefined, kind?: string): DxfTags {
-  return {
-    'data-dxf-kind': kind,
-    'data-dxf-layer': layer?.name ?? '0',
-    'data-dxf-color': layer?.color ?? '#000000',
-    'data-dxf-lw': String(layer?.lineWeight ?? 0.25),
-    'data-dxf-ltype': layer?.lineType ?? 'continuous',
-    'data-dxf-print': layer?.print === false ? '0' : undefined,
-  };
-}
-
-/** A drafted line's tags: its layer's, and the weight and line type the element overrides (`entityPen`), which the DXF writes on the entity itself. */
-export function lineTags(layer: DraftLayer | undefined, own: { lineWeight?: number; lineType?: string }): DxfTags {
-  return {
-    ...layerTags(layer),
-    'data-dxf-own-lw': own.lineWeight !== undefined ? String(own.lineWeight) : undefined,
-    'data-dxf-own-ltype': own.lineType,
-  };
-}
-
-/** What a drafted annotation is, for the CAD layer standard (`project/cad-layers.ts`): dimension, text or hatch; other shapes none. */
-export function cadKindOf(shape: { type: string }): CadKind | undefined {
-  switch (shape.type) {
-    case 'dimension': case 'radial': case 'angular': return 'dimension';
-    case 'text': case 'leader': case 'level': return 'text';
-    case 'hatch': return 'hatch';
-    default: return undefined;
-  }
-}
+export { cadKindOf, layerTags, lineTags, penTags, type DxfSubject, type DxfTags } from '@bimvoice/ifcsheet/dxf';

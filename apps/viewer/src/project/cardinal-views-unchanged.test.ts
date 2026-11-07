@@ -17,6 +17,11 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
  * these are the primitive counts of AC20-FZK-Haus on `main` at e5459e2 (the
  * same generation run through a build of that tree's engine drew the same
  * lines, line for line).
+ *
+ * The section's counts were re-recorded for #749 (2643 lines, 58 cut polygons before). Its plane z = 0 lies on faces of
+ * many of these raw meshes, and a vertex on the plane now counts on the side the section does not look at: faces on the
+ * plane whose solid lies behind it are no longer cut, and triangles with a vertex on the plane are cut through it, so the
+ * railing's balusters and the site close as polygons.
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -25,7 +30,7 @@ const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 
 const ON_MAIN = {
   plan: { axis: 'y', position: 1.2, lines: 2194, hidden: 999, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 2643, hidden: 2304, polygons: 58 },
+  section: { axis: 'z', position: 0, lines: 2622, hidden: 2304, polygons: 64 },
   elevation: { axis: 'z', position: 20, lines: 474, hidden: 447, polygons: 0 },
 } as const;
 

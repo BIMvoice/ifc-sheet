@@ -29,12 +29,30 @@ function selected(ctx: DraftContext): DraftEntity[] {
  * and the user is told.
  */
 function editable(ctx: DraftContext): DraftEntity[] {
-  const ids = withSectionParts(new Set(selected(ctx).map((e) => e.id)), ctx.entities());
-  const items = ctx.entities().filter((e) => ids.has(e.id));
+  const { items, locked } = movableOf(ctx.selection(), ctx.entities());
+  if (locked) ctx.say('drafting.msg.sectionSymbolLocked');
+  return items;
+}
+
+/** What of the selection `ids` moves (see `editable`), and whether a detail's mark was left out. Shared with dragging a selection (#168). */
+export function movableOf(ids: ReadonlySet<string>, entities: readonly DraftEntity[]): { items: DraftEntity[]; locked: boolean } {
+  const whole = withSectionParts(new Set(entities.filter((e) => ids.has(e.id)).map((e) => e.id)), entities);
+  const all = entities.filter((e) => whole.has(e.id));
   const views = useProjectStore.getState().views;
-  const free = items.filter((e) => !isDetailMark(e, views));
-  if (free.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
-  return free;
+  const items = all.filter((e) => !isDetailMark(e, views));
+  return { items, locked: items.length < all.length };
+}
+
+/**
+ * MOVE's and COPY's one edit, by the vector `d`: a move shifts `items` in place, a copy adds them shifted (as plain
+ * drawing, no section link), each one undo step. Returns the ids of the copies. Shared with dragging a selection (#168).
+ */
+export function displaceDrafts(mode: 'move' | 'copy', viewId: string, items: readonly DraftEntity[], d: Pt): string[] {
+  if (mode === 'move') {
+    editDrafts({ update: new Map(items.map((e) => [e.id, translateEntity(e.shape, d)])) });
+    return [];
+  }
+  return editDrafts({ add: items.map((e) => newDraft(viewId, e.layerId, translateEntity(e.shape, d), withoutSectionLink(e.params))) });
 }
 
 export const eraseCommand: DraftCommandDef = {
@@ -86,13 +104,8 @@ function displaceCommand(id: 'move' | 'copy'): DraftCommandDef {
             base = p;
             return 'continue';
           }
-          const d = sub(p, base);
-          if (id === 'move') {
-            editDrafts({ update: new Map(items.map((e) => [e.id, translateEntity(e.shape, d)])) });
-            return 'done';
-          }
-          editDrafts({ add: items.map((e) => newDraft(ctx.viewId, e.layerId, translateEntity(e.shape, d), withoutSectionLink(e.params))) });
-          return 'continue';
+          displaceDrafts(id, ctx.viewId, items, sub(p, base));
+          return id === 'move' ? 'done' : 'continue';
         },
         onEnter: () => 'done',
         preview: (cursor) => (base ? items.flatMap((e) => entitySkeleton(translateEntity(e.shape, sub(cursor, base as Pt)))) : []),
