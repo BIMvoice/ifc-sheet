@@ -51,7 +51,7 @@ export const onboardingEn = {
   'onboarding.howto.dimension.step1': 'Double-click a plan sheet on the Wall to open it.',
   'onboarding.howto.dimension.step2': 'Choose Dimension in the column on the left.',
   'onboarding.howto.dimension.step3': 'Click two points; keep clicking and the chain continues. Every length is read from the model.',
-  'onboarding.howto.dimension.step4': 'Press Esc, or choose Done, to stop.',
+  'onboarding.howto.dimension.step4': 'Choose Done to stop (Esc works too).',
   'onboarding.howto.dimension.step5': 'Choose Tag, then click a door, a window or a room. The tag fills itself from the model.',
 
   'onboarding.howto.schedules.title': 'Schedules',
