@@ -22,7 +22,6 @@ import type {
 import { makeEntityKey } from './types.js';
 import {
   vec3,
-  vec3Lerp,
   EPSILON,
   getAxisNormal,
   signedDistanceToPlane,
@@ -30,6 +29,7 @@ import {
   projectTo2DBasis,
 } from './math.js';
 import { PolygonBuilder } from './polygon-builder.js';
+import { entityPlaneEpsilons, intersectTrianglePlane, meshPlaneEpsilon, viewedSide } from './plane-side.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SECTION CUTTER CLASS
@@ -40,12 +40,15 @@ export class SectionCutter {
   private planeDistance: number;
   private axis: 'x' | 'y' | 'z';
   private flipped: boolean;
+  /** The sign of the signed distance of what the drawing looks at; a vertex on the plane counts on the other side (#749). */
+  private viewed: 1 | -1;
   /** Set when `config.customPlane` is supplied — disables cardinal projection. */
   private customPlane: SectionPlaneConfig['customPlane'];
 
   constructor(config: SectionPlaneConfig) {
     this.axis = config.axis;
     this.flipped = config.flipped;
+    this.viewed = viewedSide(config);
     this.customPlane = config.customPlane;
 
     if (this.customPlane) {
@@ -79,10 +82,11 @@ export class SectionCutter {
     const segmentArrays: CutSegment[][] = [];
     let totalTriangles = 0;
     let intersectedTriangles = 0;
+    const epsilons = entityPlaneEpsilons(meshes);
 
     // Process each mesh - collect segment arrays for efficient flattening
     for (const mesh of meshes) {
-      const result = this.cutSingleMesh(mesh);
+      const result = this.cutSingleMesh(mesh, epsilons.get(makeEntityKey(mesh.modelIndex ?? 0, mesh.expressId)));
       segmentArrays.push(result.segments);
       totalTriangles += result.trianglesProcessed;
       intersectedTriangles += result.trianglesIntersected;
@@ -111,9 +115,10 @@ export class SectionCutter {
   }
 
   /**
-   * Cut a single mesh with the section plane
+   * Cut a single mesh with the section plane. `planeEps` is the plane tolerance of its element
+   * (`entityPlaneEpsilons`, so the layers of a wall agree); a mesh cut alone takes its own (`meshPlaneEpsilon`).
    */
-  cutSingleMesh(mesh: MeshData): MeshCutResult {
+  cutSingleMesh(mesh: MeshData, planeEps: number = meshPlaneEpsilon(mesh)): MeshCutResult {
     const segments: CutSegment[] = [];
     const { positions, indices, expressId, ifcType, modelIndex, origin, color, materialId } = mesh;
 
@@ -137,29 +142,15 @@ export class SectionCutter {
       const d1 = signedDistanceToPlane(v1, this.planeNormal, this.planeDistance);
       const d2 = signedDistanceToPlane(v2, this.planeNormal, this.planeDistance);
 
-      // Plane-side classification epsilon. `dot(v, n)` sums three
-      // float32-quantized components, so even a vertex whose TRUE distance
-      // is 0 carries rounding noise proportional to its own coordinate
-      // magnitude (~coord · 2⁻²²), not just the fixed EPSILON. Without this
-      // floor, a face lying exactly on a non-axis-aligned cut plane gets its
-      // near-zero d0/d1 misclassified as a genuine crossing, and the
-      // resulting lerp — dividing one noise term by another — produces a
-      // wild extrapolated point instead of being skipped as coplanar.
-      //
-      // Crucially, this must be measured on the LOCAL (pre-origin) vertex
-      // coordinates, not `v0`/`v1`/`v2` (world = origin + local). The
-      // quantization noise is a property of the `Float32Array` values as
-      // authored, not of where the element's per-mesh RTC origin happens to
-      // place it in the model. Using the world-lifted magnitude here scales
-      // the tolerance to the element's DISTANCE FROM THE MODEL ORIGIN
-      // instead of its own extent — a small element far from the model
-      // origin would get a tolerance orders of magnitude too loose, which
-      // misclassifies genuine close crossings as coplanar (#2622).
+      // `planeEps` is sized off the LOCAL (pre-origin) coordinates, the float32
+      // noise floor of the values as stored, never the world-lifted ones: a small
+      // element far from the model origin must keep a tight tolerance (#2622).
+      // It is one value per element, so every triangle and every layer of a wall
+      // puts a vertex on the same side of the plane (#749).
       const localMaxCoord = this.localMaxCoord(positions, i0, i1, i2);
-      const planeEps = Math.max(EPSILON, localMaxCoord * 2 ** -22);
 
       // Intersect triangle with plane
-      const intersection = this.intersectTrianglePlane(v0, v1, v2, d0, d1, d2, planeEps);
+      const intersection = intersectTrianglePlane(v0, v1, v2, d0, d1, d2, planeEps, this.viewed);
 
       if (intersection) {
         intersectedCount++;
@@ -246,85 +237,6 @@ export class SectionCutter {
     }
     return m;
   }
-
-  /**
-   * Intersect a triangle with the section plane
-   * Returns the two intersection points, or null if no intersection
-   */
-  private intersectTrianglePlane(
-    v0: Vec3,
-    v1: Vec3,
-    v2: Vec3,
-    d0: number,
-    d1: number,
-    d2: number,
-    eps: number = EPSILON
-  ): { p0: Vec3; p1: Vec3 } | null {
-    // Count vertices on each side of the plane
-    const pos =
-      (d0 > eps ? 1 : 0) + (d1 > eps ? 1 : 0) + (d2 > eps ? 1 : 0);
-    const neg =
-      (d0 < -eps ? 1 : 0) + (d1 < -eps ? 1 : 0) + (d2 < -eps ? 1 : 0);
-
-    // No intersection if all vertices on same side
-    if (pos === 3 || neg === 3) return null;
-
-    // All vertices on the plane - skip (degenerate case)
-    if (pos === 0 && neg === 0) return null;
-
-    // Find intersection points on edges
-    const points: Vec3[] = [];
-
-    // Check edge v0-v1
-    const p01 = this.edgePlaneIntersection(v0, v1, d0, d1, eps);
-    if (p01) points.push(p01);
-
-    // Check edge v1-v2
-    const p12 = this.edgePlaneIntersection(v1, v2, d1, d2, eps);
-    if (p12) points.push(p12);
-
-    // Check edge v2-v0
-    if (points.length < 2) {
-      const p20 = this.edgePlaneIntersection(v2, v0, d2, d0, eps);
-      if (p20) points.push(p20);
-    }
-
-    // Need exactly 2 intersection points
-    if (points.length >= 2) {
-      return { p0: points[0], p1: points[1] };
-    }
-
-    return null;
-  }
-
-  /**
-   * Find intersection point of an edge with the plane
-   */
-  private edgePlaneIntersection(
-    v0: Vec3,
-    v1: Vec3,
-    d0: number,
-    d1: number,
-    eps: number = EPSILON
-  ): Vec3 | null {
-    // Both vertices on the plane - edge lies on plane
-    if (Math.abs(d0) < eps && Math.abs(d1) < eps) {
-      return null; // Handled separately as face-on-plane
-    }
-
-    // One vertex on plane - return that vertex
-    if (Math.abs(d0) < eps) return v0;
-    if (Math.abs(d1) < eps) return v1;
-
-    // Both vertices on same side - no intersection
-    if ((d0 > 0) === (d1 > 0)) return null;
-
-    // Compute interpolation parameter
-    const t = d0 / (d0 - d1);
-
-    // Interpolate to find intersection point
-    return vec3Lerp(v0, v1, t);
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -358,13 +270,14 @@ export async function cutMeshesStreaming(
   let totalTriangles = 0;
   let intersectedTriangles = 0;
   let lastYield = performance.now();
+  const epsilons = entityPlaneEpsilons(meshes);
 
   for (let i = 0; i < meshes.length; i += batchSize) {
     const batch = meshes.slice(i, Math.min(i + batchSize, meshes.length));
     const batchSegmentArrays: CutSegment[][] = [];
 
     for (const mesh of batch) {
-      const result = cutter.cutSingleMesh(mesh);
+      const result = cutter.cutSingleMesh(mesh, epsilons.get(makeEntityKey(mesh.modelIndex ?? 0, mesh.expressId)));
       batchSegmentArrays.push(result.segments);
       totalTriangles += result.trianglesProcessed;
       intersectedTriangles += result.trianglesIntersected;
