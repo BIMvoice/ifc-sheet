@@ -80,7 +80,7 @@ export function ModifyBar({ entities, transform, axis, areaWidth }: Props) {
       {FLIPS.map(({ id, labelKey, icon: Icon }) => (
         <IconButton key={id} label={t(labelKey)} className="size-7" onClick={() => startDraftCommand('flip', keep ? `${id} keep` : id)}><Icon className="size-3.5" /></IconButton>
       ))}
-      <label className="flex items-center gap-1 px-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+      <label className="flex items-center gap-1 px-1 text-2xs text-zinc-700 dark:text-zinc-300">
         <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="size-3" />
         {t('drafting.sel.flipKeep')}
       </label>

@@ -47,7 +47,7 @@ export function TurnHandle({ viewId, selection, transform, axis, turn, cursor }:
         <RotateCw className="size-3.5" />
       </div>
       {turn && label ? (
-        <div data-turn-angle className="pointer-events-none absolute z-20 rounded-sm px-1 text-[11px] tabular-nums text-zinc-700 shadow-sm" style={{ left: label.x + 16, top: label.y - 24, background: PAPER }}>
+        <div data-turn-angle className="pointer-events-none absolute z-20 rounded-sm px-1 text-2xs tabular-nums text-zinc-700 shadow-sm" style={{ left: label.x + 16, top: label.y - 24, background: PAPER }}>
           {t('drafting.turn.angle', { angle: turn.degrees })}
         </div>
       ) : null}
