@@ -17,6 +17,7 @@ import { RevisionPick } from './RevisionsCard';
 import { ToolTypes } from './ToolTypes';
 import { isEditTool } from './EditToolField';
 import { toolHelpKey } from './tool-help';
+import { usePlainT } from '@/lib/commands/plain-texts';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 import { WALL_CARD, WALL_CARD_TITLE, WALL_EYEBROW } from './wall-type';
 
@@ -33,6 +34,7 @@ function Card({ eyebrow, title, children }: { eyebrow: string; title: string; ch
 /** `drawingOn`: where a draw tool draws, the drawing's name, or null for the sheet's paper. */
 export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?: string | null; onDone: () => void }) {
   const { t } = useTranslation();
+  const plain = usePlainT();
   const ortho = useDraftingSession((o) => o.ortho || o.orthoHeld);
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
   const orthoNote = ortho ? <output className="mb-0 mt-2 block text-xs font-medium text-white">{t('wall.ortho.on')}</output> : null;
@@ -46,7 +48,7 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
         {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
         {isEditTool(draw.command) ? <ToolTypes tool={draw.command} /> : null}
         {draw.command === 'revcloud' ? <RevisionPick /> : null}
-        <p className="mb-0 mt-3 text-xs text-cyan-300">{t('wall.drawHint')}</p>
+        <p className="mb-0 mt-3 text-xs text-cyan-300">{plain('wall.drawHint')}</p>
         {orthoNote}
         {done}
       </Card>
@@ -57,7 +59,7 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
       <Card eyebrow={t(chosen.labelKey)} title={t(chosen.titleKey)}>
         <p className="m-0 leading-relaxed">{t(toolHelpKey(chosen.command))}</p>
         <ToolTypes tool={chosen.command} />
-        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{t(chosen.hintKey ?? 'wall.drawHint')}</p>
+        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{plain(chosen.hintKey ?? 'wall.drawHint')}</p>
         {orthoNote}
         {done}
       </Card>

@@ -55,10 +55,12 @@ import { roomScheduleEn } from '../catalogues/room-schedule.en';
 import { regionSelectEn } from '../catalogues/region-select.en';
 import { roomSummaryEn } from '../catalogues/room-summary.en';
 import { roomToolEn } from '../catalogues/room-tool.en';
+import { plainHintsEn } from '../catalogues/plain-hints.en';
 
 /** The catalogues whose file starts with `m` to `r` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const enMR = {
   ...manualValidationEn,
+  ...plainHintsEn,
   ...materialsEn,
   ...mcpPlaygroundEn,
   ...mcpEn,
