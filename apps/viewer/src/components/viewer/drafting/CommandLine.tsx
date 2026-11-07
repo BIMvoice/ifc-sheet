@@ -13,7 +13,7 @@ import { useTranslation } from '@/i18n';
 import { inputTypeOf, onTypedText } from '@/drafting/unit-superscript';
 import { endCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 
-interface CommandLineProps {
+export interface CommandLineProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -21,7 +21,7 @@ interface CommandLineProps {
 }
 
 /** The prompts that ask for the words of a text, which may run to several lines. */
-const TEXT_PROMPTS: readonly string[] = ['textLines.prompt', 'tbparams.text.prompt'];
+export const TEXT_PROMPTS: readonly string[] = ['textLines.prompt', 'tbparams.text.prompt'];
 const MAX_ROWS = 5;
 
 export const CommandLine = forwardRef<HTMLTextAreaElement, CommandLineProps>(function CommandLine({ value, onChange, onSubmit, onEscape }, ref) {

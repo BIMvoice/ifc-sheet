@@ -70,7 +70,7 @@ import { modelHighlight } from './drafting-shapes';
 
 import { useDraftingProviders } from './useDraftingProviders';
 
-import { CommandLine } from './CommandLine';
+import { DraftingPrompt } from './ToolPrompt';
 
 import { gripCursor, useDraftingPointer } from './useDraftingPointer';
 
@@ -394,7 +394,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
         {selected.length > 0 && !state.gripDrag && !state.selectionDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
-      <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
+      <DraftingPrompt ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
   );
 }
