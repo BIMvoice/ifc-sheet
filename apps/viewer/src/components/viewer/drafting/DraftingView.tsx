@@ -95,10 +95,9 @@ import { screenToDrawing } from '@/drafting/frame';
 import { useModelCommandBridge } from './ModelCommandLayer';
 
 import { OpeningSymbolsLayer } from './OpeningSymbolsLayer';
-
 import { CutHatchLayer } from './CutHatchLayer';
-
 import { MembraneLayer } from './MembraneLayer';
+import { OnDrawingText } from './OnDrawingText';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
@@ -385,6 +384,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           symbols={liveSymbols}
         />
         <RegionSelectHint hidden={!!command} />
+        <OnDrawingText transform={viewTransform} axis={axis} />
         {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
         {selected.length === 1 && !state.gripDrag && !state.selectionDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
