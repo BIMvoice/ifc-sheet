@@ -36,7 +36,6 @@ export const draftingEn = {
   'drafting.sel.copy': 'Copy',
   'drafting.sel.move': 'Move',
   'drafting.sel.rotate': 'Rotate',
-  'drafting.sel.mirror': 'Mirror',
   'drafting.sel.bar': 'Change the selected drawing elements',
   'drafting.cmd.offset': 'OFFSET',
   'drafting.cmd.trim': 'TRIM',
