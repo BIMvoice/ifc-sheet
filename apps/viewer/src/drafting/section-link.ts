@@ -15,7 +15,7 @@
  */
 
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { graphicStandardOf, markStyleOf, type MarkStyle } from '@bimvoice/ifcsheet';
+import { graphicStandardOf, markStyleOf, placementOf, symbolParts, type MarkStyle, type SymbolPlacement } from '@bimvoice/ifcsheet';
 import type { CustomSectionPlane } from '@/store/section-types';
 import { useProjectStore } from '@/project/project-store';
 import { viewPlaneConfig } from '@/project/view-plane-config';
@@ -28,44 +28,8 @@ import type { DraftEntity, EntityShape, Pt } from './types';
 
 const EPS = 1e-6;
 
-/** Where a symbol sits on its plan: the cut line from `a` to `b`, looking toward `side`. */
-export interface SymbolPlacement {
-  a: Pt;
-  b: Pt;
-  side: Pt;
-}
-
-/** The parts of `viewId`'s symbol on one plan, in the order `sectionSymbolShapes` made them. */
-export function symbolParts(drafts: readonly DraftEntity[], viewId: string): DraftEntity[] {
-  return drafts.filter((d) => sectionLink(d) === viewId);
-}
-
-/**
- * Where the symbol made of `parts` sits. The cut line is the first line, the
- * first stem the second; the stem's direction is the side the section looks
- * toward. Measured from the parts, so it holds after a move, a rotation or a
- * grip drag of one end of the cut line.
- */
-export function placementOf(parts: readonly DraftEntity[]): SymbolPlacement | null {
-  const lines = parts.flatMap((p) => (p.shape.type === 'line' ? [p.shape] : []));
-  if (lines.length < 2) return null;
-  const [cut, stem] = lines;
-  const dx = cut.b.x - cut.a.x;
-  const dy = cut.b.y - cut.a.y;
-  const len = Math.hypot(dx, dy);
-  if (len < EPS) return null;
-  const sx = stem.b.x - stem.a.x;
-  const sy = stem.b.y - stem.a.y;
-  // The side is the normal of the cut line that the stem points along.
-  let nx = -dy / len;
-  let ny = dx / len;
-  if (sx * nx + sy * ny < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  const mid = { x: (cut.a.x + cut.b.x) / 2, y: (cut.a.y + cut.b.y) / 2 };
-  return { a: cut.a, b: cut.b, side: { x: mid.x + nx, y: mid.y + ny } };
-}
+// Where a symbol sits, and which shapes are its parts, are the engine's (`cross-ref/section-geometry.ts`): the references under its letters are placed from them there.
+export { placementOf, symbolParts, type SymbolPlacement };
 
 /** The text height the symbol was drawn with (its labels'), else `fallback`. */
 function symbolTextHeight(parts: readonly DraftEntity[], fallback: number): number {

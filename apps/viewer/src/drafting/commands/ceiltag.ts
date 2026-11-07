@@ -8,12 +8,11 @@
  * what is missing (`rcp/ceiling-tags.ts`).
  */
 
-import { annotationScreenUp } from '@/drafting/annotation';
-import { obstacleBoxes } from '@/drafting/cross-ref-marks';
+import { annotationScreenRight, annotationScreenUp } from '@/drafting/annotation';
 import { getLocale } from '@/i18n';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { centredAnchor } from '@bimvoice/ifcsheet';
+import { centredAnchor, obstacleBoxes } from '@bimvoice/ifcsheet';
 import { textWidthEm } from '@/drafting/text-width';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { styledParams } from '@/project/drafting-standards';
@@ -61,7 +60,7 @@ export function ceilTag(
   const height = ctx.settings.textHeight;
   const up = annotationScreenUp();
   // A tag stands at the centroid of its ceiling unless the plan draws a door leaf or swing (or a drafted line) there.
-  const obstacles = todo.length ? [...ctx.planObstacles(), ...obstacleBoxes(ctx.entities())] : [];
+  const obstacles = todo.length ? [...ctx.planObstacles(), ...obstacleBoxes(ctx.entities(), { widthOf: textWidthEm, frame: { up, right: annotationScreenRight() } })] : [];
   const drafts = todo.map((t) => {
     const at = clearTagSpot(t.at, t.extent, t.text, height, up, obstacles);
     return newDraft(ctx.viewId, ctx.layerId, {

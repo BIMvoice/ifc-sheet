@@ -12,7 +12,7 @@
  * renumbered, without anyone editing the plan the mark is on. Pure.
  */
 
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import type { ProjectSheet, SheetViewport } from '../document.js';
 
 type SheetLike = Pick<ProjectSheet, 'number' | 'viewports'>;
 

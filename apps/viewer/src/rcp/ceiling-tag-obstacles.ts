@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { overlayObstacleBoxes, type Box } from '@/drafting/cross-ref-marks';
+import { overlayObstacleBoxes, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import { planOverlays } from '@/project/plan-overlays';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { hiddenClasses } from '@/project/view-graphics';

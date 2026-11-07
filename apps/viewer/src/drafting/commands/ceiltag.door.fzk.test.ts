@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { FZK_HAUS, loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { clearDraftHistory } from '@/drafting/draft-store.js';
-import { boxOf, overlaps, overlayObstacleBoxes, type Box } from '@/drafting/cross-ref-marks';
+import { boxesOverlap as overlaps, boxOfPoints as boxOf, overlayObstacleBoxes, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import { textBox } from '@/drafting/annotation';
 import { modelLevels } from '@/project/model-levels';
 import { planOverlays } from '@/project/plan-overlays';

@@ -34,7 +34,7 @@ const drawing = {
   lines: [], cutPolygons: [], projectionPolygons: [],
   stats: { cutLineCount: 0, projectionLineCount: 0, hiddenLineCount: 0, silhouetteLineCount: 0, polygonCount: 0, totalTriangles: 0, processingTimeMs: 0 },
 } as unknown as Drawing2D;
-const view = { id: 'v', kind: 'plan', name: 'Plan', createdAt: 0 } as unknown as ProjectView;
+const view = { id: 'v', kind: 'plan', name: 'Plan', createdAt: 0, level: { name: 'L0', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2, scale: 100 } as unknown as ProjectView;
 const viewport = (over: Partial<SheetViewport>): SheetViewport => ({ id: 'vp', viewId: 'v', x: 420, y: 297, scale: 50, width: 0, height: 0, center: null, ...over });
 const sheetOf = (vp: SheetViewport): ProjectSheet => ({ id: 's', number: 'A-101', name: 'Plan', createdAt: 0, paper: 'A1', orientation: 'landscape', viewports: [vp] });
 
