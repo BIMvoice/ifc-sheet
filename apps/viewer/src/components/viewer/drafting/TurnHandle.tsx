@@ -37,8 +37,8 @@ export function TurnHandle({ viewId, selection, transform, axis, turn, cursor }:
     <>
       <div
         data-turn-handle
-        role="img"
-        aria-label={t('drafting.turn.handle')}
+        // A picture only: the drawing takes the drag, so screen readers skip it.
+        aria-hidden="true"
         title={t('drafting.turn.handle')}
         className="pointer-events-none absolute z-20 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sky-600 text-sky-700 shadow-sm"
         // On the paper, which stays white in dark mode (the theme remaps `bg-white`).
