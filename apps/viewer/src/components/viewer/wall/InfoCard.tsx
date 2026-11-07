@@ -15,6 +15,7 @@ import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
 import { RevisionPick } from './RevisionsCard';
 import { ToolTypes } from './ToolTypes';
+import { isEditTool } from './EditToolField';
 import { toolHelpKey } from './tool-help';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions';
 import { WALL_CARD, WALL_CARD_TITLE, WALL_EYEBROW } from './wall-type';
@@ -43,6 +44,7 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
       <Card eyebrow={drawingOn ? t('wall.draw.onDrawing', { name: drawingOn }) : t('wall.draw.onSheet')} title={t(draw.labelKey)}>
         <p className="m-0 leading-relaxed">{t(toolHelpKey(draw.command))}</p>
         {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
+        {isEditTool(draw.command) ? <ToolTypes tool={draw.command} /> : null}
         {draw.command === 'revcloud' ? <RevisionPick /> : null}
         <p className="mb-0 mt-3 text-xs text-cyan-300">{t('wall.drawHint')}</p>
         {orthoNote}

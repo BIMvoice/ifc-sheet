@@ -10,6 +10,7 @@ import { cleanup, render, type } from '@/test/render.js';
 import { attachDraftingView, cancelCommand, clickDrawing, patchDraftSettings, startDraftCommand } from '@/drafting/session';
 import { clearDraftHistory, draftsOfView, editDrafts, newDraft } from '@/drafting/draft-store';
 import { resetProject, useProjectStore } from '@/project/project-store';
+import { InfoCard } from './InfoCard.js';
 import { ToolTypes } from './ToolTypes.js';
 
 /** #168: Offset, Fillet and Chamfer show their number on the tool card; setting it there is what the picks use. */
@@ -41,6 +42,16 @@ function drawCorner() {
 }
 
 describe('the number field on the tool card of Offset, Fillet and Chamfer (#168)', () => {
+  it('is on the card the Wall shows while the tool runs, with a help line that points at it', () => {
+    for (const [tool, label] of [['offset', 'Distance'], ['fillet', 'Radius'], ['chamfer', 'Distance']] as const) {
+      const ui = render(<InfoCard tool={tool} onDone={() => {}} />);
+      assert.equal(ui.querySelectorAll('input[type="number"]').length, 1, `${tool}: one number field on the card`);
+      assert.ok(ui.textContent?.includes(label), `${tool}: labelled ${label}`);
+      assert.ok(!/\btype a\b/i.test(ui.textContent ?? ''), `${tool}: the card does not tell the user to type a number`);
+      cleanup();
+    }
+  });
+
   it('shows the current value with a label: Radius for Fillet, Distance for Offset and Chamfer', () => {
     patchDraftSettings({ filletRadius: 1.5, chamferDistance: 0.4, offsetDistance: 2 });
     for (const [tool, label, value] of [['fillet', 'Radius', '1.5'], ['chamfer', 'Distance', '0.4'], ['offset', 'Distance', '2']] as const) {
