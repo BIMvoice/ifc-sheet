@@ -20,6 +20,7 @@ import { undoLatest } from '@/project/unified-undo';
 import { cancelCommand, clickDrawing, currentLayerId, endCommand, runningCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { setAutocadMode } from '@/lib/commands/autocad-mode';
 import type { ProjectView } from '@/project/types';
+import { drawingToScreen } from '@/drafting/frame';
 import { DraftingView } from './DraftingView.js';
 
 const plan = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 } satisfies ProjectView;
@@ -143,6 +144,56 @@ describe('Note: a straight leader needs no Enter', () => {
     assert.equal(drafts().length, 1);
     const shape = drafts()[0].shape;
     assert.equal(shape.type === 'leader' ? shape.pts.length : 0, 3);
+  });
+});
+
+describe('Note: the leader stays drawn while its words are asked for (#168)', () => {
+  /** The blue dashed preview paths of the running command, as the drawing overlay draws them. */
+  const previews = (ui: HTMLElement) => [...ui.querySelectorAll('path[stroke-dasharray="4 3"]')].map((p) => p.getAttribute('d') ?? '');
+  const hover = (ui: HTMLElement, x: number, y: number) => {
+    const s = drawingToScreen({ x, y }, { scale: 40, x: 0, y: 0 }, 'down');
+    act(() => { ui.querySelector('[data-drafting-canvas]')!.dispatchEvent(new window.MouseEvent('pointermove', { bubbles: true, clientX: s.x, clientY: s.y })); });
+  };
+
+  it('a one-segment leader is previewed with the editor open', async () => {
+    const ui = render(<DraftingView view={plan} />);
+    act(() => { startDraftCommand('leader'); });
+    click(0, 0);
+    click(2, 1);
+    click(2, 1);
+    hover(ui, 6, 6);
+    await advance(0);
+    assert.ok(editorIn(ui), 'the editor is open');
+    const shown = previews(ui);
+    assert.equal(shown.length, 1, 'the leader is drawn as a preview');
+    const segments = shown[0].match(/[ML]/g) ?? [];
+    assert.equal(segments.length, 2, 'arrow point and end: one segment');
+  });
+
+  it('a two-segment leader is previewed with the editor open', async () => {
+    const ui = render(<DraftingView view={plan} />);
+    act(() => { startDraftCommand('leader'); });
+    click(0, 0);
+    click(2, 1);
+    click(5, 1);
+    hover(ui, 6, 6);
+    await advance(0);
+    assert.ok(editorIn(ui), 'the editor is open');
+    const shown = previews(ui);
+    assert.equal(shown.length, 1, 'the leader is drawn as a preview');
+    assert.equal((shown[0].match(/[ML]/g) ?? []).length, 3, 'arrow point, bend and end: two segments');
+  });
+
+  it('Esc drafts nothing and the preview goes', () => {
+    const ui = render(<DraftingView view={plan} />);
+    act(() => { startDraftCommand('leader'); });
+    click(0, 0);
+    click(2, 1);
+    click(5, 1);
+    hover(ui, 6, 6);
+    press(editorIn(ui)!, 'Escape');
+    assert.equal(drafts().length, 0);
+    assert.equal(previews(ui).length, 0);
   });
 });
 

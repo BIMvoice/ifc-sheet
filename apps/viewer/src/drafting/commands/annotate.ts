@@ -130,7 +130,9 @@ export const leaderCommand: DraftCommandDef = {
         return 'done';
       },
       preview(cursor) {
-        if (asking || pts.length === 0) return [];
+        // While the words are asked for, the leader placed stays drawn so the note's target is in view (#168).
+        if (asking) return pts.length >= 2 ? [{ type: 'polyline', pts: [...pts], closed: false }] : [];
+        if (pts.length === 0) return [];
         if (pts.length === 1) return [{ type: 'polyline', pts: [pts[0], cursor], closed: false }];
         return [{ type: 'polyline', pts: [pts[0], pts[1], end(cursor)], closed: false }, ...orthoGuides(pts[1], cursor, 4 * ctx.settings.textHeight).map((g) => ({ type: 'line' as const, a: g.a, b: g.b }))];
       },
