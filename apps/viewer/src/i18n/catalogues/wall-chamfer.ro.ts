@@ -9,7 +9,7 @@ import type { TranslationValue } from '../types';
 export const wallChamferRo = {
   'wall.edit': 'Editare',
   'wall.draw.chamfer': 'Șanfrenare',
-  'wall.draw.chamfer.body': 'Faceți clic pe două linii ca să tăiați colțul lor. Scrieți mai întâi o distanță; 0 dă un colț ascuțit. Merge pe liniile desenate și pe liniile modelului.',
+  'wall.draw.chamfer.body': 'Faceți clic pe două linii ca să tăiați colțul lor. Setați distanța în câmpul de mai jos; 0 dă un colț ascuțit. Merge pe liniile desenate și pe liniile modelului.',
   'drafting.cmd.chamfer': 'CHAMFER',
   'drafting.prompt.chamferFirst': 'Selectați prima linie (distanța {distance}) sau scrieți o distanță:',
   'drafting.prompt.chamferSecond': 'Selectați a doua linie:',

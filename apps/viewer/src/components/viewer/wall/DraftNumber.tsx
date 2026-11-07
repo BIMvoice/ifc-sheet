@@ -15,7 +15,8 @@ import { useEffect, useState } from 'react';
 import { WALL_FIELD } from './wall-type';
 
 export function DraftNumber({ value, onValid, accept, min, step, label }: {
-  value: number;
+  /** The stored value; null shows an empty field (a setting not chosen yet). */
+  value: number | null;
   onValid: (v: number) => void;
   /** Whether a typed number is a value the field takes (default: any finite number). */
   accept?: (v: number) => boolean;
@@ -23,13 +24,13 @@ export function DraftNumber({ value, onValid, accept, min, step, label }: {
   step?: number;
   label?: string;
 }) {
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
   const ok = (text: string): number | null => {
     const v = Number(text);
     return text.trim() !== '' && Number.isFinite(v) && (accept ? accept(v) : true) ? v : null;
   };
   // The stored value changed under the field (another control, an undo): show it, unless the text already means it.
-  useEffect(() => setDraft((d) => (ok(d) === value ? d : String(value))), [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setDraft((d) => (ok(d) === value ? d : value === null ? '' : String(value))), [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <input
       className={WALL_FIELD} type="number" min={min} step={step} value={draft} aria-label={label}
@@ -38,7 +39,7 @@ export function DraftNumber({ value, onValid, accept, min, step, label }: {
         const v = ok(e.target.value);
         if (v !== null) onValid(v);
       }}
-      onBlur={() => setDraft(String(value))}
+      onBlur={() => setDraft(value === null ? '' : String(value))}
     />
   );
 }
