@@ -39,6 +39,7 @@ import { sweptDiskInspectionEn } from '../catalogues/swept-disk-inspection.en';
 import { tableCorrectionsEn } from '../catalogues/table-corrections.en';
 import { tagFieldsEn } from '../catalogues/tag-fields.en';
 import { tagShowsEn } from '../catalogues/tag-shows.en';
+import { symbolToolFieldsEn } from '../catalogues/symbol-tool-fields.en';
 import { terrainImageryEn } from '../catalogues/terrain-imagery.en';
 import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
@@ -112,6 +113,7 @@ export const enSZ = {
   ...sweptDiskInspectionEn,
   ...tableCorrectionsEn,
   ...tagFieldsEn,
+  ...symbolToolFieldsEn,
   ...tagShowsEn,
   ...terrainImageryEn,
   ...titleBlockParamsEn,
