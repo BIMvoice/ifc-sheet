@@ -81,7 +81,7 @@ import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
 import { ModifyBar } from './ModifyBar';
-
+import { TurnHandle } from './TurnHandle';
 import { gripsOf } from '@/drafting/grips';
 
 import { grippable } from '@/drafting/section-link';
@@ -141,7 +141,6 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
-
 
 const NO_SHEET_TRANSFORM = { current: null };
 
@@ -391,6 +390,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
         ) : null}
         {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
         {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag?.drag && !command ? <TurnHandle viewId={view.id} selection={selection} transform={viewTransform} axis={axis} turn={state.selectionDrag?.turn ?? null} cursor={state.cursor} /> : null}
         {selected.length > 0 && !state.gripDrag && !state.selectionDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
