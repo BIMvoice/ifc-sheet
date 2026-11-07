@@ -189,6 +189,7 @@ Entity references come from the file, so a recursive walk over a self-referentia
 ## Working in parallel: rules learned the hard way
 
 **Keep the queue small** (2026-10-29: about 50 open PRs re-conflicted each other on every merge; most CI time and agent work went into re-merging)
+- Two checks enforce the next two rules: `queue-guard` (`.github/workflows/queue-guard.yml`, areas in `.github/queue-areas.json`) turns the 6th open PR, or a second in one area, into a draft, and `no-stack` (a step of the CI `gates` job, `scripts/check-no-stack.mjs`) fails a PR built on another open PR.
 - At most 5 open agent PRs. Do not open a new one while 5 are open: get one merged first.
 - One open PR per area (joinery, drafting, engine/CLI, i18n, standards, permits, CI). A second change in the same area waits for the first to merge, then branches from `main`.
 - Update a PR with `main` only when it is next to merge. Every push requeues a full CI run, and a PR updated early conflicts again before its turn.
