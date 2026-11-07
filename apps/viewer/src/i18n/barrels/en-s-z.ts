@@ -57,6 +57,7 @@ import { visibilityReasonsEn } from '../catalogues/visibility-reasons.en';
 import { wallArrangeEn } from '../catalogues/wall-arrange.en';
 import { wallExitsEn } from '../catalogues/wall-exits.en';
 import { wallFindEn } from '../catalogues/wall-find.en';
+import { wallDropEn } from '../catalogues/wall-drop.en';
 import { wallZoomEn } from '../catalogues/wall-zoom.en';
 import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
@@ -130,6 +131,7 @@ export const enSZ = {
   ...wallFindEn,
   ...wallRelayoutEn,
   ...wallZoomEn,
+  ...wallDropEn,
   ...wallCompareEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,

@@ -142,7 +142,6 @@ export const wallRo = {
   'wall.vp.remove': 'Elimină de pe planșă',
   'wall.vp.none': 'Faceți clic pe un desen pentru a-l alege; trageți-l pentru a-l muta, dublu clic pentru a desena în el, Delete pentru a-l scoate.',
   'wall.vp.place': 'Amplasează pe această planșă',
-  'wall.vp.placePick': 'Alegeți un desen sau un tabel…',
   'wall.fit': 'Încadrează',
   'wall.tb.title': 'Cartuș',
   'wall.tb.everySheet': 'Se completează o dată și se tipărește pe fiecare planșă. O planșă poate spune altceva din propriul buton Cartuș.',
