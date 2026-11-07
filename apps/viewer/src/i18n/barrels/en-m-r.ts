@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { repeatToolEn } from '../catalogues/repeat-tool.en';
 import { manualValidationEn } from '../catalogues/manual-validation.en';
 import { materialsEn } from '../catalogues/materials.en';
 import { norwayEn } from '../catalogues/norway.en';
@@ -104,6 +105,7 @@ export const enMR = {
   ...revisionsEn,
   ...ribbonToolbarEn,
   ...regionSelectEn,
+  ...repeatToolEn,
   ...roofBlockEn,
   ...roofEn,
   ...roomFinishesEn,

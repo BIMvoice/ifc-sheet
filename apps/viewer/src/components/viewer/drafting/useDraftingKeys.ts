@@ -120,10 +120,21 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         }
         return;
       }
+      if (isKey('drafting.repeat')) {
+        // A visible, bound action (#168): the last tool starts again only when nothing runs.
+        const { lastCommandId, commandId, selecting } = useDraftingSession.getState();
+        if (lastCommandId && !commandId && !selecting) {
+          e.preventDefault();
+          startDraftCommand(lastCommandId);
+        }
+        return;
+      }
       if (isKey('drafting.confirm')) {
         if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
-        submitRef.current();
+        // Outside AutoCAD mode Enter and Space end a running command and otherwise do nothing: repeating the last tool is `drafting.repeat` (#168).
+        const running = useDraftingSession.getState().commandId !== null || useDraftingSession.getState().selecting;
+        if (running || autocadModeOn()) submitRef.current();
         return;
       }
       if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key)) {

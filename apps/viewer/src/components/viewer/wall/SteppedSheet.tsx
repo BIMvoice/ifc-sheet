@@ -79,6 +79,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [tool, setTool] = useState<string | null>(null);
+  const [lastTool, setLastTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
@@ -183,6 +184,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }, [inDrawing]);
 
   const startTool = (command: string): void => {
+    setLastTool(command);
     cancelStart.current();
     ran.current = null;
     setAdding(false);
@@ -313,7 +315,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
+        <ToolRail active={tool} last={lastTool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
