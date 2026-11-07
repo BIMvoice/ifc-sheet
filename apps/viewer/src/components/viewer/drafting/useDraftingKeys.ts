@@ -19,6 +19,7 @@ import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
 import { removeMarkedWitnessPoint } from '@/drafting/witness-point';
+import { repeatLastTool } from '../wall/repeat-tool';
 import { claimWallKey } from '../wall/wall-key-bus';
 import { isDraftingKey } from './drafting-key-match';
 import { runDraftingAction, type DraftingRunId } from './run-action';
@@ -122,11 +123,8 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       }
       if (isKey('drafting.repeat')) {
         // A visible, bound action (#168): the last tool starts again only when nothing runs.
-        const { lastCommandId, commandId, selecting } = useDraftingSession.getState();
-        if (lastCommandId && !commandId && !selecting) {
-          e.preventDefault();
-          startDraftCommand(lastCommandId);
-        }
+        e.preventDefault();
+        repeatLastTool();
         return;
       }
       if (isKey('drafting.confirm')) {
