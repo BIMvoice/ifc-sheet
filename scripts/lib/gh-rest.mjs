@@ -10,17 +10,18 @@
 const API = process.env.GITHUB_API_URL || 'https://api.github.com';
 
 async function call(token, method, path, body) {
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-      'user-agent': 'ifcsheet-queue-gates',
-      ...(body ? { 'content-type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: 'application/vnd.github+json',
+    'x-github-api-version': '2022-11-28',
+    'user-agent': 'ifcsheet-queue-gates',
+  };
+  // Only POST calls carry a body; a GET never does.
+  if (body && method !== 'POST') throw new Error(`gh-rest: a ${method} request cannot carry a body`);
+  const init = body
+    ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    : { method, headers };
+  const res = await fetch(`${API}${path}`, init);
   if (!res.ok) {
     throw new Error(`GitHub ${method} ${path} answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
