@@ -6,11 +6,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ElevationDirection, ProjectSheet, ProjectView } from '@/project/types';
 import { textBox } from './annotation';
-import { elevationMarkDrafts, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts, type Box } from './cross-ref-marks';
+import { elevationMarkDrafts, obstacleBoxes, overlayObstacleBoxes, sectionReferenceDrafts, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
+import { textWidthEm } from './text-width';
 import { doorSymbol } from './opening-symbols';
 import type { PlanOverlay } from '@/project/plan-overlays';
 import { sectionSymbolShapes } from './section-symbol';
 import type { DraftEntity, Pt } from './types';
+
+const measure = { widthOf: textWidthEm, frame: { up: 1 as const, right: 1 as const } };
 
 /** Where the elevation marks stand on a plan: outside the building, on the side each elevation looks at. */
 
@@ -28,7 +31,7 @@ const sheets: ProjectSheet[] = [
   ] },
 ];
 const make = (sheetList = sheets, viewList = views) =>
-  elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views: viewList, sheets: sheetList, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1 });
+  elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views: viewList, sheets: sheetList, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1 });
 
 const labelFor = (marks: DraftEntity[], text: string) => {
   const d = marks.find((m) => m.shape.type === 'text' && m.shape.text === text);
@@ -102,7 +105,7 @@ describe('elevationMarkDrafts', () => {
   });
 
   it('keeps the size on paper at the viewport scale', () => {
-    const at50 = elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.05, factor: 0.5 });
+    const at50 = elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.05, factor: 0.5 });
     const text = (list: DraftEntity[]) => list.find((m) => m.shape.type === 'text')!.shape;
     assert.equal(text(at50).type, 'text');
     // Stored height times the factor drawing multiplies it by: 2.5 mm of paper at 1:50 is 0.125 m.
@@ -112,8 +115,8 @@ describe('elevationMarkDrafts', () => {
   it('slides a mark clear of a section line through the middle of its side, and stays outside the building', () => {
     // The demo case: section A cuts the building at x = 106, its symbol reaching past both the north and the south facade.
     const symbol: DraftEntity[] = sectionSymbolShapes({ x: 106, y: 198 }, { x: 106, y: 212 }, { x: 108, y: 205 }, 'A', 0.35).map((shape, i) => ({ id: `sym${i}`, viewId: 'plan', layerId: '0', shape, params: { sectionOf: 'sec' } }));
-    const obstacles = obstacleBoxes(symbol);
-    const at = (list: Box[]) => elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles: list });
+    const obstacles = obstacleBoxes(symbol, measure);
+    const at = (list: Box[]) => elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles: list });
     const boxOfMark = (marks: DraftEntity[], direction: ElevationDirection): Box => {
       const pts = marks.filter((m) => m.id.includes(`e-${direction}`)).flatMap((m) => (m.shape.type === 'line' ? [m.shape.a, m.shape.b] : m.shape.type === 'text' ? textBox(m.shape.p, m.shape.text, m.shape.height, m.shape.rotation) : []));
       return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
@@ -141,7 +144,7 @@ describe('marks keep clear of what the plan overlays', () => {
     return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
   };
   const hits = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
-  const at = (obstacles: Box[], paperUnit = 0.1) => elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit, factor: 1, obstacles });
+  const at = (obstacles: Box[], paperUnit = 0.1) => elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit, factor: 1, obstacles });
   // A 0.9 m door in the middle of the south wall, its leaf and swing opening outward over the margin the marks stand in.
   const front = doorSymbol({ c: { x: 106, y: 210 }, u: { x: 1, y: 0 }, n: { x: 0, y: 1 }, width: 0.9, depth: 0.3 }, 0);
   const swing = overlayObstacleBoxes([overlay([...front.thin, ...front.heavy])]);
@@ -181,7 +184,7 @@ describe('marks keep clear of what the plan overlays', () => {
     const view: ProjectView[] = [{ id: 'sec', kind: 'section', name: 'A', createdAt: 0 } as ProjectView];
     const sectionSheets: ProjectSheet[] = [{ id: 's', number: 'A-301', name: 'Sections', createdAt: 0, viewports: [{ id: 'vs', viewId: 'sec', x: 0, y: 0, scale: 100, width: 0, height: 0, center: null }] }];
     const symbol: DraftEntity[] = sectionSymbolShapes({ x: 106, y: 198 }, { x: 106, y: 212 }, { x: 108, y: 205 }, 'A', 0.35).map((shape, i) => ({ id: `sym${i}`, viewId: 'plan', layerId: '0', shape, params: { sectionOf: 'sec' } }));
-    const refs = (obstacles: Box[]) => sectionReferenceDrafts(symbol, view, sectionSheets, { obstacles, factor: 1 });
+    const refs = (obstacles: Box[]) => sectionReferenceDrafts(symbol, view, sectionSheets, { measure, obstacles, factor: 1 });
     const boxOfRef = (d: DraftEntity): Box => {
       assert.equal(d.shape.type, 'text');
       if (d.shape.type !== 'text') throw new Error('text');
@@ -191,13 +194,13 @@ describe('marks keep clear of what the plan overlays', () => {
 
     it('stays where it was with nothing in the way', () => {
       assert.equal(refs([]).length, 2, 'one by each letter');
-      assert.deepEqual(refs([]).map((d) => d.shape), sectionReferenceDrafts(symbol, view, sectionSheets).map((d) => d.shape));
+      assert.deepEqual(refs([]).map((d) => d.shape), sectionReferenceDrafts(symbol, view, sectionSheets, { measure }).map((d) => d.shape));
     });
 
     it('keeps clear of the other letters on the plan, the next section\'s letter among them', () => {
       const [home] = refs([]).map(boxOfRef);
       const next: DraftEntity = { id: 'other', viewId: 'plan', layerId: '0', shape: { type: 'text', p: { x: home.x0 + 0.02, y: home.y0 + 0.02 }, text: 'B', height: 0.35, rotation: 0 }, params: {} };
-      const crowded = sectionReferenceDrafts([...symbol, next], view, sectionSheets, { factor: 1 }).map(boxOfRef);
+      const crowded = sectionReferenceDrafts([...symbol, next], view, sectionSheets, { measure, factor: 1 }).map(boxOfRef);
       const letter = boxOfRef({ ...next });
       for (const box of crowded) assert.equal(hits(box, letter), false);
     });

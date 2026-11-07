@@ -18,7 +18,7 @@ import { annotationFactor } from '@/project/viewport-annotation';
 import type { SheetViewport } from '@/project/types';
 import type { Pt } from './types';
 import { textBox, withAnnotationScreenUp } from './annotation';
-import { elevationMarkPlan } from './cross-ref-marks';
+import { elevationMarkPlan } from '@bimvoice/ifcsheet';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from './cross-ref-plan';
 import { draftsOfView } from './draft-store';
 

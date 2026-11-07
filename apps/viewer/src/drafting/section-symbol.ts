@@ -9,11 +9,14 @@
  * moves and undoes like any other drawing.
  */
 
-import type { MarkStyle } from '@bimvoice/ifcsheet';
+import {
+  CIRCLE_POLE, CIRCLE_R, FLAG_PAD, FLAG_POINT, FLAG_POLE, TRIANGLE_HALF_BASE, TRIANGLE_LEN, markHeadReach, sectionLink, sectionNormal, withoutSectionLink,
+  type MarkStyle,
+} from '@bimvoice/ifcsheet';
 import { registeredTranslations, resolveName } from '@/i18n/registry';
 import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
-import { DETAIL_LINK, detailLink, isDetailMark, PART } from './detail-mark';
+import { detailLink, isDetailMark } from './detail-mark';
 
 /** Stem length in text heights. */
 const STEM = 4;
@@ -21,37 +24,8 @@ const STEM = 4;
 const BARB = 0.8;
 const BARB_HALF_ANGLE = Math.PI / 7;
 
-/** The unit normal of the cut line a-b on the side `side` is on (the way the section looks); `null` for a line of no length. */
-export function sectionNormal(a: Pt, b: Pt, side: Pt): Pt | null {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-9) return null;
-  const n = { x: -dy / len, y: dx / len };
-  return (side.x - a.x) * n.x + (side.y - a.y) * n.y < 0 ? { x: -n.x, y: -n.y } : n;
-}
-
-/** Circle head: the radius, the pole to it, and how far the direction triangle stands past it (text heights). */
-const CIRCLE_R = 1.3;
-const CIRCLE_POLE = 2;
-const TRIANGLE_LEN = 1.1;
-/** Share of the circle's radius the triangle's base spans on each side of the axis. */
-const TRIANGLE_HALF_BASE = 0.55;
-/** Flag head: the pole to it, the padding round the letter, and the point on its far edge (text heights). */
-const FLAG_POLE = 1.5;
-const FLAG_PAD = 0.5;
-const FLAG_POINT = 0.8;
-
-/**
- * How far past the letter's centre a mark's head reaches along the view direction, for a letter whose box extends
- * `halfN` along that direction. The reference under the letter ("1 / A-301") starts beyond it.
- * Zero for the arrow, whose head is not round the letter (convention, #447).
- */
-export function markHeadReach(style: MarkStyle, height: number, halfN: number): number {
-  if (style === 'circle') return CIRCLE_R * height + TRIANGLE_LEN * height;
-  if (style === 'flag') return halfN + FLAG_PAD * height + FLAG_POINT * height;
-  return 0;
-}
+// The head sizes, the way the section looks and how far a head reaches past the letter are the engine's (`cross-ref/section-geometry.ts`), so the references under the letters stand clear of the symbol in the PDF as in the app.
+export { markHeadReach, sectionLink, sectionNormal, withoutSectionLink };
 
 const solidTriangle = (pts: Pt[]): AnnotationShape => ({ type: 'hatch', loops: [pts], pattern: 'SOLID', scale: 1, angle: 0 });
 
@@ -117,9 +91,6 @@ export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height
   return [...out, ...barbs(a), ...barbs(b), letter(at(tip(a), clear)), letter(at(tip(b), clear))];
 }
 
-/** The parameter that ties a drafted shape to the section view whose symbol it belongs to. */
-const LINK = 'sectionOf';
-
 /** `Section A-A`: how drawings name a section view. */
 export function sectionViewName(mark: string): string {
   return resolveName('names.view.section', { mark });
@@ -147,11 +118,6 @@ export function nextSectionMark(views: readonly { kind: string; name: string }[]
   while (taken.has(mark.toLowerCase())) mark = nextAxisLabel(mark);
   return mark;
 }
-
-export const sectionLink = (e: Pick<DraftEntity, 'params'>): string | null => {
-  const id = e.params[LINK];
-  return typeof id === 'string' ? id : null;
-};
 
 /** A shape of the symbol of a section view that still exists. Such shapes are locked to their section. */
 export function isSectionSymbol(e: Pick<DraftEntity, 'params'>, views: readonly { id: string }[]): boolean {
@@ -181,15 +147,6 @@ export function withSectionParts(ids: ReadonlySet<string>, entities: readonly Dr
     if (link && sections.has(link)) out.add(e.id);
   }
   return out;
-}
-
-/** The parameters of a copy: the same, minus the claim to be a section's symbol or a detail's mark. */
-export function withoutSectionLink(params: Readonly<Record<string, DraftParamValue>>): Record<string, DraftParamValue> {
-  const rest = { ...params };
-  delete rest[LINK];
-  delete rest[DETAIL_LINK];
-  delete rest[PART];
-  return rest;
 }
 
 /** The drafts with the symbol of `viewId` showing the mark of `name`. Unchanged (same array) when nothing shows it. */

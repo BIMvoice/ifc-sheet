@@ -14,10 +14,9 @@ import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { generateDefaultSet, gridAxesOfModel, gridObstacles, gridShapesOf, type DefaultSet } from '@bimvoice/ifcsheet';
+import { generateDefaultSet, gridAxesOfModel, overlayObstacleBoxes, gridObstacles, gridShapesOf, type DefaultSet } from '@bimvoice/ifcsheet';
 import { generateViewDrawings, openModel, sectionConfigFor, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { overlayObstacleBoxes } from '@/drafting/cross-ref-marks';
 import { loadPlanModel, planModelMissing } from '@/test/discipline-plan-fixture';
 import { gridOverlays, viewGridAxes } from './grid-overlay';
 

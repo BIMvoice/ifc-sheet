@@ -6,8 +6,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 import { withAnnotationScreenUp } from './annotation';
-import { elevationMarkDrafts, type Box } from './cross-ref-marks';
+import { elevationMarkDrafts, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
+import { textWidthEm } from './text-width';
 import { withCrossReferences, type PlanCrossRefInput } from './cross-ref-plan';
+
+const measure = { widthOf: textWidthEm, frame: { up: 1 as const, right: 1 as const } };
 
 /**
  * #154: a sheet asks for a plan viewport's cross-references three times a render and on every
@@ -53,7 +56,7 @@ describe('withCrossReferences places a plan\'s marks once per input (#154)', () 
 });
 
 describe('elevationMarkDrafts takes the nearest clear place (#154 kept its tie rule)', () => {
-  const mark = (obstacles: Box[]) => elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views: [north], sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles });
+  const mark = (obstacles: Box[]) => elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views: [north], sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles });
   const labelX = (obstacles: Box[]): number => {
     const d = mark(obstacles).find((m) => m.shape.type === 'text');
     assert.ok(d && d.shape.type === 'text');

@@ -39,6 +39,7 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
 import { paperOf } from './viewport-fit.js';
 import { sheetNoteLines } from './sheet-notes.js';
+import { crossRefAnnotations } from './sheet-cross-refs.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
 import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
@@ -316,11 +317,16 @@ export function sheetGraphic(
       }
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
-    if (drawing && project?.annotations && Number.isFinite(drawing.bounds.min.x)) {
+    // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
+    const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale }) : null;
+    if (drawing && (project?.annotations || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
-      const drafted = viewportAnnotations({ view, vp, at, frame: paperSigns(drawing.config.plane.axis), box, plane: drawing.config.plane }, project.annotations);
-      strokes.push(...drafted.strokes);
-      out.texts.push(...drafted.texts);
+      const frame = paperSigns(drawing.config.plane.axis);
+      const printed = [...(project?.annotations ? [viewportAnnotations({ view, vp, at, frame, box, plane: drawing.config.plane }, project.annotations)] : []), ...(crossRefs ? [viewportAnnotations({ view, vp, at, frame, box: drawingArea, plane: drawing.config.plane }, crossRefs)] : [])];
+      for (const drafted of printed) {
+        strokes.push(...drafted.strokes);
+        out.texts.push(...drafted.texts);
+      }
     }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;

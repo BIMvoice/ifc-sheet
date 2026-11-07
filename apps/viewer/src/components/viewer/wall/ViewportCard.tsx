@@ -9,7 +9,7 @@
  * view can be dragged onto the paper instead, to land where it is let go (#168, `SheetCanvas`).
  */
 
-import { templateKindOf } from '@bimvoice/ifcsheet';
+import { drawingNumbers, templateKindOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
@@ -17,7 +17,6 @@ import { addViewport, editViewport, removeViewport } from '@/project/sheets';
 import { isResizable } from '@/project/viewport-resize';
 import { isFittedSchedule } from '@/project/schedule-fit';
 import { PLACE_DRAG_TYPE, dropsAtTrueSize } from '@/project/viewport-drop';
-import { drawingNumbers } from '@/drafting/cross-ref';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { useLegendLabels } from '../legend/LegendGraphic';
