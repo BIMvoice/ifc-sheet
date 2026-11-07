@@ -58,7 +58,7 @@ export interface DimensionPlan {
   strings: PlannedString[];
   /** Facades with nothing to dimension (no opening and no cross wall). */
   skippedFacades: number;
-  /** Strings left out: their line would run through the building (a notch or a courtyard facade), or their facade is not on the walls' axes and its figures could not be trusted. */
+  /** Strings left out: their line would run through the building (a notch or a courtyard facade), a wall apart from it runs out across their line further than they may move to clear it (a site wall), or their facade is not on the walls' axes and its figures could not be trusted. */
   droppedStrings: number;
   /** Doors and windows left out of the strings because the plan does not show exactly where their edges are. */
   droppedOpenings: number;
