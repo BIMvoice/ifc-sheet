@@ -49,7 +49,7 @@ export function SymbolToolFields() {
     <>
       <NumberField label={t('symbolTool.size')} value={settings.symbolScale} accepts={(n) => n > 0} onValue={(n) => patchDraftSettings({ symbolScale: n })} />
       <NumberField label={t('symbolTool.rotation')} value={settings.symbolRotation} accepts={() => true} onValue={(n) => patchDraftSettings({ symbolRotation: n })} />
-      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={t('symbolTool.rotationQuick')}>
+      <fieldset className="m-0 mt-2 flex flex-wrap gap-2 border-0 p-0" aria-label={t('symbolTool.rotationQuick')}>
         {QUICK_ROTATIONS.map((deg) => (
           <button
             key={deg}
@@ -62,7 +62,7 @@ export function SymbolToolFields() {
             {deg}
           </button>
         ))}
-      </div>
+      </fieldset>
     </>
   );
 }
