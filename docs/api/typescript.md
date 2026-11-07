@@ -9,6 +9,60 @@ ifc-lite ships its public npm packages under the `@ifc-lite/*` scope, plus the `
 <!-- BEGIN GENERATED: package-index -->
 | Package | Description |
 |---------|-------------|
+| [`@ifc-lite/parser`](#ifc-liteparser) | IFC/STEP parser for IFC-Lite |
+| [`@ifc-lite/geometry`](#ifc-litegeometry) | Geometry processing bridge for IFC-Lite - exact-arithmetic CSG, streamed across workers |
+| [`@ifc-lite/data`](#ifc-litedata) | Columnar data structures for IFC-Lite |
+| [`@ifc-lite/query`](#ifc-litequery) | Query system for IFC-Lite |
+| [`@ifc-lite/spatial`](#ifc-litespatial) | Spatial indexing for IFC-Lite |
+| [`@ifc-lite/renderer`](#ifc-literenderer) | WebGPU renderer for IFC-Lite |
+| [`@ifc-lite/export`](#ifc-liteexport) | Export formats for IFC-Lite |
+| [`@ifc-lite/mutations`](#ifc-litemutations) | Mutation tracking and property editing for IFC-Lite |
+| [`@ifc-lite/create`](#ifc-litecreate) | IFC creation from scratch — walls, slabs, beams, columns, stairs, roofs with geometry, properties and quantities |
+| [`@ifc-lite/bcf`](#ifc-litebcf) | BIM Collaboration Format (BCF) support for IFC-Lite |
+| [`@ifc-lite/ids`](#ifc-liteids) | IDS (Information Delivery Specification) support for IFC-Lite |
+| [`@ifc-lite/drawing-2d`](#ifc-litedrawing-2d) | 2D architectural drawing generation from IFC models - section cuts, floor plans, and elevations |
+| [`@ifc-lite/clash`](#ifc-liteclash) | Clash detection for IFC-Lite — representation-agnostic core engine + source adapters |
+| [`@ifc-lite/diff`](#ifc-litediff) | Headless model-diff engine for IFC-Lite — classifies entities as added/modified/deleted/unchanged across two revisions, with separable data vs geometry scope. |
+| [`@ifc-lite/lens`](#ifc-litelens) | Rule-based 3D filtering and colorization for IFC models |
+| [`@ifc-lite/lists`](#ifc-litelists) | Configurable property tables and schedules from IFC data for IFC-Lite |
+| [`@ifc-lite/ifcx`](#ifc-liteifcx) | IFC5 (IFCX) parser for IFC-Lite |
+| [`@ifc-lite/encoding`](#ifc-liteencoding) | IFC string encoding/decoding and property value parsing for IFC-Lite |
+| [`@ifc-lite/cache`](#ifc-litecache) | Binary cache format for IFC-Lite - fast model loading |
+| [`@ifc-lite/pointcloud`](#ifc-litepointcloud) | Point cloud decoders and types for IFC-Lite |
+| [`@ifc-lite/solar`](#ifc-litesolar) | Solar position, sunrise/sunset and 3D sun-path geometry for IFC-Lite |
+| [`@ifc-lite/sdk`](#ifc-litesdk) | Scripting SDK for ifc-lite — the bim.* API for BIM automation |
+| [`@ifc-lite/sandbox`](#ifc-litesandbox) | QuickJS-in-WASM sandboxed script execution for ifc-lite |
+| [`@ifc-lite/extensions`](#ifc-liteextensions) | Extension manifest, capability grammar, and slot registry for ifc-lite user customization |
+| [`@ifc-lite/mcp`](#ifc-litemcp) | Model Context Protocol server for ifc-lite — agent-native BIM via MCP (stdio + Streamable HTTP) |
+| [`@ifc-lite/cli`](#ifc-litecli) | CLI toolkit for IFC files — query, validate, export, create, and script BIM data |
+| [`@ifc-lite/collab`](#ifc-litecollab) | Real-time collaborative BIM via CRDT on IFCX |
+| [`@ifc-lite/collab-server`](#ifc-litecollab-server) | Reference websocket sync server for @ifc-lite/collab |
+| [`@ifc-lite/embed-sdk`](#ifc-liteembed-sdk) | SDK for embedding the IFC-Lite 3D viewer in any web page via iframe |
+| [`@ifc-lite/embed-protocol`](#ifc-liteembed-protocol) | Shared postMessage protocol types for ifc-lite embed viewer and SDK |
+| [`@ifc-lite/viewer-core`](#ifc-liteviewer-core) | Interactive 3D viewer for IFC models — WebGL 2 browser viewer with REST API |
+| [`@ifc-lite/server-client`](#ifc-liteserver-client) | TypeScript client SDK for IFC-Lite Server |
+| [`@ifc-lite/server-bin`](#ifc-liteserver-bin) | Pre-built IFC-Lite server binary - run without Docker or Rust |
+| [`@ifc-lite/wasm`](#ifc-litewasm) | WebAssembly bindings for IFC-Lite |
+| [`@ifc-lite/codegen`](#ifc-litecodegen) | TypeScript code generator from IFC EXPRESS schemas |
+| [`create-ifc-lite`](#create-ifc-lite) | Create IFC-Lite projects with one command |
+| [`@ifc-lite/bcf-api`](https://www.npmjs.com/package/@ifc-lite/bcf-api) | BCF API (OpenCDE) REST client for connecting to BCF servers |
+| [`@ifc-lite/charts`](https://www.npmjs.com/package/@ifc-lite/charts) | Headless chart data binding for IFC-Lite: aggregate model rows into buckets that keep their element ids, build ECharts options, render SVG |
+| [`@ifc-lite/documents-api`](https://www.npmjs.com/package/@ifc-lite/documents-api) | OpenCDE Documents API 1.0 client: select, download, query and upload documents against a buildingSMART Documents API server |
+| [`@ifc-lite/flow`](https://www.npmjs.com/package/@ifc-lite/flow) | Keyed-data graph runtime for BIM workflows: typed ports, item/list/group lifting, memoised evaluation, and element tracking for re-runnable graphs |
+| [`@ifc-lite/flow-nodes`](https://www.npmjs.com/package/@ifc-lite/flow-nodes) | Standard node library for @ifc-lite/flow over the ifc-lite SDK: model reads and writes, tables, viewer, and a sandboxed Script node |
+| [`@ifc-lite/load-trace`](https://www.npmjs.com/package/@ifc-lite/load-trace) | Dependency-free load-trace spans: performance.measure plus a per-load, cross-thread span tree with worker clock alignment and Chrome-trace export |
+| [`@ifc-lite/merge`](https://www.npmjs.com/package/@ifc-lite/merge) | Three-way merge engine for IFCX layers — MergePlan with auto-merged ops and explicit conflict records, merge-layer emission, rebase, and revert. |
+| [`@ifc-lite/oauth-pkce`](https://www.npmjs.com/package/@ifc-lite/oauth-pkce) | Browser OAuth 2.0 Authorization Code + PKCE flow, shared by ifc-lite's file-source providers |
+| [`@ifc-lite/opencde-foundation`](https://www.npmjs.com/package/@ifc-lite/opencde-foundation) | buildingSMART OpenCDE Foundation API client: version discovery, auth discovery, OAuth2 flows and the shared HTTP client used by every OpenCDE service client |
+| [`@ifc-lite/plugin-api`](https://www.npmjs.com/package/@ifc-lite/plugin-api) | Dependency-free type surface for ifc-lite file-source plugins |
+| [`@ifc-lite/regex-guard`](https://www.npmjs.com/package/@ifc-lite/regex-guard) | A shared, dependency-free guard against catastrophic-backtracking (ReDoS) regex patterns compiled from untrusted input |
+| [`@ifc-lite/rules`](https://www.npmjs.com/package/@ifc-lite/rules) | Filter-rule vocabulary, evaluator and .rules.json information-validation engine for IFC-Lite |
+| [`@ifc-lite/semantic`](https://www.npmjs.com/package/@ifc-lite/semantic) | Portable semantic datasets, profiles, validation and IFC identity resolution |
+| [`@ifc-lite/source-autodesk`](https://www.npmjs.com/package/@ifc-lite/source-autodesk) | Autodesk Forma and Data Exchange cloud-source provider for ifc-lite |
+| [`@ifc-lite/source-dalux`](https://www.npmjs.com/package/@ifc-lite/source-dalux) | Dalux Build (Box) file-source provider for ifc-lite |
+| [`@ifc-lite/source-dropbox`](https://www.npmjs.com/package/@ifc-lite/source-dropbox) | Dropbox file-source provider for ifc-lite |
+| [`@ifc-lite/source-msgraph`](https://www.npmjs.com/package/@ifc-lite/source-msgraph) | Microsoft Graph file-source provider for the signed-in user's own OneDrive |
+| [`@ifc-lite/wasm-lifecycle`](https://www.npmjs.com/package/@ifc-lite/wasm-lifecycle) | Shared WASM engine load-retry classification and cross-realm panic-forwarding, used by @ifc-lite/geometry and @ifc-lite/parser |
 <!-- END GENERATED: package-index -->
 
 ---

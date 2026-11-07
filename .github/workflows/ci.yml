@@ -84,14 +84,16 @@
 # something) whenever `changes` reports code, that is, on anything but a
 # docs-only pull request, and on every push to main.
 #
-# Also run, directly, in the gates job (nothing to build): check-refwalk-guards,
-# check-csv-escaper-copies, the generated doc regions and the package READMEs.
+# Also run, directly, in the gates job (nothing to build): check-refwalk-guards
+# and check-csv-escaper-copies.
 # Run in the Script tests job, which builds the packages first: the doc code
 # samples, check:bim-globals and check:templates (#563 item 3).
 #
-# Deliberately left out: check-api-surface. This fork publishes no package (every
-# one is private), so its snapshot is an empty object and the gate would pass
-# whatever changes; it needs a decision on what is published first. Also out of
+# Deliberately left out: check-api-surface, the generated doc regions and the
+# package READMEs. This fork publishes no package (every one is private), so the
+# API snapshot is an empty object, the README check has nothing to check, and the
+# regenerated package table in docs/api/typescript.md would come out empty: each
+# needs a decision on what is published first. Also out of
 # scope for now (follow-up): the other scripts/check-* gates and the
 # scripts/*.test.mjs files that the "Script tests" job leaves out (listed with
 # reasons above that job). Only check-module-size, check-test-wiring and
@@ -606,14 +608,6 @@ jobs:
       - name: No new copy of the CSV escaper
         if: ${{ !cancelled() }}
         run: node scripts/check-csv-escaper-copies.mjs
-
-      - name: Generated doc regions are up to date
-        if: ${{ !cancelled() }}
-        run: node scripts/docs/generate-docs-sections.mjs --check
-
-      - name: Every published package has a README
-        if: ${{ !cancelled() }}
-        run: node scripts/docs/check-package-readmes.mjs
 
   # Runs the scripts/*.test.mjs files listed below when `changes` reports code
   # (anything but a docs-only pull request, and every push to main). It is part
