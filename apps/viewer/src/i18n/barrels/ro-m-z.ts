@@ -39,6 +39,7 @@ import { standardsPacksRo } from '../catalogues/standards-packs.ro';
 import { styleRulesRo } from '../catalogues/style-rules.ro';
 import { tagFieldsRo } from '../catalogues/tag-fields.ro';
 import { tagShowsRo } from '../catalogues/tag-shows.ro';
+import { symbolToolFieldsRo } from '../catalogues/symbol-tool-fields.ro';
 import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
@@ -109,6 +110,7 @@ export const roMZ = {
   ...standardsPacksRo,
   ...styleRulesRo,
   ...tagFieldsRo,
+  ...symbolToolFieldsRo,
   ...tagShowsRo,
   ...titleBlockParamsRo,
   ...titleBlockRoRo,

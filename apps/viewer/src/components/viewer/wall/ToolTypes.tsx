@@ -15,6 +15,7 @@ import { baseDraftSettings, patchDraftSettings, useDraftingSession } from '@/dra
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { WALL_FIELD } from './wall-type';
+import { SymbolToolFields } from './SymbolToolFields';
 import { TagShows } from './TagShows';
 
 const field = WALL_FIELD;
@@ -29,12 +30,15 @@ export function ToolTypes({ tool }: { tool: string }) {
   if (tool === 'symbol') {
     const all = allSymbols(symbols ?? []);
     return (
-      <label className="mt-4 block text-xs text-sky-200">
-        {t('wall.type.symbol')}
-        <select className={field} value={settings.symbolId ?? all[0]?.id ?? ''} onChange={(e) => patchDraftSettings({ symbolId: e.target.value })}>
-          {all.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </label>
+      <>
+        <label className="mt-4 block text-xs text-sky-200">
+          {t('wall.type.symbol')}
+          <select className={field} value={settings.symbolId ?? all[0]?.id ?? ''} onChange={(e) => patchDraftSettings({ symbolId: e.target.value })}>
+            {all.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        <SymbolToolFields />
+      </>
     );
   }
   const mine = (types ?? []).filter((x) => x.tool === tool);
