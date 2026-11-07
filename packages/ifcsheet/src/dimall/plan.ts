@@ -34,6 +34,10 @@ const CORNER = 0.01;
 const MIN_MASS = 2;
 /** A mass thicker than this (metres) is more than one wall. */
 const BARE_WALL = 1;
+/** How far (metres) into a wall a string's end may lie, at an inner corner where the facade ends at a wall's core and its finish coat stands proud of it (rvt01's site wall, 12 mm). */
+const ON_WALL = 0.05;
+/** How much further out (paper mm) a string may stand to clear a wall in its way, a site wall in front of the building: beyond that it is left out. */
+const MAX_PUSH_MM = 30;
 
 /** The values ascending, those within SAME of the one before merged into it; the last value stays the end of the string. */
 function distinct(values: readonly number[]): number[] {
@@ -89,15 +93,20 @@ export function planDimensions(parts: readonly PlanPart[], settings: DimensionSe
     const sets: [StringKind, number[]][] = [['inner', [f.s0, f.s1, ...c.endFaces, ...c.crossFaces, ...c.openings]]];
     if (c.crossAxes.length) sets.push(['middle', [f.s0, f.s1, ...c.crossAxes]]);
     sets.push(['overall', [f.s0, f.s1]]);
+    let inside = -Infinity;
     sets.forEach(([kind, values], i) => {
       const along = distinct(values);
       if (along.length < 2) return;
       // A string stands outside the building: on a facade of a notch or a courtyard its line would run through the building, over its rooms and labels, so it is left out and counted.
-      const offset = base + step * i;
-      if (loops.some((m) => runsThrough(m, f, along[0], along[along.length - 1], offset))) {
+      const through = (o: number) => loops.some((m) => runsThrough(m, f, along[0], along[along.length - 1], o));
+      const planned = Math.max(base + step * i, inside + step);
+      // A wall apart from the building that the line would cross (a site wall round the plot): the string stands beyond it, and the ones after it further out. Too far beyond, it is left out and counted.
+      const offset = through(planned) ? null : clearOfWalls(walls, f, along[0], along[along.length - 1], planned, step, base + step * i + MAX_PUSH_MM * settings.paperUnit);
+      if (offset === null || through(offset)) {
         dropped++;
         return;
       }
+      inside = offset;
       // A span between the two edges of a door or window measures that element.
       const measures = along.slice(1).map((s1, k) => (kind === 'inner' ? c.openingParts.find((o) => Math.abs(o.s0 - along[k]) <= SAME && Math.abs(o.s1 - s1) <= SAME)?.id ?? null : null));
       strings.push({ key: key(f, kind), kind, along: back(f.u), outward: back(f.n), points: along.map(at), offset, measures });
@@ -151,6 +160,44 @@ function runsThrough(loop: readonly Pt[], f: Facade, s0: number, s1: number, off
     }
   }
   return false;
+}
+
+/**
+ * Where a string from `s0` to `s1` of the facade `f` stands clear of the `rings` (in the facade's frame), from `offset` outward:
+ * past each wall its line would cross, `gap` beyond its far face. Its ends may lie on a wall, at an inner corner. Null when that
+ * is further out than `limit`.
+ */
+function clearOfWalls(rings: readonly (readonly Pt[])[], f: Facade, s0: number, s1: number, offset: number, gap: number, limit: number): number | null {
+  let at = offset;
+  for (let round = 0; round < 8 && at <= limit; round++) {
+    const far = farInWay(rings, f, s0 + ON_WALL, s1 - ON_WALL, f.D + at);
+    if (far === null) return at;
+    at = far - f.D + gap;
+  }
+  return null;
+}
+
+/** How far out (`d`) the rings that the line at `d` from `s0` to `s1` crosses reach between `s0` and `s1`; null when it crosses none. */
+function farInWay(rings: readonly (readonly Pt[])[], f: Facade, s0: number, s1: number, d: number): number | null {
+  let far: number | null = null;
+  for (const ring of rings) {
+    const sd = ring.map((p) => ({ s: p.x * f.u.x + p.y * f.u.y, d: p.x * f.n.x + p.y * f.n.y }));
+    // Where the ring's edges cross the line, ordered: inside the ring between each pair.
+    const cuts: number[] = [];
+    let reach = -Infinity;
+    for (let i = 0; i < sd.length; i++) {
+      const a = sd[i], b = sd[(i + 1) % sd.length];
+      if (a.d > d !== b.d > d) cuts.push(a.s + ((b.s - a.s) * (d - a.d)) / (b.d - a.d));
+      if (a.s >= s0 && a.s <= s1) reach = Math.max(reach, a.d);
+      // Where the edge passes the string's ends: the ring's reach inside them.
+      for (const e of [s0, s1]) if (a.s < e !== b.s < e) reach = Math.max(reach, a.d + ((b.d - a.d) * (e - a.s)) / (b.s - a.s));
+    }
+    cuts.sort((x, y) => x - y);
+    let crosses = false;
+    for (let k = 0; k + 1 < cuts.length; k += 2) if (cuts[k] < s1 && cuts[k + 1] > s0) crosses = true;
+    if (crosses) far = Math.max(far ?? -Infinity, reach);
+  }
+  return far;
 }
 
 /** The line a string runs on: from its first to its last point, moved out by its offset. */

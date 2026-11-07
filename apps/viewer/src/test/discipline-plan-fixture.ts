@@ -56,7 +56,7 @@ export interface LoadedPlanModel {
  * `.wasm` off disk only without a `window`, and happy-dom's `fetch` refuses
  * `file:` (same shim as `useDrawingGeneration.projection.test.tsx`).
  */
-function serveWasmFromDisk(): void {
+export function serveWasmFromDisk(): void {
   const upstream = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const href = input instanceof URL ? input.href : typeof input === 'string' ? input : input.url;

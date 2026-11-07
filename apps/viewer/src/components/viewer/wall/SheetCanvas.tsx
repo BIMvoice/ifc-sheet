@@ -8,7 +8,9 @@
  * (viewport) and a drag moves it, snapping to the frame, the title block and the other drawings (guides show while it does, one
  * drag is one undo step); the arrow keys nudge it 1 mm (10 with Shift); a double-click opens it to draw in; Delete
  * takes it off the sheet; its grips resize the crop (`ViewportHandles`). Alt and the wheel over a drawing move its cut (a
- * plan) or its depth (a section, an elevation). Plain drawing on the paper
+ * plan) or its depth (a section, an elevation). A view dragged from the card's list of what is not on the sheet yet shows
+ * its outline at true size while it is over the paper, snapping like a move, and lands where it is let go (#168,
+ * `viewport-drop.ts`). Plain drawing on the paper
  * (lines, text, hatched zones) goes through the same drafting session as a
  * view, in paper millimetres (`useSheetDrafting`).
  */
@@ -23,7 +25,9 @@ import { useProjectStore } from '@/project/project-store';
 import { paperOf, removeViewport, updateViewport } from '@/project/sheets';
 import { runAsOneUndoStep } from '@/drafting/draft-store';
 import { NUDGE_MM, nudgeViewport, snapMove, snapTargets, snapTolerance, type SnapLine } from '@/project/viewport-snap';
-import type { ProjectSheet, SheetViewport } from '@/project/types';
+import { PLACE_DRAG_TYPE, dropPreview, placeDropped, type DropPreview } from '@/project/viewport-drop';
+import type { ModelExtent } from '@/project/drawing-set';
+import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { CommandLine } from '../drafting/CommandLine';
 import { useDraftingKeys } from '../drafting/useDraftingKeys';
 import { submitTypedLine } from '../drafting/typed-line';
@@ -53,12 +57,16 @@ interface SheetCanvasProps {
   onNudge: (viewport: SheetViewport, steps: number) => void;
   /** Bumped to fit the whole sheet in view again. */
   fitKey: number;
+  /** The view being dragged from the card's list to be placed here, while the drag lasts (#168). */
+  dropView?: ProjectView | null;
+  /** The model's extent: what a dropped view's outline is sized by. */
+  extent?: ModelExtent | null;
 }
 
 const ZOOM = { min: 0.05, max: 40 } as const;
 const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
 
-export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey }, paperRef) {
+export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey, dropView = null, extent = null }, paperRef) {
   const host = useRef<HTMLDivElement>(null);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
@@ -155,6 +163,14 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
 
   const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport; sheet?: ProjectSheet; targets?: SnapLine[]; last?: { x: number; y: number } } | null>(null);
   const [guides, setGuides] = useState<SnapLine[]>([]);
+  // A view dragged in from the card: its outline where it would land (#168).
+  const [dropping, setDropping] = useState<DropPreview | null>(null);
+  const othersOf = (except: string | null) => (sheet.viewports ?? []).filter((o) => o.id !== except).map((o) => ({ x: o.x, y: o.y, ...sheetContent.boxOf(o) }));
+  const previewAt = (e: { clientX: number; clientY: number; dataTransfer: DataTransfer | null }): DropPreview | null =>
+    (dropView && extent && e.dataTransfer?.types.includes(PLACE_DRAG_TYPE) ? dropPreview(sheet, dropView, extent, othersOf(null), toPaper(e.clientX, e.clientY), snapTolerance(pan.k)) : null);
+  // A drag that ends anywhere else (let go off the paper, Esc) leaves no outline behind.
+  useEffect(() => { if (!dropView) setDropping(null); }, [dropView]);
+  const shownGuides = dropping ? dropping.guides : guides;
   const endDrag = (): void => {
     const d = drag.current;
     drag.current = null;
@@ -194,7 +210,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           // A cell of a list schedule is picked by a click on it (#446); the card then offers its value to override. A drag still moves the schedule.
           const cell = vp && e.button === 0 ? cellAt(sheetContent.content(vp).schedule, p) : null;
           pickCell(vp && cell ? { scheduleId: vp.viewId, guid: cell.guid, column: cell.column } : null);
-          const others = vp ? (sheet.viewports ?? []).filter((o) => o.id !== vp.id).map((o) => ({ x: o.x, y: o.y, ...sheetContent.boxOf(o) })) : [];
+          const others = vp ? othersOf(vp.id) : [];
           drag.current = { kind: vp ? 'move' : 'pan', sx: e.clientX, sy: e.clientY, start: pan, vp: vp ?? undefined, sheet, targets: vp ? snapTargets(sheet, others) : undefined };
         }}
         onPointerMove={(e) => {
@@ -214,6 +230,23 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         }}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onDragOver={(e) => {
+          const preview = previewAt(e);
+          setDropping(preview);
+          if (!preview) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDragLeave={(e) => {
+          if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setDropping(null);
+        }}
+        onDrop={(e) => {
+          const preview = previewAt(e);
+          setDropping(null);
+          if (!preview || !dropView || !extent) return;
+          e.preventDefault();
+          onChoose(placeDropped(sheet.id, dropView, preview, extent));
+        }}
         onDoubleClick={(e) => {
           const vp = viewportAt(toPaper(e.clientX, e.clientY));
           if (vp && !runningCommand()) {
@@ -225,9 +258,10 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
-        {guides.length > 0 ? (
+        {shownGuides.length > 0 || dropping ? (
           <svg data-snap-guides className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }} width={paper.w * pan.k} height={paper.h * pan.k} viewBox={`0 0 ${paper.w} ${paper.h}`} aria-hidden="true">
-            {guides.map((g) => (
+            {dropping ? <rect data-drop-outline x={dropping.x - dropping.width / 2} y={dropping.y - dropping.height / 2} width={dropping.width} height={dropping.height} fill="#22d3ee" fillOpacity={0.08} stroke="#0891b2" strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" /> : null}
+            {shownGuides.map((g) => (
               <line key={`${g.axis}${g.at}`} data-snap-guide={g.axis} x1={g.axis === 'x' ? g.at : g.from} x2={g.axis === 'x' ? g.at : g.to} y1={g.axis === 'x' ? g.from : g.at} y2={g.axis === 'x' ? g.to : g.at} stroke="#e11d8f" strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
             ))}
           </svg>

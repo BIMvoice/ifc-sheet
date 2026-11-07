@@ -85,6 +85,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const [revising, setRevising] = useState(false);
   const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  // The view being dragged from the card onto the paper (#168), while the drag lasts.
+  const [dragViewId, setDragViewId] = useState<string | null>(null);
   const [settingsKey, setSettingsKey] = useState(0);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
@@ -319,7 +321,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
-              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
             </div>
           )}
           <div ref={cardHost} className={WALL_CARD_HOST}>
@@ -329,7 +331,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} onDragView={setDragViewId} />}
           </div>
           {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (

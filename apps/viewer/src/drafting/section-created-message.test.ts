@@ -5,7 +5,7 @@
 /**
  * #653: after a section is drawn the command line must point at something the
  * edition has. IfcSheet has no Project Navigator, so its line names the sheet's
- * "Choose what to place…" select; the full app keeps the Navigator wording.
+ * "Place on this sheet" list; the full app keeps the Navigator wording.
  */
 
 import { afterEach, beforeEach, describe, it } from 'node:test';
@@ -45,11 +45,11 @@ function lastLineAfterSection(): string {
 }
 
 describe('the line after drawing a section (#653)', () => {
-  it('IfcSheet does not mention a Project Navigator and names the place select', () => {
+  it('IfcSheet does not mention a Project Navigator and names the place list', () => {
     setEditionForTests('docs');
     const line = lastLineAfterSection();
     assert.ok(!line.includes('Project Navigator'), line);
-    assert.ok(line.includes('Choose what to place'), line);
+    assert.ok(line.includes('Place on this sheet'), line);
   });
 
   it('the full app keeps pointing at its Project Navigator', () => {

@@ -22,6 +22,7 @@ import type { DetailLevel, ProjectLevel } from '@bimvoice/ifcsheet';
 import type { ViewGraphics } from '@/project/types';
 import type { PhaseView } from '@/project/view-graphics';
 import { shapePath } from './DraftOverlay';
+import { DoorFlipButtons } from './DoorFlipButtons';
 
 const NO_FLIPS: Record<string, number> = {};
 
@@ -75,9 +76,12 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
     </g>
   );
   return (
+    <>
     <svg data-opening-symbols className="absolute inset-0 h-full w-full pointer-events-none text-zinc-800 dark:text-zinc-200" aria-hidden="true">
       {draw(group(symbols.filter((s) => !turned(s))), '')}
       {draw(group(symbols.filter(turned)), 'text-primary', 'data-flipped-symbols')}
     </svg>
+    {plane?.axis === 'y' ? <DoorFlipButtons symbols={symbols} transform={transform} axis={axis} /> : null}
+    </>
   );
 });
