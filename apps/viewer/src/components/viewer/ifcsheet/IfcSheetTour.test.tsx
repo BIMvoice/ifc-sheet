@@ -16,6 +16,7 @@ import { abortTour } from '@/lib/tours/controller';
 import { resetTourState, useTourStore } from '@/lib/tours/tour-store';
 import { TourHost } from '@/components/tours/TourHost.js';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
+import { setAutocadMode } from '@/lib/commands/autocad-mode';
 import { getTour } from '@/lib/tours/registry';
 import { TourStepCard } from '@/components/tours/TourStepCard.js';
 import { SteppedSheet } from '../wall/SteppedSheet.js';
@@ -119,8 +120,11 @@ describe('IfcSheet tour: keys', () => {
     await waitFor(() => !running(), 'Esc ends the tour');
   });
 
-  it('typing LINE and Enter at the tour starts no drafting command; the same keys elsewhere do', async () => {
+  it('typing LINE and Enter at the tour starts no drafting command; the same keys elsewhere do', async (t) => {
     const viewId = useProjectStore.getState().views.find((v) => v.kind === 'plan')?.id ?? '';
+    // Typed commands and Enter start a tool only in AutoCAD mode (#168, audit finding 6), so the control below needs it on.
+    setAutocadMode(true);
+    t.after(() => setAutocadMode(false));
     act(() => { useDraftingSession.setState({ viewId }); });
     render(<><Keys /><Wall /></>);
     await waitFor(() => card() !== null, 'the tour shows');
