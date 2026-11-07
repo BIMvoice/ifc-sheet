@@ -64,6 +64,7 @@ import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
 import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
+import { wallDropRo } from '../catalogues/wall-drop.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
 import { starRo } from '../catalogues/star.ro';
@@ -136,6 +137,7 @@ export const roMZ = {
   ...underlayRo,
   ...starRo,
   ...wallZoomRo,
+  ...wallDropRo,
   ...wallCompareRo,
   ...wallRo,
   ...whatChangedRo,

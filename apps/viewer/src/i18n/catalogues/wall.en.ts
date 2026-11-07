@@ -190,7 +190,6 @@ export const wallEn = {
   'wall.vp.threeD.none': 'Not captured yet. Show the view in 3D, then capture it.',
   'wall.vp.threeD.failed': 'The 3D view could not be captured: {reason}',
   'wall.vp.place': 'Place on this sheet',
-  'wall.vp.placePick': 'Choose what to place…',
   'wall.legend.add': '+ Legend',
   'wall.legend.nameLabel': 'Name',
   'wall.legend.listsLabel': 'Lists',
