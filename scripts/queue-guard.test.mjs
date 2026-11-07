@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { areaOf, commentFor, decideQueue } from './queue-guard.mjs';
+import { areaOf, commentFor, decideQueue, enforce } from './queue-guard.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAP = JSON.parse(readFileSync(join(ROOT, '.github/queue-areas.json'), 'utf8'));
@@ -98,4 +98,36 @@ test('every prefix in the area map exists in the repository', () => {
   for (const area of MAP.areas) {
     for (const prefix of area.prefixes || []) assert.ok(existsSync(join(ROOT, prefix)), `${area.name}: ${prefix}`);
   }
+});
+
+// #561: the first live run (PR #754) died on a refused draft conversion before
+// any comment was posted. Rebuilt moment: #751 draft, #752 and #753 open.
+const MOMENT = [pr(751, 'drafting', { draft: true, nodeId: 'N751' }), pr(752, 'drafting', { nodeId: 'N752' }), pr(753, 'ci', { nodeId: 'N753' }), pr(754, 'drafting', { nodeId: 'N754' })];
+
+test('a refused draft conversion still posts the comment and exits 1', async () => {
+  const decisions = decideQueue(MOMENT, { subject: 754 });
+  assert.equal(decisions[0].action, 'draft');
+  assert.deepEqual(decisions[0].holders, [752]);
+  const comments = [];
+  const code = await enforce(decisions, MOMENT, {
+    draft: async () => {
+      throw new Error('GitHub GraphQL: Resource not accessible by integration');
+    },
+    comment: async (number, body) => comments.push({ number, body }),
+  });
+  assert.equal(code, 1);
+  assert.equal(comments.length, 1);
+  assert.equal(comments[0].number, 754);
+  assert.match(comments[0].body, /#752 already holds the slot/);
+  assert.match(comments[0].body, /refused/);
+});
+
+test('a successful draft conversion posts the converted comment and exits 0', async () => {
+  const comments = [];
+  const code = await enforce(decideQueue(MOMENT, { subject: 754 }), MOMENT, {
+    draft: async (id) => assert.equal(id, 'N754'),
+    comment: async (number, body) => comments.push(body),
+  });
+  assert.equal(code, 0);
+  assert.match(comments[0], /^Converted to draft/);
 });
