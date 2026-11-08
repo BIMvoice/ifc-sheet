@@ -234,7 +234,10 @@ describe('the library on the Wall', () => {
     assert.equal(useProjectStore.getState().drafts.length, drafts);
   });
 
-  it('keeps Enter and Space for its buttons while a tool is running, instead of confirming the tool', () => {
+  it('keeps Enter and Space for its buttons while a tool is running, instead of confirming the tool', (t) => {
+    // A tool is running: outside AutoCAD mode Enter confirms only then (#168, audit finding 6), so the control below needs it.
+    act(() => { useDraftingSession.setState({ commandId: 'line' }); });
+    t.after(() => act(() => { useDraftingSession.setState({ commandId: null }); }));
     const submitted: string[] = [];
     const ui = render(<><KeysHarness submitted={submitted} /><LibraryPanel /></>);
     const exportButton = button(ui, 'Export library');

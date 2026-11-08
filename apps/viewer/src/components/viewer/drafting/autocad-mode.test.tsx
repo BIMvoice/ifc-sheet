@@ -364,8 +364,8 @@ describe('AutoCAD mode on: a focused control keeps Enter and Space', () => {
   });
 });
 
-describe('AutoCAD mode off: Enter on a focused button confirms, as on main', () => {
-  it('repeats the last drawing command', () => {
+describe('AutoCAD mode off: Enter on a focused button no longer repeats (#168)', () => {
+  it('does not start the last drawing command again', () => {
     const line = mount();
     enter(line, 'l');
     enter(line, '0,0');
@@ -374,7 +374,7 @@ describe('AutoCAD mode off: Enter on a focused button confirms, as on main', () 
     const button = document.createElement('button');
     document.body.appendChild(button);
     press(button, 'Enter');
-    assert.equal(useDraftingSession.getState().commandId, 'line');
+    assert.equal(useDraftingSession.getState().commandId, null);
     button.remove();
   });
 });

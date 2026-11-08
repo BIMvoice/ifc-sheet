@@ -27,6 +27,7 @@ export const DRAFTING_KEY_COMMANDS = [
   { id: 'drafting.cancel', labelKey: 'commands.drafting.cancel', category: 'drafting', when: 'drafting', keys: [{ key: 'escape' }] },
   { id: 'drafting.erase', labelKey: 'commands.drafting.erase', category: 'drafting', when: 'drafting', keys: [{ key: 'delete' }, { key: 'backspace' }] },
   { id: 'drafting.confirm', labelKey: 'commands.drafting.confirm', category: 'drafting', when: 'drafting', keys: [{ key: 'enter' }, { key: ' ' }] },
+  { id: 'drafting.repeat', labelKey: 'commands.drafting.repeat', category: 'drafting', when: 'drafting', keys: [] },
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type DraftingKeyId = (typeof DRAFTING_KEY_COMMANDS)[number]['id'];
