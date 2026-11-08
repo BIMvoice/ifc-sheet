@@ -31,7 +31,12 @@ export function clipSegment(a: Point2D, b: Point2D, box: Rect): [Point2D, Point2
     else t1 = Math.min(t1, r);
     if (t0 > t1) return null;
   }
-  return [{ x: a.x + t0 * dx, y: a.y + t0 * dy }, { x: a.x + t1 * dx, y: a.y + t1 * dy }];
+  // A point the tolerance let in is put back on the box, so nothing is ever drawn outside it.
+  const on = (t: number): Point2D => ({
+    x: Math.min(Math.max(a.x + t * dx, box.x), box.x + box.w),
+    y: Math.min(Math.max(a.y + t * dy, box.y), box.y + box.h),
+  });
+  return [on(t0), on(t1)];
 }
 
 /** `points` clipped to `box`: the runs that stay inside, each an open run of points; a run wholly inside comes back as it was. */
