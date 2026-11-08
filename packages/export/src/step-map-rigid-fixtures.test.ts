@@ -21,7 +21,7 @@ import { StepExporter } from './step-exporter.js';
 
 type Point = [number, number, number];
 const fixtures = [
-  { path: 'ara3d/AC20-FZK-Haus.ifc', angle: 50, offset: [458870.0632856814, 5438773.629049492, 110] as Point, count: 127, door: 17468 },
+  { path: 'ara3d/AC20-FZK-Haus.ifc', committed: '../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', angle: 50, offset: [458870.0632856814, 5438773.629049492, 110] as Point, count: 127, door: 17468 },
   { path: 'georeferencer/MiniBIM-3.1-DO_01_VORM.ifc', angle: 15, offset: [90770, 435320, 3.5] as Point, count: 2668, door: 136868 },
 ];
 const wasm = new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
@@ -192,7 +192,7 @@ describe('real authoring-tool fixtures through fresh canonical WASM (#6692)', ()
     initSync({ module: readFileSync(wasm) });
   });
   for (const fixture of fixtures) {
-    const path = new URL(`../../../tests/models/${fixture.path}`, import.meta.url);
+    const path = new URL('committed' in fixture ? fixture.committed : `../../../tests/models/${fixture.path}`, import.meta.url);
     const available = existsSync(path) && existsSync(wasm);
     if (!available && !required) console.warn(`SKIP #6692 ${fixture.path}: run pnpm fixtures and scripts/build-wasm.sh.`);
     it.skipIf(!available && !required)(`preserves authored ${fixture.angle} degree frames and cut/style surfaces in ${fixture.path}`, async () => {

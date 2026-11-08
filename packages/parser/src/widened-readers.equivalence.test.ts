@@ -68,7 +68,8 @@ const MIN_ENTITIES = 10_000;
 // it runs from the repo root (turbo) or from the package directory.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const MANIFEST_PATH = resolve(REPO_ROOT, 'tests', 'models', 'manifest.json');
-const FIXTURE_PATH = resolve(REPO_ROOT, 'tests', 'models', FIXTURE_RELPATH);
+// The committed copy (same bytes as the manifest's FIXTURE_RELPATH), so CI runs this instead of skipping.
+const FIXTURE_PATH = resolve(REPO_ROOT, 'apps', 'viewer', 'src', 'test', '__fixtures__', 'AC20-FZK-Haus.ifc');
 
 interface FixtureManifest {
   files?: { path?: string }[];
