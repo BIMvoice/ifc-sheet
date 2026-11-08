@@ -33,6 +33,10 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
  *    length (FZK's rafters): plan 2145, 967, 229 became 2139, 965, 229; section 2625, 2304, 64 became 2616, 2307, 64
  *    (rafters under the roof slab turn hidden); elevation 474, 447, 0 became 481, 451, 0.
  * Bisected: both counts passed at 09f26cf71, the parent of #768, and no other commit since touched the drawing engine.
+ *  - #557 (fix/stair-section), the outline of a curved surface runs along its smooth edges and is drawn where the
+ *    surface folds over: this test passes no outline provider, so every element is drawn from its silhouette, and the
+ *    handrails, rails, the stair's column and its helical stringer gain their long lines. plan 2139, 965, 229 became
+ *    2324, 1076, 229; section 2616, 2307, 64 became 2863, 2554, 64; elevation 481, 451, 0 became 494, 464, 0.
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -41,9 +45,9 @@ const FZK = join(dirname(fileURLToPath(import.meta.url)), '..', 'test', '__fixtu
 const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 
 const ON_MAIN = {
-  plan: { axis: 'y', position: 1.2, lines: 2139, hidden: 965, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 2616, hidden: 2307, polygons: 64 },
-  elevation: { axis: 'z', position: 20, lines: 481, hidden: 451, polygons: 0 },
+  plan: { axis: 'y', position: 1.2, lines: 2324, hidden: 1076, polygons: 229 },
+  section: { axis: 'z', position: 0, lines: 2863, hidden: 2554, polygons: 64 },
+  elevation: { axis: 'z', position: 20, lines: 494, hidden: 464, polygons: 0 },
 } as const;
 
 describe('plans, sections and elevations of FZK-Haus draw what they drew on main', () => {
