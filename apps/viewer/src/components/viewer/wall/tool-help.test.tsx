@@ -6,6 +6,7 @@ import '@/test/setup-dom.js';
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from '@/i18n/registry';
+import { PLAIN_TEXT } from '@/lib/commands/plain-texts';
 import { cleanup, click, render } from '@/test/render.js';
 import { InfoCard } from './InfoCard.js';
 import { ToolRail } from './ToolRail.js';
@@ -41,7 +42,7 @@ describe('tool help', () => {
     cleanup();
     for (const command of chosen) {
       const card = render(<InfoCard tool={command} onDone={() => {}} />);
-      assert.ok((card.textContent ?? '').includes(resolve(toolHelpKey(command))), `${command} shows its help line once chosen`);
+      assert.ok((card.textContent ?? '').includes(resolve(PLAIN_TEXT[toolHelpKey(command)] ?? toolHelpKey(command))), `${command} shows its help line once chosen (the plain text outside AutoCAD mode)`);
       cleanup();
     }
   });
