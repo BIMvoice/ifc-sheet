@@ -192,7 +192,7 @@ describe('real authoring-tool fixtures through fresh canonical WASM (#6692)', ()
     initSync({ module: readFileSync(wasm) });
   });
   for (const fixture of fixtures) {
-    const path = new URL('committed' in fixture ? fixture.committed : `../../../tests/models/${fixture.path}`, import.meta.url);
+    const path = new URL(fixture.committed ?? `../../../tests/models/${fixture.path}`, import.meta.url);
     const available = existsSync(path) && existsSync(wasm);
     if (!available && !required) console.warn(`SKIP #6692 ${fixture.path}: run pnpm fixtures and scripts/build-wasm.sh.`);
     it.skipIf(!available && !required)(`preserves authored ${fixture.angle} degree frames and cut/style surfaces in ${fixture.path}`, async () => {
