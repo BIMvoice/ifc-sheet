@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { dimensionChainCardRo } from '../catalogues/dimension-chain-card.ro';
 import { addDrawingKindsRo } from '../catalogues/add-drawing-kinds.ro';
 import { contoursRo } from '../catalogues/contours.ro';
 import { lengthUnitsFootRo } from '../catalogues/length-units-foot.ro';
@@ -117,4 +118,5 @@ export const roAL = {
   ...lineStyleRo,
   ...layerDuplicateRo,
   ...listScheduleRo,
+  ...dimensionChainCardRo,
 } as const;

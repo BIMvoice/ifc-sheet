@@ -53,3 +53,8 @@ export function titleDrop(title: PaperBox, marks: readonly PaperBox[], gap = TIT
   }
   return drop;
 }
+
+/** The boxes of what a set of printed annotations (the marks) prints: each text, each stroke. */
+export function printedPaperBoxes(printed: { texts: readonly PlacedText[]; strokes: readonly { runs: readonly (readonly Point2D[])[] }[] }): PaperBox[] {
+  return [...printed.texts.map(textPaperBox), ...printed.strokes.map((s) => runsPaperBox(s.runs)).filter((b): b is PaperBox => b !== null)];
+}

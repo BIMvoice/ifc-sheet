@@ -32,7 +32,7 @@ import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
 import { LOGO_FIELD } from './title-block-fields.js';
 import { printTitleBlock, sheetLookup } from './title-block-print.js';
-import { standardCaptionsFor, standardTitleBlock } from './title-block-standard.js';
+import { DEFAULT_SHEET_TYPE, standardCaptionsFor, standardTitleBlock } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
@@ -53,7 +53,9 @@ import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } fro
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
-import { runsPaperBox, textPaperBox, titleDrop, type PaperBox } from './title-clear.js';
+import { printedPaperBoxes, type PaperBox } from './title-clear.js';
+import { viewTitleSheet } from './view-title.js';
+import { drawingNumbers } from './cross-ref/reference.js';
 import { dxfSheetStrokes, dxfSheetTexts } from './dxf-underlay-sheet.js';
 
 export type Polyline = readonly Point2D[];
@@ -239,6 +241,8 @@ export function sheetGraphic(
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
   const vps = sheet.viewports ?? [];
+  /** The drawing number of each view's viewport, in reading order unless the viewport has its own (`drawingNumbers`): what a section or elevation mark names. */
+  const numbers = drawingNumbers(sheet, new Set(doc.views.map((v) => v.id)));
   const strokes: SheetStroke[] = [];
   // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
   const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
@@ -332,10 +336,7 @@ export function sheetGraphic(
         strokes.push(...drafted.strokes);
         out.texts.push(...drafted.texts);
       }
-      if (crossRefs) {
-        const marksPrinted = printed[printed.length - 1];
-        markBoxes.push(...marksPrinted.texts.map(textPaperBox), ...marksPrinted.strokes.map((s) => runsPaperBox(s.runs)).filter((b): b is PaperBox => b !== null));
-      }
+      if (crossRefs) markBoxes.push(...printedPaperBoxes(printed[printed.length - 1]));
     }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
@@ -356,10 +357,10 @@ export function sheetGraphic(
       }
     }
     if (view) {
-      // Under the drawing's box, and under the elevation and section marks that stand there (`titleDrop`).
-      const title = { at: { x: vp.x, y: (box ? box.y + box.h : vp.y) + 8 }, text: `${view.name}  1:${vp.scale}`, size: 3.5, align: 'center' as const };
-      const drop = titleDrop(textPaperBox(title), markBoxes);
-      out.texts.push({ ...title, at: { x: title.at.x, y: title.at.y + drop }, layer: 'VIEWPORT-LABELS' });
+      const text = `${view.name}  1:${vp.scale}`;
+      // The title under the drawing's box (and under the marks that stand there) with the drawing's number in a ring at its start, as the app's sheet places it (`viewTitleLayout`).
+      const title = box ? viewTitleSheet(box, DEFAULT_SHEET_TYPE.viewTitle, text, numbers.get(vp.id), markBoxes) : null;
+      if (title) { strokes.push(...title.strokes); out.texts.push(...title.texts); } else out.texts.push({ at: { x: vp.x, y: vp.y + 8 }, text, size: 3.5, align: 'center', layer: 'VIEWPORT-LABELS' });
     }
   }
   // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.

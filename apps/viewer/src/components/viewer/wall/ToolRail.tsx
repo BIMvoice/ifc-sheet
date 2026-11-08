@@ -35,6 +35,8 @@ const DRAW_ICONS: Record<string, ReactNode> = {
 
 interface ToolRailProps {
   active: string | null;
+  /** The tool used last, marked with a dashed border while no tool runs, so a repeat is a visible click (#168). */
+  last?: string | null;
   onTool: (command: string) => void;
   adding: boolean;
   onAdd: () => void;
@@ -43,7 +45,7 @@ interface ToolRailProps {
   onAll: (command: string) => void;
 }
 
-export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
+export function ToolRail({ active, last = null, onTool, adding, onAdd, viewKind, onAll }: ToolRailProps) {
   const { t } = useTranslation();
   const ortho = useDraftingSession((o) => o.ortho);
   const tracking = useTrackingPref((o) => o.on);
@@ -66,11 +68,12 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
             key={tool.command}
             type="button"
             aria-pressed={on}
+            data-last-tool={!on && last === tool.command ? '' : undefined}
             {...keyed(t(toolHelpKey(tool.command)), tool.command)}
             onClick={() => onTool(tool.command)}
             className={cn(
               'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1 text-xs leading-tight',
-              on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
+              on ? 'border-sky-400 bg-sky-500 text-white' : last === tool.command ? 'border-dashed border-sky-300/80 text-sky-100' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
             )}
           >
             {DRAW_ICONS[tool.command]}
@@ -90,11 +93,12 @@ export function ToolRail({ active, onTool, adding, onAdd, viewKind, onAll }: Too
             <button
               type="button"
               aria-pressed={on}
+              data-last-tool={!on && last === tool.command ? '' : undefined}
               {...keyed(t(toolHelpKey(tool.command)), tool.command)}
               onClick={() => onTool(tool.command)}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-xl border px-2 py-1 text-xs transition-colors',
-                on ? 'border-sky-400 bg-sky-500 text-white' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
+                on ? 'border-sky-400 bg-sky-500 text-white' : last === tool.command ? 'border-dashed border-sky-300/80 bg-[#0d2a55] text-sky-50' : 'border-sky-300/20 bg-[#0d2a55] text-sky-50 hover:border-sky-300/60',
               )}
             >
               <ToolIcon name={tool.icon} size={28} accent={on ? '#0b1f3d' : '#22d3ee'} />

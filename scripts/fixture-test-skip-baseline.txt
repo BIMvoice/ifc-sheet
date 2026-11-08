@@ -1,0 +1,4 @@
+# Test files that read tests/models and do not skip with a `pnpm fixtures`
+# message, for scripts/check-fixture-test-skip.mjs. One path per line. The list
+# only shrinks: a row for a file that now passes, or is gone, fails the check.
+# Empty on purpose: every test that failed the rule when it landed was fixed.

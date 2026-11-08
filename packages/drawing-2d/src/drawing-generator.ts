@@ -37,11 +37,8 @@ import { SVGExporter } from './svg-exporter.js';
 import type { SVGExportOptions } from './svg-exporter.js';
 import { GPUSectionCutter } from './gpu-section-cutter.js';
 import { projectProfiles } from './profile-projector.js';
-import {
-  bandsWithEdgeTolerance,
-  getViewDirectionForPlane,
-  outlineToProjectionLines,
-} from './projection-bands.js';
+import { bandsWithEdgeTolerance, getViewDirectionForPlane } from './projection-bands.js';
+import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } from './outline-depth.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
@@ -115,7 +112,7 @@ export class Drawing2DGenerator {
   private cpuCutter: SectionCutter | null = null;
   private polygonBuilder = new PolygonBuilder();
   private edgeExtractor = new EdgeExtractor(30); // 30° crease angle
-  private hiddenLineClassifier = new HiddenLineClassifier({ resolution: 1024 });
+  private hiddenLineClassifier = new HiddenLineClassifier({ resolution: HIDDEN_LINE_RESOLUTION });
   private hatchGenerator = new HatchGenerator();
   private svgExporter = new SVGExporter();
 
@@ -281,7 +278,7 @@ export class Drawing2DGenerator {
               : null;
             if (outline && outline.contours.length > 0) {
               projectionLines.push(
-                ...outlineToProjectionLines(
+                ...outlineLinesWithDepth(
                   outline,
                   {
                     entityId: mesh.expressId,
@@ -290,6 +287,7 @@ export class Drawing2DGenerator {
                   },
                   config.plane,
                   bands,
+                  mesh,
                 ),
               );
             } else {
@@ -327,8 +325,11 @@ export class Drawing2DGenerator {
       // Compute bounds for depth buffer
       const bounds = this.computeBounds(allLines);
 
+      // The band's own edge allowance (#628): a plan's floor slab exactly at the band's bottom is in the lines' band, so
+      // it occludes too. Without it the app's cut (1.2000000000000002 m) clipped the slab top out of the raster while the
+      // engine's (1.2 m) kept it, and the edges an occluder's own surface lets through differed between the two.
       const occluderDepth = config.clipProjectionBands
-        ? (config.projectionBelowDepth ?? config.projectionDepth)
+        ? bandsWithEdgeTolerance(config).below
         : Math.max(config.projectionDepth, config.projectionBelowDepth ?? config.projectionDepth,
           config.projectionAboveDepth ?? config.projectionDepth);
       const occluders = config.clipProjectionBands
@@ -348,7 +349,7 @@ export class Drawing2DGenerator {
       // would both skip them AND drop them from the recombination below.
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
-      const classified = this.hiddenLineClassifier.applyVisibility(toClassify);
+      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds));
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines

@@ -13,6 +13,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet } from './index.js';
 import { openModel, sheetGraphics, type SheetGraphic } from './headless.js';
 import { textPaperBox, titleDrop, type PaperBox } from './title-clear.js';
+import { viewTitleLayout } from './view-title.js';
 
 const SAMPLE = fileURLToPath(new URL('../../../apps/viewer/public/samples/building-architecture.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -30,6 +31,25 @@ describe('titleDrop', () => {
   it('moves a title under the mark it meets, and under a second mark that the move then meets', () => {
     const drop = titleDrop(title, [{ x0: 20, x1: 30, y0: 99, y1: 103 }, { x0: 40, x1: 45, y0: 103, y1: 109 }]);
     expect(100 + drop).toBeGreaterThanOrEqual(109 + 1);
+  });
+});
+
+describe('viewTitleLayout, the one layout the app and the engine place a title by (#557)', () => {
+  const box = { x: 40, y: 60, w: 120, h: 80 };
+  const mark = { x0: 50, x1: 70, y0: 142, y1: 145 };
+  it('keeps its place when no mark is in the way, with or without a ring', () => {
+    const far = { x0: 300, x1: 320, y0: 142, y1: 145 };
+    for (const number of [undefined, 'A-12']) {
+      expect(viewTitleLayout(box, 3.5, number, { text: 'Plan  1:100', marks: [far] })).toEqual(viewTitleLayout(box, 3.5, number));
+    }
+  });
+  it('moves the title and its ring down under a mark it would print over', () => {
+    const plain = viewTitleLayout(box, 3.5, 'A-12');
+    const clear = viewTitleLayout(box, 3.5, 'A-12', { text: 'Plan  1:100', marks: [mark] });
+    expect(clear.baseline - 3.5).toBeGreaterThanOrEqual(mark.y1 + 1 - 1e-9);
+    expect(clear.baseline).toBeGreaterThan(plain.baseline);
+    expect(clear.textX).toBe(plain.textX);
+    expect(clear.number?.ring.y).toBeCloseTo((plain.number?.ring.y ?? 0) + clear.baseline - plain.baseline);
   });
 });
 

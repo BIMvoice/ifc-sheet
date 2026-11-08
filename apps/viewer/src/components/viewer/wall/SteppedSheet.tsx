@@ -42,7 +42,8 @@ import { TitleBlockCard } from './TitleBlockForm';
 import { useWallNav } from './wall-nav';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
-import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { DRAW_TOOLS, WALL_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { registerRailStart } from './repeat-tool';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
@@ -79,6 +80,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [tool, setTool] = useState<string | null>(null);
+  const [lastTool, setLastTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
@@ -183,6 +185,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }, [inDrawing]);
 
   const startTool = (command: string): void => {
+    setLastTool(command);
     cancelStart.current();
     ran.current = null;
     setAdding(false);
@@ -202,6 +205,13 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     setFocusId(target.id);
     cancelStart.current = startWhenAttached(target.id, command);
   };
+
+  // "Repeat last tool" starts through the rail, like a click on the tool. A tool the rail does not offer (typed, say) starts on its own.
+  const railStartRef = useRef(startTool);
+  railStartRef.current = startTool;
+  useEffect(() => registerRailStart((command) => {
+    if ([...DRAW_TOOLS, ...WALL_TOOLS].some((x) => x.command === command)) railStartRef.current(command); else startDraftCommand(command);
+  }), []);
 
   /** The tool's Done: ends it and lets the rail go, without Esc or Enter (#166). The dimension chain does not start again. */
   const stopTool = useCallback((): void => {
@@ -313,7 +323,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
+        <ToolRail active={tool} last={lastTool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">

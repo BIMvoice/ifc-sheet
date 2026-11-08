@@ -55,7 +55,7 @@ export const polylineCommand: DraftCommandDef = {
       return 'done';
     };
     return {
-      prompt: () => ({ key: pts.length === 0 ? 'drafting.prompt.firstPoint' : 'drafting.prompt.nextPointOrClose' }),
+      prompt: () => ({ key: pts.length === 0 ? 'drafting.prompt.firstPoint' : 'drafting.prompt.polylineNext' }),
       input: () => 'point',
       basePoint: () => pts.at(-1) ?? null,
       onPoint(p) {
