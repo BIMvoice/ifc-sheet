@@ -10,7 +10,7 @@
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { describe, expect, it } from 'vitest';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { alignDxfByTwoPoints, dxfPointToDrawing, dxfUnderlayFromPaths, dxfUnderlayRuns, withDxfLayerVisible, type ViewDxfUnderlay } from './dxf-underlay.js';
+import { DXF_UNDERLAY_PEN_MM, alignDxfByTwoPoints, dxfPointToDrawing, dxfUnderlayFromPaths, dxfUnderlayRuns, withDxfLayerVisible, type ViewDxfUnderlay } from './dxf-underlay.js';
 import { readDxfUnderlays } from './dxf-underlay-read.js';
 import { placer, sheetGraphic } from './sheet-graphic.js';
 
@@ -81,9 +81,11 @@ const doc = (u: ViewDxfUnderlay): ProjectDocument => ({
   name: 'Casă', models: [], sheets: [sheet('s1'), sheet('s2')], dxfUnderlays: [u],
   views: [{ id: 'v1', kind: 'plan', name: 'Parter', createdAt: 0, cutHeight: 1.2, level: { name: 'Parter', elevation: 0, storeyGlobalIds: [] } }],
 });
+/** The underlay's strokes only: the sheet's other strokes (a view title's number ring) are not what this prints. */
 const strokesOf = (u: ViewDxfUnderlay, sheetId: string) => {
   const d = doc(u);
-  return sheetGraphic(d.sheets.find((s) => s.id === sheetId)!, d, new Map([['v1', drawing]])).strokes ?? [];
+  const all = sheetGraphic(d.sheets.find((s) => s.id === sheetId)!, d, new Map([['v1', drawing]])).strokes ?? [];
+  return all.filter((s) => s.width === DXF_UNDERLAY_PEN_MM);
 };
 
 describe('printing (#547)', () => {

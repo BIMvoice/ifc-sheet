@@ -39,7 +39,7 @@ import { dxfIgnore, SchemeHatchDxf } from './SchemeHatchDxf';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
-import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimvoice/ifcsheet';
+import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers, viewTitleLayout, type ViewTitleLayout } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -116,17 +116,13 @@ export function viewportTransform(vp: SheetViewport, drawing: Drawing2D | null, 
   return { scale: s, x: vp.x - c.x * kx * s, y: vp.y - c.y * ky * s };
 }
 
-/** Width on paper of the drawing number's ring, mm: round for one or two characters, longer for a longer number. */
-const numberWidth = (n: string, size: number): number => Math.max(size + 1, n.length * size * 0.6 + 2);
-
-/** The drawing's number in a ring at the start of its title, at the title's text size (mm): the number a mark elsewhere names. */
-function TitleNumber({ number, x, baseline, size }: { number: string | undefined; x: number; baseline: number; size: number }) {
-  if (!number) return null;
-  const w = numberWidth(number, size);
+/** The drawing's number in a ring at the start of its title, at the title's text size (mm): the number a mark elsewhere names. The ring is placed by `viewTitleLayout`, the same function the engine's PDF and DXF use. */
+function TitleNumber({ number, size }: { number: NonNullable<ViewTitleLayout['number']>; size: number }) {
+  const { ring } = number;
   return (
     <g {...penTags('VIEWPORT-LABELS', 0.25)}>
-      <rect x={x} y={baseline - size - 0.4} width={w} height={size + 1} rx={(size + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
-      <text x={x + w / 2} y={baseline - 0.2} fontSize={size * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
+      <rect x={ring.x} y={ring.y} width={ring.w} height={ring.h} rx={ring.r} fill="none" stroke="#000" strokeWidth={0.25} />
+      <text x={number.at.x} y={number.at.y} fontSize={size * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number.text}</text>
     </g>
   );
 }
@@ -164,6 +160,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const box = viewportBox(vp, drawing?.bounds ?? null);
   const left = vp.x - box.width / 2;
   const top = vp.y - box.height / 2;
+  const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber);
   const clipId = `vp-${vp.id}`;
   // A detail shows exactly its area (the drawing is centred on it); every other view, its box.
   const clip = view?.detail
@@ -223,8 +220,8 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} size={standard.type.viewTitle} />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+      {title.number ? <TitleNumber number={title.number} size={standard.type.viewTitle} /> : null}
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={title.textX} y={title.baseline} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
       </text>
       {content.site ? <SiteBalance x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}

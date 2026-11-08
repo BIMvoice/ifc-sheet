@@ -26,7 +26,7 @@ const ROOMS = ['Bad', 'Buero', 'Flur', 'Küche', 'Schlafzimmer', 'Wohnen'];
 /** The decoded content of every Flate stream of a PDF. */
 const pdfContent = (bytes: Uint8Array): string => {
   const raw = Buffer.from(bytes).toString('latin1');
-  return [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].map((m) => {
+  return [...raw.matchAll(/stream\r?\n([\s\S]*?)\nendstream/g)].map((m) => {
     try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return ''; }
   }).join('\n');
 };
