@@ -38,7 +38,8 @@ import type { SVGExportOptions } from './svg-exporter.js';
 import { GPUSectionCutter } from './gpu-section-cutter.js';
 import { projectProfiles } from './profile-projector.js';
 import { bandsWithEdgeTolerance, getViewDirectionForPlane } from './projection-bands.js';
-import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths, withOwnSurfaceDepth } from './outline-depth.js';
+import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } from './outline-depth.js';
+import { meshSilhouetteLines } from './silhouette-lines.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
@@ -291,11 +292,9 @@ export class Drawing2DGenerator {
                 ),
               );
             } else {
-              const edges = this.edgeExtractor.extractEdges(mesh);
-              const silhouettes = this.edgeExtractor.extractExteriorEdges(edges, viewDir, opts.includeFeatureEdges, opts.clipPlanes);
-              projectionLines.push(
-                ...withOwnSurfaceDepth(this.edgeExtractor.edgesToProjectionLines(silhouettes, config.plane, bands), config.plane, mesh),
-              );
+              projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, bands, viewDir, {
+                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvesOwnDepth: opts.hiddenLineEdgeTolerancePx === undefined,
+              }));
             }
           }
         }

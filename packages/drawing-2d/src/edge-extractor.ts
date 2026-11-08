@@ -50,6 +50,7 @@ import {
 import { windingSign } from './mesh-winding.js';
 import { weldIndices } from './mesh-weld.js';
 import { onClipPlane, type ClipPlane } from './clip-rim.js';
+import { registerSmoothEdge, smoothEdgeOnOutline, type MeshTopology } from './smooth-fold.js';
 
 /**
  * Dot-product deadband for the silhouette test (issue #979).
@@ -71,7 +72,8 @@ const SILHOUETTE_EPSILON = 1e-4;
 
 /**
  * Below this angle (radians, about 0.06°) two faces meeting at an edge are one flat face split by a diagonal, f32 noise
- * included; above it a smooth edge is kept, since the silhouette of a curved surface runs along such edges.
+ * included; above it `extractEdges(mesh, true)` keeps a smooth edge, since the outline of a curved surface runs along
+ * such edges (`smooth-fold.ts`).
  */
 const SMOOTH_OUTLINE_MIN_ANGLE = 1e-3;
 
@@ -103,9 +105,11 @@ export class EdgeExtractor {
   }
 
   /**
-   * Extract all feature edges from a mesh
+   * Extract all feature edges from a mesh: creases and boundaries, and with
+   * `withSmooth` the smooth edges a curved surface's outline can run along
+   * (#557), which `extractSilhouettes` keeps only where the surface folds.
    */
-  extractEdges(mesh: MeshData): EdgeData[] {
+  extractEdges(mesh: MeshData, withSmooth = false): EdgeData[] {
     const { positions, expressId, ifcType, modelIndex, origin } = mesh;
     // Adjacency is by POSITION, not by buffer index: tessellated meshes (and
     // every mesh the projection clipper emits) repeat a vertex per triangle,
@@ -157,6 +161,7 @@ export class EdgeExtractor {
 
     // Second pass: classify edges
     const edges: EdgeData[] = [];
+    const topo: MeshTopology = { positions, origin, indices, normals: faceNormals, edgeFaces: edgeMap };
 
     for (const [, edgeInfo] of edgeMap) {
       const v0 = this.getVertex(positions, edgeInfo.v0Idx, origin);
@@ -185,12 +190,13 @@ export class EdgeExtractor {
         }
       }
 
-      // A smooth edge stays when its two faces are not flat together: the outline of a curved surface (a tube, a column,
-      // a helical stringer) runs along smooth edges only, so dropping them left FZK's handrails, rails and stair column
-      // without their long lines in a section, only their end caps (#557). A diagonal across one flat face can never
-      // be an outline, so it goes.
-      if (type !== 'smooth' || dihedralAngle > SMOOTH_OUTLINE_MIN_ANGLE) {
-        edges.push({
+      // With `withSmooth`, a smooth edge stays when its two faces are not flat together: the outline of a curved surface
+      // (a tube, a column, a helical stringer) runs along smooth edges only, so dropping them left FZK's handrails, rails
+      // and stair column without their long lines in a section, only their end caps (#557). A diagonal across one flat
+      // face can never be an outline, so it goes.
+      const smooth = type === 'smooth' && withSmooth && edgeInfo.faceIndices.length === 2 && dihedralAngle > SMOOTH_OUTLINE_MIN_ANGLE;
+      if (type !== 'smooth' || smooth) {
+        const edge: EdgeData = {
           v0,
           v1,
           face0Normal,
@@ -200,7 +206,9 @@ export class EdgeExtractor {
           entityId: expressId,
           ifcType: ifcType || 'Unknown',
           modelIndex: modelIndex || 0,
-        });
+        };
+        if (smooth) registerSmoothEdge(edge, topo, edgeInfo.faceIndices[0], edgeInfo.faceIndices[1]);
+        edges.push(edge);
       }
     }
 
@@ -224,6 +232,9 @@ export class EdgeExtractor {
       if (!edge.face0Normal || !edge.face1Normal) {
         return false;
       }
+
+      // A smooth edge (a curved surface) is on the outline only where the surface folds over (`smooth-fold.ts`).
+      if (edge.type === 'smooth') return smoothEdgeOnOutline(edge, normalizedView, SILHOUETTE_EPSILON);
 
       const dot0 = vec3Dot(edge.face0Normal, normalizedView);
       const dot1 = vec3Dot(edge.face1Normal, normalizedView);

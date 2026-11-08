@@ -49,7 +49,10 @@ export interface VisibilityResult {
 
 /** What a view seen from outside (an axonometric) asks of the generator on top of the defaults every cardinal view has. */
 export interface ExteriorViewOptions {
-  /** Pixels of tolerance for an edge lying on its occluder's outline (`HiddenLineOptions.edgeTolerancePx`). Absent: none. */
+  /**
+   * Pixels of tolerance for an edge lying on its occluder's outline (`HiddenLineOptions.edgeTolerancePx`). Absent: none,
+   * and the outline of a curved surface then takes its element's own surface depth (`silhouette-lines.ts`).
+   */
   hiddenLineEdgeTolerancePx?: number;
   /**
    * Also draw the creases facing the viewer, not only the silhouette

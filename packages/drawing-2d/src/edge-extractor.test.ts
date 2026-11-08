@@ -287,10 +287,10 @@ describe('EdgeExtractor.extractExteriorEdges (axonometric line work, issue #49)'
 describe('EdgeExtractor silhouette of a curved surface (FZK handrails in a section, #557)', () => {
   // A closed 32-sided tube along Z, radius 0.04 and 2 long, as a handrail is tessellated: its sides meet at 11.25°,
   // under the 30° crease angle, so its outline runs along smooth edges only.
-  function tube(sides = 32, r = 0.04, length = 2): MeshData {
+  function tube(phase = 0, sides = 32, r = 0.04, length = 2): MeshData {
     const pos: number[] = [];
     for (const z of [0, length]) for (let k = 0; k < sides; k++) {
-      const a = (2 * Math.PI * k) / sides;
+      const a = (2 * Math.PI * (k + phase)) / sides;
       pos.push(r * Math.cos(a), r * Math.sin(a), z);
     }
     pos.push(0, 0, 0, 0, 0, length); // cap centres
@@ -309,9 +309,25 @@ describe('EdgeExtractor silhouette of a curved surface (FZK handrails in a secti
 
   it('draws the tube seen from its side with its two long lines, not only its end caps', () => {
     const extractor = new EdgeExtractor(30);
-    const silhouette = extractor.extractSilhouettes(extractor.extractEdges(tube()), { x: -1, y: 0, z: 0 });
+    const silhouette = extractor.extractSilhouettes(extractor.extractEdges(tube(), true), { x: -1, y: 0, z: 0 });
     const long = silhouette.filter((e) => Math.abs(e.v1.z - e.v0.z) > 1.9);
     expect(long.map((e) => Math.round(e.v0.y * 100) / 100).sort()).toEqual([-0.04, 0.04]);
+  });
+
+  it('draws one long line along a facet seen exactly edge-on at the top and the bottom of the tube', () => {
+    // Half a step round, the top and bottom facets face straight up and down: seen level, they have no area, and the
+    // surface folds over across them, so one of each facet's two long edges is the outline.
+    const extractor = new EdgeExtractor(30);
+    const silhouette = extractor.extractSilhouettes(extractor.extractEdges(tube(0.5), true), { x: -1, y: 0, z: 0 });
+    const long = silhouette.filter((e) => Math.abs(e.v1.z - e.v0.z) > 1.9);
+    expect(long).toHaveLength(2);
+    expect(long.map((e) => Math.sign(e.v0.y)).sort()).toEqual([-1, 1]);
+  });
+
+  it('leaves the smooth edges out unless asked, so a curved surface is not drawn by them elsewhere', () => {
+    const extractor = new EdgeExtractor(30);
+    const silhouette = extractor.extractSilhouettes(extractor.extractEdges(tube()), { x: -1, y: 0, z: 0 });
+    expect(silhouette.filter((e) => Math.abs(e.v1.z - e.v0.z) > 1.9)).toHaveLength(0);
   });
 
   it('still leaves out the diagonals across a flat face', () => {
