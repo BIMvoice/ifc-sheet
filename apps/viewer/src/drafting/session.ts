@@ -94,10 +94,10 @@ export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string;
   set({ revision: get().revision + 1 });
 }
 
-/** Change the drafting settings the commands read (an annotation type applying its options, the symbol to place…). */
+/** Change the drafting settings the commands read (an annotation type applying its options, the symbol to place…). A running tool's sentence is asked again, so it follows the change. */
 export function patchDraftSettings(patch: Partial<DraftSettings>): void {
   Object.assign(settings, patch);
-  set({ revision: get().revision + 1 });
+  set({ prompt: command ? command.prompt() : get().prompt, revision: get().revision + 1 });
 }
 
 export function currentStyles(): { textStyle: string; dimStyle: string } {
