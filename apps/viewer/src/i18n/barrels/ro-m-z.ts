@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { repeatToolRo } from '../catalogues/repeat-tool.ro';
 import { manualValidationRo } from '../catalogues/manual-validation.ro';
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
 import { miscPanelsBRo } from '../catalogues/misc-panels-b.ro';
@@ -26,6 +27,7 @@ import { roomSummaryRo } from '../catalogues/room-summary.ro';
 import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { scaleFieldRo } from '../catalogues/scale-field.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
+import { selectionTurnRo } from '../catalogues/selection-turn.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { settingsRo } from '../catalogues/settings.ro';
 import { sharedCommandsRo } from '../catalogues/shared-commands.ro';
@@ -45,6 +47,7 @@ import { titleBlockParamsRo } from '../catalogues/title-block-params.ro';
 import { titleBlockRoRo } from '../catalogues/title-block-ro.ro';
 import { titleBlockSourcesRo } from '../catalogues/title-block-sources.ro';
 import { textLinesRo } from '../catalogues/text-lines.ro';
+import { textOnDrawingRo } from '../catalogues/text-on-drawing.ro';
 import { toursRo } from '../catalogues/tours.ro';
 import { unitsNumbersRo } from '../catalogues/units-numbers.ro';
 import { viewTemplatesRo } from '../catalogues/view-templates.ro';
@@ -72,11 +75,13 @@ import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
 import { starRo } from '../catalogues/star.ro';
 import { wallRo } from '../catalogues/wall.ro';
+import { plainHintsRo } from '../catalogues/plain-hints.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 
 /** The catalogues whose file starts with `m` to `z` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roMZ = {
   ...manualValidationRo,
+  ...plainHintsRo,
   ...measuredQuantitiesRo,
   ...miscPanelsBRo,
   ...miscReachableRo,
@@ -100,6 +105,8 @@ export const roMZ = {
   ...scheduleExportRo,
   ...scaleFieldRo,
   ...selectionBarRo,
+  ...selectionTurnRo,
+  ...repeatToolRo,
   ...setTemplateRo,
   ...settingsRo,
   ...sharedCommandsRo,
@@ -119,6 +126,7 @@ export const roMZ = {
   ...titleBlockRoRo,
   ...titleBlockSourcesRo,
   ...textLinesRo,
+  ...textOnDrawingRo,
   ...toursRo,
   ...unitsNumbersRo,
   ...viewTemplatesRo,

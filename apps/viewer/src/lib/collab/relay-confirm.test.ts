@@ -60,6 +60,38 @@ function inputFor(
   };
 }
 
+/**
+ * Runs `confirmRelayHoldsState` on node:test's fake clock (#561: the budget cases
+ * used to measure real milliseconds and failed on a slow CI runner, e.g. merge_group
+ * run 41803807276). Virtual time advances 1 ms at a time, with a real `setImmediate`
+ * between steps so the loop's awaits settle, until the call returns or `maxSteps`
+ * virtual ms have passed. `elapsed` is virtual ms, so load cannot change it.
+ */
+async function onFakeClock(
+  input: ConfirmRelayInput,
+  maxSteps: number,
+): Promise<{ ok: boolean | undefined; elapsed: number }> {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  try {
+    const start = Date.now();
+    let ok: boolean | undefined;
+    let elapsed = 0;
+    const result = confirmRelayHoldsState(input).then((v) => {
+      ok = v;
+      elapsed = Date.now() - start;
+    });
+    for (let i = 0; i < maxSteps && ok === undefined; i++) {
+      mock.timers.tick(1);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => { setImmediate(resolve); });
+    }
+    if (ok !== undefined) await result;
+    return { ok, elapsed };
+  } finally {
+    mock.timers.reset();
+  }
+}
+
 describe('confirmRelayHoldsState (#4446)', () => {
   it('polls until the relay has caught up, then confirms', async () => {
     const owner = await ownerWith(2);
@@ -73,22 +105,25 @@ describe('confirmRelayHoldsState (#4446)', () => {
   });
 
   it('a reachable relay that is still behind is waited for past the unreachable budget, up to the hard cap', async () => {
+    // Fake clock (#561): the 5 ms / 60 ms budgets are virtual time.
     const owner = await ownerWith(1);
     try {
       const relay = laggingRelay(owner.clientId, 0, 0);
-      const t0 = Date.now();
-      const ok = await confirmRelayHoldsState(
+      const { ok, elapsed } = await onFakeClock(
         inputFor(owner, relay.collab, { unreachableMs: 5, maxWaitMs: 60, intervalMs: 2, maxIntervalMs: 4 }),
+        1_000,
       );
       assert.equal(ok, false);
-      assert.ok(Date.now() - t0 >= 55, 'the 5 ms unreachable budget did not apply to a relay that answered');
-      assert.ok(relay.probes() >= 5, 'it kept asking until the cap');
+      assert.ok(elapsed >= 60, `the 5 ms unreachable budget did not apply to a relay that answered, gave up at ${elapsed}`);
+      assert.ok(relay.probes() >= 5, `it kept asking until the cap, got ${relay.probes()} probes`);
     } finally {
       owner.dispose();
     }
   });
 
   it('gives up once the relay has been out of reach for the whole budget', async () => {
+    // #561: this case used to assert `calls >= 3` inside a 30 ms wall-clock budget
+    // and failed once on a slow runner (merge_group run 41803807276). Now on the fake clock.
     const owner = await ownerWith(1);
     try {
       let calls = 0;
@@ -99,11 +134,14 @@ describe('confirmRelayHoldsState (#4446)', () => {
           throw new Error('ECONNREFUSED');
         },
       };
-      const t0 = Date.now();
-      const ok = await confirmRelayHoldsState(inputFor(owner, collab, { unreachableMs: 30, maxWaitMs: 5_000, intervalMs: 2, maxIntervalMs: 4 }));
+      const { ok, elapsed } = await onFakeClock(
+        inputFor(owner, collab, { unreachableMs: 30, maxWaitMs: 5_000, intervalMs: 2, maxIntervalMs: 4 }),
+        6_000,
+      );
       assert.equal(ok, false);
-      assert.ok(Date.now() - t0 < 2_000, 'the unreachable budget, not the hard cap, ended the wait');
-      assert.ok(calls >= 3, 'it retried while the budget lasted');
+      assert.ok(elapsed >= 30, `it waited out the 30 ms unreachable budget first, gave up at ${elapsed}`);
+      assert.ok(elapsed < 5_000, 'the unreachable budget, not the hard cap, ended the wait');
+      assert.ok(calls >= 3, `it retried while the budget lasted, got ${calls} probes`);
     } finally {
       owner.dispose();
     }

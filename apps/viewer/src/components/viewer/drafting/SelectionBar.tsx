@@ -11,7 +11,6 @@
  * what the element does not override.
  */
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Bold, Italic, Minus, Pencil, Plus, RotateCcw, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { IconButton } from '@/components/ui/icon-button';
@@ -27,8 +26,8 @@ import { isElementTag, tagOverrideOf } from '@/drafting/tag-override';
 import { overrideTagText, resetTagText } from '@/project/tag-override-actions';
 import { openStandards } from '@/project/standards-dialog-store';
 import { flipDimensionSide } from '@/drafting/dimension-flip';
-import { inputTypeOf, onTypedText } from '@/drafting/unit-superscript';
 import { isDimensional, useStyleBook } from './AnnotationStyleFields';
+import { InlineTextEditor } from './InlineTextEditor';
 
 const BTN = 'h-7 whitespace-nowrap rounded-sm px-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800';
 const BAR_HALF = 250;
@@ -135,48 +134,14 @@ export function SelectionBar({ entity, transform, axis, editing, onEditingChange
 
 function InlineEditor({ entity, value, at, onDone }: { entity: DraftEntity; value: string; at: Pt; onDone: () => void }) {
   const { t } = useTranslation();
-  const [text, setText] = useState(value);
-  const ref = useRef<HTMLInputElement>(null);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { (ref.current ?? areaRef.current)?.focus(); (ref.current ?? areaRef.current)?.select(); }, []);
-  const commit = () => {
+  const commit = (text: string) => {
     if (text !== value && isElementTag(entity)) {
       // An element tag keeps its link and takes the written text over the model's (#445).
       overrideTagText(entity.id, text);
     } else if (text !== value) editDrafts({ update: new Map([[entity.id, withText(entity.shape as AnnotationShape, text)]]) });
     onDone();
   };
-  const shared = {
-    'aria-label': t('standards.el.editText'),
-    className: 'absolute z-30 min-w-48 -translate-x-1/2 rounded-md border-2 border-primary bg-white px-2 text-sm text-zinc-900 shadow-lg outline-none',
-    style: { left: at.x, top: at.y + 4 },
-    value: text,
-    onPointerDown: (e: ReactPointerEvent) => e.stopPropagation(),
-    onBlur: commit,
-  };
   // A label of several lines (a room's number, name and area) opens as it is written, and a drafted text always can take another: Enter commits, Shift+Enter breaks a line (#542, #673).
-  if (value.includes('\n') || entity.shape.type === 'text') {
-    return (
-      <textarea
-        {...shared} ref={areaRef} rows={Math.min(Math.max(text.split('\n').length, value.split('\n').length), 6)} className={`${shared.className} py-1`}
-        onChange={(e) => onTypedText(e.target, inputTypeOf(e), text, setText)}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-          if (e.key === 'Escape') onDone();
-        }}
-      />
-    );
-  }
-  return (
-    <input
-      {...shared} ref={ref} className={`${shared.className} h-8`}
-      onChange={(e) => onTypedText(e.target, inputTypeOf(e), text, setText)}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') commit();
-        if (e.key === 'Escape') onDone();
-      }}
-    />
-  );
+  const multiline = value.includes('\n') || entity.shape.type === 'text';
+  return <InlineTextEditor value={value} at={at} multiline={multiline} label={t('standards.el.editText')} onCommit={commit} onCancel={onDone} />;
 }

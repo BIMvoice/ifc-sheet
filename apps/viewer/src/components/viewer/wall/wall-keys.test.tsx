@@ -398,10 +398,10 @@ describe('the drafting keys the shortcut list shows (#119 review)', () => {
     render(<WithCommandLine handlers={handlers} typed={typed} />);
     const row = (id: string) => DRAFTING_KEY_COMMANDS.find((c) => c.id === id)!;
     const snap = useDraftingSession.getState().snap;
-    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.snap').keys[0])); });
+    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.snap').keys[0]!)); });
     assert.equal(useDraftingSession.getState().snap, !snap, 'F3 toggles snap');
     const ortho = useDraftingSession.getState().ortho;
-    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.ortho').keys[0])); });
+    act(() => { document.body.dispatchEvent(draftingKey(row('drafting.ortho').keys[0]!)); });
     assert.equal(useDraftingSession.getState().ortho, !ortho, 'F8 toggles ortho');
     for (const id of ['drafting.undo', 'drafting.redo', 'drafting.confirm'] as const) {
       for (const chord of row(id).keys) {

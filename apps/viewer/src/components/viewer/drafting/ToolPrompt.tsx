@@ -11,6 +11,7 @@
 
 import { forwardRef } from 'react';
 import { useTranslation } from '@/i18n';
+import { usePlainT } from '@/lib/commands/plain-texts';
 import { useAutocadMode } from '@/lib/commands/autocad-mode';
 import { CommandLine, TEXT_PROMPTS, type CommandLineProps } from './CommandLine';
 import { endCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
@@ -19,10 +20,11 @@ const BUTTON = 'shrink-0 rounded border border-zinc-300 dark:border-zinc-700 px-
 
 export function ToolPrompt() {
   const { t } = useTranslation();
+  const plain = usePlainT();
   const prompt = useDraftingSession((s) => s.prompt);
   const running = useDraftingSession((s) => s.commandId !== null);
   if (!running) return null;
-  const text = prompt ? t(prompt.key, prompt.params) : '';
+  const text = prompt ? plain(prompt.key, prompt.params) : '';
   return (
     <div data-tool-prompt="" className="flex shrink-0 min-w-0 flex-wrap items-center gap-2 overflow-hidden border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-3 py-1.5 text-sm text-zinc-800 dark:text-zinc-200">
       <output aria-live="polite" className="min-w-0 flex-1 truncate" title={text}>{text}</output>

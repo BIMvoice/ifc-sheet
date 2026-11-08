@@ -40,7 +40,8 @@ describe('the shortcut list on IfcSheet\'s face', () => {
   it('lists the drafting keys that work on the Wall, read from the drafting keymap (#119 review)', () => {
     setEditionForTests('docs');
     const rows = shown(render(<ShortcutsTab />));
-    for (const c of DRAFTING_KEY_COMMANDS) assert.equal(rows.get(c.id), shortcutLabel(c.id, false), c.id);
+    // Repeat last tool ships with no key (#168): the keyboard settings list it instead.
+    for (const c of DRAFTING_KEY_COMMANDS) assert.equal(rows.get(c.id), c.keys.length > 0 ? shortcutLabel(c.id, false) : undefined, c.id);
     assert.equal(rows.get('drafting.undo'), 'Ctrl+Z');
     assert.equal(rows.get('drafting.snap'), 'F3');
     assert.equal(rows.get('drafting.ortho'), 'F8');

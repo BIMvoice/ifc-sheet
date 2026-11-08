@@ -89,10 +89,12 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
   const named = (l: Loaded | null, name: RegExp) => l?.plans.find((p) => name.test(p.name));
 
   // The default 1.2 m cut: the ground slab's top sits exactly 1.2 m under it, and the app's cut position is 1.2000000000000002 (#628).
+  // 569 since an edge is visible where its own element shows at its depth in a pixel beside it (#768): 16 seen pieces more
+  // than the 553 of the point sample. The slab top occludes on both sides (the band's edge allowance).
   const ground = (extra: Partial<PlanProjectView> = {}) => named(fzk, /Erdgeschoss/) && { ...named(fzk, /Erdgeschoss/)!, id: `fzk-eg-${JSON.stringify(extra)}`, ...extra };
-  it('FZK Erdgeschoss, the default 1.2 m cut: 553 projection lines on both sides (#628)', async (t) => {
-    await row(t, () => [fzk, ground()], 553);
-    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 553);
+  it('FZK Erdgeschoss, the default 1.2 m cut: 569 projection lines on both sides (#628, #768)', async (t) => {
+    await row(t, () => [fzk, ground()], 569);
+    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 569);
   });
   it('FZK Dachgeschoss', (t) => row(t, () => [fzk, named(fzk, /Dachgeschoss/)], 100));
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));

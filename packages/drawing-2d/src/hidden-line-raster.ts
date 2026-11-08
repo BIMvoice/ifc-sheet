@@ -34,9 +34,16 @@ import { signedDepth, projectPointForPlane } from './projection-bands.js';
 import type { RasterVertex } from './raster-core.js';
 import { getVertex, barycentricCoords, computeProjectedBounds } from './raster-core.js';
 
+/** One number per element across federated models: its express id within its model's slot. */
+export function ownerKey(expressId: number, modelIndex: number): number {
+  return modelIndex * 2 ** 32 + expressId;
+}
+
 export interface DepthRaster {
   /** Per-pixel minimum view depth; Infinity where nothing rasterized. */
   buffer: Float32Array;
+  /** The element nearest in each pixel (`ownerKey` of its mesh), -1 where nothing rasterized: whose surface a pixel shows. */
+  owners: Float64Array;
   width: number;
   height: number;
   bounds: Bounds2D;
@@ -98,8 +105,9 @@ export function buildDepthRaster(
 
   const buffer = new Float32Array(width * height);
   buffer.fill(Infinity);
+  const owners = new Float64Array(width * height).fill(-1);
 
-  const raster: DepthRaster = { buffer, width, height, bounds: b };
+  const raster: DepthRaster = { buffer, owners, width, height, bounds: b };
 
   for (const mesh of meshes) {
     rasterizeMesh(raster, mesh, plane, occluderDepth, depthBias);
@@ -117,6 +125,7 @@ function rasterizeMesh(
 ): void {
   const { positions, indices, origin } = mesh;
   const triangleCount = indices.length / 3;
+  const owner = ownerKey(mesh.expressId, mesh.modelIndex ?? 0);
 
   const inWindow = (viewDepth: number) => viewDepth >= 0 && viewDepth <= occluderDepth;
 
@@ -144,6 +153,7 @@ function rasterizeMesh(
       { x: uv1.x, y: uv1.y, depth: depth1 },
       { x: uv2.x, y: uv2.y, depth: depth2 },
       depthBias,
+      owner,
     );
   }
 }
@@ -154,8 +164,9 @@ function rasterizeTriangle(
   p1: RasterVertex,
   p2: RasterVertex,
   depthBias: number,
+  owner: number,
 ): void {
-  const { buffer, width, height, bounds } = raster;
+  const { buffer, owners, width, height, bounds } = raster;
 
   const toPixelX = (x: number) => ((x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
   const toPixelY = (y: number) =>
@@ -186,6 +197,7 @@ function rasterizeTriangle(
         const idx = py * width + px;
         if (depth < buffer[idx]) {
           buffer[idx] = depth;
+          owners[idx] = owner;
         }
       }
     }
