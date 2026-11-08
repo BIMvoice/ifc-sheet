@@ -119,7 +119,7 @@ describe('immutable worker index publication (#3985)', () => {
 // Archicad Haus contains real IfcRelDefinesByProperties and property atoms;
 // IfcOpenHouse has no property associations and cannot exercise this contract.
 const fixture = [
-  resolve(__dirname, '../../../tests/models/ara3d/AC20-FZK-Haus.ifc'),
+  resolve(__dirname, '../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'),
   '/Users/louistrue/Development/ifc-lite-fixtures-wt/tests/models/ara3d/AC20-FZK-Haus.ifc',
 ].find(existsSync);
 if (!fixture) console.warn('skip: immutable transport real IFC fixture missing — run pnpm fixtures');
