@@ -99,9 +99,9 @@ test('IDS dry run on AC20-FZK-Haus equals the native validator', async context =
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   let bytes: Buffer;
-  try { bytes = await readFile(resolve(process.cwd(), '../../tests/models/ara3d/AC20-FZK-Haus.ifc')); }
+  try { bytes = await readFile(resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc')); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('Run pnpm fixtures to fetch AC20-FZK-Haus.ifc'); return; }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('the committed FZK fixture is missing'); return; }
     throw error;
   }
   const store = await parseIfc(Uint8Array.from(bytes));

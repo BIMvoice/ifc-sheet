@@ -24,6 +24,7 @@ import { getEffectiveEntityIndex } from './effective-index.js';
 import { Ifc5AppearanceWriter } from './ifc5-appearance.js';
 import { IFCX_APPEARANCE_SCHEMAS, type IfcxEncodedImage } from '@ifc-lite/ifcx';
 import { buildMaterialAttribute } from './ifc5-material.js';
+import { writeDerivedEdges } from './ifc5-derived-nodes.js';
 import { collectRequiredImports, generateUuid, stepTypeToClassName, stripNodePathPrefix, type UnrepresentedPropertySet } from './ifc5-export-helpers.js';
 import { writePsetProperties, type PropertyCollision, type PsetPropertySinks } from './ifc5-pset-properties.js';
 import { addClassificationAttribute } from './ifc5-classification.js';
@@ -356,8 +357,7 @@ export class Ifc5Exporter {
       });
     }
 
-    nodes.push(...appearance.images);
-
+    nodes.push(...writeDerivedEdges(this.dataStore, nodes, this.entityUuids, options.onlyTreeEntities === false ? { onlyKnownProperties: options.onlyKnownProperties !== false, sinks } : null), ...appearance.images);
     // Determine required imports by scanning which attribute namespaces are used
     const imports = collectRequiredImports(nodes);
 

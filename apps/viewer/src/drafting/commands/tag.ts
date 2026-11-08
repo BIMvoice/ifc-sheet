@@ -31,7 +31,7 @@ export const tagCommand: DraftCommandDef = {
     const currentField = (): TagField => typed ?? (ctx.settings.annotationType?.tool === 'tag' ? ctx.settings.tagField : useProjectStore.getState().tagField ?? ctx.settings.tagField);
     let anchor: { p: Pt; guid: string; text: string } | null = null;
     return {
-      prompt: () => ({ key: anchor ? 'drafting.prompt.tagLabel' : 'drafting.prompt.tagElement', params: { field: currentField().toUpperCase() } }),
+      prompt: () => ({ key: anchor ? 'drafting.prompt.tagLabel' : 'drafting.prompt.tagElement', params: { field: currentField().toUpperCase(), tagField: currentField() } }),
       input: () => 'point',
       basePoint: () => anchor?.p ?? null,
       onKeyword(word) {

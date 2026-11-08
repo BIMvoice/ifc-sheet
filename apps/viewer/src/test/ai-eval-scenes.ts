@@ -94,9 +94,9 @@ export async function seedScene(scene: AiEvalScene): Promise<SceneResult> {
   }
   if (scene === 'validation-fzk-haus') {
     let bytes: Uint8Array;
-    try { bytes = new Uint8Array(await readFile(repo('tests/models/ara3d/AC20-FZK-Haus.ifc'))); }
+    try { bytes = new Uint8Array(await readFile(repo('apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc'))); }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing', message: 'Run pnpm fixtures to fetch AC20-FZK-Haus.ifc' };
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing', message: 'the committed FZK fixture is missing' };
       throw error;
     }
     const store = await parseIfc(bytes);

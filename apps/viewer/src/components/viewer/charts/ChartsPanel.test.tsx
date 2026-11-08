@@ -418,8 +418,8 @@ describe('ChartsPanel over a parsed model (#3944)', () => {
     assert.equal(aggregate({ ...saved, type: 'histogram', dimension: saved.measure.column! }, dataset).total, 7.5);
   });
 
-  const authoringFixture = resolve(process.cwd(), '../../tests/models/ara3d/AC20-FZK-Haus.ifc');
-  it('sums material volume from an Archicad IFC export (#5373)', { skip: !existsSync(authoringFixture) && 'Run pnpm fixtures to fetch AC20-FZK-Haus.ifc' }, async () => {
+  const authoringFixture = resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc');
+  it('sums material volume from an Archicad IFC export (#5373)', { skip: !existsSync(authoringFixture) && 'the committed FZK fixture is missing' }, async () => {
     const bytes = readFileSync(authoringFixture);
     const store = await new IfcParser().parseColumnar(Uint8Array.from(bytes).buffer);
     const model = { ...fixtureModel('archicad', { idOffset: OFFSET }), name: 'AC20-FZK-Haus.ifc', ifcDataStore: store, maxExpressId: 100_000 };
