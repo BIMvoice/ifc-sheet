@@ -561,6 +561,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/check-wasm-test-skip.mjs
 
+      - name: The fixture-test-skip check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-fixture-test-skip.test.mjs
+
+      - name: Tests that read tests/models skip without it
+        if: ${{ !cancelled() }}
+        run: node scripts/check-fixture-test-skip.mjs
+
       - name: The changeset-required check itself
         if: ${{ !cancelled() }}
         run: node --test scripts/check-changeset-required.test.mjs

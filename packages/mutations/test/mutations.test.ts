@@ -53,6 +53,8 @@ for (const file of testFiles) {
   }
 }
 
+if (!testFile) console.warn('IFC Mutations integration skipped: tests/models fixtures missing, run `pnpm fixtures`');
+
 // Parsed store - shared across tests
 let store: Awaited<ReturnType<ColumnarParser['parseLite']>>;
 
