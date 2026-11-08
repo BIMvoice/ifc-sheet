@@ -283,3 +283,39 @@ describe('EdgeExtractor.extractExteriorEdges (axonometric line work, issue #49)'
     expect(extractor.extractExteriorEdges([], view, true)).toEqual([]);
   });
 });
+
+describe('EdgeExtractor silhouette of a curved surface (FZK handrails in a section, #557)', () => {
+  // A closed 32-sided tube along Z, radius 0.04 and 2 long, as a handrail is tessellated: its sides meet at 11.25°,
+  // under the 30° crease angle, so its outline runs along smooth edges only.
+  function tube(sides = 32, r = 0.04, length = 2): MeshData {
+    const pos: number[] = [];
+    for (const z of [0, length]) for (let k = 0; k < sides; k++) {
+      const a = (2 * Math.PI * k) / sides;
+      pos.push(r * Math.cos(a), r * Math.sin(a), z);
+    }
+    pos.push(0, 0, 0, 0, 0, length); // cap centres
+    const c0 = 2 * sides, c1 = c0 + 1;
+    const idx: number[] = [];
+    for (let k = 0; k < sides; k++) {
+      const n = (k + 1) % sides;
+      idx.push(k, n, sides + n, k, sides + n, sides + k); // side, outward
+      idx.push(c0, n, k, c1, sides + k, sides + n); // caps, outward
+    }
+    return {
+      expressId: 7, ifcType: 'IfcRailing', modelIndex: 0,
+      positions: new Float32Array(pos), normals: new Float32Array(pos.length), indices: new Uint32Array(idx), color: [1, 1, 1, 1],
+    };
+  }
+
+  it('draws the tube seen from its side with its two long lines, not only its end caps', () => {
+    const extractor = new EdgeExtractor(30);
+    const silhouette = extractor.extractSilhouettes(extractor.extractEdges(tube()), { x: -1, y: 0, z: 0 });
+    const long = silhouette.filter((e) => Math.abs(e.v1.z - e.v0.z) > 1.9);
+    expect(long.map((e) => Math.round(e.v0.y * 100) / 100).sort()).toEqual([-0.04, 0.04]);
+  });
+
+  it('still leaves out the diagonals across a flat face', () => {
+    const extractor = new EdgeExtractor(30);
+    expect(extractor.extractEdges(boxMesh(1, 0, 2))).toHaveLength(12);
+  });
+});

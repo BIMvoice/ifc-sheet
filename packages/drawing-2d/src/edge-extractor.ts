@@ -69,6 +69,12 @@ import { onClipPlane, type ClipPlane } from './clip-rim.js';
  */
 const SILHOUETTE_EPSILON = 1e-4;
 
+/**
+ * Below this angle (radians, about 0.06°) two faces meeting at an edge are one flat face split by a diagonal, f32 noise
+ * included; above it a smooth edge is kept, since the silhouette of a curved surface runs along such edges.
+ */
+const SMOOTH_OUTLINE_MIN_ANGLE = 1e-3;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -179,8 +185,11 @@ export class EdgeExtractor {
         }
       }
 
-      // Only include non-smooth edges
-      if (type !== 'smooth') {
+      // A smooth edge stays when its two faces are not flat together: the outline of a curved surface (a tube, a column,
+      // a helical stringer) runs along smooth edges only, so dropping them left FZK's handrails, rails and stair column
+      // without their long lines in a section, only their end caps (#557). A diagonal across one flat face can never
+      // be an outline, so it goes.
+      if (type !== 'smooth' || dihedralAngle > SMOOTH_OUTLINE_MIN_ANGLE) {
         edges.push({
           v0,
           v1,

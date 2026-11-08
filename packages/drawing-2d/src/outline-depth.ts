@@ -71,7 +71,16 @@ export function outlineLinesWithDepth(
   depths: ProjectionBandDepths,
   mesh: MeshData,
 ): DrawingLine[] {
-  const lines = outlineToProjectionLines(outline, meta, plane, depths);
+  return withOwnSurfaceDepth(outlineToProjectionLines(outline, meta, plane, depths), plane, mesh);
+}
+
+/**
+ * Remember `mesh` for each of `lines` (lines drawn from that mesh on `plane`), so `refineOutlineDepths` gives them the
+ * depth of the element's own surface. The mesh silhouette needs it as much as the Rust outline: a column or a handrail
+ * is a tube, and its silhouette runs along the rim, behind the tube's own front by up to its radius within one raster
+ * pixel, so the column of FZK's spiral stair was hidden by itself in Section A-A (#557).
+ */
+export function withOwnSurfaceDepth(lines: DrawingLine[], plane: SectionPlaneConfig, mesh: MeshData): DrawingLine[] {
   const source: OutlineSource = { mesh, plane };
   for (const line of lines) sources.set(line, source);
   return lines;
