@@ -17,12 +17,15 @@
  *
  * A face on the plane with its solid on the viewed side (the outer face of a building on an elevation drawn at the
  * model's extent) is still cut, as before. One with its solid on the far side is not cut: it is beyond the cut.
+ *
+ * The tolerance is at least 10 µm (`PLANE_EPSILON`), wider than the few µm a flat face's vertices stray from its height in
+ * the kernel's output; a narrower one cut that face along the diagonals of its triangles (#759).
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { EntityKey, SectionPlaneConfig, Vec3 } from './types.js';
 import { makeEntityKey } from './types.js';
-import { EPSILON, vec3Lerp } from './math.js';
+import { vec3Lerp } from './math.js';
 import { looksUp } from './projection-bands.js';
 
 /** `+1` when the drawing looks along the plane normal (a flipped section, a reflected plan), `-1` when it looks against it: the sign of the signed distance of what it sees. */
@@ -40,9 +43,18 @@ function localMaxCoord(positions: Float32Array): number {
   return m;
 }
 
-/** The plane tolerance of a mesh: the fixed EPSILON, floored to the float32 noise of its local coordinates. */
+/**
+ * The least plane tolerance, 10 µm. A face the geometry kernel builds on a given height does not keep every vertex on
+ * it: on rvt01 the bottom face of the opening for window 24516 in wall 14797 has its corners 2.4e-8 m from the height
+ * and the points the kernel added inside it 6.1e-6 m away. With a tolerance below that, the plane 1e-7 m under the sill
+ * put the corners beyond the cut and the inner points on the viewed side, so that one flat face was cut along the
+ * diagonals of its triangles and the plan drew a hole through the wall (#759). 10 µm is 0.0001 mm on paper at 1:100.
+ */
+const PLANE_EPSILON = 1e-5;
+
+/** The plane tolerance of a mesh: `PLANE_EPSILON`, floored to the float32 noise of its local coordinates. */
 export function meshPlaneEpsilon(mesh: Pick<MeshData, 'positions'>): number {
-  return Math.max(EPSILON, localMaxCoord(mesh.positions) * 2 ** -22);
+  return Math.max(PLANE_EPSILON, localMaxCoord(mesh.positions) * 2 ** -22);
 }
 
 /**
