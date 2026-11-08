@@ -20,6 +20,7 @@ const FIXTURE = fileURLToPath(
   new URL('../../../tests/models/ifcopenshell/structural_analysis_curve.ifc', import.meta.url),
 );
 
+if (!existsSync(FIXTURE)) console.warn('structural extractor fixture test skipped: tests/models fixtures missing, run `pnpm fixtures`');
 const describeMaybe = existsSync(FIXTURE) ? describe : describe.skip;
 
 describeMaybe('extractStructuralOnDemand — structural_analysis_curve.ifc', () => {
