@@ -18,10 +18,10 @@ function assertCanonicalSurface(conversion: NonNullable<AppearancePlan['conversi
 
 test('real WASM preserves mapped occurrences unless explicitly opted in and composes finite PDF appearance (#4404)', async t => {
   const wasmUrl = new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
-  const sourceUrl = new URL('../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+  const sourceUrl = new URL('../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
   try { await Promise.all([access(wasmUrl), access(sourceUrl)]); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    t.skip('Run pnpm fixtures and pnpm build:wasm for the real evaluated appearance contract'); return;
+    t.skip('Run pnpm build:wasm:fetch for the real evaluated appearance contract'); return;
   }
   const source = await readFile(sourceUrl);
   const { default: init, IfcAPI } = await import('@ifc-lite/wasm');
@@ -97,10 +97,10 @@ test('real WASM preserves mapped occurrences unless explicitly opted in and comp
 
 test('real WASM image and page conversion preserve cut slab and opening companion provenance (#4404)', async t => {
   const wasmUrl = new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
-  const sourceUrl = new URL('../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+  const sourceUrl = new URL('../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
   try { await Promise.all([access(wasmUrl), access(sourceUrl)]); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    t.skip('Run pnpm fixtures and pnpm build:wasm for the real opening appearance contract'); return;
+    t.skip('Run pnpm build:wasm:fetch for the real opening appearance contract'); return;
   }
   const source = await readFile(sourceUrl);
   const { default: init, IfcAPI } = await import('@ifc-lite/wasm');

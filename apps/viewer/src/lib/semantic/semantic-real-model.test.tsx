@@ -23,9 +23,9 @@ afterEach(() => useViewerStore.setState(initial, true));
 
 test('charter #6643: ArchiCAD 20 FZK door identity, federated selection and projected declaration survive IFC export', async context => {
   let bytes: Uint8Array;
-  try { bytes = await readFile(new URL('../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url)); }
+  try { bytes = await readFile(new URL('../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url)); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('Run pnpm fixtures to fetch the canonical ArchiCAD fixture'); return; }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('the committed FZK fixture is missing'); return; }
     throw error;
   }
   // Ground truth is the externally authored, hash-verified manifest file; no fabricated geometry or GUID oracle.
