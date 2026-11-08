@@ -14,13 +14,16 @@ import type { IfcDataStore } from '@ifc-lite/parser';
 import { isTerrainMesh, predefinedTypeReader } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 
+/** The store when it is a whole one (a test may hand over a stub with a spatial hierarchy only, which cannot tell a PredefinedType). */
+const fullStore = (store: object | null | undefined): IfcDataStore | null => (store && 'entities' in store && store.entities ? (store as IfcDataStore) : null);
+
 /**
  * Whether a mesh is a terrain, read from the store of the model that owns it (`isTerrainMesh`). `legacy` is the single loaded
  * model's store, read when no federated model is loaded (global id = express id); it defaults to the viewer's own.
  */
-export function terrainTester(legacy?: IfcDataStore | null): (mesh: MeshData) => boolean {
+export function terrainTester(legacy?: object | null): (mesh: MeshData) => boolean {
   const state = useViewerStore.getState();
-  const single = legacy ?? state.ifcDataStore;
+  const single = fullStore(legacy) ?? state.ifcDataStore;
   const readers = new Map<string, (id: number) => string | null>();
   return (mesh) => {
     if (mesh.ifcType?.toUpperCase() !== 'IFCGEOGRAPHICELEMENT') return false;
@@ -36,7 +39,7 @@ export function terrainTester(legacy?: IfcDataStore | null): (mesh: MeshData) =>
 }
 
 /** `meshes` without the terrain (see {@link terrainTester}); the same array when it holds none. */
-export function withoutTerrainMeshes(meshes: MeshData[], legacy?: IfcDataStore | null): MeshData[] {
+export function withoutTerrainMeshes(meshes: MeshData[], legacy?: object | null): MeshData[] {
   if (!meshes.some((m) => m.ifcType?.toUpperCase() === 'IFCGEOGRAPHICELEMENT')) return meshes;
   const isTerrain = terrainTester(legacy);
   return meshes.filter((mesh) => !isTerrain(mesh));
