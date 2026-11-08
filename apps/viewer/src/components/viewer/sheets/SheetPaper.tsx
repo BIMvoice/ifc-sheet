@@ -197,7 +197,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const titleText = keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' });
   // The title stands under the drawing and under the marks that stand there, as the engine's PDF places it (`viewTitleLayout`).
   const markBoxes = (content.markBoxes ?? []).map((b) => paperBox(drawingToScreen(b.min, t, axis), drawingToScreen(b.max, t, axis)));
-  const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber, { text: titleText, marks: markBoxes });
+  const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber, { text: titleText, marks: markBoxes, areaBottom: drawingArea.y + drawingArea.h });
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
