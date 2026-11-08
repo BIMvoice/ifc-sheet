@@ -13,6 +13,8 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/i18n';
 import type { TranslationKey, TranslationParameters } from '@/i18n';
+import { TAG_FIELD_WORDS } from '@/tagfields/tag-field-words';
+import type { TagField } from '@/tagfields/element-tag';
 import { useAutocadMode } from './autocad-mode';
 
 export const PLAIN_TEXT: Readonly<Partial<Record<TranslationKey, TranslationKey>>> = {
@@ -41,5 +43,10 @@ export const PLAIN_TEXT: Readonly<Partial<Record<TranslationKey, TranslationKey>
 export function usePlainT(): (key: TranslationKey, params?: TranslationParameters) => string {
   const { t } = useTranslation();
   const autocad = useAutocadMode((s) => s.on);
-  return useCallback((key, params) => t(autocad ? key : PLAIN_TEXT[key] ?? key, params), [t, autocad]);
+  // A tag's sentence names the field in words ("the element's mark"), not as the typed MARK.
+  return useCallback((key, params) => {
+    const field = params?.tagField;
+    const named = typeof field === 'string' && field in TAG_FIELD_WORDS ? { ...params, fieldWords: t(TAG_FIELD_WORDS[field as TagField]) } : params;
+    return t(autocad ? key : PLAIN_TEXT[key] ?? key, named);
+  }, [t, autocad]);
 }

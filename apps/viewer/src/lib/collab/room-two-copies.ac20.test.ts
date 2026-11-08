@@ -15,10 +15,8 @@
  * guest model hydrates its own copy's meshes and its own texture, and a pick
  * (global id → model) resolves to the copy the mesh belongs to.
  *
- * Skips (never fails) when the fixture or the wasm runtime is absent; CI
- * fetches both (`pnpm fixtures`, `pnpm build:wasm`). The fixture must stay in
- * the committed manifest, so its absence from disk is a skip but its absence
- * from the manifest is a failure — otherwise this would go vacuous unseen.
+ * Reads the FZK-Haus committed beside the test helpers, so CI runs it; it skips
+ * only when the wasm runtime is not built (CI restores it, `pnpm build:wasm:fetch` locally).
  */
 
 import { describe, it } from 'node:test';
@@ -40,7 +38,7 @@ import { roomExportPathPrefix } from './room-export-paths.js';
 import { joiner, localIdOf, ownerShare, texturePixel, type RoomTestState } from '../../test/collab-room-harness.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
-const FIXTURE = 'tests/models/ara3d/AC20-FZK-Haus.ifc';
+const FIXTURE = 'apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc';
 const WASM = 'packages/wasm/pkg/ifc-lite_bg.wasm';
 
 /** The real STEP parse, the way the viewer's loader does it off the main thread. */
@@ -73,15 +71,8 @@ function copyMeshes(base: readonly MeshData[], idOffset: number, paintedId: numb
 
 describe('two copies of AC20-FZK-Haus.ifc in one room (#4444)', () => {
   it('owner → fresh guest → rejoin: two slots, two models, two textures, correct picking', async (t) => {
-    const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'tests', 'models', 'manifest.json'), 'utf8')) as {
-      files: { path: string }[];
-    };
-    assert.ok(
-      manifest.files.some((f) => `tests/models/${f.path}` === FIXTURE),
-      `${FIXTURE} is not in tests/models/manifest.json, so CI would never fetch it`,
-    );
     if (!existsSync(join(REPO_ROOT, FIXTURE)) || !existsSync(join(REPO_ROOT, WASM))) {
-      t.skip('run pnpm fixtures and pnpm build:wasm for the real two-copy room contract');
+      t.skip('run pnpm build:wasm:fetch for the real two-copy room contract');
       return;
     }
 

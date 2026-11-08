@@ -26,7 +26,7 @@ import { queryForSelection } from './related-query';
 import { executeValidation } from './validation-job';
 const initialViewer = useViewerStore.getState(); const initialSession = useSemanticSession.getState();
 afterEach(() => { cleanup(); useViewerStore.setState(initialViewer, true); useSemanticSession.setState(initialSession, true); localStorage.clear(); });
-const fixture = new URL('../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+const fixture = new URL('../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 const GlobalId = '1Oms875aH3Wg$9l65H2ZGw'; const id = `https://lbd.org/${GlobalId}`;
 async function seed(count: number) {
   const bytes = new Uint8Array(await readFile(fixture));
@@ -65,7 +65,7 @@ for (const initial of [{ mode: 'template' as const, template: 'https://example.o
 }
 
 test('URI identity #6783 mounted controls enable real ArchiCAD door selection in renderer and property channels', async context => {
-  if (!existsSync(fixture)) { context.skip('Run pnpm fixtures for the real ArchiCAD fixture'); return; }
+  if (!existsSync(fixture)) { context.skip('the committed FZK fixture is missing'); return; }
   await seed(1);
   useSemanticSession.setState({ strategy: 'ifc-global-id', profile: DEFAULT_PROFILE, document: undefined, results: results(id), resultMapping: { id: 'resource' }, graph: '', links: [], revisions: new Map() });
   const ui = render(<SemanticPanel />); assert.equal(rowButton(ui).disabled, true);
@@ -80,7 +80,7 @@ test('URI identity #6783 mounted controls enable real ArchiCAD door selection in
 });
 
 test('URI identity #6783 real engine encoded subject rows remain ambiguous until an explicit current model choice', async context => {
-  if (!existsSync(fixture)) { context.skip('Run pnpm fixtures for the real ArchiCAD fixture'); return; }
+  if (!existsSync(fixture)) { context.skip('the committed FZK fixture is missing'); return; }
   await seed(2); const encoded = id.replace('$', '%24');
   useSemanticSession.setState({ strategy: 'resource-uri', uriConfig: { mode: 'template', template: 'https://lbd.org/{GlobalId}' }, links: [], revisions: new Map() });
   const engine = new Oxigraph(); engine.load(`<${encoded}> <urn:label> "ArchiCAD door" .`, { format: 'text/turtle' });
@@ -111,7 +111,7 @@ test('URI identity #6783 portable configuration is validated and restoration cle
 });
 
 test('issues #6783/#6784: granted local SPARQL URI-only results select the public ArchiCAD door through mounted controls', async context => {
-  if (!existsSync(fixture)) { context.skip('Run pnpm fixtures for the real ArchiCAD fixture'); return; }
+  if (!existsSync(fixture)) { context.skip('the committed FZK fixture is missing'); return; }
   await seed(1);
   const subject = id.replace('$', '%24');
   const query = 'SELECT ?resource WHERE { ?resource <urn:label> ?label }';

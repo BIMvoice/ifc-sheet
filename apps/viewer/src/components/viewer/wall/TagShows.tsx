@@ -13,6 +13,8 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { setTagFieldChoice } from '@/tagfields/tag-field-choice';
 import type { TagField } from '@/tagfields/element-tag';
+import { TAG_FIELD_WORDS } from '@/tagfields/tag-field-words';
+import { patchDraftSettings } from '@/drafting/session';
 import { WALL_FIELD } from './wall-type';
 
 /** The words of the choices; the IFC attribute is named as the standard names it (Name). */
@@ -21,16 +23,25 @@ const OPTION: Record<TagField, TranslationKey> = {
   classification: 'atype.tag.classification', classificationTitle: 'atype.tag.classificationTitle',
 };
 
+/** The project keeps the choice; the session is told too, so a running tool's sentence follows it. */
+function choose(field: TagField): void {
+  setTagFieldChoice(field);
+  patchDraftSettings({ tagField: field });
+}
+
 export function TagShows() {
   const { t } = useTranslation();
   const chosen: TagField = useProjectStore((s) => s.tagField) ?? 'mark';
   return (
-    <label className="mt-4 block text-xs text-sky-200">
-      {t('tagShows.label')}
-      <select className={WALL_FIELD} value={chosen} onChange={(e) => setTagFieldChoice(e.target.value as TagField)}>
-        {TAG_FIELDS.map((f) => <option key={f} value={f}>{t(OPTION[f])}</option>)}
-      </select>
+    <div className="mt-4 text-xs text-sky-200">
+      <label className="block">
+        {t('tagShows.label')}
+        <select className={WALL_FIELD} value={chosen} onChange={(e) => choose(e.target.value as TagField)}>
+          {TAG_FIELDS.map((f) => <option key={f} value={f}>{t(OPTION[f])}</option>)}
+        </select>
+      </label>
+      <output className="mt-1 block text-sky-100">{t('tagCard.sentence', { field: t(TAG_FIELD_WORDS[chosen]) })}</output>
       <span className="mt-1 block text-sky-300">{t('tagShows.hint')}</span>
-    </label>
+    </div>
   );
 }
