@@ -327,8 +327,11 @@ export class Drawing2DGenerator {
       // Compute bounds for depth buffer
       const bounds = this.computeBounds(allLines);
 
+      // The band's own edge allowance (#628): a plan's floor slab exactly at the band's bottom is in the lines' band, so
+      // it occludes too. Without it the app's cut (1.2000000000000002 m) clipped the slab top out of the raster while the
+      // engine's (1.2 m) kept it, and the edges an occluder's own surface lets through differed between the two.
       const occluderDepth = config.clipProjectionBands
-        ? (config.projectionBelowDepth ?? config.projectionDepth)
+        ? bandsWithEdgeTolerance(config).below
         : Math.max(config.projectionDepth, config.projectionBelowDepth ?? config.projectionDepth,
           config.projectionAboveDepth ?? config.projectionDepth);
       const occluders = config.clipProjectionBands
