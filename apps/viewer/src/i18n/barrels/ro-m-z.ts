@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { polylineCardRo } from '../catalogues/polyline-card.ro';
 import { repeatToolRo } from '../catalogues/repeat-tool.ro';
 import { manualValidationRo } from '../catalogues/manual-validation.ro';
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
@@ -155,4 +156,5 @@ export const roMZ = {
   ...wallCompareRo,
   ...wallRo,
   ...whatChangedRo,
+  ...polylineCardRo,
 } as const;

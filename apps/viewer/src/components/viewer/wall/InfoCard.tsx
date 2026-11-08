@@ -15,6 +15,7 @@ import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
 import { RevisionPick } from './RevisionsCard';
 import { ToolTypes } from './ToolTypes';
+import { PolylineToolButtons } from './PolylineToolButtons';
 import { isEditTool } from './EditToolField';
 import { toolHelpKey } from './tool-help';
 import { usePlainT } from '@/lib/commands/plain-texts';
@@ -44,9 +45,10 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
   if (draw) {
     return (
       <Card eyebrow={drawingOn ? t('wall.draw.onDrawing', { name: drawingOn }) : t('wall.draw.onSheet')} title={t(draw.labelKey)}>
-        <p className="m-0 leading-relaxed">{t(toolHelpKey(draw.command))}</p>
+        <p className="m-0 leading-relaxed">{plain(toolHelpKey(draw.command))}</p>
         {draw.command === 'hatch' ? <><ToolTypes tool="hatch" /><HatchSettings /></> : null}
         {isEditTool(draw.command) ? <ToolTypes tool={draw.command} /> : null}
+        {draw.command === 'polyline' ? <PolylineToolButtons /> : null}
         {draw.command === 'revcloud' ? <RevisionPick /> : null}
         <p className="mb-0 mt-3 text-xs text-cyan-300">{plain('wall.drawHint')}</p>
         {orthoNote}

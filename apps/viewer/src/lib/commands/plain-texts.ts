@@ -31,6 +31,8 @@ export const PLAIN_TEXT: Readonly<Partial<Record<TranslationKey, TranslationKey>
   'drafting.prompt.chainSplit': 'plainHints.chainSplit',
   'drafting.prompt.secondPoint': 'plainHints.secondPoint',
   'drafting.prompt.trimPick': 'plainHints.trimPick',
+  'wall.draw.polyline.body': 'polylineCard.body',
+  'drafting.prompt.polylineNext': 'plainHints.polylineNext',
   'drafting.prompt.extendPick': 'plainHints.extendPick',
 };
 
