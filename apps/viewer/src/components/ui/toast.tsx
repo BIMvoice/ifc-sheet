@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Check, AlertCircle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
+import { useViewportCovered } from '@/components/viewer/viewport-cover';
 
 // ─── Store (vanilla, framework-agnostic) ─────────────────────────────────
 
@@ -158,6 +159,8 @@ export interface ToasterProps {
 export function Toaster({ variant = 'fixed' }: ToasterProps = {}) {
   const items = useToasts();
   const { t } = useTranslation();
+  // IfcSheet's face covers the viewport and puts its command line at the bottom; a toast down there hides the tool's prompt. Under the face the stack sits below its header (h-12) instead, pinned to the window: the viewport it would otherwise anchor to is not the window's.
+  const covered = useViewportCovered();
 
   const handleDismiss = useCallback((id: number) => dismiss(id), []);
 
@@ -205,8 +208,8 @@ export function Toaster({ variant = 'fixed' }: ToasterProps = {}) {
   return (
     <div
       className={cn(
-        'bottom-4 right-4 z-(--z-toast) flex flex-col pointer-events-none max-w-sm',
-        variant === 'absolute' ? 'absolute' : 'fixed',
+        'right-4 z-(--z-toast) flex flex-col pointer-events-none max-w-sm',
+        covered ? 'fixed top-14' : cn('bottom-4', variant === 'absolute' ? 'absolute' : 'fixed'),
       )}
     >
       <div role="alert" aria-atomic="false" className="flex flex-col-reverse gap-2 pb-2 empty:pb-0">
