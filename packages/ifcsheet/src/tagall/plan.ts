@@ -33,6 +33,7 @@ import { ringArea, type RoomOfPlan } from './footprint.js';
 import { roomLabelPoint } from './room-point.js';
 import { roomLabelPointLeast } from './room-point-least.js';
 import { roomLabelOutside } from './room-outside.js';
+import { roomLabelSpill } from './room-spill.js';
 import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types.js';
 
 export interface TagAllDrafts {
@@ -170,6 +171,11 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
         if (least) spot = { centre: least.centre, fits: true };
         summary.roomsOverLines++;
       }
+    }
+    // Too big for its room, with no place inside: it still keeps off the texts already drawn, beside its deepest point with a leader to it; none free keeps the deepest point.
+    if (!spot.fits && !tip) {
+      const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, roomIndex, clear);
+      if (spill) { spot = { centre: spill.centre, fits: false }; tip = spill.tip; }
     }
     const placed = labelDraft(env, input.types.room, room.guid, spot.centre, at, undefined, extras);
     // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).
