@@ -83,4 +83,17 @@ describe('the Dimension tool card Chain switch (#168)', () => {
     pick(5, 3);
     assert.ok(runningCommand(), 'chaining again');
   });
+
+  it('the card body and hint say what the switch does: chaining on, then one dimension only when off', () => {
+    const ui = render(<InfoCard tool="dimaligned" onDone={endCommand} />);
+    const text = () => ui.textContent ?? '';
+    assert.ok(text().includes(t('wall.tool.dimension.body')), 'on: the chain text');
+    assert.ok(!text().includes(t('dimensionChain.bodyOff')));
+    click(chainSwitch(ui));
+    assert.ok(text().includes(t('dimensionChain.bodyOff')), 'off: the body says each dimension stands alone');
+    assert.ok(text().includes(t('dimensionChain.hintOff')), 'off: the hint says the tool ends after one');
+    assert.ok(!text().includes(t('wall.tool.dimension.body')), 'off: no longer promises a chain');
+    click(chainSwitch(ui));
+    assert.ok(text().includes(t('wall.tool.dimension.body')), 'on again: the chain text');
+  });
 });

@@ -10,7 +10,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslation } from '@/i18n';
-import { useDraftingSession } from '@/drafting/session';
+import { baseDraftSettings, useDraftingSession } from '@/drafting/session';
 import { ToolIcon } from '../ifcsheet/ToolIcon';
 import { HatchSettings } from './HatchSettings';
 import { RevisionPick } from './RevisionsCard';
@@ -38,6 +38,8 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
   const { t } = useTranslation();
   const plain = usePlainT();
   const ortho = useDraftingSession((o) => o.ortho || o.orthoHeld);
+  useDraftingSession((o) => o.revision);
+  const chainOn = baseDraftSettings().dimContinuous;
   const chosen = WALL_TOOLS.find((x) => x.command === tool);
   const orthoNote = ortho ? <output className="mb-0 mt-2 block text-xs font-medium text-white">{t('wall.ortho.on')}</output> : null;
   // Esc is never the only way out (#166): the tool ends from its own card.
@@ -58,12 +60,14 @@ export function InfoCard({ tool, drawingOn, onDone }: { tool: string; drawingOn?
     );
   }
   if (chosen) {
+    // The dimension tool's texts follow its Chain switch: with it off the tool ends after one dimension.
+    const single = chosen.command === 'dimaligned' && !chainOn;
     return (
       <Card eyebrow={t(chosen.labelKey)} title={t(chosen.titleKey)}>
-        <p className="m-0 leading-relaxed">{t(toolHelpKey(chosen.command))}</p>
+        <p className="m-0 leading-relaxed">{single ? t('dimensionChain.bodyOff') : t(toolHelpKey(chosen.command))}</p>
         <ToolTypes tool={chosen.command} />
         {chosen.command === 'dimaligned' ? <DimensionChainSwitch /> : null}
-        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{plain(chosen.hintKey ?? 'wall.drawHint')}</p>
+        <p className="mb-0 mt-4 flex items-start gap-2 text-cyan-300"><ToolIcon name="cube" size={22} accent="currentColor" />{single ? t('dimensionChain.hintOff') : plain(chosen.hintKey ?? 'wall.drawHint')}</p>
         {orthoNote}
         {done}
       </Card>
