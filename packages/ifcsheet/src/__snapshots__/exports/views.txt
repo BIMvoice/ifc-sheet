@@ -124,6 +124,7 @@ hiddenLineElement: value
 hiddenLineEntry: value
 inDrawOrder: value
 isTerrainMesh: value
+isTerrainPredefinedType: value
 itemRules: value
 layerOrder: value
 layoutContourLabels: value
@@ -141,6 +142,7 @@ ownGraphicsOf: value
 parseClassificationRows: value
 penGroups: value
 penOrder: value
+predefinedTypeReader: value
 presetRules: value
 readClassificationMapping: value
 readClassificationMappings: value

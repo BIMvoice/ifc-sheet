@@ -20,6 +20,7 @@ import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
 import { generateViewDrawings } from './view-drawings.js';
 import { withContours } from './contour-drawing.js';
 import { isTerrainMesh } from './contours.js';
+import { predefinedTypeReader } from './terrain.js';
 import { storeyFloorsOf } from './plan-projection.js';
 import { planOpeningSymbols, viewOpeningSymbols } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
@@ -85,7 +86,8 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   const drawings = options.drawings === false || !model.extent ? new Map()
     : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError, options.onEmptyView, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy));
   // A site plan draws its terrain as contours (#182), as the app's do: the terrain is among all the meshes, not the building's.
-  const terrain = (model.meshes ?? []).filter(isTerrainMesh);
+  const terrainTypeOf = model.dataStore ? predefinedTypeReader(model.dataStore) : undefined;
+  const terrain = (model.meshes ?? []).filter((m) => isTerrainMesh(m, terrainTypeOf));
   for (const view of terrain.length > 0 ? doc.views : []) {
     const drawing = drawings.get(view.id);
     if (drawing) drawings.set(view.id, withContours(drawing, view, terrain, model.coordinateInfo?.originShift?.y ?? 0));

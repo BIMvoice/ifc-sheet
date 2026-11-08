@@ -18,6 +18,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { SpatialHierarchy } from '@ifc-lite/data';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { GeometryProcessor, type GeometryResult } from '@ifc-lite/geometry';
 import { useDrawingGeneration } from '@/hooks/useDrawingGeneration';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
@@ -56,8 +57,8 @@ export function boundsOf(geometry: GeometryResult) {
   return mergedSectionBounds(new Map(), geometry);
 }
 
-/** The drawing `view` shows (before any sheet), made the way an open view makes it (`planeOverride`: a plane the view cannot say, a flipped plan); with the model's `spatialHierarchy` a plan is scoped to its storey, as in the app. */
-export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, geometry: GeometryResult, spatialHierarchy?: SpatialHierarchy, typeVisibility: TypeVisibilityGate = VIEWER_START, planeOverride: Partial<ViewSectionPlane> = {}): Promise<Drawing2D | null> {
+/** The drawing `view` shows (before any sheet), made the way an open view makes it (`planeOverride`: a plane the view cannot say, a flipped plan); with the model's `spatialHierarchy` (or its whole `dataStore`, which also tells a terrain from a tree) a plan is scoped to its storey, as in the app. */
+export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, geometry: GeometryResult, spatialHierarchy?: SpatialHierarchy, typeVisibility: TypeVisibilityGate = VIEWER_START, planeOverride: Partial<ViewSectionPlane> = {}, dataStore?: IfcDataStore): Promise<Drawing2D | null> {
   const resolved = sectionPlaneForView(view, boundsOf(geometry), []);
   assert.ok(resolved, `view ${view.name} has no plane`);
   const plane = { ...resolved, ...planeOverride };
@@ -67,7 +68,7 @@ export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, ge
   let run: (() => Promise<void>) | null = null;
   function Harness(): null {
     const { generateDrawing } = useDrawingGeneration({
-      activeTool: 'select', geometryResult: geometry, ifcDataStore: spatialHierarchy ? { source: undefined as never, spatialHierarchy } : null, sectionPlane: plane!, displayOptions,
+      activeTool: 'select', geometryResult: geometry, ifcDataStore: dataStore ?? (spatialHierarchy ? { source: undefined as never, spatialHierarchy } : null), sectionPlane: plane!, displayOptions,
       typeVisibility, combinedHiddenIds: new Set<number>(), combinedIsolatedIds: null, computedIsolatedIds: null,
       models: new Map([['m0', { id: 'm0', visible: true }]]), panelVisible: false, drawing: null,
       setDrawing: (d) => { drawing = d; }, setDrawingStatus: () => {}, setDrawingProgress: () => {}, setDrawingError: () => {}, primary: false,

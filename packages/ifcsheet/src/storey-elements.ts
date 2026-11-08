@@ -13,20 +13,23 @@
  * The engine (`openModel`) and the app (`buildingFraming` in `project/model-rooms.ts`) both call this, so the extent
  * and the drawings they make from a model cannot disagree about which elements are the building.
  *
- * A terrain (an IfcGeographicElement, what `isTerrainMesh` names) is the ground the building stands on, not part of it, even
+ * A terrain (an IfcGeographicElement that `isTerrainPredefinedType` accepts; a tree or a boring point stays) is the ground the building stands on, not part of it, even
  * when the model contains it in a storey (Bonsai does): left in, it set the extent, was cut in every section as a block and
  * drawn in every elevation as a rectangle (#683). The engine contours it on its own.
  */
 
 import { IfcTypeEnum, isSpatialStructureType, type SpatialHierarchy } from '@ifc-lite/data';
+import { isTerrainPredefinedType } from './terrain.js';
 
 export function storeyElementIds(
   hierarchy: Pick<SpatialHierarchy, 'byStorey' | 'elementToStorey'>,
   storeys: Iterable<number>,
   typeOf: (expressId: number) => IfcTypeEnum,
+  /** The PredefinedType of an element (null: none). Without it a geographic element counts as one that states none, a terrain. */
+  predefinedTypeOf: (expressId: number) => string | null = () => null,
 ): number[] {
   const wanted = new Set(storeys);
-  const isBuilding = (id: number): boolean => typeOf(id) !== IfcTypeEnum.IfcGeographicElement;
+  const isBuilding = (id: number): boolean => typeOf(id) !== IfcTypeEnum.IfcGeographicElement || !isTerrainPredefinedType(predefinedTypeOf(id));
   const ids: number[] = [];
   const seen = new Set<number>();
   for (const storey of wanted) {

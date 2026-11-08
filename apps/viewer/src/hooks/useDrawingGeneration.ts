@@ -39,6 +39,7 @@ import { customPlaneCenter, useViewerStore } from '@/store';
 import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 import { isTypeVisible } from '@/store/typeVisibilityFilter';
+import { withoutTerrainMeshes } from '@/project/terrain-elements';
 import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
 import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
 import { useDrawingRtcContext } from './useDrawingRtcContext.js';
@@ -425,6 +426,9 @@ export function useDrawingGeneration({
       // too. Same shared mapping as the viewport, Cesium, basket and GLB
       // export, so all six toggles stay in lockstep.
       meshesToProcess = meshesToProcess.filter((mesh) => isTypeVisible(mesh.ifcType, typeVisibility));
+
+      // The terrain is not cut or projected, as the engine's drawings leave it out (#683).
+      meshesToProcess = withoutTerrainMeshes(meshesToProcess, ifcDataStore);
 
       // Filter out hidden entities (using combined multi-model set)
       if (combinedHiddenIds.size > 0) {
