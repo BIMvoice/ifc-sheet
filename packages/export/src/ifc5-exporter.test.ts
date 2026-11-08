@@ -41,6 +41,7 @@ const FIXTURES = {
 const FIXTURES_AVAILABLE = Object.values(FIXTURES).every((name) =>
   existsSync(resolve(MODELS_DIR, name)),
 );
+if (!FIXTURES_AVAILABLE) console.warn('IFC5 reference-file tests skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 function loadReferenceFile(filename: string): any {
   return JSON.parse(readFileSync(resolve(MODELS_DIR, filename), 'utf-8'));

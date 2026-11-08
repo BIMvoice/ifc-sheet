@@ -67,6 +67,7 @@ function delta(nodes: IfcxNode[], id: string): IfcxFile {
 
 for (const model of MODELS) {
   const available = existsSync(model.path);
+  if (!available) console.warn(`${model.rel} fuzz skipped: tests/models fixtures missing, run \`pnpm fixtures\``);
 
   // Skipped when the model file is missing on disk — run `pnpm fixtures`.
   describe.skipIf(!available)(`real-model partition fuzz: ${model.rel}`, () => {
