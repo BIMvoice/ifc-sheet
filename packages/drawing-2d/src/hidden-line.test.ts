@@ -556,6 +556,22 @@ describe('HiddenLineClassifier, an edge on the outline of the surface in front o
     expect(result.overallVisibility).toBe('visible');
   });
 
+  it('keeps an edge hidden where only another element shows at its depth beside it (#768, FZK ground floor)', () => {
+    // A plan seen from above: a lower wall (3) whose top is level with the floor slab (1) at view depth 5, under a cut wall
+    // (2) nearer the viewer. The lower wall's top edge runs along the cut wall's foot; the floor beside it is at the same
+    // depth but is not the lower wall, so the edge is not seen. Counting any surface drew it along every cut wall.
+    const floor = quad(1, [[3, 0, 5], [10, 0, 5], [10, 10, 5], [3, 10, 5]]);
+    const cutWall = quad(2, [[0, 0, 0.5], [3, 0, 0.5], [3, 10, 0.5], [0, 10, 0.5]]);
+    const lowerWall = quad(3, [[0, 0, 5], [3, 0, 5], [3, 10, 5], [0, 10, 5]]);
+    const classifier = new HiddenLineClassifier({ resolution: 64, samplesPerLine: 40 });
+    classifier.buildDepthBuffer([floor, cutWall, lowerWall], plane, 10, bounds);
+    const top: DrawingLine = {
+      line: { start: { x: 3, y: 0.5 }, end: { x: 3, y: 9.5 } },
+      category: 'projection', visibility: 'visible', entityId: 3, ifcType: 'IfcWall', modelIndex: 0, depth: 5,
+    };
+    expect(classifier.classifyLines([top])[0].overallVisibility).toBe('hidden');
+  });
+
   it('keeps a wall top tucked under a roof that slopes away from the viewer hidden', () => {
     // The roof's face runs over the wall top 0.02 nearer than the wall and turns deeper than the wall within a pixel
     // above it (view depth 4.98 + 2 * (y - 5)). Pixels above the edge are deeper than the wall, but the wall is not

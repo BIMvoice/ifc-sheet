@@ -19,7 +19,7 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
-import { buildDepthRaster, type DepthRaster } from './hidden-line-raster.js';
+import { buildDepthRaster, ownerKey, type DepthRaster } from './hidden-line-raster.js';
 import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -111,17 +111,20 @@ function lineDepthAt(line: DrawingLine): (t: number) => number {
 }
 
 /**
- * Whether a pixel next to (`ix`, `iy`) shows a surface at the line's own depth (within `depthBias`): the line is then on
- * the edge of a surface that is seen, even though its own pixel is covered by something in front. A gable wall's top
- * edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge pixel about half the time
- * and the edge printed as dashes along the roof of an elevation. A neighbour that is merely deeper does not count:
- * above a wall top tucked under a roof that slopes away from the viewer every pixel is deeper than the wall, and the
- * wall top stays hidden.
+ * Whether a pixel next to (`ix`, `iy`) shows the line's own element (`owner`) at the line's depth (within `depthBias`): the
+ * line is then on the edge of its own surface where that surface is seen, even though its own pixel is covered by something
+ * in front. A gable wall's top edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge
+ * pixel about half the time and the edge printed as dashes along the roof of an elevation. A neighbour that is merely
+ * deeper does not count: above a wall top tucked under a roof that slopes away from the viewer every pixel is deeper than
+ * the wall, and the wall top stays hidden. Nor does another element's surface at the same depth: the top of a wall under a
+ * cut wall is level with the floor beside it, and with any surface counting its edge was drawn along every cut wall's foot.
  */
-function ownSurfaceBeside(buffer: Float32Array, width: number, height: number, ix: number, iy: number, lineDepth: number, depthBias: number): boolean {
+function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, lineDepth: number, owner: number, depthBias: number): boolean {
+  const { buffer, owners, width, height } = raster;
   for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
     for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) {
-      if (Math.abs(buffer[y * width + x] - lineDepth) <= depthBias) return true;
+      const i = y * width + x;
+      if (owners[i] === owner && Math.abs(buffer[i] - lineDepth) <= depthBias) return true;
     }
   }
   return false;
@@ -262,7 +265,8 @@ export class HiddenLineClassifier {
     const segments: VisibilitySegment[] = [];
     let currentStart = line.line.start;
     let currentT = 0;
-    let currentVisible = this.sampleVisibility(line.line.start, depthAt(0), depthBias);
+    const owner = ownerKey(line.entityId, line.modelIndex ?? 0);
+    let currentVisible = this.sampleVisibility(line.line.start, depthAt(0), depthBias, owner);
     let visibleCount = currentVisible ? 1 : 0;
 
     for (let i = 1; i <= numSamples; i++) {
@@ -273,7 +277,7 @@ export class HiddenLineClassifier {
       // misreading a fully occluded endpoint as visible (PR #2644 review).
       const point =
         i === numSamples ? line.line.end : point2DLerp(line.line.start, line.line.end, t);
-      const isVisible = this.sampleVisibility(point, depthAt(t), depthBias);
+      const isVisible = this.sampleVisibility(point, depthAt(t), depthBias, owner);
 
       if (isVisible) visibleCount++;
 
@@ -326,7 +330,7 @@ export class HiddenLineClassifier {
     return { line, segments, overallVisibility };
   }
 
-  private sampleVisibility(point: Point2D, lineDepth: number, depthBias: number): boolean {
+  private sampleVisibility(point: Point2D, lineDepth: number, depthBias: number, owner: number): boolean {
     const raster = this.raster;
     // No raster means no occluder rasterized into the kept half: nothing can
     // hide the line (issue #2639 - the previous code indexed the buffer with
@@ -367,9 +371,9 @@ export class HiddenLineClassifier {
     // to half a pixel off the edge that was sampled, and across a sloped face
     // that is a depth step larger than the bias, which would hide the inner
     // corner of a wall and a slab. Without a tolerance a covered sample is still
-    // visible when its own surface shows in a pixel beside it (`ownSurfaceBeside`).
+    // visible when its own element shows at its depth in a pixel beside it (`ownSurfaceBeside`).
     const reach = this.edgeTolerancePx;
-    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias || ownSurfaceBeside(buffer, width, height, ix, iy, lineDepth, depthBias);
+    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias || ownSurfaceBeside(raster, ix, iy, lineDepth, owner, depthBias);
     const pixel = Math.max((bounds.max.x - bounds.min.x) / (width - 1), (bounds.max.y - bounds.min.y) / (height - 1));
     const slack = depthBias + reach * pixel;
     for (let y = iy - reach; y <= iy + reach; y++) {
