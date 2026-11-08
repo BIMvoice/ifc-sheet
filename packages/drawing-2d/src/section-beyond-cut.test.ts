@@ -23,9 +23,12 @@ function box(expressId: number, min: [number, number, number], max: [number, num
 }
 
 // Section plane x = 0, looking toward -x (unflipped). Cut wall straddles x = 0;
-// BEHIND wall at x in [-2.2,-2]; FRONT wall at x in [2,2.2].
+// BEHIND wall at x in [-2.2,-2]; FRONT wall at x in [2,2.2]. Both rise 1 m above
+// the cut wall: of the same height they would lie wholly behind its part past
+// the cut, and were drawn only because a point on the far edge of the drawing
+// read a raster pixel nothing fills (Refs #557).
 const CUT = 1, BEHIND = 2, FRONT = 3;
-const scene = () => [box(CUT, [-0.1, 0, -2], [0.1, 3, 2]), box(BEHIND, [-2.2, 0, -2], [-2, 3, 2]), box(FRONT, [2, 0, -2], [2.2, 3, 2])];
+const scene = () => [box(CUT, [-0.1, 0, -2], [0.1, 3, 2]), box(BEHIND, [-2.2, 0, -2], [-2, 4, 2]), box(FRONT, [2, 0, -2], [2.2, 4, 2])];
 
 function config(depth: number, flipped: boolean): SectionConfig {
   return {

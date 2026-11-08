@@ -361,8 +361,12 @@ export class HiddenLineClassifier {
     if (!Number.isFinite(px) || !Number.isFinite(py)) return true;
 
     // Clamp to guard the floating-point edge at bounds.max.
-    const ix = Math.max(0, Math.min(width - 1, Math.floor(px)));
-    const iy = Math.max(0, Math.min(height - 1, Math.floor(py)));
+    // A pixel holds the depth at its centre, half a pixel past its corner, so
+    // the last column and row are centred outside the bounds and nothing inside
+    // them ever fills them: a point on the far edge reads the pixel before
+    // (Refs #557, a purlin ending at the verge of FZK's roof showed through).
+    const ix = Math.max(0, Math.min(width - 2, Math.floor(px)));
+    const iy = Math.max(0, Math.min(height - 2, Math.floor(py)));
 
     // Line is visible if it's at or in front of the depth buffer at the sample's
     // pixel. With a tolerance, the pixels within `reach` of it are consulted too
