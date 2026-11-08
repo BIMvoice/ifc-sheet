@@ -58,7 +58,7 @@ import { scanIfcEntities } from './entity-scanner.js';
 import { contiguousSourceBytes, type IfcSourceBytes, type IfcSourceTransfer } from './source-bytes.js';
 import type { EntityRef } from './types.js';
 
-/** Fixture, relative to `tests/models`. Fixtures are NOT committed (AGENTS.md). */
+/** The manifest entry, relative to `tests/models`; the test reads the committed copy of the same bytes (FIXTURE_PATH). */
 const FIXTURE_RELPATH = 'ara3d/AC20-FZK-Haus.ifc';
 
 /** Non-vacuity floor for the fixture side: AC20-FZK-Haus indexes ~44k records. */
