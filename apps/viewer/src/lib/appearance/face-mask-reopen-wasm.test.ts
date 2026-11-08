@@ -24,10 +24,10 @@ const png = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1
  */
 test('real AC20 face-masked export reopens as textured + retained parts of one product with siblings unchanged (#4404)', async t => {
   const wasmUrl = new URL('../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
-  const sourceUrl = new URL('../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+  const sourceUrl = new URL('../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
   try { await Promise.all([access(wasmUrl), access(sourceUrl)]); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    t.skip('Run pnpm fixtures and pnpm build:wasm for the real face-mask reopen contract'); return;
+    t.skip('Run pnpm build:wasm:fetch for the real face-mask reopen contract'); return;
   }
   const source = new Uint8Array(await readFile(sourceUrl));
   const { default: init, IfcAPI } = await import('@ifc-lite/wasm');

@@ -23,7 +23,7 @@ import { meshFile, viewDrawing } from '@/test/view-drawing-harness';
 import { __setGenerationWorkerFactoryForTest, type GenerationWorker } from './client';
 import { __setOutlineLoaderForTest, handle, postDrawing, PART_SIZE, type GenerationReply, type GenerationRequest } from './drawing-generation.worker';
 
-const FZK = new URL('../../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+const FZK = new URL('../../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 
 const s = Math.SQRT1_2;
 const VIEWS: Exclude<ProjectView, { kind: '3d' }>[] = [
@@ -78,7 +78,7 @@ after(() => {
 describe('drawing generation in the worker', () => {
   for (const shared of [false, true]) {
     it(`draws what the main thread draws (meshes ${shared ? 'shared' : 'transferred'})`, async (t) => {
-      if (!geometry) return t.skip('run pnpm fixtures and pnpm build:wasm:fetch');
+      if (!geometry) return t.skip('run pnpm build:wasm:fetch');
       const traffic: Traffic = { requests: [], replies: [] };
       __setGenerationWorkerFactoryForTest(() => inProcessWorker(traffic), shared);
       try {

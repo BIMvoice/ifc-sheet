@@ -3,8 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The FZK-Haus with phases (made from `tests/models/ara3d/AC20-FZK-Haus.ifc`, fetched by
- * `pnpm fixtures`, by `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
+ * The FZK-Haus with phases (made from the committed `AC20-FZK-Haus.ifc`, by `phase-fixture-source.ts` as it loads) as a test loads it: parsed into the
  * viewer store (a single model, so a drawing's entity ids are express ids), its real
  * meshes from the wasm geometry pass, and the drawings of a plan, a section and an
  * elevation made by the drawing generator on the CPU. Import `@/test/setup-dom.js` first.
@@ -17,12 +16,12 @@ import { Drawing2DGenerator, type Drawing2D, type SectionConfig } from '@ifc-lit
 import { parseStep, seedModel } from '@/test/properties-panel-harness.js';
 import { withPhaseStatus } from '@/test/phase-fixture-source.js';
 
-const SAMPLE = new URL('../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url);
+const SAMPLE = new URL('__fixtures__/AC20-FZK-Haus.ifc', import.meta.url);
 const WASM = new URL('../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
 
 /** Why the phase model cannot be made here (the skip message), or null when it can. */
 export function phaseModelMissing(): string | null {
-  if (!existsSync(SAMPLE)) return 'FZK-Haus fixture not fetched: run `pnpm fixtures`';
+  if (!existsSync(SAMPLE)) return 'committed FZK-Haus fixture missing';
   if (!existsSync(WASM)) return 'wasm bundle not built: run `pnpm build:wasm:fetch` (or `bash scripts/build-wasm.sh`) first';
   return null;
 }
