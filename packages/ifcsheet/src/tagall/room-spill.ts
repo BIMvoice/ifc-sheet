@@ -19,26 +19,61 @@ export interface RoomSpill {
   tip?: Pt;
 }
 
+/** What else a moved tag respects. */
+export interface SpillLimits {
+  /** A detail's area: the whole tag stands inside it. */
+  crop?: { min: Pt; max: Pt };
+  /** The cut walls: a moved tag does not stand over one. */
+  walls?: RectIndex<readonly Pt[]>;
+}
+
 export function roomLabelSpill(
   ring: readonly Pt[], w: number, h: number, deepest: Pt,
-  texts: RectIndex, clear: number,
+  texts: RectIndex, clear: number, limits: SpillLimits = {},
 ): RoomSpill | null {
   const box = ringBounds(ring);
   const reach = Math.max(w, h);
   const step = Math.max(Math.min(w, h) / 6, (box.x1 - box.x0 + box.y1 - box.y0) / 240, 0.02);
-  const cands: { c: Pt; d: number }[] = [{ c: deepest, d: 0 }];
-  for (let y = box.y0 - reach; y <= box.y1 + reach; y += step) {
-    for (let x = box.x0 - reach; x <= box.x1 + reach; x += step) cands.push({ c: { x, y }, d: Math.hypot(x - deepest.x, y - deepest.y) });
-  }
-  cands.sort((a, b) => a.d - b.d || a.c.y - b.c.y || a.c.x - b.c.x);
-  for (const { c } of cands) {
-    const r = rectAround(c, w + 2 * clear, h + 2 * clear);
-    if (texts.any(r)) continue;
+  const { crop, walls } = limits;
+  const inCrop = (c: Pt): boolean => {
+    const tag = rectAround(c, w, h);
+    return !crop || (tag.x0 >= crop.min.x && tag.x1 <= crop.max.x && tag.y0 >= crop.min.y && tag.y1 <= crop.max.y);
+  };
+  const ok = (c: Pt): boolean => {
+    const tag = rectAround(c, w, h);
+    if (!inCrop(c)) return false;
+    if (texts.any(rectAround(c, w + 2 * clear, h + 2 * clear))) return false;
     // The tag must touch the room, or its leader would run through other rooms.
-    if (!pointInRing(ring, c) && !rectHitsRing(rectAround(c, w, h), ring)) continue;
-    return { centre: c, tip: tipFor(ring, c, w, h, deepest, texts, step) };
+    if (!pointInRing(ring, c) && !rectHitsRing(tag, ring)) return false;
+    let onWall = false;
+    walls?.query(tag, (_b, wall) => { if (rectHitsRing(tag, wall)) { onWall = true; return true; } });
+    return !onWall;
+  };
+  const found = (c: Pt): RoomSpill => ({ centre: c, tip: tipFor(ring, c, w, h, deepest, texts, step) });
+  // The deepest point itself when nothing is drawn there, as before.
+  if (!texts.any(rectAround(deepest, w + 2 * clear, h + 2 * clear)) && inCrop(deepest)) return found(deepest);
+  // Else the nearest clear place, searched in square rings of growing distance round the deepest point; a ring nearer than the best
+  // found so far is still searched (a corner of a ring is farther than the middle of the next), and ties go to the lower y, then the lower x.
+  const last = Math.ceil((Math.max(box.x1 - box.x0, box.y1 - box.y0) + 2 * reach) / step);
+  let best: { c: Pt; d: number } | null = null;
+  for (let m = 1; m <= last + 1; m++) {
+    if (best && m * step > best.d) break;
+    for (const [i, j] of ringOffsets(m)) {
+      const c = { x: deepest.x + i * step, y: deepest.y + j * step };
+      const d = Math.hypot(i, j) * step;
+      if (best && (d > best.d || (d === best.d && (c.y > best.c.y || (c.y === best.c.y && c.x >= best.c.x))))) continue;
+      if (ok(c)) best = { c, d };
+    }
   }
-  return null;
+  return best ? found(best.c) : null;
+}
+
+/** The grid offsets at Chebyshev distance m from the origin. */
+function ringOffsets(m: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = -m; i <= m; i++) out.push([i, -m], [i, m]);
+  for (let j = -m + 1; j < m; j++) out.push([-m, j], [m, j]);
+  return out;
 }
 
 /** Where the leader ends: the point of the room nearest the tag that no text covers (the deepest point when nothing is nearer), none when the tag stands over it. */

@@ -127,6 +127,11 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const roomIndex = new RectIndex(4 * at.textHeight);
   for (const r of base) roomIndex.add(r);
   for (const r of input.obstacles ?? []) roomIndex.add(r);
+  // What a room tag that does not fit moves clear of: real texts only (the notes, tags and labels drawn, never a door swing or a frame), and not over a cut wall.
+  const textIndex = new RectIndex(4 * at.textHeight);
+  for (const r of base) textIndex.add(r);
+  const walls = new RectIndex<readonly Pt[]>(4 * at.textHeight);
+  for (const t of input.targets) if (/^ifc(wall|curtainwall|column)/i.test(t.className)) walls.add(ringBounds(t.ring), t.ring);
   for (const t of todo) {
     const spot = spots.get(String(t.renderId));
     const extras = extrasOf.get(t.guid) ?? {};
@@ -134,6 +139,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     if (!draft || !spot || !within(input.crop, spot.centre)) continue;
     drafts.push(draft);
     roomIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
+    textIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
     if (extras.numbered !== undefined) summary.numbered++;
   }
@@ -174,7 +180,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     }
     // Too big for its room, with no place inside: it still keeps off the texts already drawn, beside its deepest point with a leader to it; none free keeps the deepest point.
     if (!spot.fits && !tip) {
-      const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, roomIndex, clear);
+      const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, textIndex, clear, { crop: input.crop, walls });
       if (spill) { spot = { centre: spill.centre, fits: false }; tip = spill.tip; }
     }
     const placed = labelDraft(env, input.types.room, room.guid, spot.centre, at, undefined, extras);
@@ -183,6 +189,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     if (!draft) continue;
     drafts.push(draft);
     roomIndex.add(growRect(rectAround(spot.centre, size.w, size.h), 0));
+    textIndex.add(rectAround(spot.centre, size.w, size.h));
     summary.rooms++;
     if (fromModel) summary.areaFromModel++; else summary.areaFromFootprint++;
     if (!spot.fits) summary.roomsTooSmall++;

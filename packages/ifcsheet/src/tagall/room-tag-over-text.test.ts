@@ -26,7 +26,7 @@ const room: LabelElement = {
 };
 
 /** A 1.2 m by 0.6 m room (a gallery) with a text of the draughtsman's in its middle; the tag of a room needs more than that. */
-function run(existing: readonly DraftEntity[]) {
+function run(existing: readonly DraftEntity[], more: Partial<Parameters<typeof tagAllDrafts>[0]> = {}) {
   let n = 0;
   const ring = [{ x: 0, y: 0 }, { x: 1.2, y: 0 }, { x: 1.2, y: 0.6 }, { x: 0, y: 0.6 }];
   const [mark, roomType] = TAGALL_TYPES;
@@ -34,7 +34,7 @@ function run(existing: readonly DraftEntity[]) {
     elements: [], targets: [], rooms: [{ ring, at: 'cut', renderId: 1, guid: 'g' }], existing,
     placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.01, locale: 'en' },
     types: { mark: mark!, room: roomType! }, env: { read: () => room, up: 1, styled: () => ({}), newId: () => `t${++n}` },
-    reader: { sectionLink: () => null, measure }, rectsOf, parts: { doors: false, windows: false, rooms: true },
+    reader: { sectionLink: () => null, measure }, rectsOf, parts: { doors: false, windows: false, rooms: true }, ...more,
   });
 }
 
@@ -65,5 +65,24 @@ describe('a room tag too big for its room (#557, PR #779)', () => {
     expect(overlap(boxOf(tag), boxOf(note))).toBe(false);
     expect(overlap(boxOf(tag), { x0: 0, y0: 0, x1: 1.2, y1: 0.6 }) || !!leaderOf(tag), 'the tag touches the room or has a leader into it').toBe(true);
     expect(summary.roomsTooSmall).toBe(1);
+  });
+
+  // Review of the PR: it ignored the detail crop, and it could put a moved tag over a cut wall.
+  it('keeps the tag inside the detail crop: with no clear place there it stays at the deepest point', () => {
+    const crop = { min: { x: 0, y: 0 }, max: { x: 1.2, y: 0.6 } };
+    const { drafts } = run([note], { crop });
+    const tag = tagOf(drafts);
+    // Every clear place for a tag this size lies partly outside the crop, so none is taken: the tag stands where it does with nothing else on the view.
+    expect(leaderOf(tag)).toBeUndefined();
+    expect(boxOf(tag)).toEqual(boxOf(tagOf(run([], { crop }).drafts)));
+  });
+
+  it('does not put a moved tag over a cut wall', () => {
+    const wallRing = [{ x: -3, y: -0.4 }, { x: 4, y: -0.4 }, { x: 4, y: 0 }, { x: -3, y: 0 }];
+    const targets = [{ guid: 'w', className: 'IfcWall', anchor: { x: 0.5, y: -0.2 }, renderId: 2, ring: wallRing }];
+    const { drafts } = run([note], { targets });
+    const box = boxOf(tagOf(drafts));
+    expect(overlap(box, { x0: -3, y0: -0.4, x1: 4, y1: 0 })).toBe(false);
+    expect(overlap(box, boxOf(note))).toBe(false);
   });
 });
