@@ -20,7 +20,7 @@ import { gridAxesOfModel, gridObstacles, gridShapesOf } from '../grid-overlay.js
 import { DEFAULT_VIEW_SCALE } from '../viewport-annotation.js';
 import { planOpeningSymbols } from '../plan-openings.js';
 import { resolveViewGraphics } from '../view-templates.js';
-import { tableMeasure } from '../dimall/measure.js';
+import { tableMeasure, type DimAllMeasure } from '../dimall/measure.js';
 import { planParts } from '../dimall/parts.js';
 import { DEFAULT_DIM_STYLE } from '../draft-styles.js';
 import { DEFAULT_TEXT_STYLE } from '../draft-look.js';
@@ -144,7 +144,9 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
     return marks.get(markKey('model', id)) ?? elementMark({ tag, typeMark: '' });
   };
   const read = ds ? elementReader(ds, (guid) => byGuid.get(guid), markOf) : () => null;
-  const rectsOf = annotationRects(tableMeasure);
+  // The frame a view is annotated in, as the app's `annotationFrameOf` says: a plan's drawing-y runs down the screen (up = -1), an elevation's and a section's up the screen (up = 1). One measure serves the label's anchor, its box and the boxes of what is placed.
+  const measureOf = (view: HeadlessView): DimAllMeasure => (view.kind === 'plan' ? tableMeasure : { ...tableMeasure, frame: { ...tableMeasure.frame, up: 1 } });
+  const rectsOfView = (view: HeadlessView) => annotationRects(measureOf(view));
   const plans = new Map(set.document.views.filter((v): v is PlanProjectView => v.kind === 'plan').map((v) => [v.id, v]));
   const paperUnit = (c: ReadCall<HeadlessView, Drawing2D>) => paperUnitFor(c.view.id, set.document.sheets, [{ id: c.view.id, scale: c.view.scale }]);
   // Annotation sizes are paper sizes at the view's scale, as the open view reads them.
@@ -177,7 +179,7 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
     dimall: (c) => ({
       ...placement(c), placed: c.placed, parts: planParts(c.drawing, model.buildingMeshes), rooms: roomsOf(c), obstacles: obstaclesOf(c), newId: c.newId, book,
       firstMm: undefined, settings: { textHeight: placement(c).textHeight, textStyle: current.textStyle, dimStyle: current.dimStyle },
-      reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
+      reader: { sectionLink: () => null, measure: measureOf(c.view) }, rectsOf: rectsOfView(c.view),
     }),
     tagall: (c) => {
       const onPlan = c.view.kind === 'plan';
@@ -193,12 +195,12 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
       const [mark, room] = TAGALL_TYPES;
       return {
         onPlan, elements, targets, rooms, existing: c.placed, obstacles: onPlan ? obstaclesOf(c) : [], placement: { ...placement(c), locale: c.locale }, types: { mark, room },
-        env: { read, up: 1, styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId },
-        reader: { sectionLink: () => null, measure: tableMeasure }, rectsOf,
+        env: { read, up: measureOf(c.view).frame.up, styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId },
+        reader: { sectionLink: () => null, measure: measureOf(c.view) }, rectsOf: rectsOfView(c.view),
       };
     },
     levelall: (c) => ({
-      kind: c.view.kind, elements: viewElementsOf(c.drawing), levels: set.levels, existing: c.placed, rectsOf, placement: placement(c),
+      kind: c.view.kind, elements: viewElementsOf(c.drawing), levels: set.levels, existing: c.placed, rectsOf: rectsOfView(c.view), placement: placement(c),
       styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId,
     }),
   };
