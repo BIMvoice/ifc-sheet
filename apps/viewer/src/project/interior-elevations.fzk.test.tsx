@@ -142,8 +142,13 @@ describe('facade elevations and sections are unchanged', () => {
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
     // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
-    north: '200/0/0/1559646051', south: '246/0/0/-1985095184', east: '390/0/0/-2048274549', west: '527/0/0/647391895',
-    'north-deep': '206/0/0/900226919', 'south-deep': '266/0/0/-589421286', 'east-deep': '398/0/0/-1670455646', 'west-deep': '481/0/0/119669648',
+    // All eleven re-recorded for #557 (outline-depth.ts): an outline line takes the depth of its element's own surface, so the
+    // 42 rafters under the roof slab are hidden on north and south and the inner corners of walls behind a mitred corner on
+    // all four; a face seen edge-on no longer fills a column of the depth raster, and a point on the raster's far edge reads
+    // the last pixel that can be filled. Before: north 200, south 246, east 390, west 527, north-deep 206, south-deep 266,
+    // east-deep 398, west-deep 481, s1 609, s2 2044, s3 2050 lines.
+    north: '172/0/0/53495229', south: '215/0/0/1673163390', east: '377/0/0/353450951', west: '513/0/0/338119489',
+    'north-deep': '161/0/0/-588991310', 'south-deep': '221/0/0/2015243806', 'east-deep': '389/0/0/2056835847', 'west-deep': '525/0/0/779790265',
     // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
     // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
     // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
@@ -152,7 +157,7 @@ describe('facade elevations and sections are unchanged', () => {
     // surface at the same depth does not count. A pixel diff of the FZK set's sheets against main at 120 dpi: under 100 pixels
     // on the elevations, under 600 on the sections, short pieces of frames and eaves. Before (main): north 193, south 241, east 363, west 421,
     // north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
-    s1: '609/65/0/1690289141', s2: '2044/32/0/1112585943', s3: '2050/39/0/-1377101584',
+    s1: '621/65/0/929328739', s2: '2062/32/0/1176559827', s3: '2039/39/0/670656729',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };

@@ -176,6 +176,18 @@ function rasterizeTriangle(
   const px1 = { x: toPixelX(p1.x), y: toPixelY(p1.y), depth: p1.depth };
   const px2 = { x: toPixelX(p2.x), y: toPixelY(p2.y), depth: p2.depth };
 
+  // A face seen edge-on covers no area. Its Gram determinant below is a
+  // difference of two equal products of pixel coordinates, so it came out as
+  // rounding noise rather than 0 and the face filled a broken column of pixels
+  // at arbitrary depths between its vertices'. That column hid a sloped
+  // element's own outline once outline lines carried their own depth (FZK's
+  // roof slab, Refs #557). The cross product of the same edges is exactly 0.
+  const cross = (px1.x - px0.x) * (px2.y - px0.y) - (px1.y - px0.y) * (px2.x - px0.x);
+  const span = Math.max(Math.hypot(px1.x - px0.x, px1.y - px0.y), Math.hypot(px2.x - px0.x, px2.y - px0.y), Math.hypot(px2.x - px1.x, px2.y - px1.y));
+  if (Math.abs(cross) <= 1e-6 * span * span) {
+    return;
+  }
+
   const minX = Math.max(0, Math.floor(Math.min(px0.x, px1.x, px2.x)));
   const maxX = Math.min(width - 1, Math.ceil(Math.max(px0.x, px1.x, px2.x)));
   const minY = Math.max(0, Math.floor(Math.min(px0.y, px1.y, px2.y)));

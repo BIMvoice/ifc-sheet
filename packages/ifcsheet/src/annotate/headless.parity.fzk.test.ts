@@ -25,6 +25,7 @@ import type { DraftShape } from '../draft-types.js';
 import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
 import { joineryScheduleData } from '../joinery-schedule.js';
 import { scheduleModelsOf } from '../schedule-models.js';
+import { MARK_TYPE_ID } from '../tagall/types.js';
 import { ALL_CHOICES } from './choices.js';
 import { annotateSetHeadless, readersOf, type HeadlessAnnotateResult } from './headless.js';
 
@@ -81,8 +82,13 @@ describe.skipIf(missing !== null)('annotateSetHeadless matches the app on AC20-F
   });
 
   it('places a label clear of a text that is already on the view', async () => {
-    const tag = result.all.find((d) => d.shape.type === 'text' && d.shape.text !== '' && !d.shape.leader);
-    if (!tag) throw new Error('the first run placed no tag');
+    // A door or window tag, the kind this test was written on. Taking the first tag of any kind took a room tag once the first
+    // plan's two W1 tags moved to leaders (#557: in the Dachgeschoss plan the ground floor's west wall #21966 now shows 13.5 m
+    // of edges that lie on the visible edges of the gable wall above it, all but 0.07 m, so the labels read it as an element of
+    // the plan). That room tag, "7 Galerie", is one the run reports too big for its room (tagAllTooSmall 1, on main too): it goes
+    // to the room's deepest point whatever is there (`roomLabelPoint`), and lands on a NOTE put on it on main as on the branch.
+    const tag = result.all.find((d) => d.shape.type === 'text' && d.shape.text !== '' && !d.shape.leader && d.params.atype === MARK_TYPE_ID);
+    if (!tag) throw new Error('the first run placed no door or window tag without a leader');
     // A text of the draughtsman's where the first run put a tag: the run must put its tag elsewhere.
     const obstacle: DraftEntity = { id: 'obstacle', viewId: tag.viewId, layerId: tag.layerId, shape: { ...tag.shape, text: 'NOTE' } as DraftEntity['shape'], params: {} };
     const again = await annotateSetHeadless({ model, set, choices: ALL_CHOICES, existing: [obstacle], viewIds: new Set([tag.viewId]) });
