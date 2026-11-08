@@ -154,7 +154,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 - Prove removals: TS with `pnpm knip` (on-demand, not a CI gate); Rust with `cargo test --workspace`, **not** `cargo check` (check skips `#[cfg(test)]`, so a test-only reference to a deleted fn slips through). Intentionally-unused Rust items need `#[allow(dead_code)]` and a why.
 
 ## Test fixtures
-- Not committed (no LFS): catalogued in `tests/models/manifest.json`, fetched via `pnpm fixtures`. Tests must **skip** (never throw/panic) when a fixture is absent; point to `pnpm fixtures` in the skip message. Add one: drop under `tests/models/<group>/`, run `pnpm fixtures:manifest`, then `pnpm fixtures:upload`; commit only the manifest. CI runs `pnpm fixtures` before tests.
+- Not committed (no LFS): catalogued in `tests/models/manifest.json`, fetched via `pnpm fixtures`. Tests must **skip** (never throw/panic) when a fixture is absent; point to `pnpm fixtures` in the skip message. Add one: drop under `tests/models/<group>/`, run `pnpm fixtures:manifest`, then `pnpm fixtures:upload`; commit only the manifest. **CI does not run `pnpm fixtures`**: `tests/models/` is empty there, so every test that reads it skips in CI and is checked only on a machine that fetched them (one such test, `outline-gaps.models`, sat red on main unseen). A test that must run in CI reads a committed copy instead, as the FZK tests do from `apps/viewer/src/test/__fixtures__/`; after changing code a `tests/models` test covers, run that test locally with fixtures fetched.
 
 ## Bounding walks over file-supplied references
 

@@ -20,6 +20,7 @@ import { attachDraftingView, cancelCommand, clickDrawing, runningCommand, startD
 import { clearDraftHistory } from '@/drafting/draft-store';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
+import { setAutocadMode } from '@/lib/commands/autocad-mode';
 import { TagFieldsPanel } from './TagFieldsPanel.js';
 
 beforeEach(async () => {
@@ -94,7 +95,13 @@ describe('the tag fields panel', () => {
       assert.deepEqual(submitted, [], 'nothing reached the command line');
       assert.deepEqual(useProjectStore.getState().tagFields?.door?.mark?.at(-1), { kind: 'pset', pset: 'Office', property: 'Nr' }, 'Enter in the field adds the source');
       if (tool === 'idle') {
-        press(document.body, 'Enter');
+        // With no tool running, Enter confirms only in AutoCAD mode (#168, audit finding 6), so the control needs it on.
+        setAutocadMode(true);
+        try {
+          press(document.body, 'Enter');
+        } finally {
+          setAutocadMode(false);
+        }
         assert.deepEqual(submitted, ['submit'], 'the same key from outside still confirms: the guard is the panel\'s');
       }
     });

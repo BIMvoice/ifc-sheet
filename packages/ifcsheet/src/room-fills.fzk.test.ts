@@ -27,7 +27,9 @@ const HATCHED: ColourScheme = { property: 'LongName', target: 'rooms', hatches: 
 
 const pdfContent = (bytes: Uint8Array): string => {
   const raw = Buffer.from(bytes).toString('latin1');
-  return [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].map((m) => {
+  // The writer ends a stream with a bare LF. A `\r?` before `endstream` would eat a compressed stream's last byte whenever that byte
+  // is 0x0D, the stream would then fail to inflate and the page would read as empty (what the number ring's extra bytes exposed).
+  return [...raw.matchAll(/stream\r?\n([\s\S]*?)\nendstream/g)].map((m) => {
     try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return ''; }
   }).join('\n');
 };

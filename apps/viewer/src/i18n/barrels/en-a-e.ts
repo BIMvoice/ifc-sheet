@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { dimensionChainCardEn } from '../catalogues/dimension-chain-card.en';
 import { addDrawingKindsEn } from '../catalogues/add-drawing-kinds.en';
 import { aiReportsEn } from '../catalogues/ai-reports.en';
 import { alignmentSectionEn } from '../catalogues/alignment-section.en';
@@ -163,4 +164,5 @@ export const enAE = {
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...extrusionInspectionEn,
+  ...dimensionChainCardEn,
 } as const;

@@ -19,6 +19,7 @@ import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
 import { removeMarkedWitnessPoint } from '@/drafting/witness-point';
+import { repeatLastTool } from '../wall/repeat-tool';
 import { claimWallKey } from '../wall/wall-key-bus';
 import { isDraftingKey } from './drafting-key-match';
 import { runDraftingAction, type DraftingRunId } from './run-action';
@@ -120,10 +121,19 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
         }
         return;
       }
+      if (isKey('drafting.repeat')) {
+        // A visible, bound action (#168): the last tool starts again only when nothing runs.
+        e.preventDefault();
+        repeatLastTool();
+        return;
+      }
       if (isKey('drafting.confirm')) {
         if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
-        submitRef.current();
+        // Outside AutoCAD mode Enter and Space end a running command or send what the command line holds, and otherwise do nothing:
+        // repeating the last tool is `drafting.repeat` (#168).
+        const running = useDraftingSession.getState().commandId !== null || useDraftingSession.getState().selecting;
+        if (running || typing || autocadModeOn()) submitRef.current();
         return;
       }
       if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key)) {

@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import type { ViewGraphics } from '@bimvoice/ifcsheet';
 import { hiddenElementIds } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
+import { usePlainT } from '@/lib/commands/plain-texts';
 import { useViewerStore } from '@/store';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { hideElements, showAllHidden } from '@/project/element-graphics-actions';
@@ -38,6 +39,7 @@ interface Props {
 
 export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden, onShowHidden, pickingLine, onPickLine }: Props) {
   const { t } = useTranslation();
+  const plain = usePlainT();
   const [panel, setPanel] = useState(false);
   const selectedIds = useViewerStore((s) => s.selectedEntityIds);
   const selectedId = useViewerStore((s) => s.selectedEntityId);
@@ -92,7 +94,7 @@ export function ElementGraphicsBar({ viewId, graphics, extraPatterns, showHidden
             <button type="button" className={BTN} onClick={() => showAllHidden(viewId)}>{t('elgfx.showAll')}</button>
           </>
         ) : null}
-        {pickingLine ? <output className="px-1.5 text-xs text-zinc-600 dark:text-zinc-400">{t('elgfx.pickLine')}</output> : null}
+        {pickingLine ? <output className="px-1.5 text-xs text-zinc-600 dark:text-zinc-400">{plain('elgfx.pickLine')}</output> : null}
         {showHidden && hiddenCount > 0 && !pickingLine ? <output className="px-1.5 text-xs text-zinc-600 dark:text-zinc-400">{t('elgfx.ghostHint')}</output> : null}
       </div>
       {opening && joinery ? <ElementOpeningCard key={`${joinery.modelId}:${joinery.expressId}`} modelId={joinery.modelId} expressId={joinery.expressId} onClose={() => setOpening(false)} /> : null}

@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { polylineCardRo } from '../catalogues/polyline-card.ro';
+import { repeatToolRo } from '../catalogues/repeat-tool.ro';
 import { manualValidationRo } from '../catalogues/manual-validation.ro';
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
 import { miscPanelsBRo } from '../catalogues/misc-panels-b.ro';
@@ -74,11 +76,13 @@ import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
 import { starRo } from '../catalogues/star.ro';
 import { wallRo } from '../catalogues/wall.ro';
+import { plainHintsRo } from '../catalogues/plain-hints.ro';
 import { whatChangedRo } from '../catalogues/whatchanged.ro';
 
 /** The catalogues whose file starts with `m` to `z` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const roMZ = {
   ...manualValidationRo,
+  ...plainHintsRo,
   ...measuredQuantitiesRo,
   ...miscPanelsBRo,
   ...miscReachableRo,
@@ -103,6 +107,7 @@ export const roMZ = {
   ...scaleFieldRo,
   ...selectionBarRo,
   ...selectionTurnRo,
+  ...repeatToolRo,
   ...setTemplateRo,
   ...settingsRo,
   ...sharedCommandsRo,
@@ -151,4 +156,5 @@ export const roMZ = {
   ...wallCompareRo,
   ...wallRo,
   ...whatChangedRo,
+  ...polylineCardRo,
 } as const;

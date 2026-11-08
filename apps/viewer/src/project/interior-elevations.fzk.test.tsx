@@ -142,12 +142,22 @@ describe('facade elevations and sections are unchanged', () => {
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
     // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
-    north: '193/0/0/781551425', south: '241/0/0/-1142268376', east: '363/0/0/288291549', west: '421/0/0/-514462133',
-    'north-deep': '200/0/0/-1472118032', 'south-deep': '258/0/0/-109971380', 'east-deep': '371/0/0/-493559164', 'west-deep': '371/0/0/316887504',
+    // All eleven re-recorded for #557 (outline-depth.ts): an outline line takes the depth of its element's own surface, so the
+    // 42 rafters under the roof slab are hidden on north and south and the inner corners of walls behind a mitred corner on
+    // all four; a face seen edge-on no longer fills a column of the depth raster, and a point on the raster's far edge reads
+    // the last pixel that can be filled. Before: north 200, south 246, east 390, west 527, north-deep 206, south-deep 266,
+    // east-deep 398, west-deep 481, s1 609, s2 2044, s3 2050 lines.
+    north: '172/0/0/53495229', south: '215/0/0/1673163390', east: '377/0/0/353450951', west: '513/0/0/338119489',
+    'north-deep': '161/0/0/-588991310', 'south-deep': '221/0/0/2015243806', 'east-deep': '389/0/0/2056835847', 'west-deep': '525/0/0/779790265',
     // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
     // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
     // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
-    s1: '624/65/0/-881192568', s2: '2008/32/0/1592352504', s3: '1894/39/0/316627023',
+    // All eleven re-recorded for #768 (hidden-line.ts sampleVisibility): a covered edge is drawn where its own element shows at
+    // its depth in a pixel beside it, so an edge on the outline of a surface in front of it is drawn whole. Another element's
+    // surface at the same depth does not count. A pixel diff of the FZK set's sheets against main at 120 dpi: under 100 pixels
+    // on the elevations, under 600 on the sections, short pieces of frames and eaves. Before (main): north 193, south 241, east 363, west 421,
+    // north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
+    s1: '621/65/0/929328739', s2: '2062/32/0/1176559827', s3: '2039/39/0/670656729',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };

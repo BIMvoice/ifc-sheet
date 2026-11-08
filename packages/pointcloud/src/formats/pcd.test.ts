@@ -20,6 +20,7 @@ const REPO_ROOT = path.resolve(HERE, '../../../..');
 const SMALL_PCD = path.join(REPO_ROOT, 'tests/models/ifc5/Point_Cloud_point-cloud.ifcx');
 const LARGE_PCD = path.join(REPO_ROOT, 'tests/models/ifc5/Point_Cloud_S1-pointcloud.ifcx');
 const FIXTURES_AVAILABLE = existsSync(SMALL_PCD) && existsSync(LARGE_PCD);
+if (!FIXTURES_AVAILABLE) console.warn('decodePcd IFCx fixture tests skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 function buildAsciiPcd(rows: number[][], rgbColumn = false): Uint8Array {
   const fields = rgbColumn ? 'x y z rgb' : 'x y z';
