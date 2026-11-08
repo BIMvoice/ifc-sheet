@@ -130,9 +130,10 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       if (isKey('drafting.confirm')) {
         if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
-        // Outside AutoCAD mode Enter and Space end a running command and otherwise do nothing: repeating the last tool is `drafting.repeat` (#168).
+        // Outside AutoCAD mode Enter and Space end a running command or send what the command line holds, and otherwise do nothing:
+        // repeating the last tool is `drafting.repeat` (#168).
         const running = useDraftingSession.getState().commandId !== null || useDraftingSession.getState().selecting;
-        if (running || autocadModeOn()) submitRef.current();
+        if (running || typing || autocadModeOn()) submitRef.current();
         return;
       }
       if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key)) {
