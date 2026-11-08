@@ -185,6 +185,13 @@ function groupAttributesByNamespace(
       if (typeof material.uri === 'string') {
         materialProps.set('Uri', material.uri);
       }
+      // A material node's colour (not an element's, which is its mesh's) is kept on the row so export can write it back.
+      const diffuse = attributes.get(ATTR.DIFFUSE_COLOR);
+      if (Array.isArray(diffuse) && diffuse.length >= 3 && diffuse.every((c) => typeof c === 'number')) {
+        materialProps.set('DiffuseColor', diffuse.slice(0, 3).join(' '));
+      }
+      const opacity = attributes.get(ATTR.OPACITY);
+      if (typeof opacity === 'number') materialProps.set('Opacity', opacity);
       continue;
     }
 
