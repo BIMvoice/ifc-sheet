@@ -12,9 +12,13 @@
  *
  * The engine (`openModel`) and the app (`buildingFraming` in `project/model-rooms.ts`) both call this, so the extent
  * and the drawings they make from a model cannot disagree about which elements are the building.
+ *
+ * A terrain (an IfcGeographicElement, what `isTerrainMesh` names) is the ground the building stands on, not part of it, even
+ * when the model contains it in a storey (Bonsai does): left in, it set the extent, was cut in every section as a block and
+ * drawn in every elevation as a rectangle (#683). The engine contours it on its own.
  */
 
-import { isSpatialStructureType, type IfcTypeEnum, type SpatialHierarchy } from '@ifc-lite/data';
+import { IfcTypeEnum, isSpatialStructureType, type SpatialHierarchy } from '@ifc-lite/data';
 
 export function storeyElementIds(
   hierarchy: Pick<SpatialHierarchy, 'byStorey' | 'elementToStorey'>,
@@ -22,15 +26,16 @@ export function storeyElementIds(
   typeOf: (expressId: number) => IfcTypeEnum,
 ): number[] {
   const wanted = new Set(storeys);
+  const isBuilding = (id: number): boolean => typeOf(id) !== IfcTypeEnum.IfcGeographicElement;
   const ids: number[] = [];
   const seen = new Set<number>();
   for (const storey of wanted) {
     for (const id of hierarchy.byStorey.get(storey) ?? []) {
-      if (!seen.has(id)) { seen.add(id); ids.push(id); }
+      if (!seen.has(id) && isBuilding(id)) { seen.add(id); ids.push(id); }
     }
   }
   for (const [id, storey] of hierarchy.elementToStorey) {
-    if (seen.has(id) || !wanted.has(storey) || isSpatialStructureType(typeOf(id))) continue;
+    if (seen.has(id) || !wanted.has(storey) || isSpatialStructureType(typeOf(id)) || !isBuilding(id)) continue;
     seen.add(id);
     ids.push(id);
   }
