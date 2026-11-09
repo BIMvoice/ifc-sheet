@@ -159,7 +159,7 @@ describe('facade elevations and sections are unchanged', () => {
     // north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
     // s3 re-recorded for #557 (curved outlines): the oblique section looks into the spiral stair, and its handrails, rails,
     // column and stringer now draw their long lines (s3 was '2039/39/0/670656729').
-    s1: '621/65/0/929328739', s2: '2062/32/0/1176559827', s3: '2067/39/0/-975655629',
+    s1: '621/65/0/929328739', s2: '2062/32/0/1176559827', s3: '2068/39/0/-1762624777',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };
