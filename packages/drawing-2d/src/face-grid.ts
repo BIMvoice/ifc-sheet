@@ -6,6 +6,7 @@
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from './types.js';
+import { getVertex } from './raster-core.js';
 import { projectPointForPlane, signedDepth } from './projection-bands.js';
 
 /**
@@ -18,39 +19,21 @@ export const STRIDE = 11;
 /** Slope slot of an entry that is an edge of a face seen edge-on. */
 export const EDGE = -1;
 
-/**
- * The projection on `plane` as an affine map of world points: rows u, v and view depth (`-signedDepth`), each
- * `[x, y, z, constant]`, read off the plane's own `projectPointForPlane` and `signedDepth`.
- */
-export function planeAffine(plane: SectionPlaneConfig): Float64Array {
-  const at = (x: number, y: number, z: number): [number, number, number] => {
-    const p = { x, y, z };
-    const q = projectPointForPlane(p, plane);
-    return [q.x, q.y, -signedDepth(p, plane)];
-  };
-  const o = at(0, 0, 0), ex = at(1, 0, 0), ey = at(0, 1, 0), ez = at(0, 0, 1);
-  const m = new Float64Array(12);
-  for (let r = 0; r < 3; r++) {
-    m[r * 4] = ex[r] - o[r]; m[r * 4 + 1] = ey[r] - o[r]; m[r * 4 + 2] = ez[r] - o[r]; m[r * 4 + 3] = o[r];
-  }
-  return m;
-}
-
 /** World x, y, z, then u, v and depth of a triangle's three corners. */
 const CORNER = new Float64Array(18);
 
 /**
- * Push the entries of triangle `t` of `mesh` projected by `m` (`planeAffine`) onto `out`: one for a face, one per
- * edge for a face seen edge-on (it holds no area the raster can fill), none for a degenerate triangle.
+ * Push the entries of triangle `t` of `mesh` projected on `plane` onto `out`: one for a face, one per edge for a face
+ * seen edge-on (it holds no area the raster can fill), none for a degenerate triangle.
  */
-export function projectTriangle(mesh: MeshData, m: Float64Array, t: number, out: number[]): void {
+export function projectTriangle(mesh: MeshData, plane: SectionPlaneConfig, t: number, out: number[]): void {
   const { positions, indices, origin } = mesh;
   const c = CORNER;
   for (let k = 0; k < 3; k++) {
-    const b = indices[t * 3 + k] * 3;
-    const x = positions[b] + (origin ? origin[0] : 0), y = positions[b + 1] + (origin ? origin[1] : 0), z = positions[b + 2] + (origin ? origin[2] : 0);
-    c[k * 6] = x; c[k * 6 + 1] = y; c[k * 6 + 2] = z;
-    for (let r = 0; r < 3; r++) c[k * 6 + 3 + r] = m[r * 4] * x + m[r * 4 + 1] * y + m[r * 4 + 2] * z + m[r * 4 + 3];
+    const p = getVertex(positions, indices[t * 3 + k], origin);
+    const q = projectPointForPlane(p, plane);
+    c[k * 6] = p.x; c[k * 6 + 1] = p.y; c[k * 6 + 2] = p.z;
+    c[k * 6 + 3] = q.x; c[k * 6 + 4] = q.y; c[k * 6 + 5] = -signedDepth(p, plane);
   }
   const u0 = c[3], v0 = c[4], d0 = c[5], u1 = c[9], v1 = c[10], d1 = c[11], u2 = c[15], v2 = c[16], d2 = c[17];
   const e1u = u1 - u0, e1v = v1 - v0, e2u = u2 - u0, e2v = v2 - v0;

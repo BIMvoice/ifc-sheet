@@ -25,7 +25,6 @@ import type { ProjectionBandDepths } from './projection-bands.js';
 import type { ClipPlane } from './clip-rim.js';
 import { withOwnSurfaceDepth } from './outline-depth.js';
 import type { LocalFaces } from './local-surface.js';
-import { planeAffine } from './face-grid.js';
 import { faceAdjacency, smoothEdgeFaces, type MeshTopology } from './smooth-fold.js';
 
 export interface SilhouetteLineOptions {
@@ -61,7 +60,7 @@ export function meshSilhouetteLines(
 function localFaces(topo: MeshTopology, plane: SectionPlaneConfig): LocalFaces {
   const n = topo.normals.length;
   return {
-    adjacency: faceAdjacency(topo), affine: planeAffine(plane),
+    adjacency: faceAdjacency(topo), plane,
     first: new Int32Array(n).fill(-1), count: new Uint8Array(n), pool: new Float64Array(0), used: 0, seen: new Int32Array(n), stamp: 0,
   };
 }

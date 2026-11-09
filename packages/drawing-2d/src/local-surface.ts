@@ -9,6 +9,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
+import type { SectionPlaneConfig } from './types.js';
 import { EDGE, STRIDE, projectTriangle } from './face-grid.js';
 
 /**
@@ -27,8 +28,8 @@ export interface LocalSurface {
 export interface LocalFaces {
   /** The triangles sharing an edge with triangle `f`: `faces[start[f]]` up to `faces[start[f + 1]]`. */
   adjacency: { start: Int32Array; faces: Int32Array };
-  /** The projection on the drawing's plane (`planeAffine`). */
-  affine: Float64Array;
+  /** The drawing's plane. */
+  plane: SectionPlaneConfig;
   /** Where triangle `f`'s entries start in `pool` (-1 until projected) and how many there are; `used` of `pool` is filled. */
   first: Int32Array;
   count: Uint8Array;
@@ -75,7 +76,7 @@ const scratch: number[] = [];
 /** Project triangle `f` into `local.pool`, growing it as needed. */
 function project(mesh: MeshData, local: LocalFaces, f: number): void {
   scratch.length = 0;
-  projectTriangle(mesh, local.affine, f, scratch);
+  projectTriangle(mesh, local.plane, f, scratch);
   if (local.used + scratch.length > local.pool.length) {
     const grown = new Float64Array(Math.max(2 * local.pool.length, local.used + scratch.length, 64 * STRIDE));
     grown.set(local.pool.subarray(0, local.used));

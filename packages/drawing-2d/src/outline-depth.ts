@@ -35,7 +35,7 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Bounds2D, DrawingLine, MeshOutline2D, SectionPlaneConfig } from './types.js';
 import { outlineToProjectionLines, type ProjectionBandDepths } from './projection-bands.js';
-import { EDGE, FaceGrid, STRIDE, planeAffine, projectTriangle } from './face-grid.js';
+import { EDGE, FaceGrid, STRIDE, projectTriangle } from './face-grid.js';
 import { walkLocal, type LocalSurface } from './local-surface.js';
 
 /** Resolution (pixels on the longer side) of the generator's hidden-line raster. */
@@ -53,8 +53,8 @@ interface OutlineSource {
 }
 
 /**
- * Over this many faces near a line (an element hardly larger than a raster pixel, a thin rail), its depth is the lowest
- * of each of `BUCKETS` stretches along it rather than exact, which costs the square of the faces.
+ * Over this many faces near a curved line (an element hardly larger than a raster pixel, a thin rail), its depth is the
+ * lowest of each of `BUCKETS` stretches along it rather than exact, which costs the square of the faces.
  */
 const MAX_EXACT_SPANS = 48;
 const BUCKETS = 8;
@@ -153,7 +153,7 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
     for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) add(faces, f * STRIDE);
   }
 
-  if (spans.length > 5 * MAX_EXACT_SPANS) return simplify(clampToCut(bucketed(spans, fallback)));
+  if (source.near && spans.length > 5 * MAX_EXACT_SPANS) return simplify(clampToCut(bucketed(spans, fallback)));
   ts.sort((p, q) => p - q);
   const points: Array<[number, number]> = [];
   for (const t of ts) {
@@ -295,13 +295,12 @@ function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: 
 function facesOf(source: OutlineSource, reach: number): { faces: Float64Array; grid: FaceGrid } {
   if (source.built && source.built.reach === reach) return source.built;
   const n = Math.floor(source.mesh.indices.length / 3);
-  const m = planeAffine(source.plane);
   const faces: number[] = [];
   const edges: number[] = [];
   const one: number[] = [];
   for (let t = 0; t < n; t++) {
     one.length = 0;
-    projectTriangle(source.mesh, m, t, one);
+    projectTriangle(source.mesh, source.plane, t, one);
     if (one.length > 0) (one[9] === EDGE ? edges : faces).push(...one);
   }
   const used = new Float64Array(faces.length + edges.length);
