@@ -35,7 +35,7 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Bounds2D, DrawingLine, MeshOutline2D, SectionPlaneConfig } from './types.js';
 import { outlineToProjectionLines, type ProjectionBandDepths } from './projection-bands.js';
-import { EDGE, FaceGrid, SPAN, STRIDE, clipToEdge, clipToFace, projectTriangle } from './face-grid.js';
+import { EDGE, FaceGrid, SPAN, STRIDE, clipToEdge, clipToFace, projectMesh } from './face-grid.js';
 import { localDepth, type LocalSurface } from './local-surface.js';
 
 /** Resolution (pixels on the longer side) of the generator's hidden-line raster. */
@@ -121,6 +121,15 @@ export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, cove
   return out;
 }
 
+/**
+ * Scratch buffers for `depthAlong`, reused across lines: an outline line meets
+ * hundreds of faces of its own element (every face within a raster pixel), so
+ * a tuple per face and a fresh array per line made the collector a third of
+ * the cost on ISSUE_068 (#557).
+ */
+let spanBuf = new Float64Array(5 * 256);
+let tBuf = new Float64Array(3 * 256 + 2);
+
 /** Breakpoints `[t, depth]` along `line` (t from 0 to 1), its depth linear between them. */
 function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Array<[number, number]> {
   const ax = line.line.start.x, ay = line.line.start.y;
@@ -129,29 +138,46 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
 
   if (source.near) return simplify(clampToCut(localDepth(source.mesh, source.near, reach, line)), NEAR_TOLERANCE);
 
-  // Each face near the line: its t interval and its lowered depth alpha + beta·t, floored at its nearest vertex.
-  const spans: number[] = [];
-  const ts: number[] = [0, 1];
+  // Each face near the line, nearest first: its t interval and its lowered depth alpha + beta·t, floored at its
+  // nearest vertex. Once the faces taken put the whole line at or in front of the next face's nearest vertex, no face
+  // left can bring any of it nearer (`coveredBy`): the rest still add their breakpoints, so the line is cut where it
+  // was, but no depth is read off them.
   const { faces, grid } = facesOf(source, reach);
-  for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) {
-    const o = f * STRIDE;
+  const found = grid.query(Math.min(ax, ax + dx), Math.min(ay, ay + dy), Math.max(ax, ax + dx), Math.max(ay, ay + dy));
+  const near = grid.found;
+  if (spanBuf.length < found * 5) spanBuf = new Float64Array(found * 10);
+  if (tBuf.length < found * 3 + 2) tBuf = new Float64Array(found * 6 + 2);
+  const spans = spanBuf, ts = tBuf;
+  let ns = 0, nt = 0;
+  ts[nt++] = 0;
+  ts[nt++] = 1;
+  let taken = found;
+  for (let i = 0, check = 4; i < found; i++) {
+    const o = near[i] * STRIDE;
+    const floor = faces[o + 10];
+    if (taken === found && ns >= check * 5) {
+      check *= 2;
+      if (coveredBy(spans, ns, floor)) taken = i;
+    }
     if (!(faces[o + 9] === EDGE ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
     const t0 = SPAN[0], t1 = SPAN[1], alpha = SPAN[2], beta = SPAN[3];
-    const floor = faces[o + 10];
-    spans.push(t0, t1, alpha, beta, floor);
-    ts.push(t0, t1);
+    if (i < taken) { spans[ns++] = t0; spans[ns++] = t1; spans[ns++] = alpha; spans[ns++] = beta; spans[ns++] = floor; }
+    ts[nt++] = t0;
+    ts[nt++] = t1;
     if (beta !== 0) {
       const kink = (floor - alpha) / beta;
-      if (kink > t0 && kink < t1) ts.push(kink);
+      if (kink > t0 && kink < t1) ts[nt++] = kink;
     }
   }
 
-  ts.sort((p, q) => p - q);
+  // Numeric order; no t is NaN, and +0 and -0 give the same point.
+  const sorted = ts.subarray(0, nt).sort();
   const points: Array<[number, number]> = [];
-  for (const t of ts) {
+  for (let i = 0; i < nt; i++) {
+    const t = sorted[i];
     if (t < 0 || t > 1 || (points.length > 0 && t - points[points.length - 1][0] < T_EPS)) continue;
     let depth = Infinity;
-    for (let s = 0; s < spans.length; s += 5) {
+    for (let s = 0; s < ns; s += 5) {
       if (t < spans[s] - T_EPS || t > spans[s + 1] + T_EPS) continue;
       depth = Math.min(depth, Math.max(spans[s + 2] + spans[s + 3] * t, spans[s + 4]));
     }
@@ -159,6 +185,37 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   }
   if (points[points.length - 1][0] < 1) points[points.length - 1][0] = 1;
   return simplify(clampToCut(points));
+}
+
+let partBuf = new Float64Array(2 * 256);
+let orderBuf = new Int32Array(256);
+
+/**
+ * Whether the spans (`[t0, t1, alpha, beta, floor]` each) put every t in [0, 1] at or in front of `level`: the parts
+ * of each that are, sorted by where they start, leave no gap from 0 to 1.
+ */
+function coveredBy(spans: Float64Array, ns: number, level: number): boolean {
+  if (orderBuf.length < ns / 5) { partBuf = new Float64Array((ns / 5) * 4); orderBuf = new Int32Array((ns / 5) * 2); }
+  const parts = partBuf, order = orderBuf;
+  let n = 0;
+  for (let s = 0; s < ns; s += 5) {
+    if (spans[s + 4] > level) continue;
+    let t0 = spans[s], t1 = spans[s + 1];
+    const alpha = spans[s + 2], beta = spans[s + 3];
+    if (beta === 0) { if (alpha > level) continue; }
+    else if (beta > 0) t1 = Math.min(t1, (level - alpha) / beta);
+    else t0 = Math.max(t0, (level - alpha) / beta);
+    if (!(t0 <= t1)) continue;
+    parts[n * 2] = t0; parts[n * 2 + 1] = t1; order[n] = n; n++;
+  }
+  order.subarray(0, n).sort((p, q) => parts[p * 2] - parts[q * 2]);
+  let reached = 0;
+  for (let k = 0; k < n && reached < 1; k++) {
+    const i = order[k];
+    if (parts[i * 2] > reached) return false;
+    reached = Math.max(reached, parts[i * 2 + 1]);
+  }
+  return reached >= 1;
 }
 
 /**
@@ -203,21 +260,10 @@ function chordKeeps(points: Array<[number, number]>, i: number, j: number, toler
   return true;
 }
 
-/** Project the mesh's faces once per source, faces first, then the edges of faces seen edge-on. */
+/** Project the mesh's faces once per source, nearest first (`projectMesh`). */
 function facesOf(source: OutlineSource, reach: number): { faces: Float64Array; grid: FaceGrid } {
   if (source.built && source.built.reach === reach) return source.built;
-  const n = Math.floor(source.mesh.indices.length / 3);
-  const faces: number[] = [];
-  const edges: number[] = [];
-  const one: number[] = [];
-  for (let t = 0; t < n; t++) {
-    one.length = 0;
-    projectTriangle(source.mesh, source.plane, t, one);
-    if (one.length > 0) (one[9] === EDGE ? edges : faces).push(...one);
-  }
-  const used = new Float64Array(faces.length + edges.length);
-  used.set(faces);
-  used.set(edges, faces.length);
-  source.built = { faces: used, grid: new FaceGrid(used, reach), reach };
+  const faces = projectMesh(source.mesh, source.plane);
+  source.built = { faces, grid: new FaceGrid(faces, reach), reach };
   return source.built;
 }

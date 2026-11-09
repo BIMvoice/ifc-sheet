@@ -18,6 +18,7 @@ import { undoLatest } from '@/project/unified-undo';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { SheetCanvas } from './SheetCanvas.js';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 import { ViewportCard } from './ViewportCard.js';
 import { viewportTransform } from '../sheets/SheetPaper.js';
 import { useSheetContent } from '../sheets/useSheetContent.js';
@@ -72,11 +73,11 @@ const grip = (ui: HTMLElement, handle: string): HTMLElement => {
 const pointer = (el: HTMLElement, type: string, p: { clientX: number; clientY: number }) =>
   act(() => { el.dispatchEvent(new window.PointerEvent(type, { ...p, bubbles: true, button: 0, pointerId: 1 })); });
 /** A press on a grip, a move to a paper point, and the release there. */
-function drag(el: HTMLElement, from: { x: number; y: number }, to: { x: number; y: number }, release = true): void {
-  pointer(el, 'pointerdown', at(from));
-  pointer(el, 'pointermove', at({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }));
-  pointer(el, 'pointermove', at(to));
-  if (release) pointer(el, 'pointerup', at(to));
+function drag(el: HTMLElement, from: { x: number; y: number }, to: { x: number; y: number }, release = true, map: (mm: { x: number; y: number }) => { clientX: number; clientY: number } = at): void {
+  pointer(el, 'pointerdown', map(from));
+  pointer(el, 'pointermove', map({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }));
+  pointer(el, 'pointermove', map(to));
+  if (release) pointer(el, 'pointerup', map(to));
 }
 const placed = (v: SheetViewport) => viewportTransform(v, DRAWING, 'down');
 
@@ -240,10 +241,14 @@ describe('Esc on a grip (#139)', () => {
     const ui = render(<SteppedSheet sheet={sheetOf()} extent={null} proposals={[]} onBack={() => { left += 1; }} onStep={() => {}} />);
     const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
     assert.ok(canvas);
-    pointer(canvas, 'pointerdown', at({ x: 150, y: 150 }));
-    pointer(canvas, 'pointerup', at({ x: 150, y: 150 }));
+    // Inside the Wall the paper is fitted into what the card leaves free (fit-width), not the whole canvas.
+    const fitted = fitWidth(canvas);
+    const kf = Math.min((fitted - 24) / 594, (800 - 24) / 420);
+    const atFit = (mm: { x: number; y: number }) => ({ clientX: (fitted - 594 * kf) / 2 + mm.x * kf, clientY: (800 - 420 * kf) / 2 + mm.y * kf });
+    pointer(canvas, 'pointerdown', atFit({ x: 150, y: 150 }));
+    pointer(canvas, 'pointerup', atFit({ x: 150, y: 150 }));
     const g = grip(ui, 'se');
-    drag(g, { x: 210, y: 190 }, { x: 250, y: 215 }, false);
+    drag(g, { x: 210, y: 190 }, { x: 250, y: 215 }, false, atFit);
     press(g, 'Escape');
     assert.deepEqual(vpOf(), vp, 'the drag is cancelled');
     assert.equal(left, 0, 'the sheet stays');

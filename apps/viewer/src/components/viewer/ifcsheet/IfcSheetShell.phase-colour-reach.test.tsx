@@ -25,6 +25,7 @@ import { clearDraftHistory } from '@/drafting/draft-store';
 import { cancelCommand } from '@/drafting/session';
 import type { ProjectSheet, ProjectView } from '@/project/types';
 import { IfcSheetShell } from './IfcSheetShell.js';
+import { fitWidth } from '@/components/viewer/wall/sheet-fit.js';
 import { stepInto, useWallNav } from '../wall/wall-nav.js';
 
 const wait = (ms = 40) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
@@ -48,7 +49,8 @@ function clickViewport(ui: HTMLElement, sheet: ProjectSheet, viewId: string): vo
   const vp = (sheet.viewports ?? []).find((v) => v.viewId === viewId)!;
   const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
   assert.ok(canvas, 'the sheet is in front');
-  const { width, height } = canvas.getBoundingClientRect();
+  const { height } = canvas.getBoundingClientRect();
+  const width = fitWidth(canvas); // the card covers the canvas's right side, Fit leaves it free
   const k = Math.min((width - 24) / paper.w, (height - 24) / paper.h);
   const at = { clientX: (width - paper.w * k) / 2 + vp.x * k, clientY: (height - paper.h * k) / 2 + vp.y * k };
   for (const type of ['pointerdown', 'pointerup']) act(() => { canvas.dispatchEvent(new window.PointerEvent(type, { ...at, bubbles: true, button: 0, pointerId: 1 })); });

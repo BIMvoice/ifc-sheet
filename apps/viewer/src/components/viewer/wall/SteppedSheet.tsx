@@ -334,7 +334,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
               <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
             </div>
           )}
-          <div ref={cardHost} className={WALL_CARD_HOST}>
+          <div ref={cardHost} data-wall-card-host className={WALL_CARD_HOST}>
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} onDone={stopTool} />
               : hatches.length > 0 && !papering && !titling && !revising ? <SelectedHatchCard hatches={hatches} drawingOn={focusView?.name ?? null} />
               : focusView ? null
