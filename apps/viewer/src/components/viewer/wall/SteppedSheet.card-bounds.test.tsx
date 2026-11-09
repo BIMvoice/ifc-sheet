@@ -17,6 +17,7 @@ import type { ModelExtent } from '@/project/drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { manyTypes } from '@/joinery/schedule-fit.test';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 import { WALL_CARD, WALL_CARD_BOUND, WALL_CARD_HOST } from './wall-type';
 
 /** #288 (jsdom has no stylesheet, so the classes are asserted; the computed styles are the Playwright spec's): a card taller than the sheet scrolls inside itself; it never pushes the app shell. */
@@ -34,11 +35,12 @@ describe('the viewport card is bounded (#288)', () => {
     const sheetId = hangSchedule(id, manyTypes(2));
     const sheet = useProjectStore.getState().sheets.find((s) => s.id === sheetId)!;
     const ui = render(<SteppedSheet sheet={sheet} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} scheduleRows={() => manyTypes(2)} />);
-    const k = Math.min((1280 - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
     const vp = sheet.viewports![0];
     const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]')!;
+    const fitted = fitWidth(canvas); // the paper is fitted into what the card leaves free
+    const k = Math.min((fitted - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
     act(() => {
-      canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (1280 - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
+      canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (fitted - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
     });
     const card = ui.querySelector('aside');
     assert.ok(card, 'the card is up');

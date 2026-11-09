@@ -15,6 +15,7 @@
  * view, in paper millimetres (`useSheetDrafting`).
  */
 
+import { fitWidth } from './sheet-fit.js';
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { parsePat } from '@/drafting/hatch/pattern';
 import { pressEscape, runningCommand, useDraftingSession } from '@/drafting/session';
@@ -78,7 +79,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   useLayoutEffect(() => {
     const el = host.current;
     if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
+    const { height } = el.getBoundingClientRect();
+    const width = fitWidth(el);
     const k = Math.max(ZOOM.min, Math.min((width - 24) / paper.w, (height - 24) / paper.h));
     setPan({ k, x: (width - paper.w * k) / 2, y: (height - paper.h * k) / 2 });
   }, [paper.w, paper.h, fitKey]);

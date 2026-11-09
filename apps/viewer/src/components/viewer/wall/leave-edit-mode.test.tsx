@@ -17,6 +17,7 @@ import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectSheet } from '@/project/types';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 
 /**
  * Issue #142: a drawing brought forward (edit mode) is left with a visible
@@ -47,7 +48,8 @@ function clickViewport(ui: HTMLElement, sheet: ProjectSheet, viewId: string, typ
   const vp = (sheet.viewports ?? []).find((v) => v.viewId === viewId)!;
   const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
   assert.ok(canvas);
-  const { width, height } = canvas.getBoundingClientRect();
+  const { height } = canvas.getBoundingClientRect();
+  const width = fitWidth(canvas); // the card covers the canvas's right side, Fit leaves it free
   const k = Math.min((width - 24) / paper.w, (height - 24) / paper.h);
   const at = { clientX: (width - paper.w * k) / 2 + vp.x * k, clientY: (height - paper.h * k) / 2 + vp.y * k };
   const event = type === 'dblclick' ? new window.MouseEvent('dblclick', { ...at, bubbles: true }) : new window.PointerEvent(type, { ...at, bubbles: true, button: 0, pointerId: 1 });
