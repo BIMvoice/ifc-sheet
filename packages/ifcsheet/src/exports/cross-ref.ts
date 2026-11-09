@@ -17,4 +17,4 @@ export {
   CIRCLE_POLE, CIRCLE_R, DETAIL_LINK, DETAIL_PART, FLAG_PAD, FLAG_POINT, FLAG_POLE, SECTION_LINK, TRIANGLE_HALF_BASE, TRIANGLE_LEN,
   markHeadReach, placementOf, sectionLink, sectionNormal, symbolParts, withoutSectionLink, type SymbolPlacement,
 } from '../cross-ref/section-geometry.js';
-export { viewTitleLayout, type ViewTitleLayout } from '../view-title.js';
+export { viewTitleLayout, type TitleClear, type ViewTitleLayout } from '../view-title.js';

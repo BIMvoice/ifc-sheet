@@ -114,6 +114,7 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
     setDrawingProgress,
     setDrawingError,
     primary: false,
+    terrainApart: true,
   });
 
   // An empty model (no geometry, no bounds) is not an error: the view is a bare work plane.

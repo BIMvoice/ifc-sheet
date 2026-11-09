@@ -30,9 +30,9 @@ import type { SurfaceFill } from './surface-fills.js';
 import type { ProjectDocument, ProjectSheet } from './document.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { drawingAreaIn, frameOf, frameRect, titleBlockRect, type Rect } from './sheet-frame.js';
-import { LOGO_FIELD } from './title-block-fields.js';
-import { printTitleBlock, sheetLookup } from './title-block-print.js';
-import { DEFAULT_SHEET_TYPE, standardCaptionsFor, standardTitleBlock } from './title-block-standard.js';
+export { printableLogo } from './sheet-title-block.js';
+import { titleBlock } from './sheet-title-block.js';
+import { DEFAULT_SHEET_TYPE } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
@@ -53,7 +53,8 @@ import { markArea, markBox, northDegrees, viewportMarkFlags, viewportMarks } fro
 import type { PlanDirection } from './true-north.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { printedUnderlays, underlayMatrix, type UnderlayMatrix } from './underlay.js';
-import { viewTitleSheet } from './view-title.js';
+import { printedPaperBoxes, type PaperBox } from './title-clear.js';
+import { stripHeight, viewTitleSheet } from './view-title.js';
 import { drawingNumbers } from './cross-ref/reference.js';
 import { dxfSheetStrokes, dxfSheetTexts } from './dxf-underlay-sheet.js';
 
@@ -156,22 +157,6 @@ export interface SheetGraphic {
 /** A rectangle as a closed run of points (the first repeated last), so it reads whole in an open-polyline layer. */
 const rect = (r: { x: number; y: number; w: number; h: number }): Polyline => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }, { x: r.x, y: r.y }];
 
-/** The logo as the PDF can draw it: a PNG or JPEG data URL. An SVG logo, which the app shows, is not drawn here yet. */
-export function printableLogo(src: string | undefined): string | undefined {
-  return src && /^data:image\/(png|jpeg);base64,/i.test(src) ? src : undefined;
-}
-
-/**
- * The title block: the layout the project keeps (`doc.titleBlockTemplate`: the Romanian one, or any the app edited),
- * else the standard one, as the app does (`title-block-standard.ts`). `projectFields` are the project's fields
- * resolved from the model (`title-block-sources.ts`); without them the document's typed values are all there is.
- */
-function titleBlock(sheet: ProjectSheet, doc: ProjectDocument, paper: { w: number; h: number }, scale: string, projectFields?: Record<string, string>, language?: string): { frame: Polyline[]; texts: SheetText[]; images: SheetImage[] } {
-  const tb = titleBlockRect(paper, frameOf(sheet));
-  const template = doc.titleBlockTemplate ?? standardTitleBlock(standardCaptionsFor(language));
-  return printTitleBlock(template, sheetLookup(sheet, doc, scale, projectFields, language), tb, frameOf(sheet).titleBlock === 'right', printableLogo((projectFields ?? doc.titleBlock)?.[LOGO_FIELD]));
-}
-
 /**
  * Which way each drawing axis runs on the paper, by the axis the drawing is cut
  * along: a plan (`y`) keeps its second axis pointing down the paper (a point
@@ -253,6 +238,8 @@ export function sheetGraphic(
     out.texts.push(...onLayer(shapes.texts, 'SITE-SYMBOLS'));
   };
   /** A site plan's marks, placed once every viewport on the sheet is known (`siteMarks`; `own`: its index in `out.viewports`). */
+  /** Where each viewport's title ends (paper mm, by index in `out.viewports`): the legends and site marks keep off it, wherever the drop put it. */
+  const titleBottoms = new Map<number, number>();
   const siteJobs: { box: Rect; own: number; scale: number; arrowDegrees: number | null; bar: boolean; obstacles: Obstacle[] }[] = [];
   for (const vp of vps) {
     // A schedule placed here instead of a view: laid out and placed as the app's sheet does (`sheet-schedules.ts`).
@@ -325,6 +312,7 @@ export function sheetGraphic(
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
+    const markBoxes: PaperBox[] = [];
     const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale }) : null;
     if (drawing && (project?.annotations || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
@@ -334,6 +322,7 @@ export function sheetGraphic(
         strokes.push(...drafted.strokes);
         out.texts.push(...drafted.texts);
       }
+      if (crossRefs) markBoxes.push(...printedPaperBoxes(printed[printed.length - 1]));
     }
     const flags = viewportMarkFlags(vp, view);
     const marksBox = box && drawing ? markBox(vp, box) : null;
@@ -355,21 +344,18 @@ export function sheetGraphic(
     }
     if (view) {
       const text = `${view.name}  1:${vp.scale}`;
-      // The title under the drawing's box with the drawing's number in a ring at its start, as the app's sheet places it (`viewTitleLayout`).
-      const title = box ? viewTitleSheet(box, DEFAULT_SHEET_TYPE.viewTitle, text, numbers.get(vp.id)) : null;
-      if (title) {
-        strokes.push(...title.strokes);
-        out.texts.push(...title.texts);
-      } else out.texts.push({ at: { x: vp.x, y: vp.y + 8 }, text, size: 3.5, align: 'center', layer: 'VIEWPORT-LABELS' });
+      // The title under the drawing's box (and under the marks that stand there) with the drawing's number in a ring at its start, as the app's sheet places it (`viewTitleLayout`).
+      const title = box ? viewTitleSheet(box, DEFAULT_SHEET_TYPE.viewTitle, text, numbers.get(vp.id), markBoxes, drawingArea.y + drawingArea.h) : null;
+      if (title && box) { strokes.push(...title.strokes); out.texts.push(...title.texts); titleBottoms.set(out.viewports.length - 1, title.bottom); } else out.texts.push({ at: { x: vp.x, y: vp.y + 8 }, text, size: 3.5, align: 'center', layer: 'VIEWPORT-LABELS' });
     }
   }
   // The viewports, their titles and the title block are not free: the legends and a site plan's outside marks keep off them.
-  const taken = out.viewports.map(({ box }) => ({ x: box.x, y: box.y, w: box.w, h: box.h + 12 }));
+  const taken = out.viewports.map(({ box }, i) => ({ x: box.x, y: box.y, w: box.w, h: box.h + stripHeight(box, titleBottoms.get(i)) }));
   taken.push(titleBlockRect(paper, frameOf(sheet)));
   for (const m of siteJobs) {
     // Its own viewport's drawing box is the one it stands beside; its title strip under the box stays taken.
     const own = out.viewports[m.own].box;
-    const others = [...taken.filter((_, i) => i !== m.own), { x: own.x, y: own.y + own.h, w: own.w, h: 12 }];
+    const others = [...taken.filter((_, i) => i !== m.own), { x: own.x, y: own.y + own.h, w: own.w, h: stripHeight(own, titleBottoms.get(m.own)) }];
     const shapes = siteMarks({ box: m.box, drawingArea, scale: m.scale, arrowDegrees: m.arrowDegrees, bar: m.bar, locale: marks.locale, obstacles: m.obstacles, taken: others });
     out.symbols.strokes.push(...shapes.strokes);
     out.symbols.solids.push(...shapes.solids);
