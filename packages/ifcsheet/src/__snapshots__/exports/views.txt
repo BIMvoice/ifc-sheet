@@ -141,6 +141,7 @@ ownGraphicsOf: value
 parseClassificationRows: value
 penGroups: value
 penOrder: value
+predefinedTypeReader: value
 presetRules: value
 readClassificationMapping: value
 readClassificationMappings: value
