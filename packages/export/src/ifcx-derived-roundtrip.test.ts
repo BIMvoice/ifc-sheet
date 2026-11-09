@@ -75,4 +75,30 @@ describe('export writes the classes the file states, not the ones the reader der
       expect(owners(again), `owners of ${path}`).toEqual(owners(parsed));
     }
   });
+
+  it('load, export, load again: every material node keeps its diffuseColor and opacity (colour is lost on export)', async () => {
+    const bytes = readFileSync(SAMPLE);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const parsed = await parseIfcx(buffer);
+    const store = { ...parsed, source: new Uint8Array(0), entityIndex: { byId: new Map(), byType: new Map() } } as unknown as IfcDataStore;
+    const out = new Ifc5Exporter(store, { meshes: parsed.meshes } as unknown as GeometryResult)
+      .export({ onlyTreeEntities: false, onlyKnownProperties: false });
+
+    // What each material node says, composed from the file as the reader sees it.
+    const colours = (file: IfcxFile): Record<string, { diffuse: unknown; opacity: unknown }> => {
+      const found: Record<string, { diffuse: unknown; opacity: unknown }> = {};
+      for (const node of composeIfcx(file).values()) {
+        if (!MATERIALS.includes(node.path)) continue;
+        found[node.path] = {
+          diffuse: node.attributes.get('bsi::ifc::presentation::diffuseColor'),
+          opacity: node.attributes.get('bsi::ifc::presentation::opacity'),
+        };
+      }
+      return found;
+    };
+    const before = colours(JSON.parse(readFileSync(SAMPLE, 'utf8')) as IfcxFile);
+    expect(Object.keys(before).sort()).toEqual([...MATERIALS].sort());
+    expect(before[MATERIALS[0]].diffuse).toEqual([0.5, 0.5, 0.5]);
+    expect(colours(JSON.parse(out.content) as IfcxFile)).toEqual(before);
+  });
 });
