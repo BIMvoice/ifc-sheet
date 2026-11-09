@@ -35,13 +35,15 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Bounds2D, DrawingLine, MeshOutline2D, SectionPlaneConfig } from './types.js';
 import { outlineToProjectionLines, type ProjectionBandDepths } from './projection-bands.js';
-import { EDGE, FaceGrid, STRIDE, projectTriangle } from './face-grid.js';
-import { walkLocal, type LocalSurface } from './local-surface.js';
+import { EDGE, FaceGrid, SPAN, STRIDE, clipToEdge, clipToFace, projectTriangle } from './face-grid.js';
+import { localDepth, type LocalSurface } from './local-surface.js';
 
 /** Resolution (pixels on the longer side) of the generator's hidden-line raster. */
 export const HIDDEN_LINE_RESOLUTION = 1024;
 
 const T_EPS = 1e-9;
+/** A curved line's depth is kept within this of its sampled own surface (metres) when its breakpoints are thinned. */
+const NEAR_TOLERANCE = 5e-4;
 
 interface OutlineSource {
   mesh: MeshData;
@@ -51,13 +53,6 @@ interface OutlineSource {
   /** For a line along a curved surface: the faces that form it, the only ones its depth is read from. */
   near?: LocalSurface;
 }
-
-/**
- * Over this many faces near a curved line (an element hardly larger than a raster pixel, a thin rail), its depth is the
- * lowest of each of `BUCKETS` stretches along it rather than exact, which costs the square of the faces.
- */
-const MAX_EXACT_SPANS = 48;
-const BUCKETS = 8;
 
 /** Lines `outlineLinesWithDepth` produced, mapped to the mesh their depth is read from. */
 const sources = new WeakMap<DrawingLine, OutlineSource>();
@@ -132,11 +127,15 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   const dx = line.line.end.x - ax, dy = line.line.end.y - ay;
   const fallback = line.depth;
 
+  if (source.near) return simplify(clampToCut(localDepth(source.mesh, source.near, reach, line)), NEAR_TOLERANCE);
+
   // Each face near the line: its t interval and its lowered depth alpha + beta·t, floored at its nearest vertex.
   const spans: number[] = [];
   const ts: number[] = [0, 1];
-  const add = (faces: Float64Array, o: number): boolean => {
-    if (!(faces[o + 9] === EDGE ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) return false;
+  const { faces, grid } = facesOf(source, reach);
+  for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) {
+    const o = f * STRIDE;
+    if (!(faces[o + 9] === EDGE ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
     const t0 = SPAN[0], t1 = SPAN[1], alpha = SPAN[2], beta = SPAN[3];
     const floor = faces[o + 10];
     spans.push(t0, t1, alpha, beta, floor);
@@ -145,15 +144,8 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
       const kink = (floor - alpha) / beta;
       if (kink > t0 && kink < t1) ts.push(kink);
     }
-    return true;
-  };
-  if (source.near) walkLocal(source.mesh, source.near, add);
-  else {
-    const { faces, grid } = facesOf(source, reach);
-    for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) add(faces, f * STRIDE);
   }
 
-  if (source.near && spans.length > 5 * MAX_EXACT_SPANS) return simplify(clampToCut(bucketed(spans, fallback)));
   ts.sort((p, q) => p - q);
   const points: Array<[number, number]> = [];
   for (const t of ts) {
@@ -167,26 +159,6 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   }
   if (points[points.length - 1][0] < 1) points[points.length - 1][0] = 1;
   return simplify(clampToCut(points));
-}
-
-/**
- * Breakpoints at `BUCKETS` even steps along the line, none deeper than the nearest face anywhere in the stretches on
- * either side of it, so the depth between them is a lower bound of the exact one.
- */
-function bucketed(spans: number[], fallback: number): Array<[number, number]> {
-  const low = new Float64Array(BUCKETS).fill(Infinity);
-  for (let s = 0; s < spans.length; s += 5) {
-    const t0 = spans[s], t1 = spans[s + 1], alpha = spans[s + 2], beta = spans[s + 3], floor = spans[s + 4];
-    const last = Math.min(BUCKETS - 1, Math.floor(t1 * BUCKETS));
-    for (let b = Math.max(0, Math.floor(t0 * BUCKETS)); b <= last; b++) {
-      const u0 = Math.max(t0, b / BUCKETS), u1 = Math.min(t1, (b + 1) / BUCKETS);
-      low[b] = Math.min(low[b], Math.max(Math.min(alpha + beta * u0, alpha + beta * u1), floor));
-    }
-  }
-  const at = (b: number) => (Number.isFinite(low[b]) ? low[b] : fallback);
-  const points: Array<[number, number]> = [];
-  for (let k = 0; k <= BUCKETS; k++) points.push([k / BUCKETS, Math.min(at(Math.max(0, k - 1)), at(Math.min(BUCKETS - 1, k)))]);
-  return points;
 }
 
 /**
@@ -207,88 +179,28 @@ function clampToCut(points: Array<[number, number]>): Array<[number, number]> {
 }
 
 /** Drop breakpoints while the longer chord stays at or in front of every point it skips. */
-function simplify(points: Array<[number, number]>): Array<[number, number]> {
+function simplify(points: Array<[number, number]>, tolerance?: number): Array<[number, number]> {
   const out: Array<[number, number]> = [points[0]];
   let i = 0;
   while (i < points.length - 1) {
     let j = i + 1;
-    while (j + 1 < points.length && chordKeeps(points, i, j + 1)) j++;
+    while (j + 1 < points.length && chordKeeps(points, i, j + 1, tolerance)) j++;
     out.push(points[j]);
     i = j;
   }
   return out;
 }
 
-function chordKeeps(points: Array<[number, number]>, i: number, j: number): boolean {
+/** Whether the chord from point i to point j stays in front of every point between, or with `tolerance` within it either way. */
+function chordKeeps(points: Array<[number, number]>, i: number, j: number, tolerance?: number): boolean {
   const [ti, di] = points[i];
   const [tj, dj] = points[j];
   for (let k = i + 1; k < j; k++) {
     const [tk, dk] = points[k];
-    if (di + (dj - di) * ((tk - ti) / (tj - ti)) > dk + 1e-9) return false;
+    const chord = di + (dj - di) * ((tk - ti) / (tj - ti));
+    if (tolerance === undefined ? chord > dk + 1e-9 : Math.abs(chord - dk) > tolerance) return false;
   }
   return true;
-}
-
-/** The last clip's `[t0, t1, alpha, beta]` (`clipToFace`, `clipToEdge`), kept here so no clip allocates. */
-const SPAN = new Float64Array(4);
-
-function span(t0: number, t1: number, alpha: number, beta: number): true {
-  SPAN[0] = t0; SPAN[1] = t1; SPAN[2] = alpha; SPAN[3] = beta;
-  return true;
-}
-
-/**
- * The t interval of `A + t·D` (t in [0, 1]) inside face `o` grown by `reach`
- * on every edge, or false when it misses (Liang-Barsky against three edges),
- * with the face's depth there as `alpha + beta·t` (in `SPAN`).
- */
-function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
-  let t0 = 0, t1 = 1;
-  // Orientation, so every edge normal points into the face.
-  const ux0 = faces[o], uy0 = faces[o + 1];
-  const area2 = (faces[o + 2] - ux0) * (faces[o + 5] - uy0) - (faces[o + 4] - ux0) * (faces[o + 3] - uy0);
-  const sign = area2 > 0 ? 1 : -1;
-  for (let e = 0; e < 3; e++) {
-    const px = faces[o + e * 2], py = faces[o + e * 2 + 1];
-    const qx = faces[o + ((e + 1) % 3) * 2], qy = faces[o + ((e + 1) % 3) * 2 + 1];
-    const ex = qx - px, ey = qy - py;
-    const len = Math.hypot(ex, ey);
-    if (len === 0) return false;
-    const nx = (-ey * sign) / len, ny = (ex * sign) / len;
-    // n·(A + t·D - P) + reach >= 0
-    const c = nx * (ax - px) + ny * (ay - py) + reach;
-    const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < 0) return false; continue; }
-    const t = -c / k;
-    if (k > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
-    if (t0 > t1) return false;
-  }
-  // The face's depth plane along the line, lowered by its slope times reach.
-  return span(t0, t1, faces[o + 6] * ax + faces[o + 7] * ay + faces[o + 8] - faces[o + 9] * reach, faces[o + 6] * dx + faces[o + 7] * dy);
-}
-
-/**
- * The t interval of `A + t·D` within `reach` of edge `o` (a box around it), with
- * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`.
- */
-function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
-  const px = faces[o], py = faces[o + 1];
-  const len = Math.hypot(faces[o + 2] - px, faces[o + 3] - py);
-  const ex = (faces[o + 2] - px) / len, ey = (faces[o + 3] - py) / len;
-  let t0 = 0, t1 = 1;
-  // Along the edge from -reach to len + reach, across it within reach.
-  for (const [nx, ny, lo, hi] of [[ex, ey, -reach, len + reach], [-ey, ex, -reach, reach]]) {
-    const c = nx * (ax - px) + ny * (ay - py);
-    const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < lo || c > hi) return false; continue; }
-    const ta = (lo - c) / k, tb = (hi - c) / k;
-    t0 = Math.max(t0, Math.min(ta, tb));
-    t1 = Math.min(t1, Math.max(ta, tb));
-    if (t0 > t1) return false;
-  }
-  const slope = (faces[o + 7] - faces[o + 6]) / len;
-  const s0 = ex * (ax - px) + ey * (ay - py);
-  return span(t0, t1, faces[o + 6] + slope * s0 - Math.abs(slope) * reach, slope * (ex * dx + ey * dy));
 }
 
 /** Project the mesh's faces once per source, faces first, then the edges of faces seen edge-on. */

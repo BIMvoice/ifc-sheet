@@ -57,6 +57,68 @@ export function projectTriangle(mesh: MeshData, plane: SectionPlaneConfig, t: nu
   out.push(u0, v0, u1, v1, u2, v2, a, b, d0 - a * u0 - b * v0, Math.hypot(a, b), Math.min(d0, d1, d2));
 }
 
+/** The last clip's `[t0, t1, alpha, beta]` (`clipToFace`, `clipToEdge`), kept here so no clip allocates. */
+export const SPAN = new Float64Array(4);
+
+function span(t0: number, t1: number, alpha: number, beta: number): true {
+  SPAN[0] = t0; SPAN[1] = t1; SPAN[2] = alpha; SPAN[3] = beta;
+  return true;
+}
+
+/**
+ * The t interval of `A + t·D` (t in [0, 1]) inside face `o` grown by `reach`
+ * on every edge, or false when it misses (Liang-Barsky against three edges),
+ * with the face's depth there as `alpha + beta·t` (in `SPAN`).
+ */
+export function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
+  let t0 = 0, t1 = 1;
+  // Orientation, so every edge normal points into the face.
+  const ux0 = faces[o], uy0 = faces[o + 1];
+  const area2 = (faces[o + 2] - ux0) * (faces[o + 5] - uy0) - (faces[o + 4] - ux0) * (faces[o + 3] - uy0);
+  const sign = area2 > 0 ? 1 : -1;
+  for (let e = 0; e < 3; e++) {
+    const px = faces[o + e * 2], py = faces[o + e * 2 + 1];
+    const qx = faces[o + ((e + 1) % 3) * 2], qy = faces[o + ((e + 1) % 3) * 2 + 1];
+    const ex = qx - px, ey = qy - py;
+    const len = Math.hypot(ex, ey);
+    if (len === 0) return false;
+    const nx = (-ey * sign) / len, ny = (ex * sign) / len;
+    // n·(A + t·D - P) + reach >= 0
+    const c = nx * (ax - px) + ny * (ay - py) + reach;
+    const k = nx * dx + ny * dy;
+    if (k === 0) { if (c < 0) return false; continue; }
+    const t = -c / k;
+    if (k > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  // The face's depth plane along the line, lowered by its slope times reach.
+  return span(t0, t1, faces[o + 6] * ax + faces[o + 7] * ay + faces[o + 8] - faces[o + 9] * reach, faces[o + 6] * dx + faces[o + 7] * dy);
+}
+
+/**
+ * The t interval of `A + t·D` within `reach` of edge `o` (a box around it), with
+ * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`.
+ */
+export function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
+  const px = faces[o], py = faces[o + 1];
+  const len = Math.hypot(faces[o + 2] - px, faces[o + 3] - py);
+  const ex = (faces[o + 2] - px) / len, ey = (faces[o + 3] - py) / len;
+  let t0 = 0, t1 = 1;
+  // Along the edge from -reach to len + reach, across it within reach.
+  for (const [nx, ny, lo, hi] of [[ex, ey, -reach, len + reach], [-ey, ex, -reach, reach]]) {
+    const c = nx * (ax - px) + ny * (ay - py);
+    const k = nx * dx + ny * dy;
+    if (k === 0) { if (c < lo || c > hi) return false; continue; }
+    const ta = (lo - c) / k, tb = (hi - c) / k;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+    if (t0 > t1) return false;
+  }
+  const slope = (faces[o + 7] - faces[o + 6]) / len;
+  const s0 = ex * (ax - px) + ey * (ay - py);
+  return span(t0, t1, faces[o + 6] + slope * s0 - Math.abs(slope) * reach, slope * (ex * dx + ey * dy));
+}
+
 /** A uniform grid of face bounds (grown by `reach`), so a line looks only at the faces near it. */
 export class FaceGrid {
   private readonly cells: number[][];

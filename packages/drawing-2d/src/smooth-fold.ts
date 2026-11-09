@@ -34,6 +34,8 @@ export interface MeshTopology {
   normals: Vec3[];
   /** The faces on each edge, keyed `min:max` of its welded indices. */
   edgeFaces: Map<string, { faceIndices: number[] }>;
+  /** Cosine of the crease angle: two faces whose normals' dot product is at least this meet at a smooth edge. */
+  creaseCos: number;
 }
 
 /** Edge-on faces walked through at most, per edge: the whole flat strip of a tube or a terrain. */
@@ -85,16 +87,23 @@ export function smoothEdgeFaces(edge: EdgeData): { seeds: [number, number]; topo
   return entry && { seeds: [entry.f0, entry.f1], topo: entry.topo };
 }
 
-/** The faces sharing an edge with each face of `topo`: those of face `f` are `faces[start[f]]` up to `faces[start[f + 1]]`. */
+/**
+ * The faces sharing a SMOOTH edge with each face of `topo` (two faces meeting under `topo.creaseCos`): those of face `f`
+ * are `faces[start[f]]` up to `faces[start[f + 1]]`. A crease (the cap of a tube, the rim of a ring wall) joins nothing.
+ */
 export function faceAdjacency(topo: MeshTopology): { start: Int32Array; faces: Int32Array } {
   const n = topo.normals.length;
+  const smooth = ({ faceIndices: f }: { faceIndices: number[] }): boolean => f.length === 2 && vec3Dot(topo.normals[f[0]], topo.normals[f[1]]) >= topo.creaseCos;
   const start = new Int32Array(n + 1);
-  for (const { faceIndices } of topo.edgeFaces.values()) for (const f of faceIndices) start[f + 1] += faceIndices.length - 1;
+  for (const e of topo.edgeFaces.values()) if (smooth(e)) { start[e.faceIndices[0] + 1]++; start[e.faceIndices[1] + 1]++; }
   for (let f = 0; f < n; f++) start[f + 1] += start[f];
   const faces = new Int32Array(start[n]);
   const fill = start.slice(0, n);
-  for (const { faceIndices } of topo.edgeFaces.values()) {
-    for (const f of faceIndices) for (const h of faceIndices) if (h !== f) faces[fill[f]++] = h;
+  for (const e of topo.edgeFaces.values()) {
+    if (!smooth(e)) continue;
+    const [f0, f1] = e.faceIndices;
+    faces[fill[f0]++] = f1;
+    faces[fill[f1]++] = f0;
   }
   return { start, faces };
 }

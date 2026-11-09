@@ -71,11 +71,13 @@ import { registerSmoothEdge, smoothEdgeMayFold, smoothEdgeOnOutline, type MeshTo
 const SILHOUETTE_EPSILON = 1e-4;
 
 /**
- * Below this angle (radians, about 0.06°) two faces meeting at an edge are one flat face split by a diagonal, f32 noise
- * included; above it `extractEdges(mesh, true)` keeps a smooth edge, since the outline of a curved surface runs along
- * such edges (`smooth-fold.ts`).
+ * The least turn (radians, 1.5°) at a smooth edge that `extractEdges(mesh, true)` keeps as a possible outline of a
+ * curved surface (`smooth-fold.ts`). A tessellated tube turns by its facet angle at every edge: 11.25° for FZK's
+ * 32-sided stair column, 3.3° for its 108-sided handrail, 1.5° only past 240 sides. A terrain with millimetres of
+ * noise over cells of decimetres turns by under 1° (2 mm over 0.5 m cells: 0.97° at most), and every such fold seen
+ * level drew a line through it: a noisy level TIN went from 40 lines to 138. Below this, two faces are one surface.
  */
-const SMOOTH_OUTLINE_MIN_ANGLE = 1e-3;
+const SMOOTH_OUTLINE_MIN_ANGLE = (1.5 * Math.PI) / 180;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -162,7 +164,7 @@ export class EdgeExtractor {
 
     // Second pass: classify edges
     const edges: EdgeData[] = [];
-    const topo: MeshTopology = { positions, origin, indices, normals: faceNormals, edgeFaces: edgeMap };
+    const topo: MeshTopology = { positions, origin, indices, normals: faceNormals, edgeFaces: edgeMap, creaseCos: Math.cos(this.creaseAngle) };
 
     const smoothView = view && vec3Normalize(view);
     for (const [, edgeInfo] of edgeMap) {
