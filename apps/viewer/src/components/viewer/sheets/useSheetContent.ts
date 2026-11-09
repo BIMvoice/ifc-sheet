@@ -27,6 +27,7 @@ import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
 import { viewScreenUp } from '@/project/view-screen-up';
+import { crossReferenceBoxes } from '@/drafting/cross-ref-title-boxes';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
@@ -195,10 +196,11 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
     drawing: siteDrawing(vp),
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),
+    markBoxes: crossReferenceBoxes(crossRefInput(vp)),
     overlays: styled.get(vp.viewId)?.overlays,
     site: vp.keyPlanOf ? undefined : sites.get(vp.viewId),
     styleOf,
-  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites, styleOf]);
+  }), [views, styled, draftsFor, crossRefInput, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites, styleOf]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);

@@ -14,6 +14,7 @@ SectionReferenceOptions: type (type-only)
 SymbolPlacement: type (type-only)
 TRIANGLE_HALF_BASE: value
 TRIANGLE_LEN: value
+TitleClear: type (type-only)
 ViewReference: type (type-only)
 ViewTitleLayout: type (type-only)
 boxOfPoints: value
