@@ -103,9 +103,9 @@ describe('compact cache columns preserve iterable byte layout (#3985)', () => {
   }, BOUNDARY_TIMEOUT_MS);
 });
 
-const realFixture = resolve(__dirname, '../../../../tests/models/ara3d/AC20-FZK-Haus.ifc');
+const realFixture = resolve(__dirname, '../../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc');
 const hasFixture = existsSync(realFixture);
-if (!hasFixture) console.warn('skip compact cache real IFC oracle: run pnpm fixtures');
+if (!hasFixture) console.warn('skip compact cache real IFC oracle: the committed FZK fixture is missing');
 it.skipIf(!hasFixture)('retains real Archicad cache section bytes and properties (#3985)', async () => {
   const source = Uint8Array.from(readFileSync(realFixture)).buffer;
   const parsed = await new IfcParser().parseColumnar(source, { disableWorkerScan: true });

@@ -33,11 +33,26 @@ const classOf = (node: OutNode | undefined): string | undefined => (node?.attrib
 
 /** The value of the property `name` the reader unpacked from a derived node (`Material` and `Uri` of `bsi::ifc::material`). */
 function propertyOf(store: IfcDataStore, expressId: number, name: string): string | undefined {
+  const value = rawPropertyOf(store, expressId, name);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function rawPropertyOf(store: IfcDataStore, expressId: number, name: string): unknown {
   for (const set of store.properties.getForEntity(expressId)) {
     const hit = set.properties.find((property) => property.name === name);
-    if (typeof hit?.value === 'string') return hit.value;
+    if (hit !== undefined) return hit.value;
   }
   return undefined;
+}
+
+/** The material's colour and opacity the reader kept on its row (`DiffuseColor` is "r g b"), as the attributes they came from. */
+function colourAttributes(store: IfcDataStore, materialId: number): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const diffuse = propertyOf(store, materialId, 'DiffuseColor')?.split(' ').map(Number);
+  if (diffuse?.length === 3 && diffuse.every(Number.isFinite)) out['bsi::ifc::presentation::diffuseColor'] = diffuse;
+  const opacity = rawPropertyOf(store, materialId, 'Opacity');
+  if (typeof opacity === 'number') out['bsi::ifc::presentation::opacity'] = opacity;
+  return out;
 }
 
 /**
@@ -77,7 +92,7 @@ export function writeDerivedEdges(
       .map((id) => byPath.get(pathOf.get(id) ?? ''))
       .filter((node): node is OutNode => node !== undefined);
     if (owners.length === 0) continue;
-    const attributes: Record<string, unknown> = { [MATERIAL_ATTR]: { code, uri: propertyOf(store, materialId, 'Uri') ?? '' } };
+    const attributes: Record<string, unknown> = { [MATERIAL_ATTR]: { code, uri: propertyOf(store, materialId, 'Uri') ?? '' }, ...colourAttributes(store, materialId) };
     // The material's own properties (StrengthClass, MassDensity...), without the `Material` pset that restates the attribute above.
     const own = store.properties.getForEntity(materialId).filter((set) => set.name !== 'Material');
     writePsetProperties(attributes, materialId, own, definitions.onlyKnownProperties, definitions.sinks);
