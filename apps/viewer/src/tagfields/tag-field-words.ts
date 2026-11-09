@@ -9,5 +9,5 @@ import type { TagField } from './element-tag';
 
 export const TAG_FIELD_WORDS: Readonly<Record<TagField, TranslationKey>> = {
   mark: 'tagCard.field.mark', name: 'tagCard.field.name', typeName: 'tagCard.field.typeName', class: 'tagCard.field.class',
-  classification: 'tagCard.field.classification', classificationTitle: 'tagCard.field.classificationTitle',
+  classification: 'tagCard.field.classification', classificationTitle: 'tagCard.field.classificationTitle', custom: 'tagCustom.card',
 };
