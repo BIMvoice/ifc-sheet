@@ -11,7 +11,8 @@
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { GeometryResult, MeshData } from '@ifc-lite/geometry';
-import { isTerrainMesh, layoutContourLabels, withContours } from '@bimvoice/ifcsheet';
+import { layoutContourLabels, withContours } from '@bimvoice/ifcsheet';
+import { terrainTester } from './terrain-elements';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import type { ProjectView } from './types';
 
@@ -24,7 +25,8 @@ export function terrainMeshes(models: ReadonlyMap<string, TerrainSource>, runtim
   for (const model of models.values()) {
     if (model.landXmlDocument) for (const mesh of model.geometryResult?.meshes ?? []) out.add(mesh);
   }
-  for (const mesh of runtime ?? []) if (isTerrainMesh(mesh)) out.add(mesh);
+  const isTerrain = terrainTester();
+  for (const mesh of runtime ?? []) if (isTerrain(mesh)) out.add(mesh);
   return [...out];
 }
 

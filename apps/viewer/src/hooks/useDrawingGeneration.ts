@@ -39,6 +39,7 @@ import { customPlaneCenter, useViewerStore } from '@/store';
 import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 import { isTypeVisible } from '@/store/typeVisibilityFilter';
+import { withoutTerrainMeshes } from '@/project/terrain-elements';
 import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
 import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
 import { useDrawingRtcContext } from './useDrawingRtcContext.js';
@@ -105,7 +106,7 @@ export function useDrawingGeneration({
   setDrawing,
   setDrawingStatus,
   setDrawingProgress,
-  setDrawingError, primary = true,
+  setDrawingError, primary = true, terrainApart = false,
 }: UseDrawingGenerationParams): UseDrawingGenerationResult {
 
   // The legacy primary path can publish only `loading: false` when it finishes
@@ -454,6 +455,14 @@ export function useDrawingGeneration({
         );
       }
 
+      // A project plan does not cut or project a terrain, as the engine's does not (#683). A section or an elevation keeps it: the
+      // ground drawing (`project/ground.ts`) turns it into the earth cut and the ground line. A model of a terrain alone keeps
+      // it too, so its plan still draws, and the contours go on it.
+      if (terrainApart && sectionPlane.axis === 'down' && !sectionPlane.custom) {
+        const building = withoutTerrainMeshes(meshesToProcess, ifcDataStore);
+        if (building.length > 0) meshesToProcess = building;
+      }
+
       // If all meshes were filtered out by visibility, clear the drawing
       if (meshesToProcess.length === 0) {
         setDrawing(null);
@@ -799,7 +808,7 @@ export function useDrawingGeneration({
     setDrawing,
     setDrawingStatus,
     setDrawingProgress,
-    setDrawingError, primary,
+    setDrawingError, primary, terrainApart,
   ]);
 
   // All entry points share one queue; superseded cuts cannot publish over newer inputs (#3921).
