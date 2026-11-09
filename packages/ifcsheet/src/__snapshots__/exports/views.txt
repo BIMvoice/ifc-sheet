@@ -32,6 +32,7 @@ DETAIL_LEVELS: value
 DetailLevel: type (type-only)
 DisciplineId: type (type-only)
 DraftingProjectView: type (type-only)
+EARTH_TONE: value
 ElementGraphics: type (type-only)
 ElementLineStyle: type (type-only)
 ElementStyle: type (type-only)
@@ -39,6 +40,7 @@ ElevationDirection: type (type-only)
 ElevationProjectView: type (type-only)
 ElongatedPaper: type (type-only)
 FINE_UP_TO_SCALE: value
+GROUND_OVERHANG_M: value
 GlobalId: type (type-only)
 GridEnds: type (type-only)
 GroupPattern: type (type-only)
@@ -113,6 +115,7 @@ contourLevels: value
 contourLines: value
 defaultDetailLevel: value
 defaultViewTemplates: value
+drawingWithGround: value
 elementProperties: value
 elementShown: value
 fillColourOf: value
@@ -156,6 +159,7 @@ systemLabel: value
 templateGraphicsOf: value
 templateKindOf: value
 templateOf: value
+terrainMeshesOf: value
 untemplatedGraphics: value
 viewOverrideRules: value
 viewStyler: value

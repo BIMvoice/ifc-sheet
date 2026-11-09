@@ -17,10 +17,8 @@ import { readStoreFacts } from './title-block-records.js';
 import { projectTitleFields } from './title-block-sources.js';
 import { northOfStore } from './true-north.js';
 import { sheetFormat, type UnitsAndNumbers } from './units-and-numbers.js';
-import { generateViewDrawings } from './view-drawings.js';
+import { generateViewDrawings, terrainMeshesOf } from './view-drawings.js';
 import { withContours } from './contour-drawing.js';
-import { isTerrainMesh } from './contours.js';
-import { predefinedTypeReader } from './terrain.js';
 import { storeyFloorsOf } from './plan-projection.js';
 import { planOpeningSymbols, viewOpeningSymbols } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
@@ -82,12 +80,11 @@ export function headlessMaterialOf(dataStore: NonNullable<OpenedModel['dataStore
 /** Every sheet of `set` as shapes on its paper, in set order, the drawings cut from the building's meshes and clipped to the room the layout made for them. */
 export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'buildingMeshes' | 'extent'> & Partial<Pick<OpenedModel, 'meshes' | 'dataStore' | 'coordinateInfo'>>, options: SheetGraphicsOptions = {}): Promise<SheetGraphic[]> {
   const { document: doc, levels } = set;
+  const terrain = terrainMeshesOf(model.meshes, model.dataStore);
   const hung = new Set(doc.sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
   const drawings = options.drawings === false || !model.extent ? new Map()
-    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError, options.onEmptyView, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy));
+    : await generateViewDrawings(doc.views.filter((v) => hung.has(v.id)), model.buildingMeshes, levels, model.extent, options.onDrawingError, options.onEmptyView, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy), terrain);
   // A site plan draws its terrain as contours (#182), as the app's do: the terrain is among all the meshes, not the building's.
-  const terrainTypeOf = model.dataStore ? predefinedTypeReader(model.dataStore) : undefined;
-  const terrain = (model.meshes ?? []).filter((m) => isTerrainMesh(m, terrainTypeOf));
   for (const view of terrain.length > 0 ? doc.views : []) {
     const drawing = drawings.get(view.id);
     if (drawing) drawings.set(view.id, withContours(drawing, view, terrain, model.coordinateInfo?.originShift?.y ?? 0));

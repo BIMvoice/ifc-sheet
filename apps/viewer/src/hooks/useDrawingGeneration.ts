@@ -456,7 +456,7 @@ export function useDrawingGeneration({
       }
 
       // A project plan does not cut or project a terrain, as the engine's does not (#683). A section or an elevation keeps it: the
-      // ground drawing (`project/ground.ts`) turns it into the earth cut and the ground line. A model of a terrain alone keeps
+      // ground drawing (`drawingWithGround` in `@bimvoice/ifcsheet`) turns it into the earth cut and the ground line. A model of a terrain alone keeps
       // it too, so its plan still draws, and the contours go on it.
       if (terrainApart && sectionPlane.axis === 'down' && !sectionPlane.custom) {
         const building = withoutTerrainMeshes(meshesToProcess, ifcDataStore);

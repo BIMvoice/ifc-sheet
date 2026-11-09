@@ -6,7 +6,7 @@
  * #683, the app against the engine on a model whose storey contains a terrain block (Bonsai writes it so): a wall 4 m wide,
  * a 20 x 20 x 3 m IfcGeographicElement TERRAIN, a VEGETATION tree and a tree whose VEGETATION is its type object's. The engine
  * leaves the terrain out of the building it cuts. The app does the same in a plan, and in a section or an elevation it keeps
- * the terrain for the ground drawing (`ground.ts`): the earth cut and the ground line, while the building's own cut is the wall
+ * the terrain for the ground drawing (`drawingWithGround`, `packages/ifcsheet/src/ground.ts`): the earth cut and the ground line, while the building's own cut is the wall
  * and the trees. A model of a terrain alone still draws its plan.
  */
 
@@ -18,7 +18,7 @@ import type { GeometryResult } from '@ifc-lite/geometry';
 import { generateViewDrawings, openModel, type OpenedModel } from '@bimvoice/ifcsheet/headless';
 import { generateDefaultSet } from '@bimvoice/ifcsheet';
 import { boundsOf, meshFile, viewDrawing } from '@/test/view-drawing-harness';
-import { EARTH_TONE } from './ground';
+import { EARTH_TONE } from '@bimvoice/ifcsheet';
 import type { PlanProjectView, ProjectLevel, ProjectView, SectionProjectView } from './types';
 
 const IFC = new URL('../../../../packages/ifcsheet/test-support/terrain-in-storey.ifc', import.meta.url);
