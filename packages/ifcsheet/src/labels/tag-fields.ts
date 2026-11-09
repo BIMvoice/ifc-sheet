@@ -22,7 +22,8 @@ import type { FieldValue } from './label-resolve.js';
 export const TAG_KINDS = ['door', 'window', 'room', 'wall', 'other'] as const;
 export type TagKind = (typeof TAG_KINDS)[number];
 
-export const TAG_FIELD_IDS = ['mark', 'name'] as const;
+/** `custom` is the text the TAG tool shows when it is set to "Custom": any attribute or property of the element the office chooses (#788). */
+export const TAG_FIELD_IDS = ['mark', 'name', 'custom'] as const;
 export type TagFieldId = (typeof TAG_FIELD_IDS)[number];
 
 /** The label placeholders that read a tag field. */
@@ -45,6 +46,7 @@ const attr = (name: AttributeField): TagSource => ({ kind: 'attribute', name });
 /** What a tag showed before the sources could be changed: the Tag when it is a mark; the name, a room's long name first. */
 export function defaultSources(kind: TagKind, field: TagFieldId): TagSource[] {
   if (field === 'mark') return [attr('Mark')];
+  if (field === 'custom') return [attr('Description')];
   return kind === 'room' ? [attr('LongName'), attr('Name')] : [attr('Name')];
 }
 
@@ -54,6 +56,7 @@ export function defaultSources(kind: TagKind, field: TagFieldId): TagSource[] {
  * The labels keep `defaultSources`, which is what they showed; so tags already on sheets keep their text.
  */
 export function tagToolDefaultSources(field: TagFieldId): TagSource[] {
+  if (field === 'custom') return [attr('Description')];
   return field === 'mark' ? [attr('Tag')] : [attr('Name')];
 }
 

@@ -7,7 +7,7 @@
  * tens of thousands of edges must come in milliseconds, not minutes, and be the
  * profile the plain pairwise rule gives.
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine } from '@ifc-lite/drawing-2d';
 import { drawingWithGround, GROUND_OVERHANG_M } from './ground.js';

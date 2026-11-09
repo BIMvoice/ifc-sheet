@@ -18,6 +18,7 @@ import { click } from '@/test/render.js';
 import { WallGrid } from './WallGrid.js';
 import { useState } from 'react';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 import { paperOf } from '@/project/sheets';
 import { SET_SCALES } from '@/project/drawing-set';
 import { SheetCanvas } from './SheetCanvas.js';
@@ -159,8 +160,9 @@ describe('the Done-when of #51, on the demo set', () => {
     const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
     assert.ok(canvas, 'stepped into the sheet');
     const paper = paperOf(plans());
-    const k = Math.min((1280 - 24) / paper.w, (800 - 24) / paper.h);
-    const x0 = (1280 - paper.w * k) / 2;
+    const fitted = fitWidth(canvas); // the paper is fitted into what the card leaves free
+    const k = Math.min((fitted - 24) / paper.w, (800 - 24) / paper.h);
+    const x0 = (fitted - paper.w * k) / 2;
     const y0 = (800 - paper.h * k) / 2;
     const first = vps()[0];
     const at = { clientX: x0 + first.x * k, clientY: y0 + first.y * k };

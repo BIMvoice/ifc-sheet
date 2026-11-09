@@ -299,8 +299,22 @@ describe.skipIf(missing !== null)('ifcsheet resources, prompts, dry runs and the
   });
 
   describe('annotated_ifc', () => {
+    // Issuing draws every sheet of the set to PDF and DXF, which is the whole cost of these tests (measured in CI: 12 to 23 s per
+    // ifcsheet_issue_set of the full FZK set, against a 30 s test limit, #563). What they check is the copy and the guard, not how many
+    // sheets there are, so they issue the lightest sheet of the default set, loaded back as a project of its own.
+    let issued: string;
+    beforeAll(async () => {
+      await generate();
+      const full = { document: await sessionProject() };
+      const sheets = full.document.sheets as { viewports?: { viewId: string }[] }[];
+      const lightest = sheets.reduce((a, b) => ((b.viewports?.length ?? 0) < (a.viewports?.length ?? 0) ? b : a));
+      const shown = new Set((lightest.viewports ?? []).map((vp) => vp.viewId));
+      const small = { ...full.document, sheets: [lightest], views: full.document.views.filter((v: { id: string }) => shown.has(v.id)) };
+      issued = (await ok('ifcsheet_load_project', { model_id: modelId, project_json: JSON.stringify(small) })).document_id as string;
+    }, 60_000);
+
     it('writes a copy of the IFC the parser reads, holds every original line, says it has no annotations, and goes in handover.zip', async () => {
-      const id = await generate();
+      const id = issued;
       const out = join(tmp, 'issue-annotated');
       const sourceHash = createHash('sha256').update(readFileSync(FZK)).digest('hex');
       const r = await ok('ifcsheet_issue_set', { document_id: id, directory: out, handover: true, annotated_ifc: true });
@@ -330,7 +344,7 @@ describe.skipIf(missing !== null)('ifcsheet resources, prompts, dry runs and the
     });
 
     it('is off by default, and never overwrites the model that was opened', async () => {
-      const id = await generate();
+      const id = issued;
       const plain = join(tmp, 'issue-plain');
       const r = await ok('ifcsheet_issue_set', { document_id: id, directory: plain, handover: true });
       expect((await readdir(plain)).some((n) => n.endsWith('.ifc'))).toBe(false);
@@ -347,7 +361,7 @@ describe.skipIf(missing !== null)('ifcsheet resources, prompts, dry runs and the
     });
 
     it('refuses a value that is not true or false before anything is written', async () => {
-      const id = await generate();
+      const id = issued;
       const out = join(tmp, 'issue-nothing');
       await refused('ifcsheet_issue_set', { document_id: id, directory: out, annotated_ifc: 'yes' }, /Input validation failed/);
       expect(existsSync(out)).toBe(false);

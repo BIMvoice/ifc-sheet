@@ -33,6 +33,8 @@ export function elementLabel(globalId: string, field: TagField): string | null {
   if (field === 'typeName') return el.typeName() || '?';
   const kind = tagKindOf(el.className());
   const read = (f: TagFieldId): string => String(firstValue(tagToolSourcesOf(el.tagFields, kind, f), (ref) => readStored(ref, el)).value ?? '');
+  // The office's own choice of attribute or property (#788): any element, a door and an IfcSign alike.
+  if (field === 'custom') return read('custom') || '?';
   const name = read('name');
   if (field === 'name') return name || '?';
   // A door or window never reads its Name or a class word: its mark is what the office's sources give, else the one mark the schedule shares (`joinery/opening-marks.ts`).

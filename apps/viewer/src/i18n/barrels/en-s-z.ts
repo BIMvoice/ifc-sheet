@@ -41,6 +41,7 @@ import { tableCorrectionsEn } from '../catalogues/table-corrections.en';
 import { tagFieldsEn } from '../catalogues/tag-fields.en';
 import { tagShowsEn } from '../catalogues/tag-shows.en';
 import { tagCardEn } from '../catalogues/tag-card.en';
+import { tagCustomEn } from '../catalogues/tag-custom.en';
 import { symbolToolFieldsEn } from '../catalogues/symbol-tool-fields.en';
 import { terrainImageryEn } from '../catalogues/terrain-imagery.en';
 import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
@@ -120,6 +121,7 @@ export const enSZ = {
   ...symbolToolFieldsEn,
   ...tagShowsEn,
   ...tagCardEn,
+  ...tagCustomEn,
   ...terrainImageryEn,
   ...titleBlockParamsEn,
   ...titleBlockRoEn,

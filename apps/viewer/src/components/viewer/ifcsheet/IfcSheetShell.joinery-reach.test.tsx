@@ -31,6 +31,7 @@ import { configureElementType, typeOpeningOf } from '@/joinery/type-config-actio
 import { joineryDraftViewId } from '@/joinery/view-draft-id';
 import { IfcSheetShell } from './IfcSheetShell.js';
 import { stepInto, useWallNav } from '../wall/wall-nav.js';
+import { fitWidth } from '../wall/sheet-fit.js';
 
 const FZK = resolve(import.meta.dirname, '../../../test/__fixtures__/AC20-FZK-Haus.ifc');
 const HOUSE = { min: { x: -2, y: -1, z: -2 }, max: { x: 14, y: 8, z: 12 } };
@@ -178,12 +179,13 @@ async function openScheduleCard(): Promise<HTMLElement> {
   const ui = render(<IfcSheetShell />);
   act(() => stepInto(sheetId));
   await wait();
-  const k = Math.min((1280 - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
   const vp = sheet.viewports![0];
   const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]')!;
   assert.ok(canvas, 'the sheet is in front');
+  const fitted = fitWidth(canvas); // the paper is fitted into what the card leaves free
+  const k = Math.min((fitted - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
   act(() => {
-    canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (1280 - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
+    canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (fitted - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
   });
   return ui;
 }

@@ -12,11 +12,10 @@
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { viewShowsHidden } from '@bimvoice/ifcsheet';
+import { drawingWithGround, viewShowsHidden } from '@bimvoice/ifcsheet';
 import { cropDrawing } from './drawing-crop';
 import { interiorCropRect } from './interior-crop';
 import { outlineLines } from './elevation-outline';
-import { drawingWithGround } from './ground';
 import type { InteriorElevation, ProjectView } from './types';
 
 // One rule for the app and the engine's sheets (#627).
