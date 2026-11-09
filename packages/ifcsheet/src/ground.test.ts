@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import { drawingWithGround, EARTH_TONE, GROUND_OVERHANG_M } from './ground.js';

@@ -107,6 +107,7 @@ export async function generateCameraDrawing(input: CameraDrawingInput): Promise<
       mergeLines: true,
       extraLines,
       hiddenLineEdgeTolerancePx: input.hiddenLineEdgeTolerancePx,
+      cameraView: true,
       includeFeatureEdges: input.includeFeatureEdges,
       extraOccluders: input.occluders?.length ? [...input.occluders] : undefined,
       clipPlanes: input.clipPlanes?.length ? input.clipPlanes : undefined,

@@ -24,6 +24,10 @@ import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-
 import { viewCutOptions, viewShowsHidden } from './view-cut-options.js';
 import { automaticDepthOfSpan, planProjectionBands, viewProjection } from './plan-projection.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
+import { drawingWithGround } from './ground.js';
+import { isTerrainMesh } from './contours.js';
+import { predefinedTypeReader } from './terrain.js';
+import type { IfcDataStore } from '@ifc-lite/parser';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
 const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boolean; flipped: boolean }> = {
@@ -116,17 +120,26 @@ export function sectionConfigFor(view: ProjectView, levels: readonly ProjectLeve
 /** Whether a drawing holds nothing at all: no line, no cut face, no projected face. */
 export const isEmptyDrawing = (d: Drawing2D): boolean => d.lines.length === 0 && d.cutPolygons.length === 0 && d.projectionPolygons.length === 0;
 
+/** The terrain among `meshes` (`isTerrainMesh`, the one rule), told with the PredefinedType `dataStore` states; none without meshes. */
+export function terrainMeshesOf(meshes: readonly MeshData[] | undefined, dataStore?: IfcDataStore | null): MeshData[] {
+  const typeOf = dataStore ? predefinedTypeReader(dataStore) : undefined;
+  return (meshes ?? []).filter((m) => isTerrainMesh(m, typeOf));
+}
+
 /**
  * The drawing of every view in `views` that has a plane, by view id. Views
  * whose drawing fails are left out and reported through `onError`. A plan
  * left with nothing to draw is reported through `onEmpty`. `floors` (`storeyFloorsOf`, from the model's spatial
  * hierarchy) scopes a plan's projection to its storey, as the app does.
+ * `terrain` (`terrainMeshesOf`) is the ground the building stands on, which `meshes` leave out (#683): a section and a facade
+ * elevation are cut from both and drawn with the ground as the app draws it (`drawingWithGround`: the earth cut, the ground line).
  */
 export async function generateViewDrawings(
   views: readonly ProjectView[], meshes: MeshData[], levels: readonly ProjectLevel[], extent: ModelExtent,
   onError: (view: ProjectView, error: unknown) => void = () => {},
   onEmpty: (view: ProjectView) => void = () => {},
   floors: readonly number[] | null = null,
+  terrain: readonly MeshData[] = [],
 ): Promise<Map<string, Drawing2D>> {
   const out = new Map<string, Drawing2D>();
   if (meshes.length === 0) return out;
@@ -151,10 +164,14 @@ export async function generateViewDrawings(
         // Every view is cut as the app cuts it (`viewCutOptions`): hidden edges classified (an opaque wall hides what is behind
         // it and splits the lines it crosses, #6615) and the Rust outline of non-extruded geometry (#623, #627).
         const cut = viewCutOptions(projection, typeof meshOutline2dFn === 'function');
-        const generated = await generator.generate(meshes, config, {
+        // The ground is drawn in a section and a facade elevation (an interior elevation looks at a wall from inside).
+        const grounded = terrain.length > 0 && (view.kind === 'section' || (view.kind === 'elevation' && !view.interior));
+        const cutFrom = grounded ? [...meshes, ...terrain] : meshes;
+        const raw = await generator.generate(cutFrom, config, {
           includeHiddenLines: cut.includeHiddenLines, includeProjection: cut.includeProjection, includeEdges: cut.includeEdges, mergeLines: cut.mergeLines,
           outlineProvider: cut.outline && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
         });
+        const generated = grounded ? drawingWithGround(raw, view.kind as 'elevation' | 'section') : raw;
         // The hidden lines it found are drawn unless the view leaves them out (`viewShowsHidden`, as the app).
         const drawing = viewShowsHidden(view) ? generated : { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') };
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);

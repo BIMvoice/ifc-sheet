@@ -5,7 +5,7 @@
 /**
  * The terrain a project plan leaves out (#683). The engine cuts the building's meshes, which are the storeys' elements without the
  * ground (`storeyElementIds`), so a plan does not cut the terrain Bonsai puts in a storey. Sections and elevations keep it: the ground
- * drawing (`ground.ts`) turns it into the earth cut and the ground line. The terrain is told by the one rule the engine uses
+ * drawing (`drawingWithGround`, `packages/ifcsheet/src/ground.ts`) turns it into the earth cut and the ground line. The terrain is told by the one rule the engine uses
  * (`isTerrainMesh`): a tree or a boring point is not.
  */
 

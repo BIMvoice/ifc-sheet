@@ -20,6 +20,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
 import { buildDepthRaster, ownerKey, type DepthRaster } from './hidden-line-raster.js';
+import { PIXEL, hiddenByItself, ownSurfaceBeside, rasterPixel } from './hidden-line-own.js';
 import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -51,6 +52,12 @@ export interface VisibilityResult {
 export interface ExteriorViewOptions {
   /** Pixels of tolerance for an edge lying on its occluder's outline (`HiddenLineOptions.edgeTolerancePx`). Absent: none. */
   hiddenLineEdgeTolerancePx?: number;
+  /**
+   * The drawing is a view from a camera (an axonometric, the 3D-view PDF), not a section, a plan or an elevation. Such
+   * a view keeps the line work it always had for curved surfaces: no outline along smooth edges and no own surface
+   * depth for it (`silhouette-lines.ts`, #557), which on an axonometric let lines show past what is in front of them.
+   */
+  cameraView?: boolean;
   /**
    * Also draw the creases facing the viewer, not only the silhouette
    * (`EdgeExtractor.extractExteriorEdges`): the corners of a wall or a slab seen
@@ -110,26 +117,6 @@ function lineDepthAt(line: DrawingLine): (t: number) => number {
   return (t: number) => depthStart + (depthEnd - depthStart) * t;
 }
 
-/**
- * Whether a pixel next to (`ix`, `iy`) shows the line's own element (`owner`) at the line's depth (within `depthBias`): the
- * line is then on the edge of its own surface where that surface is seen, even though its own pixel is covered by something
- * in front. A gable wall's top edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge
- * pixel about half the time and the edge printed as dashes along the roof of an elevation. A neighbour that is merely
- * deeper does not count: above a wall top tucked under a roof that slopes away from the viewer every pixel is deeper than
- * the wall, and the wall top stays hidden. Nor does another element's surface at the same depth: the top of a wall under a
- * cut wall is level with the floor beside it, and with any surface counting its edge was drawn along every cut wall's foot.
- */
-function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, lineDepth: number, owner: number, depthBias: number): boolean {
-  const { buffer, owners, width, height } = raster;
-  for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
-    for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) {
-      const i = y * width + x;
-      if (owners[i] === owner && Math.abs(buffer[i] - lineDepth) <= depthBias) return true;
-    }
-  }
-  return false;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // HIDDEN LINE CLASSIFIER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -180,6 +167,11 @@ export class HiddenLineClassifier {
       bounds,
     );
     this.built = true;
+  }
+
+  /** Whether `line` is hidden somewhere by its own element's surface (`hiddenByItself`): only then does own depth matter. */
+  coveredByItself(line: DrawingLine): boolean {
+    return this.raster !== null && hiddenByItself(this.raster, line, Math.max(2, this.options.samplesPerLine), this.options.depthBias);
   }
 
   /**
@@ -339,34 +331,8 @@ export class HiddenLineClassifier {
 
     const { bounds, width, height, buffer } = raster;
 
-    // A sample outside the raster bounds has no occluder information: the
-    // raster only covers where occluders rasterized (plus margin), so had it
-    // extended here the pixels would read Infinity (visible). Clamping onto
-    // a border pixel instead can wrongly HIDE a line far from any occluder,
-    // e.g. when a straddling occluder's self-computed bounds collapse to a
-    // sliver of in-window vertices. Visible is the only safe default: it can
-    // at worst under-hide, never erase real geometry.
-    if (
-      point.x < bounds.min.x ||
-      point.x > bounds.max.x ||
-      point.y < bounds.min.y ||
-      point.y > bounds.max.y
-    ) {
-      return true;
-    }
-
-    // Convert to pixel coordinates
-    const px = ((point.x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
-    const py = ((point.y - bounds.min.y) / (bounds.max.y - bounds.min.y)) * (height - 1);
-    if (!Number.isFinite(px) || !Number.isFinite(py)) return true;
-
-    // Clamp to guard the floating-point edge at bounds.max.
-    // A pixel holds the depth at its centre, half a pixel past its corner, so
-    // the last column and row are centred outside the bounds and nothing inside
-    // them ever fills them: a point on the far edge reads the pixel before
-    // (Refs #557, a purlin ending at the verge of FZK's roof showed through).
-    const ix = Math.max(0, Math.min(width - 2, Math.floor(px)));
-    const iy = Math.max(0, Math.min(height - 2, Math.floor(py)));
+    if (!rasterPixel(raster, point)) return true;
+    const ix = PIXEL[0], iy = PIXEL[1];
 
     // Line is visible if it's at or in front of the depth buffer at the sample's
     // pixel. With a tolerance, the pixels within `reach` of it are consulted too
