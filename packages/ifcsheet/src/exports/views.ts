@@ -47,5 +47,8 @@ export type { MakeDraftOptions } from '../make-draft.js';
 // Terrain contours on a site plan (#182): marching triangles over a TIN, and the one function that puts them on a plan drawing
 export { CONTOUR_DEFAULT_INTERVAL, CONTOUR_MAJOR_EVERY, MAX_CONTOUR_LEVELS, contourLevels, contourLines, isTerrainMesh, type ContourLine } from '../contours.js';
 export { predefinedTypeReader } from '../terrain.js';
+export { terrainMeshesOf } from '../view-drawings.js';
+// The ground of an elevation and a section (#683): one heavy line at the top of the terrain, the cut ground in an earth tone; the app and the engine draw it with this
+export { EARTH_TONE, GROUND_OVERHANG_M, drawingWithGround } from '../ground.js';
 export { contourIntervalOf, withContours } from '../contour-drawing.js';
 export { CONTOUR_IFC_TYPE, CONTOUR_LABEL_MM, contourLabelsOf, layoutContourLabels, type ContourLabel, type ContourText } from '../contour-labels.js';
