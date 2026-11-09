@@ -61,12 +61,14 @@ interface SheetCanvasProps {
   dropView?: ProjectView | null;
   /** The model's extent: what a dropped view's outline is sized by. */
   extent?: ModelExtent | null;
+  /** Width in px, from the canvas's right edge, that a card floating over it covers right now: Fit leaves it free. */
+  coveredRight?: (canvas: HTMLElement) => number;
 }
 
 const ZOOM = { min: 0.05, max: 40 } as const;
 const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
 
-export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey, dropView = null, extent = null }, paperRef) {
+export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey, dropView = null, extent = null, coveredRight }, paperRef) {
   const host = useRef<HTMLDivElement>(null);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
@@ -78,7 +80,9 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   useLayoutEffect(() => {
     const el = host.current;
     if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
+    const { width: full, height } = el.getBoundingClientRect();
+    // The card floats over the canvas: fit into what it leaves free, never into less than half.
+    const width = full - Math.min(coveredRight?.(el) ?? 0, full / 2);
     const k = Math.max(ZOOM.min, Math.min((width - 24) / paper.w, (height - 24) / paper.h));
     setPan({ k, x: (width - paper.w * k) / 2, y: (height - paper.h * k) / 2 });
   }, [paper.w, paper.h, fitKey]);

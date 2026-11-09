@@ -251,6 +251,12 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     }
   }, [choose]);
   const cardHost = useRef<HTMLDivElement>(null);
+  // How far in from the canvas's right edge the open card reaches: its width, its right-3 gap and 12px more. It is found
+  // in the DOM, not through `cardHost`, because the canvas first fits before that ref is attached.
+  const cardCovers = (canvas: HTMLElement) => {
+    const card = canvas.closest('main')?.querySelector(':scope > [data-wall-card-host]')?.firstElementChild;
+    return card ? card.getBoundingClientRect().width + 24 : 0;
+  };
   const hatches = useSelectedHatches();
   useEffect(() => {
     if (settingsKey === 0) return;
@@ -331,10 +337,10 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
-              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} coveredRight={cardCovers} />
             </div>
           )}
-          <div ref={cardHost} className={WALL_CARD_HOST}>
+          <div ref={cardHost} data-wall-card-host className={WALL_CARD_HOST}>
             {tool ? <InfoCard tool={tool} drawingOn={focusView?.name ?? null} onDone={stopTool} />
               : hatches.length > 0 && !papering && !titling && !revising ? <SelectedHatchCard hatches={hatches} drawingOn={focusView?.name ?? null} />
               : focusView ? null
