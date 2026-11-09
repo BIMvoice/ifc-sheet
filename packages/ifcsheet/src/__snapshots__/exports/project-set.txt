@@ -88,6 +88,7 @@ allSymbols: value
 angularLayout: value
 annotationAtFactor: value
 annotationFactor: value
+annotationFrameOf: value
 arcPoints: value
 arrowMark: value
 asTextFrame: value
