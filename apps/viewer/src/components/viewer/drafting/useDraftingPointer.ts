@@ -110,6 +110,7 @@ function orthoPivot(grip: Grip): Pt {
 export function useDraftingPointer({ containerRef, transform, setTransform, axis, entityShapes, references, grips = [] }: Params) {
   const snapOn = useDraftingSession((s) => s.snap);
   const trackOn = useTrackingPref((s) => s.on);
+  const commandId = useDraftingSession((s) => s.commandId);
   const track = useRef<TrackState>(EMPTY_TRACK);
   const dwell = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<DraftingPointerState>({ tracking: NO_TRACKING, cursor: null, snap: null, hoverId: null, window: null, lasso: null, gripDrag: null, gripHover: null, selectionDrag: null });
@@ -329,6 +330,13 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
   }, [transform, axis, state.gripDrag, commitGrip]);
 
   useEffect(() => () => { if (dwell.current) clearTimeout(dwell.current); }, []);
+
+  // Acquired tracking points belong to the tool that acquired them: when it ends (placed, Esc) or another starts, they go.
+  useEffect(() => {
+    track.current = EMPTY_TRACK;
+    if (dwell.current) { clearTimeout(dwell.current); dwell.current = null; }
+    setState((prev) => (prev.tracking === NO_TRACKING ? prev : { ...prev, tracking: NO_TRACKING }));
+  }, [commandId]);
 
   // Esc while a selection is dragged or turned puts it back where it was (nothing has changed yet) and keeps it selected (#168).
   // Registered once, at mount, so it comes before the drafting keys' Esc, which would clear the selection.
