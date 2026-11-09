@@ -17,6 +17,7 @@ import type { ModelExtent } from '@/project/drawing-set';
 import { addSchedule } from '@/joinery/schedules';
 import { manyTypes } from '@/joinery/schedule-fit.test';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 
 /** #186: a schedule's settings open on a double-click, and one that does not fit the paper offers to be split. */
 
@@ -48,13 +49,15 @@ describe('double-clicking a schedule on the Wall (#186)', () => {
   it('opens its settings: the card comes forward in place of another panel, with the name ready to type over', () => {
     const { sheet } = hung(2);
     const ui = mount(sheet, 2);
+    // The paper was fitted on arrival, into what the card then showing left free: measure before the Paper card replaces it.
+    const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]')!;
+    const fitted = fitWidth(canvas);
     click(named(ui, 'Paper')!);
     assert.notEqual(document.activeElement?.tagName, 'INPUT', 'the paper card is up, no name field has focus');
-    const k = Math.min((1280 - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
+    const k = Math.min((fitted - 24) / paperOf(sheet).w, (800 - 24) / paperOf(sheet).h);
     const vp = sheet.viewports![0];
-    const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]')!;
     act(() => {
-      canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (1280 - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
+      canvas.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: (fitted - paperOf(sheet).w * k) / 2 + vp.x * k, clientY: (800 - paperOf(sheet).h * k) / 2 + vp.y * k }));
     });
     const focused = document.activeElement as HTMLInputElement | null;
     assert.equal(focused?.tagName, 'INPUT');
