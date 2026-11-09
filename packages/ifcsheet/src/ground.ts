@@ -23,7 +23,7 @@ import type { Bounds2D, Drawing2D, DrawingLine, DrawingPolygon, Point2D } from '
 /** RGBA, 0..1: a pale earth tone for the cut ground. */
 export const EARTH_TONE: [number, number, number, number] = [0.86, 0.8, 0.7, 1];
 /** How far below the building the ground goes, as a share of the building's larger side. */
-const DEPTH_SHARE = 0.06;
+export const DEPTH_SHARE = 0.06;
 /** A geographic element is ground when it is this wide, as a share of everything else. */
 const TERRAIN_SPAN = 0.6;
 const EPS = 1e-6;
