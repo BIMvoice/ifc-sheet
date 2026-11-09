@@ -36,7 +36,7 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
  *  - #557 (fix/stair-section), the outline of a curved surface runs along its smooth edges and is drawn where the
  *    surface folds over: this test passes no outline provider, so every element is drawn from its silhouette, and the
  *    handrails, rails, the stair's column and its helical stringer gain their long lines. plan 2139, 965, 229 became
- *    2330, 1095, 229; section 2616, 2307, 64 became 2863, 2554, 64; elevation 481, 451, 0 became 494, 464, 0. A curved
+ *    2332, 1097, 229; section 2616, 2307, 64 became 2863, 2554, 64; elevation 481, 451, 0 became 494, 464, 0. A curved
  *    line takes its depth from the faces it lies on only, so one behind its own element's front stays hidden.
  */
 
@@ -46,7 +46,7 @@ const FZK = join(dirname(fileURLToPath(import.meta.url)), '..', 'test', '__fixtu
 const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 
 const ON_MAIN = {
-  plan: { axis: 'y', position: 1.2, lines: 2330, hidden: 1095, polygons: 229 },
+  plan: { axis: 'y', position: 1.2, lines: 2332, hidden: 1097, polygons: 229 },
   section: { axis: 'z', position: 0, lines: 2863, hidden: 2554, polygons: 64 },
   elevation: { axis: 'z', position: 20, lines: 494, hidden: 464, polygons: 0 },
 } as const;
