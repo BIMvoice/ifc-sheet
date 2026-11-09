@@ -50,7 +50,7 @@ import {
 import { windingSign } from './mesh-winding.js';
 import { weldIndices } from './mesh-weld.js';
 import { onClipPlane, type ClipPlane } from './clip-rim.js';
-import { registerSmoothEdge, smoothEdgeOnOutline, type MeshTopology } from './smooth-fold.js';
+import { registerSmoothEdge, smoothEdgeMayFold, smoothEdgeOnOutline, type MeshTopology } from './smooth-fold.js';
 
 /**
  * Dot-product deadband for the silhouette test (issue #979).
@@ -108,8 +108,9 @@ export class EdgeExtractor {
    * Extract all feature edges from a mesh: creases and boundaries, and with
    * `withSmooth` the smooth edges a curved surface's outline can run along
    * (#557), which `extractSilhouettes` keeps only where the surface folds.
+   * With `view`, only the smooth edges that can fold seen along it.
    */
-  extractEdges(mesh: MeshData, withSmooth = false): EdgeData[] {
+  extractEdges(mesh: MeshData, withSmooth = false, view?: Vec3): EdgeData[] {
     const { positions, expressId, ifcType, modelIndex, origin } = mesh;
     // Adjacency is by POSITION, not by buffer index: tessellated meshes (and
     // every mesh the projection clipper emits) repeat a vertex per triangle,
@@ -163,10 +164,8 @@ export class EdgeExtractor {
     const edges: EdgeData[] = [];
     const topo: MeshTopology = { positions, origin, indices, normals: faceNormals, edgeFaces: edgeMap };
 
+    const smoothView = view && vec3Normalize(view);
     for (const [, edgeInfo] of edgeMap) {
-      const v0 = this.getVertex(positions, edgeInfo.v0Idx, origin);
-      const v1 = this.getVertex(positions, edgeInfo.v1Idx, origin);
-
       let face0Normal: Vec3 | null = null;
       let face1Normal: Vec3 | null = null;
       let dihedralAngle = 0;
@@ -194,11 +193,12 @@ export class EdgeExtractor {
       // (a tube, a column, a helical stringer) runs along smooth edges only, so dropping them left FZK's handrails, rails
       // and stair column without their long lines in a section, only their end caps (#557). A diagonal across one flat
       // face can never be an outline, so it goes.
-      const smooth = type === 'smooth' && withSmooth && edgeInfo.faceIndices.length === 2 && dihedralAngle > SMOOTH_OUTLINE_MIN_ANGLE;
+      const smooth = type === 'smooth' && withSmooth && edgeInfo.faceIndices.length === 2 && dihedralAngle > SMOOTH_OUTLINE_MIN_ANGLE
+        && (!smoothView || smoothEdgeMayFold(face0Normal!, face1Normal!, smoothView, SILHOUETTE_EPSILON));
       if (type !== 'smooth' || smooth) {
         const edge: EdgeData = {
-          v0,
-          v1,
+          v0: this.getVertex(positions, edgeInfo.v0Idx, origin),
+          v1: this.getVertex(positions, edgeInfo.v1Idx, origin),
           face0Normal,
           face1Normal,
           dihedralAngle,

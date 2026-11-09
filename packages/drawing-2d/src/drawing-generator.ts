@@ -293,7 +293,7 @@ export class Drawing2DGenerator {
               );
             } else {
               projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, bands, viewDir, {
-                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvesOwnDepth: opts.hiddenLineEdgeTolerancePx === undefined,
+                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView,
               }));
             }
           }
@@ -348,7 +348,7 @@ export class Drawing2DGenerator {
       // would both skip them AND drop them from the recombination below.
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
-      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds));
+      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l)));
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines

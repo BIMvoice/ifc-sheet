@@ -46,24 +46,57 @@ export function registerSmoothEdge(edge: EdgeData, topo: MeshTopology, f0: numbe
   smoothEdges.set(edge, { topo, f0, f1 });
 }
 
+/** The side of a face seen along `view`: toward the viewer (-1) under `-epsilon`, away (1) over `epsilon`, edge-on (0) between. */
+function sideOf(n: Vec3, view: Vec3, epsilon: number): number {
+  const d = vec3Dot(n, view);
+  return d < -epsilon ? -1 : d > epsilon ? 1 : 0;
+}
+
+/**
+ * Whether a smooth edge between faces of normals `n0` and `n1` can be on the outline seen along `view` at all: only
+ * when one face turns toward the viewer and the other does not. Almost every smooth edge of a mesh fails this, so the
+ * caller drops it before building anything for it.
+ */
+export function smoothEdgeMayFold(n0: Vec3, n1: Vec3, view: Vec3, epsilon: number): boolean {
+  const s0 = sideOf(n0, view, epsilon);
+  const s1 = sideOf(n1, view, epsilon);
+  return s0 !== s1 && (s0 === -1 || s1 === -1);
+}
+
 /**
  * Whether the smooth `edge` is on the outline seen along `view` (normalised).
  * A face is toward the viewer under `-epsilon`, away over `epsilon`, edge-on between.
  */
 export function smoothEdgeOnOutline(edge: EdgeData, view: Vec3, epsilon: number): boolean {
+  if (!edge.face0Normal || !edge.face1Normal || !smoothEdgeMayFold(edge.face0Normal, edge.face1Normal, view, epsilon)) return false;
+  const s0 = sideOf(edge.face0Normal, view, epsilon);
+  const s1 = sideOf(edge.face1Normal, view, epsilon);
+  if (s0 !== 0 && s1 !== 0) return true; // one toward the viewer, one away
   const entry = smoothEdges.get(edge);
   if (!entry) return false;
   const { topo, f0, f1 } = entry;
-  const side = (f: number): number => {
-    const d = vec3Dot(topo.normals[f], view);
-    return d < -epsilon ? -1 : d > epsilon ? 1 : 0;
-  };
-  const s0 = side(f0);
-  const s1 = side(f1);
-  if (s0 === s1) return false;
-  if (s0 !== 0 && s1 !== 0) return true; // one toward the viewer, one away
-  if (s0 === 1 || s1 === 1) return false; // away and edge-on: no face toward the viewer here
+  const side = (f: number): number => sideOf(topo.normals[f], view, epsilon);
   return foldsBeyond(topo, s0 === -1 ? f0 : f1, s0 === -1 ? f1 : f0, edge, view, side);
+}
+
+/** The two faces of a smooth outline `edge` and its mesh, for its own surface depth (`silhouette-lines.ts`); undefined for an edge that is not smooth. */
+export function smoothEdgeFaces(edge: EdgeData): { seeds: [number, number]; topo: MeshTopology } | undefined {
+  const entry = smoothEdges.get(edge);
+  return entry && { seeds: [entry.f0, entry.f1], topo: entry.topo };
+}
+
+/** The faces sharing an edge with each face of `topo`: those of face `f` are `faces[start[f]]` up to `faces[start[f + 1]]`. */
+export function faceAdjacency(topo: MeshTopology): { start: Int32Array; faces: Int32Array } {
+  const n = topo.normals.length;
+  const start = new Int32Array(n + 1);
+  for (const { faceIndices } of topo.edgeFaces.values()) for (const f of faceIndices) start[f + 1] += faceIndices.length - 1;
+  for (let f = 0; f < n; f++) start[f + 1] += start[f];
+  const faces = new Int32Array(start[n]);
+  const fill = start.slice(0, n);
+  for (const { faceIndices } of topo.edgeFaces.values()) {
+    for (const f of faceIndices) for (const h of faceIndices) if (h !== f) faces[fill[f]++] = h;
+  }
+  return { start, faces };
 }
 
 /**
