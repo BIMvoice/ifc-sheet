@@ -43,6 +43,7 @@ import { meshSilhouetteLines } from './silhouette-lines.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
+import { dropInsideCutFaces } from './cut-face-occlusion.js';
 import { dropOutlierProjectionLines } from './projection-outliers.js';
 import { boundsEmpty, boundsExtendLine } from './math.js';
 
@@ -348,7 +349,8 @@ export class Drawing2DGenerator {
       // would both skip them AND drop them from the recombination below.
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
-      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l)));
+      // A cut face hides what lies behind it, though it is not in the depth buffer: the pieces inside one are left out (#749).
+      const classified = dropInsideCutFaces(this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l))), cutPolygons);
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines

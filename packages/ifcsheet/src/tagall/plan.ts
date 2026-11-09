@@ -121,14 +121,18 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const swings = input.targets.filter((t) => /^ifcdoor/i.test(t.className)).map((t): LayoutElement => ({ id: String(t.renderId), ring: swingOf(t.ring) }));
   const sections = pieceRects(symbolPieces(input.existing, input.reader), 0.2 * at.textHeight);
   // Everything a label keeps clear of sits on a grid (`labels/rect-index.ts`): a place is tested against the boxes near it, not against every box of the plan.
-  const base = [...input.rectsOf(input.existing), ...sections];
+  const placed = input.rectsOf(input.existing);
+  const base = [...placed, ...sections];
   const index = new RectIndex(4 * at.textHeight);
   for (const r of base) index.add(r);
   const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: index, paperUnit: at.paperUnit };
   const spots = layoutLabels(items, scene);
   // What the rooms keep clear of: the same boxes and the marks drawn (a mark that was placed but not drawn, outside a detail's crop, is not one).
   const roomIndex = new RectIndex(4 * at.textHeight);
-  for (const r of base) roomIndex.add(r);
+  // A room tag keeps half its text height clear of what is already on the view, wherever it goes, as one that does not fit does
+  // (`SPILL_GAP`, #796); the label clearance alone let FZK's Galerie tag sit 1.1 mm beside a note put where it goes.
+  for (const r of placed) roomIndex.add(growRect(r, Math.max(0, SPILL_GAP * at.textHeight - clear)));
+  for (const r of sections) roomIndex.add(r);
   for (const r of input.obstacles ?? []) roomIndex.add(r);
   // What a room tag that does not fit moves clear of: real texts only (the notes, tags and labels drawn, never a door swing or a frame), and not over a cut wall.
   const textIndex = new RectIndex(4 * at.textHeight);

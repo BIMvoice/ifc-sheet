@@ -25,6 +25,15 @@ const RAILING = 49831;
 const STAIR = 14502;
 
 const length = (l: DrawingLine) => Math.hypot(l.line.end.x - l.line.start.x, l.line.end.y - l.line.start.y);
+/** Whether (x, y) is inside the ring (even-odd). */
+const inside = (ring: readonly { x: number; y: number }[], x: number, y: number) => {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j], b = ring[i];
+    if ((a.y > y) !== (b.y > y) && x < a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y)) hit = !hit;
+  }
+  return hit;
+};
 const visibleOf = (d: Drawing2D, id: number) => d.lines.filter((l) => l.entityId === id && l.visibility === 'visible');
 
 describe.skipIf(missing !== null)('the spiral stair in Section A-A of AC20-FZK-Haus (#557)', () => {
@@ -47,6 +56,19 @@ describe.skipIf(missing !== null)('the spiral stair in Section A-A of AC20-FZK-H
 
   it('draws the stair column from the floor to its top, not hidden by itself', () => {
     const vertical = visibleOf(sectionA, STAIR).filter((l) => Math.abs(l.line.end.x - l.line.start.x) < 1e-3);
-    expect(Math.max(0, ...vertical.map(length))).toBeGreaterThan(3);
+    // One side of the column, its pieces bottom to top. The upper floor slab is cut solid in front of the column (#749: a cut
+    // face hides what lies behind it), so the column is broken there and only there: every gap lies inside a cut slab.
+    const xs = [...new Set(vertical.map((l) => Math.round(l.line.start.x * 1000)))];
+    const sides = xs.map((x) => vertical.filter((l) => Math.round(l.line.start.x * 1000) === x)
+      .map((l) => [Math.min(l.line.start.y, l.line.end.y), Math.max(l.line.start.y, l.line.end.y)]).sort((a, b) => a[0] - b[0]));
+    const drawn = (pieces: number[][]) => pieces.reduce((sum, [lo, hi]) => sum + hi - lo, 0);
+    const side = sides.reduce((a, b) => (drawn(b) > drawn(a) ? b : a), [] as number[][]);
+    expect(drawn(side)).toBeGreaterThan(3);
+    const x = xs[sides.indexOf(side)] / 1000;
+    for (let k = 1; k < side.length; k++) {
+      const y = (side[k - 1][1] + side[k][0]) / 2;
+      expect(side[k][0] - side[k - 1][1]).toBeLessThan(0.5);
+      expect(sectionA.cutPolygons.some((q) => q.ifcType === 'IfcSlab' && inside(q.polygon.outer, x, y)), `the gap at y ${y.toFixed(2)} lies inside a cut slab`).toBe(true);
+    }
   });
 });
