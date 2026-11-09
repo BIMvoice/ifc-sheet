@@ -20,7 +20,7 @@ import { WALL_FIELD } from './wall-type';
 /** The words of the choices; the IFC attribute is named as the standard names it (Name). */
 const OPTION: Record<TagField, TranslationKey> = {
   mark: 'tagShows.mark', name: 'tagShows.name', typeName: 'atype.tag.typeName', class: 'tagShows.class',
-  classification: 'atype.tag.classification', classificationTitle: 'atype.tag.classificationTitle',
+  classification: 'atype.tag.classification', classificationTitle: 'atype.tag.classificationTitle', custom: 'tagCustom.option',
 };
 
 /** The project keeps the choice; the session is told too, so a running tool's sentence follows it. */
