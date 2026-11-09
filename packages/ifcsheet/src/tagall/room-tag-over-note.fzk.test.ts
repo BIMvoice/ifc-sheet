@@ -49,5 +49,8 @@ describe.skipIf(missing !== null)('a room tag over a NOTE on AC20-FZK-Haus (#557
     const a = boxOf(again), b = boxOf(note);
     const overlap = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
     expect(overlap, 'the tag box and the note box share no area').toBe(0);
+    // A clear gap of at least half the text height (1.25 mm of a 2.5 mm line on paper), so the note and the tag do not read as one block.
+    const gap = Math.max(a.y0 - b.y1, b.y0 - a.y1, a.x0 - b.x1, b.x0 - a.x1);
+    expect(gap, 'the tag keeps half a text height clear of the note').toBeGreaterThanOrEqual(0.5 * first.shape.height - 1e-9);
   }, 600_000);
 });

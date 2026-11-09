@@ -36,6 +36,9 @@ import { roomLabelOutside } from './room-outside.js';
 import { roomLabelSpill } from './room-spill.js';
 import { ALL_TAG_PARTS, AREA_FIELDS, MARK_TYPE_ID, ROOM_TYPE_ID, type TagAllSummary, type TagParts } from './types.js';
 
+/** A moved room tag keeps at least half its text height clear of the text it avoids, so the two do not read as one block of text (the label clearance, 0.75 mm, is under a third of a 2.5 mm line). */
+const SPILL_GAP = 0.5;
+
 export interface TagAllDrafts {
   /** Every element the view draws, and the doors and windows among them. */
   elements: readonly ViewElement[];
@@ -180,7 +183,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     }
     // Too big for its room, with no place inside: it still keeps off the texts already drawn, beside its deepest point with a leader to it; none free keeps the deepest point.
     if (!spot.fits && !tip) {
-      const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, textIndex, clear, { crop: input.crop, walls });
+      const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, textIndex, Math.max(clear, SPILL_GAP * at.textHeight), { crop: input.crop, walls });
       if (spill) { spot = { centre: spill.centre, fits: false }; tip = spill.tip; }
     }
     const placed = labelDraft(env, input.types.room, room.guid, spot.centre, at, undefined, extras);
