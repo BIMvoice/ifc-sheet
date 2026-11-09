@@ -52,7 +52,5 @@ export function makeContext(viewId: string, inputs: ViewInputs & InteractiveInpu
   };
 }
 
-/** Which way text and marks grow and which way x runs on screen, for a view cut on `axis`: plans draw drawing-y downward on screen, a side view is mirrored. */
-export function annotationFrameOf(axis: SectionAxisName): { up: 1 | -1; right: 1 | -1 } {
-  return { up: axis === 'down' ? -1 : 1, right: axis === 'side' ? -1 : 1 };
-}
+/** Which way text and marks grow and which way x runs on screen for a view cut on an axis: the engine's `annotationFrameOf`, one function for the app and the headless annotate step. */
+export { annotationFrameOf } from './frame';

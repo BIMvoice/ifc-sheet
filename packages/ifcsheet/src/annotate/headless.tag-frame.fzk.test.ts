@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { AXIS_NAME, annotationFrameOf } from '../drawing-frame.js';
 import { generateDefaultSet, type DefaultSet } from '../default-set.js';
 import type { Pt } from '../draft-types.js';
 import { textBoxIn } from '../dimall/measure.js';
@@ -64,5 +65,50 @@ describe.skipIf(missing !== null)('annotateSetHeadless measures a room tag in th
     // The box a later label keeps clear of is the same text: it sits on the point, within the text frame's own padding (a fraction of a line).
     const box = textBoxIn(inputs.reader.measure, shape.p, shape.text, shape.height, shape.rotation, shape.frame).map((p) => p.y);
     expect(Math.abs((Math.min(...box) + Math.max(...box)) / 2 - centre.y)).toBeLessThan(0.5 * shape.height);
+  }, 300_000);
+
+  // The frame goes by the drawing's cut axis, as the app's `annotationFrameOf` (one function for both) and the sheet's print do, not by the view's kind.
+  const frameOfCall = async (id: string, kind?: 'section') => {
+    const { all, views } = annotatableViews(set.document);
+    const view = views.find((v) => v.id === id);
+    const source = all.find((v) => v.id === id);
+    if (!view || !source) throw new Error(`no view ${id}`);
+    const drawing = (await generateViewDrawings([source], model.buildingMeshes, set.levels, model.extent!)).get(id);
+    if (!drawing) throw new Error(`${view.name} has no drawing`);
+    const asked = kind ? { ...view, kind } : view;
+    const call = { view: asked, drawing, placed: [], newId: () => 'x', locale: 'en' as const };
+    const readers = readersOf(model, set, [], undefined);
+    const tag = readers.tagall(call), dim = readers.dimall(call);
+    if (!tag || !dim) throw new Error('no inputs');
+    const expected = annotationFrameOf(AXIS_NAME[drawing.config.plane.axis]);
+    return { expected, frames: [tag.reader.measure.frame, dim.reader.measure.frame], up: tag.env.up };
+  };
+
+  it('a plan: up = -1, right = 1', async () => {
+    const plan = annotatableViews(set.document).views.find((v) => v.kind === 'plan');
+    const r = await frameOfCall(plan!.id);
+    expect(r.expected).toEqual({ up: -1, right: 1 });
+    for (const f of r.frames) expect(f).toMatchObject(r.expected);
+    expect(r.up).toBe(r.expected.up);
+  }, 300_000);
+
+  it('an East or West elevation is mirrored: right = -1 as the app says', async () => {
+    const { views } = annotatableViews(set.document);
+    let seen = 0;
+    for (const v of views.filter((x) => x.kind === 'elevation')) {
+      const r = await frameOfCall(v.id);
+      for (const f of r.frames) expect(f, v.name).toMatchObject(r.expected);
+      expect(r.up, v.name).toBe(r.expected.up);
+      if (r.expected.right === -1) seen++;
+    }
+    expect(seen, 'FZK has a side elevation').toBeGreaterThan(0);
+  }, 300_000);
+
+  it('a section saved from a horizontal cut runs up = -1 like the plan it cuts', async () => {
+    const plan = annotatableViews(set.document).views.find((v) => v.kind === 'plan');
+    const r = await frameOfCall(plan!.id, 'section');
+    expect(r.expected.up).toBe(-1);
+    for (const f of r.frames) expect(f).toMatchObject(r.expected);
+    expect(r.up).toBe(-1);
   }, 300_000);
 });
