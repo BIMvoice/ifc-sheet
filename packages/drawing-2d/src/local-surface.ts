@@ -76,21 +76,20 @@ function walkLocal(mesh: MeshData, near: LocalSurface, add: (faces: Float64Array
   }
 }
 
-const scratch: number[] = [];
+const scratch = new Float64Array(3 * STRIDE);
 
 /** Project triangle `f` into `local.pool`, growing it as needed. */
 function project(mesh: MeshData, local: LocalFaces, f: number): void {
-  scratch.length = 0;
-  projectTriangle(mesh, local.plane, f, scratch);
-  if (local.used + scratch.length > local.pool.length) {
-    const grown = new Float64Array(Math.max(2 * local.pool.length, local.used + scratch.length, 64 * STRIDE));
+  const n = projectTriangle(mesh, local.plane, f, scratch, 0) * STRIDE;
+  if (local.used + n > local.pool.length) {
+    const grown = new Float64Array(Math.max(2 * local.pool.length, local.used + n, 64 * STRIDE));
     grown.set(local.pool.subarray(0, local.used));
     local.pool = grown;
   }
-  local.pool.set(scratch, local.used);
+  local.pool.set(scratch.subarray(0, n), local.used);
   local.first[f] = local.used;
-  local.count[f] = scratch.length / STRIDE;
-  local.used += scratch.length;
+  local.count[f] = n / STRIDE;
+  local.used += n;
 }
 
 /** Points along a curved line where its own surface depth is read. */
