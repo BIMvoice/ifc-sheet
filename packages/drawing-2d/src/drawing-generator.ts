@@ -39,6 +39,7 @@ import { GPUSectionCutter } from './gpu-section-cutter.js';
 import { projectProfiles } from './profile-projector.js';
 import { bandsWithEdgeTolerance, getViewDirectionForPlane } from './projection-bands.js';
 import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } from './outline-depth.js';
+import { meshSilhouetteLines } from './silhouette-lines.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
@@ -291,11 +292,9 @@ export class Drawing2DGenerator {
                 ),
               );
             } else {
-              const edges = this.edgeExtractor.extractEdges(mesh);
-              const silhouettes = this.edgeExtractor.extractExteriorEdges(edges, viewDir, opts.includeFeatureEdges, opts.clipPlanes);
-              projectionLines.push(
-                ...this.edgeExtractor.edgesToProjectionLines(silhouettes, config.plane, bands),
-              );
+              projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, bands, viewDir, {
+                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView,
+              }));
             }
           }
         }
@@ -349,7 +348,7 @@ export class Drawing2DGenerator {
       // would both skip them AND drop them from the recombination below.
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
-      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds));
+      const classified = this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l)));
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines
