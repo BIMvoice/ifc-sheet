@@ -147,8 +147,10 @@ describe('facade elevations and sections are unchanged', () => {
     // all four; a face seen edge-on no longer fills a column of the depth raster, and a point on the raster's far edge reads
     // the last pixel that can be filled. Before: north 200, south 246, east 390, west 527, north-deep 206, south-deep 266,
     // east-deep 398, west-deep 481, s1 609, s2 2044, s3 2050 lines.
-    north: '172/0/0/53495229', south: '215/0/0/1673163390', east: '377/0/0/353450951', west: '513/0/0/338119489',
-    'north-deep': '161/0/0/-588991310', 'south-deep': '221/0/0/2015243806', 'east-deep': '389/0/0/2056835847', 'west-deep': '525/0/0/779790265',
+    // Re-recorded for #557 (outline depth, slivers): a line just across a face-grid cell edge from a thin face took the wrong
+    // depth. north, south, north-deep, south-deep, s1 and s2 now end rafter tails where the roof slab hides them (s2 gains 2 lines).
+    north: '172/0/0/-243412298', south: '215/0/0/1533083011', east: '377/0/0/353450951', west: '513/0/0/338119489',
+    'north-deep': '161/0/0/-380554133', 'south-deep': '221/0/0/1875163427', 'east-deep': '389/0/0/2056835847', 'west-deep': '525/0/0/779790265',
     // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
     // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
     // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
@@ -159,7 +161,7 @@ describe('facade elevations and sections are unchanged', () => {
     // north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
     // s3 re-recorded for #557 (curved outlines): the oblique section looks into the spiral stair, and its handrails, rails,
     // column and stringer now draw their long lines (s3 was '2039/39/0/670656729').
-    s1: '621/65/0/929328739', s2: '2062/32/0/1176559827', s3: '2071/39/0/707328083',
+    s1: '621/65/0/-1043390303', s2: '2064/32/0/1996399689', s3: '2071/39/0/707328083',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };
