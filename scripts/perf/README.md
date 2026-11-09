@@ -3619,28 +3619,48 @@ Lessons:
 - `scripts/check-tla-chunk-await.mjs` now fails if a chunk the page evaluates
   at start (`index.html`'s module scripts and their static imports) is wrapped.
 
-## Outline depth along a line: no allocation per face (IfcSheet #557, ISSUE_068)
+## Outline depth along a line: same faces, coarse grid, nearest first (IfcSheet #557, ISSUE_068)
 
 #779 gives every mesh outline line the depth of its own element's surface
-(`packages/drawing-2d/src/outline-depth.ts`, `refineOutlineDepths`). Each line
-clips every face of its element that its face grid returns, and within one
-raster pixel (about 10 cm on a 100 m drawing) that is nearly all of a door's or
-a wall's faces: on the 56 MB Skolebygg sample an elevation refines 139,000
-lines against some 120 faces each. With a tuple per face, a fresh array per
-query and a comparator sort per line, that took 186 of the 278 s the twelve
-views spent drawing, and one views pass went from 89 s before #779 to 296 s.
-The clips now write into one scratch buffer, the spans and breakpoints live in
-reused typed arrays and the breakpoints sort natively; the grid is unchanged.
-Every view's lines and cut faces hash the same on FZK-Haus, bloc-p4 and
-Skolebygg and the printed DXF sheets are byte-identical. Skolebygg's views pass
-takes 225 s instead of 296 s, and m1's whole set-up (open, views, `build`)
-512 s instead of 631 s, one run each on efficiency cores under load. Lessons:
+(`packages/drawing-2d/src/outline-depth.ts`, `refineOutlineDepths`; the faces
+and their grid are in `face-grid.ts`). Each line clips every face of its
+element within one raster pixel (about 10 cm on a 100 m drawing), nearly all
+of a door's or a wall's faces: on the 56 MB Skolebygg sample an elevation
+refines 139,000 lines against some 120 faces each, and one views pass went from
+89 s before #779 to about 300 s. Three changes, all with the same drawing:
 
-- The face grid files a face by its bounding box grown by `reach`, but
-  `clipToFace` grows the triangle by moving each edge out by `reach`, whose
-  corner reaches `reach / sin(half the angle)` past a sliver's tip. The grid
-  misses such faces, so the result depends on the grid's cell layout: cells of
-  at least `reach` (views pass 189 s) changed 0.9% of the North
-  Elevation's outline lines, and a brute-force query matched neither layout.
-  Clip the grown triangle to its grown box before changing the grid.
-- Most of the remaining cost is inherent: lines times nearby faces per element.
+- Nothing is allocated per face or per line: the clips write into one scratch
+  buffer, the spans and breakpoints are reused typed arrays and sort natively,
+  and each face's edge normals and directions are worked out once, not per clip.
+- The fine grid stays as the definition of which faces a line meets (below),
+  but the lookup is a coarse grid with cells no finer than `reach`, filed by the
+  box of what a clip can take of each face. Each face also keeps the range of
+  fine cells it was filed in, and a query keeps the candidates whose range meets
+  the line's. The fine grid filed a small element's face in some 25 cells and a
+  query walked it in each.
+- Faces come nearest first (sorted once per element by nearest vertex). Once
+  the faces taken put the whole line at or in front of the next face's nearest
+  vertex, the rest cannot bring any of it nearer: they still add their
+  breakpoints, but no depth is read off them.
+
+Measured interleaved, 3 runs, medians of the views pass (`generateViewDrawings`
+of the default set, built packages, efficiency cores under load from four other
+agents), base `ee16b1445`: Skolebygg 317.6 s to 147.5 s, ISSUE_159 82.4 s to
+31.8 s, FZK-Haus 12.0 s to 5.8 s, bloc-p4 17.0 s to 15.7 s. Every view's lines
+and cut faces hash the same as main on all four models in all runs. Lessons:
+
+- Which faces a line meets depends on the fine grid's cell layout: `clipToFace`
+  grows a triangle by moving each edge out by `reach`, whose corner reaches
+  `reach / sin(half the angle)` past a sliver's tip, outside the box the grid
+  files it under. A coarse grid alone changed 0.9% of Skolebygg's North
+  Elevation lines. Keeping the fine cell ranges as a filter kept the output and
+  still gave the coarse grid's speed. Clipping the grown triangle to its grown
+  box makes the result independent of the cells, but it moved 23 of FZK's 160
+  North Elevation lines (the rafter tails end 18 mm higher) and 117 of
+  ISSUE_159's 1,366 South Elevation lines, and re-records goldens: a drawing
+  decision, not a perf change, left out here.
+- Skipping the faces after the cut-off outright moved line ends by up to 6 cm
+  on ISSUE_159: `simplify` is greedy, so a breakpoint on a stretch the envelope
+  does not bend still changes where it splits the line, and the classifier then
+  samples the pieces differently. Keep every face's breakpoints.
+- The hash of every view per run caught that 6 cm draft; timing alone did not.

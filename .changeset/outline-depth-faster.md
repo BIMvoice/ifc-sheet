@@ -2,4 +2,4 @@
 "@ifc-lite/drawing-2d": patch
 ---
 
-Giving mesh outline lines the depth of their own surface (#779) allocates nothing per face or per line any more, with the same drawing: the face clips write into one buffer and the spans and breakpoints are reused typed arrays. On the ISSUE_068 school model an elevation draws in about 28 s instead of 43 s and the twelve views in 225 s instead of 296 s (Refs #557).
+Giving mesh outline lines the depth of their own surface (#779) is several times faster, with the same drawing. A line looks only at the faces a coarse grid holds near it, still exactly the faces the old fine grid gave it; the faces come nearest first, and once those taken put the whole line at or in front of the next one, the rest give no depth; and nothing is allocated per face or per line (Refs #557).
