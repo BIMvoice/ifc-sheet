@@ -34,27 +34,24 @@
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Bounds2D, DrawingLine, MeshOutline2D, SectionPlaneConfig } from './types.js';
-import { getVertex } from './raster-core.js';
-import { outlineToProjectionLines, projectPointForPlane, signedDepth, type ProjectionBandDepths } from './projection-bands.js';
+import { outlineToProjectionLines, type ProjectionBandDepths } from './projection-bands.js';
+import { EDGE, FaceGrid, SPAN, STRIDE, clipToEdge, clipToFace, projectTriangle } from './face-grid.js';
+import { localDepth, type LocalSurface } from './local-surface.js';
 
 /** Resolution (pixels on the longer side) of the generator's hidden-line raster. */
 export const HIDDEN_LINE_RESOLUTION = 1024;
 
-/**
- * Per face: the three projected vertices, the depth plane `a·u + b·v + c`, its
- * slope and its nearest vertex depth. Per edge of a face seen edge-on (slope
- * slot -1): its two projected ends (the second twice), their depths and the
- * nearer one.
- */
-const STRIDE = 11;
-const EDGE = -1;
 const T_EPS = 1e-9;
+/** A curved line's depth is kept within this of its sampled own surface (metres) when its breakpoints are thinned. */
+const NEAR_TOLERANCE = 5e-4;
 
 interface OutlineSource {
   mesh: MeshData;
   plane: SectionPlaneConfig;
   /** The projected faces, built on first use for one raster pixel size. */
   built?: { faces: Float64Array; grid: FaceGrid; reach: number };
+  /** For a line along a curved surface: the faces that form it, the only ones its depth is read from. */
+  near?: LocalSurface;
 }
 
 /** Lines `outlineLinesWithDepth` produced, mapped to the mesh their depth is read from. */
@@ -71,8 +68,17 @@ export function outlineLinesWithDepth(
   depths: ProjectionBandDepths,
   mesh: MeshData,
 ): DrawingLine[] {
-  const lines = outlineToProjectionLines(outline, meta, plane, depths);
-  const source: OutlineSource = { mesh, plane };
+  return withOwnSurfaceDepth(outlineToProjectionLines(outline, meta, plane, depths), plane, mesh);
+}
+
+/**
+ * Remember `mesh` for each of `lines` (lines drawn from that mesh on `plane`), so `refineOutlineDepths` gives them the
+ * depth of the element's own surface. The silhouette of a curved surface needs it as much as the Rust outline: a
+ * column or a handrail is a tube, and its silhouette runs along the rim, behind the tube's own front by up to its radius within one raster
+ * pixel, so the column of FZK's spiral stair was hidden by itself in Section A-A (#557).
+ */
+export function withOwnSurfaceDepth(lines: DrawingLine[], plane: SectionPlaneConfig, mesh: MeshData, near?: LocalSurface): DrawingLine[] {
+  const source: OutlineSource = { mesh, plane, near };
   for (const line of lines) sources.set(line, source);
   return lines;
 }
@@ -90,15 +96,17 @@ export function rasterPixelSize(bounds: Bounds2D, resolution = HIDDEN_LINE_RESOL
 /**
  * Replace each outline line in `lines` by pieces whose `depth`/`depthEnd`
  * follow its element's own surface (see the module comment). `bounds` is the
- * hidden-line raster's extent. Lines from any other producer pass through.
+ * hidden-line raster's extent. Lines from any other producer pass through,
+ * and so does a curved line that `coveredByItself` says its own element
+ * nowhere covers (`HiddenLineClassifier.coveredByItself`).
  */
-export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D): DrawingLine[] {
+export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, coveredByItself?: (line: DrawingLine) => boolean): DrawingLine[] {
   const reach = rasterPixelSize(bounds);
   if (!(reach > 0)) return lines;
   const out: DrawingLine[] = [];
   for (const line of lines) {
     const source = sources.get(line);
-    if (!source) { out.push(line); continue; }
+    if (!source || (source.near && coveredByItself && !coveredByItself(line))) { out.push(line); continue; }
     const pieces = depthAlong(source, reach, line);
     const { start, end } = line.line;
     const at = (t: number) => (t === 0 ? start : t === 1 ? end : { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t });
@@ -113,57 +121,37 @@ export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D): Dra
   return out;
 }
 
-/**
- * Scratch buffers for `depthAlong`, reused across lines: an outline line meets
- * hundreds of faces of its own element (every face within a raster pixel), so
- * a tuple per face and a fresh array per line made the collector a third of
- * the cost on ISSUE_068 (#557).
- */
-let spanBuf = new Float64Array(5 * 256);
-let tBuf = new Float64Array(3 * 256 + 2);
-const clip = new Float64Array(4);
-
 /** Breakpoints `[t, depth]` along `line` (t from 0 to 1), its depth linear between them. */
 function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Array<[number, number]> {
-  const { faces, grid } = facesOf(source, reach);
   const ax = line.line.start.x, ay = line.line.start.y;
   const dx = line.line.end.x - ax, dy = line.line.end.y - ay;
   const fallback = line.depth;
 
+  if (source.near) return simplify(clampToCut(localDepth(source.mesh, source.near, reach, line)), NEAR_TOLERANCE);
+
   // Each face near the line: its t interval and its lowered depth alpha + beta·t, floored at its nearest vertex.
-  const found = grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach);
-  const near = grid.found;
-  if (spanBuf.length < found * 5) spanBuf = new Float64Array(found * 10);
-  if (tBuf.length < found * 3 + 2) tBuf = new Float64Array(found * 6 + 2);
-  const spans = spanBuf;
-  const ts = tBuf;
-  let ns = 0;
-  let nt = 0;
-  ts[nt++] = 0;
-  ts[nt++] = 1;
-  for (let i = 0; i < found; i++) {
-    const o = near[i] * STRIDE;
-    const edge = faces[o + 9] === EDGE;
-    if (!(edge ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
-    const t0 = clip[0], t1 = clip[1], alpha = clip[2], beta = clip[3];
+  const spans: number[] = [];
+  const ts: number[] = [0, 1];
+  const { faces, grid } = facesOf(source, reach);
+  for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) {
+    const o = f * STRIDE;
+    if (!(faces[o + 9] === EDGE ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
+    const t0 = SPAN[0], t1 = SPAN[1], alpha = SPAN[2], beta = SPAN[3];
     const floor = faces[o + 10];
-    spans[ns++] = t0; spans[ns++] = t1; spans[ns++] = alpha; spans[ns++] = beta; spans[ns++] = floor;
-    ts[nt++] = t0;
-    ts[nt++] = t1;
+    spans.push(t0, t1, alpha, beta, floor);
+    ts.push(t0, t1);
     if (beta !== 0) {
       const kink = (floor - alpha) / beta;
-      if (kink > t0 && kink < t1) ts[nt++] = kink;
+      if (kink > t0 && kink < t1) ts.push(kink);
     }
   }
 
-  // Numeric order; no t is NaN, and +0 and -0 give the same point.
-  const sorted = ts.subarray(0, nt).sort();
+  ts.sort((p, q) => p - q);
   const points: Array<[number, number]> = [];
-  for (let i = 0; i < nt; i++) {
-    const t = sorted[i];
+  for (const t of ts) {
     if (t < 0 || t > 1 || (points.length > 0 && t - points[points.length - 1][0] < T_EPS)) continue;
     let depth = Infinity;
-    for (let s = 0; s < ns; s += 5) {
+    for (let s = 0; s < spans.length; s += 5) {
       if (t < spans[s] - T_EPS || t > spans[s + 1] + T_EPS) continue;
       depth = Math.min(depth, Math.max(spans[s + 2] + spans[s + 3] * t, spans[s + 4]));
     }
@@ -191,196 +179,45 @@ function clampToCut(points: Array<[number, number]>): Array<[number, number]> {
 }
 
 /** Drop breakpoints while the longer chord stays at or in front of every point it skips. */
-function simplify(points: Array<[number, number]>): Array<[number, number]> {
+function simplify(points: Array<[number, number]>, tolerance?: number): Array<[number, number]> {
   const out: Array<[number, number]> = [points[0]];
   let i = 0;
   while (i < points.length - 1) {
     let j = i + 1;
-    while (j + 1 < points.length && chordKeeps(points, i, j + 1)) j++;
+    while (j + 1 < points.length && chordKeeps(points, i, j + 1, tolerance)) j++;
     out.push(points[j]);
     i = j;
   }
   return out;
 }
 
-function chordKeeps(points: Array<[number, number]>, i: number, j: number): boolean {
+/** Whether the chord from point i to point j stays in front of every point between, or with `tolerance` within it either way. */
+function chordKeeps(points: Array<[number, number]>, i: number, j: number, tolerance?: number): boolean {
   const [ti, di] = points[i];
   const [tj, dj] = points[j];
   for (let k = i + 1; k < j; k++) {
     const [tk, dk] = points[k];
-    if (di + (dj - di) * ((tk - ti) / (tj - ti)) > dk + 1e-9) return false;
+    const chord = di + (dj - di) * ((tk - ti) / (tj - ti));
+    if (tolerance === undefined ? chord > dk + 1e-9 : Math.abs(chord - dk) > tolerance) return false;
   }
   return true;
 }
 
-/**
- * The t interval of `A + t·D` (t in [0, 1]) inside face `o` grown by `reach`
- * on every edge, or false when it misses (Liang-Barsky against three edges),
- * with the face's depth there as `alpha + beta·t`: `[t0, t1, alpha, beta]` in `clip`.
- */
-function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
-  let t0 = 0, t1 = 1;
-  // Orientation, so every edge normal points into the face.
-  const ux0 = faces[o], uy0 = faces[o + 1];
-  const area2 = (faces[o + 2] - ux0) * (faces[o + 5] - uy0) - (faces[o + 4] - ux0) * (faces[o + 3] - uy0);
-  const sign = area2 > 0 ? 1 : -1;
-  for (let e = 0; e < 3; e++) {
-    const px = faces[o + e * 2], py = faces[o + e * 2 + 1];
-    const qx = faces[o + ((e + 1) % 3) * 2], qy = faces[o + ((e + 1) % 3) * 2 + 1];
-    const ex = qx - px, ey = qy - py;
-    const len = Math.hypot(ex, ey);
-    if (len === 0) return false;
-    const nx = (-ey * sign) / len, ny = (ex * sign) / len;
-    // n·(A + t·D - P) + reach >= 0
-    const c = nx * (ax - px) + ny * (ay - py) + reach;
-    const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < 0) return false; continue; }
-    const t = -c / k;
-    if (k > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
-    if (t0 > t1) return false;
-  }
-  // The face's depth plane along the line, lowered by its slope times reach.
-  clip[0] = t0;
-  clip[1] = t1;
-  clip[2] = faces[o + 6] * ax + faces[o + 7] * ay + faces[o + 8] - faces[o + 9] * reach;
-  clip[3] = faces[o + 6] * dx + faces[o + 7] * dy;
-  return true;
-}
-
-/**
- * The t interval of `A + t·D` within `reach` of edge `o` (a box around it), with
- * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`:
- * `[t0, t1, alpha, beta]` in `clip`, or false when it misses.
- */
-function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
-  const px = faces[o], py = faces[o + 1];
-  const len = Math.hypot(faces[o + 2] - px, faces[o + 3] - py);
-  const ex = (faces[o + 2] - px) / len, ey = (faces[o + 3] - py) / len;
-  let t0 = 0, t1 = 1;
-  // Along the edge from -reach to len + reach, across it within reach.
-  for (let side = 0; side < 2; side++) {
-    const nx = side === 0 ? ex : -ey, ny = side === 0 ? ey : ex;
-    const lo = -reach, hi = side === 0 ? len + reach : reach;
-    const c = nx * (ax - px) + ny * (ay - py);
-    const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < lo || c > hi) return false; continue; }
-    const ta = (lo - c) / k, tb = (hi - c) / k;
-    t0 = Math.max(t0, Math.min(ta, tb));
-    t1 = Math.min(t1, Math.max(ta, tb));
-    if (t0 > t1) return false;
-  }
-  const slope = (faces[o + 7] - faces[o + 6]) / len;
-  const s0 = ex * (ax - px) + ey * (ay - py);
-  clip[0] = t0;
-  clip[1] = t1;
-  clip[2] = faces[o + 6] + slope * s0 - Math.abs(slope) * reach;
-  clip[3] = slope * (ex * dx + ey * dy);
-  return true;
-}
-
-/** Project the mesh's faces once per source; a face seen edge-on keeps only its edges (it holds no area the raster can fill). */
+/** Project the mesh's faces once per source, faces first, then the edges of faces seen edge-on. */
 function facesOf(source: OutlineSource, reach: number): { faces: Float64Array; grid: FaceGrid } {
   if (source.built && source.built.reach === reach) return source.built;
-  const { positions, indices, origin } = source.mesh;
-  const plane = source.plane;
-  const n = Math.floor(indices.length / 3);
-  const faces = new Float64Array(n * STRIDE);
+  const n = Math.floor(source.mesh.indices.length / 3);
+  const faces: number[] = [];
   const edges: number[] = [];
-  let count = 0;
+  const one: number[] = [];
   for (let t = 0; t < n; t++) {
-    const p = [getVertex(positions, indices[t * 3], origin), getVertex(positions, indices[t * 3 + 1], origin), getVertex(positions, indices[t * 3 + 2], origin)];
-    const uv = p.map((v) => projectPointForPlane(v, plane));
-    const d = p.map((v) => -signedDepth(v, plane));
-    const e1u = uv[1].x - uv[0].x, e1v = uv[1].y - uv[0].y, e2u = uv[2].x - uv[0].x, e2v = uv[2].y - uv[0].y;
-    const area2 = e1u * e2v - e2u * e1v;
-    const ax = p[1].x - p[0].x, ay = p[1].y - p[0].y, az = p[1].z - p[0].z;
-    const bx = p[2].x - p[0].x, by = p[2].y - p[0].y, bz = p[2].z - p[0].z;
-    const area3 = Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
-    if (!(area3 > 0)) continue;
-    if (Math.abs(area2) <= 1e-3 * area3) {
-      for (const [i, j] of [[0, 1], [1, 2], [2, 0]]) {
-        if (Math.hypot(uv[j].x - uv[i].x, uv[j].y - uv[i].y) === 0) continue;
-        edges.push(uv[i].x, uv[i].y, uv[j].x, uv[j].y, uv[j].x, uv[j].y, d[i], d[j], 0, EDGE, Math.min(d[i], d[j]));
-      }
-      continue;
-    }
-    const e1d = d[1] - d[0], e2d = d[2] - d[0];
-    const a = (e1d * e2v - e2d * e1v) / area2;
-    const b = (e1u * e2d - e2u * e1d) / area2;
-    const o = count * STRIDE;
-    faces[o] = uv[0].x; faces[o + 1] = uv[0].y; faces[o + 2] = uv[1].x; faces[o + 3] = uv[1].y; faces[o + 4] = uv[2].x; faces[o + 5] = uv[2].y;
-    faces[o + 6] = a; faces[o + 7] = b; faces[o + 8] = d[0] - a * uv[0].x - b * uv[0].y;
-    faces[o + 9] = Math.hypot(a, b); faces[o + 10] = Math.min(d[0], d[1], d[2]);
-    count++;
+    one.length = 0;
+    projectTriangle(source.mesh, source.plane, t, one);
+    if (one.length > 0) (one[9] === EDGE ? edges : faces).push(...one);
   }
-  const used = new Float64Array(count * STRIDE + edges.length);
-  used.set(faces.subarray(0, count * STRIDE));
-  used.set(edges, count * STRIDE);
+  const used = new Float64Array(faces.length + edges.length);
+  used.set(faces);
+  used.set(edges, faces.length);
   source.built = { faces: used, grid: new FaceGrid(used, reach), reach };
   return source.built;
-}
-
-/** A uniform grid of face bounds (grown by `reach`), so a line looks only at the faces near it. */
-class FaceGrid {
-  private readonly cells: number[][];
-  private readonly size: number;
-  private readonly minU: number;
-  private readonly minV: number;
-  private readonly cellU: number;
-  private readonly cellV: number;
-  private readonly seen: Int32Array;
-  private stamp = 0;
-  /** The faces the last `query` found, as many as it returned, reused so a query allocates nothing. */
-  readonly found: Int32Array;
-
-  constructor(faces: Float64Array, reach: number) {
-    const count = faces.length / STRIDE;
-    let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-    for (let i = 0; i < faces.length; i += STRIDE) {
-      for (let k = 0; k < 6; k += 2) {
-        minU = Math.min(minU, faces[i + k]); maxU = Math.max(maxU, faces[i + k]);
-        minV = Math.min(minV, faces[i + k + 1]); maxV = Math.max(maxV, faces[i + k + 1]);
-      }
-    }
-    this.size = count > 64 ? Math.min(64, Math.ceil(Math.sqrt(count))) : 1;
-    this.minU = minU - reach;
-    this.minV = minV - reach;
-    this.cellU = Math.max((maxU - minU + 2 * reach) / this.size, 1e-12);
-    this.cellV = Math.max((maxV - minV + 2 * reach) / this.size, 1e-12);
-    this.cells = Array.from({ length: this.size * this.size }, () => []);
-    this.seen = new Int32Array(count);
-    this.found = new Int32Array(count);
-    for (let f = 0; f < count; f++) {
-      const o = f * STRIDE;
-      const lo = this.cellRange(Math.min(faces[o], faces[o + 2], faces[o + 4]) - reach, Math.min(faces[o + 1], faces[o + 3], faces[o + 5]) - reach);
-      const hi = this.cellRange(Math.max(faces[o], faces[o + 2], faces[o + 4]) + reach, Math.max(faces[o + 1], faces[o + 3], faces[o + 5]) + reach);
-      for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) this.cells[y * this.size + x].push(f);
-    }
-  }
-
-  private cellRange(u: number, v: number): [number, number] {
-    const clamp = (c: number) => Math.max(0, Math.min(this.size - 1, Math.floor(c)));
-    return [clamp((u - this.minU) / this.cellU), clamp((v - this.minV) / this.cellV)];
-  }
-
-  /** How many faces' grown bounds may meet the box: the first that many of `found`. */
-  query(minU: number, minV: number, maxU: number, maxV: number): number {
-    const lo = this.cellRange(minU, minV);
-    const hi = this.cellRange(maxU, maxV);
-    const { found, seen, cells, size } = this;
-    const stamp = ++this.stamp;
-    let n = 0;
-    for (let y = lo[1]; y <= hi[1]; y++) {
-      for (let x = lo[0]; x <= hi[0]; x++) {
-        const cell = cells[y * size + x];
-        for (let i = 0; i < cell.length; i++) {
-          const f = cell[i];
-          if (seen[f] === stamp) continue;
-          seen[f] = stamp;
-          found[n++] = f;
-        }
-      }
-    }
-    return n;
-  }
 }
