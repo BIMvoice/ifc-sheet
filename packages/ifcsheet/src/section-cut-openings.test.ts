@@ -9,8 +9,9 @@
  *
  * - A section through the opening shows it: the wall is cut below the sill and above the head, the window between them.
  * - A section 0.15 m beside the opening cuts solid wall, so the wall is one face, and the window and the opening's edges,
- *   inside the wall behind that face, are hidden. They used to print as visible lines over the wall's cut fill, which read as
- *   the wall drawn across a window (the section A-A of the issue, 0.15 m beside its window).
+ *   inside the wall behind that face, are left out, visible and hidden alike. They used to print as visible lines over the
+ *   wall's cut fill, which read as the wall drawn across a window (the section A-A of the issue, 0.15 m beside its window),
+ *   and then as dashes over it, which printed as stray marks (bloc-p4 Section A-A).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -51,10 +52,10 @@ describe.skipIf(missing !== null)('a section and the openings of the wall it cut
   let model: OpenedModel;
   let levels: ProjectLevel[];
   /** The section across wall A at `x`, looking toward -x, on a plane drawn across the plan the way the SECTION command and the proposed sections make one. */
-  const sectionAt = async (x: number): Promise<Drawing2D> => {
+  const sectionAt = async (x: number, meshes = model.buildingMeshes): Promise<Drawing2D> => {
     const custom = sectionPlaneThrough({ x, y: 0, z: 1 }, { x, y: 0, z: -1 }, { x: x - 1, y: 0, z: 0 })!;
     const view: SectionProjectView = { id: `s${x}`, name: 'S', kind: 'section', createdAt: 0, plane: { axis: 'front', offset: custom.distance, flipped: false, custom } };
-    return (await generateViewDrawings([view], model.buildingMeshes, levels, model.extent!)).get(view.id)!;
+    return (await generateViewDrawings([view], meshes, levels, model.extent!)).get(view.id)!;
   };
 
   beforeAll(async () => {
@@ -87,22 +88,26 @@ describe.skipIf(missing !== null)('a section and the openings of the wall it cut
       wallFaces = drawing.cutPolygons.filter((q) => q.entityId === WALL);
     });
 
-    it('the premise: it cuts the wall as one face, full height, does not cut the window, and sees it', () => {
+    it('the premise: it cuts the wall as one face, full height, and does not cut the window', () => {
       expect(spanY(wallFaces).some(([lo, hi]) => lo <= 0.01 && hi >= 2.99)).toBe(true);
       expect(drawing.cutPolygons.some((q) => q.entityId === WINDOW)).toBe(false);
-      expect(drawing.lines.some((l) => l.entityId === WINDOW)).toBe(true);
     });
 
-    it('draws no visible line inside the wall\'s cut face: the window and the opening\'s edges behind it are hidden', () => {
-      const visibleInside = drawing.lines.filter((l) => {
-        if (l.category === 'cut' || l.visibility !== 'visible') return false;
+    it('the premise: with the wall taken away, the same section draws the window 0.2 m behind the plane', async () => {
+      const windowAlone = await sectionAt(3.15, model.buildingMeshes.filter((m) => m.expressId === WINDOW));
+      expect(windowAlone.lines.some((l) => l.entityId === WINDOW && l.visibility === 'visible')).toBe(true);
+    });
+
+    it('draws no line, visible or hidden, inside the wall\'s cut face: the window and the opening\'s edges behind it are left out', () => {
+      const linesInside = drawing.lines.filter((l) => {
+        if (l.category === 'cut') return false;
         const mid = { x: (l.line.start.x + l.line.end.x) / 2, y: (l.line.start.y + l.line.end.y) / 2 };
         // Off the face's outline by a millimetre: a wall face running on behind the plane keeps its line on the cut outline.
         const near = (p: Point2D) => wallFaces.some((q) => inside(q, p));
         return near(mid) && [[0.001, 0], [-0.001, 0], [0, 0.001], [0, -0.001]].every(([dx, dy]) => near({ x: mid.x + dx, y: mid.y + dy }));
       });
-      expect(visibleInside.map((l) => `${l.entityId} ${l.ifcType}`)).toEqual([]);
-      expect(drawing.lines.filter((l) => l.entityId === WINDOW).every((l) => l.visibility === 'hidden')).toBe(true);
+      expect(linesInside.map((l) => `${l.entityId} ${l.ifcType} ${l.visibility}`)).toEqual([]);
+      expect(drawing.lines.filter((l) => l.entityId === WINDOW).map((l) => l.visibility)).toEqual([]);
     });
   });
 });
