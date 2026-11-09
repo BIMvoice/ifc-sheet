@@ -144,6 +144,8 @@ export interface DraftCommand {
   onText?(text: string): StepResult;
   /** Where the words the step wants print (drawing space): the view opens its text editor there, unless AutoCAD mode keeps them in the command line (#168). */
   textAt?(): Pt | null;
+  /** When the words follow a leader: the point its last segment runs from, so the editor sits on the side of the end where the words print. */
+  textFrom?(): Pt | null;
   /** A one-click answer the step offers on the drawing beside `at` (a Note's "No bend"): pressing it is Enter. */
   shortcut?(): { key: TranslationKey; at: Pt } | null;
   /** Done (`endCommand`): finish with what is drawn so far. Without it, Done is Enter, and a step Enter only advances is cancelled. */
