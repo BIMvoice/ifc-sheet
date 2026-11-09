@@ -6,8 +6,8 @@
  * A busy worker is not a dead one: a heavy view can compute for longer than the
  * silence limit (one elevation of a large model took 39 to 43 s), and the worker
  * says it is alive from inside its work, so the client keeps waiting. A worker
- * that truly says nothing is still given up on, and a view too large to draw on
- * the main thread without freezing the page then fails with a message.
+ * that truly says nothing is still given up on, and the view is then
+ * drawn on the main thread, as before.
  */
 
 import { afterEach, describe, it, mock } from 'node:test';
@@ -16,7 +16,7 @@ import { createSectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { MeshOutline2dFn } from '@/hooks/meshOutlineProvider';
 import {
-  __setGenerationWorkerFactoryForTest, generateDrawing, silenceLimitMs, IDLE_TERMINATE_MS, MAIN_THREAD_FALLBACK_MAX_MESHES,
+  __setGenerationWorkerFactoryForTest, generateDrawing, silenceLimitMs, IDLE_TERMINATE_MS,
   type DrawingRequest, type GenerationWorker,
 } from './client';
 import { withHeartbeat } from './drawing-generation.worker';
@@ -114,20 +114,6 @@ describe('a worker that truly goes silent is still given up on', () => {
     mock.timers.reset();
     assert.ok(await result, 'drawn in this realm');
     assert.match(String(warn.mock.calls.at(-1)?.arguments.join(' ')), /silent for [\d.]+ s/);
-    warn.mock.restore();
-  });
-
-  it('a view too large for the main thread fails with a message instead of freezing the page', async () => {
-    const warn = mock.method(console, 'warn', () => {});
-    const big = Array.from({ length: MAIN_THREAD_FALLBACK_MAX_MESHES + 1 }, (_, i) => mesh(i + 1));
-    const stub = silentWorker();
-    mock.timers.enable({ apis: ['setTimeout'] });
-    const result = generateDrawing(request(big, big), undefined);
-    const failed = assert.rejects(result, /too large to draw without freezing the page/);
-    await until(() => stub.sent().length === 1);
-    mock.timers.tick(silenceLimitMs(big.length));
-    mock.timers.reset();
-    await failed;
     warn.mock.restore();
   });
 });

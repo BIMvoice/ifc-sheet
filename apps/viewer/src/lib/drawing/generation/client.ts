@@ -17,9 +17,7 @@
  *
  * Where no worker can run (Node, where the tests drive the hooks), or when
  * the workers fail, the same job runs in this realm (`runGenerateJob`), as it
- * always did: a drawing that is slow to make is better than none. The exception is
- * a worker that went silent on a view of more than {@link MAIN_THREAD_FALLBACK_MAX_MESHES}
- * meshes: that view fails with a message rather than freeze the page.
+ * always did: a drawing that is slow to make is better than none.
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -119,16 +117,6 @@ const MAX_FAILURES = 2;
 /** The error every job in flight is rejected with when the pool goes down; the crash was counted once, in {@link failAll}. */
 class WorkerCrash extends Error {}
 
-/** The pool went down because a worker stayed silent past its limit (see {@link armSilence}); the page is not frozen by it unless the view is then drawn here. */
-class WorkerSilent extends WorkerCrash {}
-
-/**
- * Most meshes a view may have and still be drawn on the main thread after its worker went silent. Above this a
- * view takes tens of seconds to draw there and the page would freeze for all of it, so the view fails with a
- * message instead (the user can regenerate it).
- */
-export const MAIN_THREAD_FALLBACK_MAX_MESHES = 2_000;
-
 function terminatePool(): void {
   for (const slot of slots) slot.worker.terminate();
   slots = [];
@@ -137,20 +125,20 @@ function terminatePool(): void {
 }
 
 /** The pool is down: every job in flight is rejected, and the crash counts as one failure whatever the number of jobs. */
-function failAll(message: string, silent = false): void {
+function failAll(message: string): void {
   const outstanding = [...pending.values()];
   pending.clear();
   terminatePool();
   failures++;
   for (const job of outstanding) {
     clearTimeout(job.timer);
-    job.reject(silent ? new WorkerSilent(message) : new WorkerCrash(message));
+    job.reject(new WorkerCrash(message));
   }
 }
 
 function armSilence(id: number, silenceMs: number): ReturnType<typeof setTimeout> {
   return setTimeout(
-    () => failAll(`drawing generation worker silent for ${silenceMs / 1000} s (job ${id}); taking it for dead`, true),
+    () => failAll(`drawing generation worker silent for ${silenceMs / 1000} s (job ${id}); taking it for dead, the view is drawn on the main thread`),
     silenceMs,
   );
 }
@@ -290,11 +278,6 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
   } catch (error) {
     // A crash was counted once when the pool went down; a job that failed by itself counts here.
     if (!(error instanceof WorkerCrash)) failures++;
-    if (error instanceof WorkerSilent && meshes.length > MAIN_THREAD_FALLBACK_MAX_MESHES) {
-      // Drawing a view this size here would freeze the page for tens of seconds: say so instead.
-      console.warn('[drawing-generation] worker silent, view too large to draw on the main thread:', error);
-      throw new Error(`The drawing worker stopped responding and this view (${meshes.length} elements) is too large to draw without freezing the page. Regenerate the view to try again.`);
-    }
     console.warn('[drawing-generation] worker unavailable, generating on the main thread:', error);
     return runGenerateJob(job, outlineFn, onProgress);
   }
