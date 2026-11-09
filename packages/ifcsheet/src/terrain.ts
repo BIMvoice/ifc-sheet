@@ -10,6 +10,7 @@
  */
 
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { RelationshipType } from '@ifc-lite/data';
 import { resolveEntityPredefinedType } from '@ifc-lite/rules';
 import { predefinedTypeText } from './schedule-filter.js';
 
@@ -19,7 +20,27 @@ export function isTerrainPredefinedType(predefinedType: string | null | undefine
   return text === null || text === 'TERRAIN' || text === 'NOTDEFINED';
 }
 
-/** The PredefinedType of an entity of `store`, as text; null when it states none. */
+/** What each store's geographic elements stated, by express id: a redraw reads a record once, never again (the read re-parses the STEP record). */
+const readCache = new WeakMap<IfcDataStore, Map<number, string | null>>();
+
+/** The text of `id`'s own PredefinedType, or of its IfcGeographicElementType's (IfcRelDefinesByType) when the occurrence states none or NOTDEFINED. */
+function predefinedTypeOf(store: IfcDataStore, id: number): string | null {
+  const own = predefinedTypeText(store.entities.getPredefinedType?.(id) || resolveEntityPredefinedType(store, id) || null);
+  if (own !== null && own !== 'NOTDEFINED') return own;
+  const typeId = store.relationships?.getRelated(id, RelationshipType.DefinesByType, 'inverse')[0];
+  const inherited = typeId === undefined ? null : predefinedTypeText(resolveEntityPredefinedType(store, typeId) || null);
+  return inherited ?? own;
+}
+
+/** The PredefinedType of an entity of `store`, as text (the type object's when the occurrence states none); null when neither does. Read once per entity and store. */
 export function predefinedTypeReader(store: IfcDataStore): (expressId: number) => string | null {
-  return (id) => predefinedTypeText(store.entities.getPredefinedType?.(id) || resolveEntityPredefinedType(store, id) || null);
+  let cache = readCache.get(store);
+  if (!cache) readCache.set(store, (cache = new Map()));
+  const known = cache;
+  return (id) => {
+    if (known.has(id)) return known.get(id) ?? null;
+    const text = predefinedTypeOf(store, id);
+    known.set(id, text);
+    return text;
+  };
 }

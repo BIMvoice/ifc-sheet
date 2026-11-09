@@ -71,7 +71,7 @@ export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, ge
       activeTool: 'select', geometryResult: geometry, ifcDataStore: dataStore ?? (spatialHierarchy ? { source: undefined as never, spatialHierarchy } : null), sectionPlane: plane!, displayOptions,
       typeVisibility, combinedHiddenIds: new Set<number>(), combinedIsolatedIds: null, computedIsolatedIds: null,
       models: new Map([['m0', { id: 'm0', visible: true }]]), panelVisible: false, drawing: null,
-      setDrawing: (d) => { drawing = d; }, setDrawingStatus: () => {}, setDrawingProgress: () => {}, setDrawingError: () => {}, primary: false,
+      setDrawing: (d) => { drawing = d; }, setDrawingStatus: () => {}, setDrawingProgress: () => {}, setDrawingError: () => {}, primary: false, terrainApart: true,
     });
     run = generateDrawing;
     return null;

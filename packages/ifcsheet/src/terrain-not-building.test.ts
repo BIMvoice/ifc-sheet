@@ -14,12 +14,15 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { IfcTypeEnum } from '@ifc-lite/data';
 import { openModel, type OpenedModel } from './headless.js';
 import { storeyElementIds } from './storey-elements.js';
+import { isTerrainPredefinedType, predefinedTypeReader } from './terrain.js';
 
 const IFC = readFileSync(new URL('../test-support/terrain-in-storey.ifc', import.meta.url));
 
 const WALL = 48;
 const TERRAIN = 59;
 const TREE = 67;
+/** A tree whose VEGETATION comes only from its IfcGeographicElementType (its own PredefinedType is `$`). */
+const TYPED_TREE = 77;
 
 describe('storeyElementIds leaves a terrain out of the building (#683)', () => {
   const types = new Map<number, IfcTypeEnum>([[10, IfcTypeEnum.IfcWall], [11, IfcTypeEnum.IfcGeographicElement], [12, IfcTypeEnum.IfcGeographicElement]]);
@@ -48,7 +51,13 @@ describe.skipIf(missing !== null)('a terrain contained in a storey does not fram
 
   it('the terrain is a mesh of the model but not of the building', () => {
     expect((model.meshes ?? []).map((m) => m.expressId)).toContain(TERRAIN);
-    expect(model.buildingMeshes.map((m) => m.expressId).sort()).toEqual([WALL, TREE]);
+    expect(model.buildingMeshes.map((m) => m.expressId).sort()).toEqual([WALL, TREE, TYPED_TREE].sort((a, b) => a - b));
+  });
+
+  it('a tree that is VEGETATION only through its type object is not a terrain (#683)', () => {
+    const isTerrain = (id: number) => isTerrainPredefinedType(predefinedTypeReader(model.dataStore)(id));
+    expect(isTerrain(TERRAIN)).toBe(true);
+    expect(isTerrain(TYPED_TREE)).toBe(false);
   });
 
   it('the extent holds the wall and the tree (6.25 m), not the terrain\'s 20 m', () => {

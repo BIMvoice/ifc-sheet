@@ -3,10 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The terrain the sections and elevations leave out (#683). The engine cuts the building's meshes, which are the
- * storeys' elements without the ground (`storeyElementIds`); the app cuts every mesh of the model, so a terrain a model
- * contains in a storey (Bonsai writes its ground box so) was cut as a grey block and drawn as a big rectangle. The terrain
- * is told by the one rule the engine uses (`isTerrainMesh`, `isTerrainPredefinedType`): a tree or a boring point is not.
+ * The terrain a project plan leaves out (#683). The engine cuts the building's meshes, which are the storeys' elements without the
+ * ground (`storeyElementIds`), so a plan does not cut the terrain Bonsai puts in a storey. Sections and elevations keep it: the ground
+ * drawing (`ground.ts`) turns it into the earth cut and the ground line. The terrain is told by the one rule the engine uses
+ * (`isTerrainMesh`): a tree or a boring point is not.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
@@ -28,7 +28,8 @@ export function terrainTester(legacy?: object | null): (mesh: MeshData) => boole
   return (mesh) => {
     if (mesh.ifcType?.toUpperCase() !== 'IFCGEOGRAPHICELEMENT') return false;
     const owner = state.models.size > 0 ? state.resolveGlobalIdFromModels(mesh.expressId) : null;
-    const store = owner ? state.models.get(owner.modelId)?.ifcDataStore : single;
+    // A global id no federated model owns is not read as a local one from the legacy store.
+    const store = owner ? state.models.get(owner.modelId)?.ifcDataStore : state.models.size > 0 ? null : single;
     // Without a store to read the PredefinedType from, a geographic element states none: a terrain.
     if (!store?.entities) return isTerrainMesh(mesh);
     const key = owner?.modelId ?? '';

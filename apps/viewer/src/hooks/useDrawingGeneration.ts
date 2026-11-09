@@ -106,7 +106,7 @@ export function useDrawingGeneration({
   setDrawing,
   setDrawingStatus,
   setDrawingProgress,
-  setDrawingError, primary = true,
+  setDrawingError, primary = true, terrainApart = false,
 }: UseDrawingGenerationParams): UseDrawingGenerationResult {
 
   // The legacy primary path can publish only `loading: false` when it finishes
@@ -427,9 +427,6 @@ export function useDrawingGeneration({
       // export, so all six toggles stay in lockstep.
       meshesToProcess = meshesToProcess.filter((mesh) => isTypeVisible(mesh.ifcType, typeVisibility));
 
-      // The terrain is not cut or projected, as the engine's drawings leave it out (#683).
-      meshesToProcess = withoutTerrainMeshes(meshesToProcess, ifcDataStore);
-
       // Filter out hidden entities (using combined multi-model set)
       if (combinedHiddenIds.size > 0) {
         meshesToProcess = meshesToProcess.filter(
@@ -456,6 +453,14 @@ export function useDrawingGeneration({
         meshesToProcess = meshesToProcess.filter(
           mesh => isolatedSet.has(mesh.expressId)
         );
+      }
+
+      // A project plan does not cut or project a terrain, as the engine's does not (#683). A section or an elevation keeps it: the
+      // ground drawing (`project/ground.ts`) turns it into the earth cut and the ground line. A model of a terrain alone keeps
+      // it too, so its plan still draws, and the contours go on it.
+      if (terrainApart && sectionPlane.axis === 'down' && !sectionPlane.custom) {
+        const building = withoutTerrainMeshes(meshesToProcess, ifcDataStore);
+        if (building.length > 0) meshesToProcess = building;
       }
 
       // If all meshes were filtered out by visibility, clear the drawing
@@ -803,7 +808,7 @@ export function useDrawingGeneration({
     setDrawing,
     setDrawingStatus,
     setDrawingProgress,
-    setDrawingError, primary,
+    setDrawingError, primary, terrainApart,
   ]);
 
   // All entry points share one queue; superseded cuts cannot publish over newer inputs (#3921).
