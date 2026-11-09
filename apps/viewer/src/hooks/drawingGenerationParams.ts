@@ -56,6 +56,6 @@ export interface UseDrawingGenerationParams {
   setDrawingStatus: (s: 'idle' | 'generating' | 'ready' | 'error') => void;
   setDrawingProgress: (p: number, phase: string) => void;
   setDrawingError: (e: string | null) => void; /** false: a project view's own generator, without the shared drawing's global side effects. */ primary?: boolean;
-  /** true (IfcSheet's project views): a plan does not cut or project a terrain, as the engine's does not (#683); sections and elevations keep it for the ground drawing (`project/ground.ts`). The generic 2D panel leaves it. */
+  /** true (IfcSheet's project views): a plan does not cut or project a terrain, as the engine's does not (#683); sections and elevations keep it for the ground drawing (`drawingWithGround` in `@bimvoice/ifcsheet`). The generic 2D panel leaves it. */
   terrainApart?: boolean;
 }

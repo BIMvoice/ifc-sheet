@@ -46,7 +46,7 @@ import type { JoineryCellOverride } from '../joinery-overrides.js';
 import { joineryScheduleData } from '../joinery-schedule.js';
 import { scheduleModelsOf } from '../schedule-models.js';
 import type { SheetLocale } from '../units-and-numbers.js';
-import { generateViewDrawings } from '../view-drawings.js';
+import { generateViewDrawings, terrainMeshesOf } from '../view-drawings.js';
 import type { AnnotateChoices } from './choices.js';
 import { annotateViews, type AnnotateReaders, type AnnotateView, type AnnotateViewsResult, type ReadCall } from './views.js';
 
@@ -219,7 +219,7 @@ export async function annotateSetHeadless(input: HeadlessAnnotateInput): Promise
   const existing = input.existing ?? [];
   const { all, views } = annotatableViews(set.document, input.viewIds);
   const drawings = model.extent && views.length > 0
-    ? await generateViewDrawings(all, model.buildingMeshes, set.levels, model.extent, undefined, undefined, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy))
+    ? await generateViewDrawings(all, model.buildingMeshes, set.levels, model.extent, undefined, undefined, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy), terrainMeshesOf(model.meshes, model.dataStore))
     : new Map<string, Drawing2D>();
   const result = await annotateViews<HeadlessView, Drawing2D>({
     views, choices, ...(input.tagParts ? { presets: { tagParts: input.tagParts } } : {}), readers: readersOf(model, set, existing, input.joinery),
