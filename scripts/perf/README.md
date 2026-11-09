@@ -3618,3 +3618,29 @@ Lessons:
   but gained little once `exceljs` was gone, and was left out.
 - `scripts/check-tla-chunk-await.mjs` now fails if a chunk the page evaluates
   at start (`index.html`'s module scripts and their static imports) is wrapped.
+
+## Outline depth along a line: no allocation per face (IfcSheet #557, ISSUE_068)
+
+#779 gives every mesh outline line the depth of its own element's surface
+(`packages/drawing-2d/src/outline-depth.ts`, `refineOutlineDepths`). Each line
+clips every face of its element that its face grid returns, and within one
+raster pixel (about 10 cm on a 100 m drawing) that is nearly all of a door's or
+a wall's faces: on the 56 MB Skolebygg sample an elevation refines 139,000
+lines against some 120 faces each. With a tuple per face, a fresh array per
+query and a comparator sort per line, that took 186 of the 278 s the twelve
+views spent drawing, and one views pass went from 89 s before #779 to 296 s.
+The clips now write into one scratch buffer, the spans and breakpoints live in
+reused typed arrays and the breakpoints sort natively; the grid is unchanged.
+Every view's lines and cut faces hash the same on FZK-Haus, bloc-p4 and
+Skolebygg and the printed DXF sheets are byte-identical. Skolebygg's views pass
+takes 225 s instead of 296 s, and m1's whole set-up (open, views, `build`)
+512 s instead of 631 s, one run each on efficiency cores under load. Lessons:
+
+- The face grid files a face by its bounding box grown by `reach`, but
+  `clipToFace` grows the triangle by moving each edge out by `reach`, whose
+  corner reaches `reach / sin(half the angle)` past a sliver's tip. The grid
+  misses such faces, so the result depends on the grid's cell layout: cells of
+  at least `reach` (views pass 189 s) changed 0.9% of the North
+  Elevation's outline lines, and a brute-force query matched neither layout.
+  Clip the grown triangle to its grown box before changing the grid.
+- Most of the remaining cost is inherent: lines times nearby faces per element.
