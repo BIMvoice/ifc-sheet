@@ -124,6 +124,7 @@ export const leaderCommand: DraftCommandDef = {
       },
       wantsText: () => asking,
       textAt: () => (asking ? pts.at(-1) ?? null : null),
+      textFrom: () => (asking && pts.length >= 2 ? pts[pts.length - 2] : null),
       shortcut: () => (!asking && pts.length === 2 ? { key: 'textOnDrawing.noBend', at: pts[1] } : null),
       onText(text) {
         if (pts.length >= 2) add(ctx, { type: 'leader', pts: [...pts], text, height: ctx.settings.textHeight });

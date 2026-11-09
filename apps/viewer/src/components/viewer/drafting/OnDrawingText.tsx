@@ -6,26 +6,26 @@
  * The words of a new Text or Note are written where they print (#168): when
  * the running command asks for them (`textAt`), the inline editor opens on the
  * drawing at that point. Enter, or a press away from it, gives the words to the
- * command as the typed line would; Esc cancels the command. A step's one-click
- * answer (`shortcut`, a Note's "No bend") is a button beside its point.
+ * command as the typed line would (an empty box gives nothing: Enter waits,
+ * a press away cancels); Esc cancels the command. A step's one-click answer (`shortcut`, a Note's "No bend") is a button beside its point.
  *
  * AutoCAD mode keeps the words in the command line, as typed CAD does.
  */
 
 import { useTranslation } from '@/i18n';
 import { useAutocadMode } from '@/lib/commands/autocad-mode';
-import { drawingToScreen, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { endCommand, pressEnter, pressEscape, runningCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
+import { leaderTextRight } from '@/drafting/leader-segments';
+import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
+import { pressEnter, pressEscape, runningCommand, submitCommandLine, useDraftingSession } from '@/drafting/session';
 import { InlineTextEditor } from './InlineTextEditor';
 
 /**
- * The words typed: an empty box ends the command with what it has drawn (Done), else they go in as the typed line. Only
- * while the command still asks for them: a box left after the command ended another way must not type into an idle line.
+ * The words typed go in as the typed line would. Only while the command still asks for them: a box left after the command
+ * ended another way must not type into an idle line. Empty words never get here: the box does not commit them (`requireText`).
  */
 function commit(text: string): void {
   if (!runningCommand()?.wantsText?.()) return;
   if (text.trim()) submitCommandLine(text, null);
-  else endCommand();
 }
 
 export function OnDrawingText({ transform, axis }: { transform: ViewTransform; axis: SectionAxisName }) {
@@ -39,13 +39,17 @@ export function OnDrawingText({ transform, axis }: { transform: ViewTransform; a
   const shortcut = command.shortcut?.() ?? null;
   if (at) {
     const screen = drawingToScreen(at, transform, axis);
+    // A Note's words print beside the end of its leader, on the side the drawing puts them (`leaderTextRight`): the box sits there.
+    const from = command.textFrom?.() ?? null;
+    const placement = !from ? 'start' : leaderTextRight([from, at], screenSigns(axis).kx) ? 'after' : 'before';
     return (
       <InlineTextEditor
         key={`${commandId}:${at.x}:${at.y}`}
         value=""
         at={screen}
-        placement="start"
+        placement={placement}
         multiline
+        requireText
         opensOnPress
         label={t('textOnDrawing.editor')}
         onCommit={commit}
