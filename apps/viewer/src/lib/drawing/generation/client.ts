@@ -54,7 +54,7 @@ function poolSize(): number {
 }
 
 /**
- * A worker that has gone too long without a word (no progress, no reply) is
+ * A worker that has gone too long without a word (no progress, no heartbeat, no reply) is
  * taken for dead: one the OS killed for memory fires neither `message` nor
  * `error`, and its jobs would otherwise never settle. "Too long" follows the
  * job, so a small view whose worker has died falls back to the main thread
@@ -154,8 +154,9 @@ function onReply(slot: Slot, data: GenerationReply): void {
   const job = pending.get(data.id);
   if (!job) return;
   clearTimeout(job.timer);
-  if (data.type === 'progress' || data.type === 'part') {
+  if (data.type === 'progress' || data.type === 'part' || data.type === 'alive') {
     job.timer = armSilence(data.id, job.silenceMs);
+    if (data.type === 'alive') return;
     if (data.type === 'progress') job.onProgress?.(data.stage, data.progress);
     else {
       const list = job.parts.get(data.key);
