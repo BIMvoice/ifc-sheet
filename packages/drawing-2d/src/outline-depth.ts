@@ -113,6 +113,16 @@ export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D): Dra
   return out;
 }
 
+/**
+ * Scratch buffers for `depthAlong`, reused across lines: an outline line meets
+ * hundreds of faces of its own element (every face within a raster pixel), so
+ * a tuple per face and a fresh array per line made the collector a third of
+ * the cost on ISSUE_068 (#557).
+ */
+let spanBuf = new Float64Array(5 * 256);
+let tBuf = new Float64Array(3 * 256 + 2);
+const clip = new Float64Array(4);
+
 /** Breakpoints `[t, depth]` along `line` (t from 0 to 1), its depth linear between them. */
 function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Array<[number, number]> {
   const { faces, grid } = facesOf(source, reach);
@@ -121,29 +131,39 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   const fallback = line.depth;
 
   // Each face near the line: its t interval and its lowered depth alpha + beta·t, floored at its nearest vertex.
-  const spans: number[] = [];
-  const ts: number[] = [0, 1];
-  for (const f of grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach)) {
-    const o = f * STRIDE;
+  const found = grid.query(Math.min(ax, ax + dx) - reach, Math.min(ay, ay + dy) - reach, Math.max(ax, ax + dx) + reach, Math.max(ay, ay + dy) + reach);
+  const near = grid.found;
+  if (spanBuf.length < found * 5) spanBuf = new Float64Array(found * 10);
+  if (tBuf.length < found * 3 + 2) tBuf = new Float64Array(found * 6 + 2);
+  const spans = spanBuf;
+  const ts = tBuf;
+  let ns = 0;
+  let nt = 0;
+  ts[nt++] = 0;
+  ts[nt++] = 1;
+  for (let i = 0; i < found; i++) {
+    const o = near[i] * STRIDE;
     const edge = faces[o + 9] === EDGE;
-    const span = edge ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach);
-    if (!span) continue;
-    const [t0, t1, alpha, beta] = span;
+    if (!(edge ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
+    const t0 = clip[0], t1 = clip[1], alpha = clip[2], beta = clip[3];
     const floor = faces[o + 10];
-    spans.push(t0, t1, alpha, beta, floor);
-    ts.push(t0, t1);
+    spans[ns++] = t0; spans[ns++] = t1; spans[ns++] = alpha; spans[ns++] = beta; spans[ns++] = floor;
+    ts[nt++] = t0;
+    ts[nt++] = t1;
     if (beta !== 0) {
       const kink = (floor - alpha) / beta;
-      if (kink > t0 && kink < t1) ts.push(kink);
+      if (kink > t0 && kink < t1) ts[nt++] = kink;
     }
   }
 
-  ts.sort((p, q) => p - q);
+  // Numeric order; no t is NaN, and +0 and -0 give the same point.
+  const sorted = ts.subarray(0, nt).sort();
   const points: Array<[number, number]> = [];
-  for (const t of ts) {
+  for (let i = 0; i < nt; i++) {
+    const t = sorted[i];
     if (t < 0 || t > 1 || (points.length > 0 && t - points[points.length - 1][0] < T_EPS)) continue;
     let depth = Infinity;
-    for (let s = 0; s < spans.length; s += 5) {
+    for (let s = 0; s < ns; s += 5) {
       if (t < spans[s] - T_EPS || t > spans[s + 1] + T_EPS) continue;
       depth = Math.min(depth, Math.max(spans[s + 2] + spans[s + 3] * t, spans[s + 4]));
     }
@@ -195,10 +215,10 @@ function chordKeeps(points: Array<[number, number]>, i: number, j: number): bool
 
 /**
  * The t interval of `A + t·D` (t in [0, 1]) inside face `o` grown by `reach`
- * on every edge, or null when it misses (Liang-Barsky against three edges),
- * with the face's depth there as `alpha + beta·t`.
+ * on every edge, or false when it misses (Liang-Barsky against three edges),
+ * with the face's depth there as `alpha + beta·t`: `[t0, t1, alpha, beta]` in `clip`.
  */
-function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): [number, number, number, number] | null {
+function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
   let t0 = 0, t1 = 1;
   // Orientation, so every edge normal points into the face.
   const ux0 = faces[o], uy0 = faces[o + 1];
@@ -209,42 +229,53 @@ function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: 
     const qx = faces[o + ((e + 1) % 3) * 2], qy = faces[o + ((e + 1) % 3) * 2 + 1];
     const ex = qx - px, ey = qy - py;
     const len = Math.hypot(ex, ey);
-    if (len === 0) return null;
+    if (len === 0) return false;
     const nx = (-ey * sign) / len, ny = (ex * sign) / len;
     // n·(A + t·D - P) + reach >= 0
     const c = nx * (ax - px) + ny * (ay - py) + reach;
     const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < 0) return null; continue; }
+    if (k === 0) { if (c < 0) return false; continue; }
     const t = -c / k;
     if (k > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
-    if (t0 > t1) return null;
+    if (t0 > t1) return false;
   }
   // The face's depth plane along the line, lowered by its slope times reach.
-  return [t0, t1, faces[o + 6] * ax + faces[o + 7] * ay + faces[o + 8] - faces[o + 9] * reach, faces[o + 6] * dx + faces[o + 7] * dy];
+  clip[0] = t0;
+  clip[1] = t1;
+  clip[2] = faces[o + 6] * ax + faces[o + 7] * ay + faces[o + 8] - faces[o + 9] * reach;
+  clip[3] = faces[o + 6] * dx + faces[o + 7] * dy;
+  return true;
 }
 
 /**
  * The t interval of `A + t·D` within `reach` of edge `o` (a box around it), with
- * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`.
+ * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`:
+ * `[t0, t1, alpha, beta]` in `clip`, or false when it misses.
  */
-function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): [number, number, number, number] | null {
+function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
   const px = faces[o], py = faces[o + 1];
   const len = Math.hypot(faces[o + 2] - px, faces[o + 3] - py);
   const ex = (faces[o + 2] - px) / len, ey = (faces[o + 3] - py) / len;
   let t0 = 0, t1 = 1;
   // Along the edge from -reach to len + reach, across it within reach.
-  for (const [nx, ny, lo, hi] of [[ex, ey, -reach, len + reach], [-ey, ex, -reach, reach]]) {
+  for (let side = 0; side < 2; side++) {
+    const nx = side === 0 ? ex : -ey, ny = side === 0 ? ey : ex;
+    const lo = -reach, hi = side === 0 ? len + reach : reach;
     const c = nx * (ax - px) + ny * (ay - py);
     const k = nx * dx + ny * dy;
-    if (k === 0) { if (c < lo || c > hi) return null; continue; }
+    if (k === 0) { if (c < lo || c > hi) return false; continue; }
     const ta = (lo - c) / k, tb = (hi - c) / k;
     t0 = Math.max(t0, Math.min(ta, tb));
     t1 = Math.min(t1, Math.max(ta, tb));
-    if (t0 > t1) return null;
+    if (t0 > t1) return false;
   }
   const slope = (faces[o + 7] - faces[o + 6]) / len;
   const s0 = ex * (ax - px) + ey * (ay - py);
-  return [t0, t1, faces[o + 6] + slope * s0 - Math.abs(slope) * reach, slope * (ex * dx + ey * dy)];
+  clip[0] = t0;
+  clip[1] = t1;
+  clip[2] = faces[o + 6] + slope * s0 - Math.abs(slope) * reach;
+  clip[3] = slope * (ex * dx + ey * dy);
+  return true;
 }
 
 /** Project the mesh's faces once per source; a face seen edge-on keeps only its edges (it holds no area the raster can fill). */
@@ -299,6 +330,8 @@ class FaceGrid {
   private readonly cellV: number;
   private readonly seen: Int32Array;
   private stamp = 0;
+  /** The faces the last `query` found, as many as it returned, reused so a query allocates nothing. */
+  readonly found: Int32Array;
 
   constructor(faces: Float64Array, reach: number) {
     const count = faces.length / STRIDE;
@@ -316,6 +349,7 @@ class FaceGrid {
     this.cellV = Math.max((maxV - minV + 2 * reach) / this.size, 1e-12);
     this.cells = Array.from({ length: this.size * this.size }, () => []);
     this.seen = new Int32Array(count);
+    this.found = new Int32Array(count);
     for (let f = 0; f < count; f++) {
       const o = f * STRIDE;
       const lo = this.cellRange(Math.min(faces[o], faces[o + 2], faces[o + 4]) - reach, Math.min(faces[o + 1], faces[o + 3], faces[o + 5]) - reach);
@@ -329,21 +363,24 @@ class FaceGrid {
     return [clamp((u - this.minU) / this.cellU), clamp((v - this.minV) / this.cellV)];
   }
 
-  /** Faces whose grown bounds may meet the box. */
-  query(minU: number, minV: number, maxU: number, maxV: number): number[] {
+  /** How many faces' grown bounds may meet the box: the first that many of `found`. */
+  query(minU: number, minV: number, maxU: number, maxV: number): number {
     const lo = this.cellRange(minU, minV);
     const hi = this.cellRange(maxU, maxV);
-    const found: number[] = [];
-    this.stamp++;
+    const { found, seen, cells, size } = this;
+    const stamp = ++this.stamp;
+    let n = 0;
     for (let y = lo[1]; y <= hi[1]; y++) {
       for (let x = lo[0]; x <= hi[0]; x++) {
-        for (const f of this.cells[y * this.size + x]) {
-          if (this.seen[f] === this.stamp) continue;
-          this.seen[f] = this.stamp;
-          found.push(f);
+        const cell = cells[y * size + x];
+        for (let i = 0; i < cell.length; i++) {
+          const f = cell[i];
+          if (seen[f] === stamp) continue;
+          seen[f] = stamp;
+          found[n++] = f;
         }
       }
     }
-    return found;
+    return n;
   }
 }
