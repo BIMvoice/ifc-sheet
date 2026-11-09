@@ -21,10 +21,10 @@
  * (`axisFlipForSection`), plus the pan offset.
  */
 
-import { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 } from '@bimvoice/ifcsheet';
+import { AXIS_NAME, annotationFrameOf, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 } from '@bimvoice/ifcsheet';
 import type { Pt } from './types';
 
-export { AXIS_NAME, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 };
+export { AXIS_NAME, annotationFrameOf, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 };
 
 export interface ViewTransform {
   x: number;

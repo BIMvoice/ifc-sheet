@@ -6,5 +6,5 @@ import type { TranslationValue } from '../types';
 
 /** What the command line says after a section is drawn in IfcSheet, which has no Project Navigator (#653). */
 export const sectionCreatedDocsEn = {
-  'drafting.msg.sectionCreatedSheet': 'Section created — open a sheet and pick it under “Choose what to place…” to put it on the paper.',
+  'drafting.msg.sectionCreatedSheet': 'Section created — open a sheet and drag it from “Place on this sheet” onto the paper, or click it there.',
 } as const satisfies Record<string, TranslationValue>;

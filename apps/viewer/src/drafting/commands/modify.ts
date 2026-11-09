@@ -29,12 +29,45 @@ function selected(ctx: DraftContext): DraftEntity[] {
  * and the user is told.
  */
 function editable(ctx: DraftContext): DraftEntity[] {
-  const ids = withSectionParts(new Set(selected(ctx).map((e) => e.id)), ctx.entities());
-  const items = ctx.entities().filter((e) => ids.has(e.id));
+  const { items, locked } = movableOf(ctx.selection(), ctx.entities());
+  if (locked) ctx.say('drafting.msg.sectionSymbolLocked');
+  return items;
+}
+
+/** What of the selection `ids` moves (see `editable`), and whether a detail's mark was left out. Shared with dragging a selection (#168). */
+export function movableOf(ids: ReadonlySet<string>, entities: readonly DraftEntity[]): { items: DraftEntity[]; locked: boolean } {
+  const whole = withSectionParts(new Set(entities.filter((e) => ids.has(e.id)).map((e) => e.id)), entities);
+  const all = entities.filter((e) => whole.has(e.id));
   const views = useProjectStore.getState().views;
-  const free = items.filter((e) => !isDetailMark(e, views));
-  if (free.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
-  return free;
+  const items = all.filter((e) => !isDetailMark(e, views));
+  return { items, locked: items.length < all.length };
+}
+
+/**
+ * MOVE's and COPY's one edit, by the vector `d`: a move shifts `items` in place, a copy adds them shifted (as plain
+ * drawing, no section link), each one undo step. Returns the ids of the copies. Shared with dragging a selection (#168).
+ */
+export function displaceDrafts(mode: 'move' | 'copy', viewId: string, items: readonly DraftEntity[], d: Pt): string[] {
+  if (mode === 'move') {
+    editDrafts({ update: new Map(items.map((e) => [e.id, translateEntity(e.shape, d)])) });
+    return [];
+  }
+  return editDrafts({ add: items.map((e) => newDraft(viewId, e.layerId, translateEntity(e.shape, d), withoutSectionLink(e.params))) });
+}
+
+/** ROTATE's one edit: `items` turned in place about `centre` by `angle` (drawing radians), one undo step. Shared with turning a selection by its handle (#168). */
+export function rotateDrafts(items: readonly DraftEntity[], centre: Pt, angle: number): void {
+  editDrafts({ update: new Map(items.map((e) => [e.id, rotateEntity(e.shape, centre, angle)])) });
+}
+
+/**
+ * MIRROR's one edit about the line `a`-`b`, one undo step: `copies` are added mirrored (as plain drawing, no section
+ * link) and `flips` are mirrored in place. Text is mirrored in position and stays readable (`mirrorEntity`). Returns
+ * the ids of the copies. Shared with the selection bar's flip buttons (#168).
+ */
+export function mirrorDrafts(viewId: string, a: Pt, b: Pt, { copies = [], flips = [] }: { copies?: readonly DraftEntity[]; flips?: readonly DraftEntity[] }): string[] {
+  const add = copies.map((e) => newDraft(viewId, e.layerId, mirrorEntity(e.shape, a, b), withoutSectionLink(e.params)));
+  return editDrafts({ add, update: new Map(flips.map((e) => [e.id, mirrorEntity(e.shape, a, b)])) });
 }
 
 export const eraseCommand: DraftCommandDef = {
@@ -86,13 +119,8 @@ function displaceCommand(id: 'move' | 'copy'): DraftCommandDef {
             base = p;
             return 'continue';
           }
-          const d = sub(p, base);
-          if (id === 'move') {
-            editDrafts({ update: new Map(items.map((e) => [e.id, translateEntity(e.shape, d)])) });
-            return 'done';
-          }
-          editDrafts({ add: items.map((e) => newDraft(ctx.viewId, e.layerId, translateEntity(e.shape, d), withoutSectionLink(e.params))) });
-          return 'continue';
+          displaceDrafts(id, ctx.viewId, items, sub(p, base));
+          return id === 'move' ? 'done' : 'continue';
         },
         onEnter: () => 'done',
         preview: (cursor) => (base ? items.flatMap((e) => entitySkeleton(translateEntity(e.shape, sub(cursor, base as Pt)))) : []),
@@ -113,7 +141,7 @@ export const rotateCommand: DraftCommandDef = {
     const items = editable(ctx);
     let base: Pt | null = null;
     const apply = (angle: number) => {
-      if (base) editDrafts({ update: new Map(items.map((e) => [e.id, rotateEntity(e.shape, base as Pt, angle)])) });
+      if (base) rotateDrafts(items, base, angle);
       return 'done' as const;
     };
     const angleTo = (p: Pt) => (base ? Math.atan2(p.y - base.y, p.x - base.x) : 0);
@@ -154,11 +182,11 @@ export const mirrorCommand: DraftCommandDef = {
           first = p;
           return 'continue';
         }
-        const mirrored = items.map((e) => newDraft(ctx.viewId, e.layerId, mirrorEntity(e.shape, first as Pt, p), withoutSectionLink(e.params)));
-        // Erasing the source cannot take a section symbol (or a detail's mark) with it: that would be moving it.
-        const sources = items.filter((e) => !isLockedToView(e, useProjectStore.getState().views));
-        if (eraseSource && sources.length < items.length) ctx.say('drafting.msg.sectionSymbolLocked');
-        editDrafts({ add: mirrored, remove: eraseSource ? new Set(sources.map((e) => e.id)) : undefined });
+        // Erasing the source cannot take a section symbol (or a detail's mark) with it: that would be moving it. Those get a
+        // mirrored copy and stay; the rest is mirrored in place, which is the same drawing as a copy and the source erased.
+        const locked = eraseSource ? items.filter((e) => isLockedToView(e, useProjectStore.getState().views)) : [];
+        if (locked.length) ctx.say('drafting.msg.sectionSymbolLocked');
+        mirrorDrafts(ctx.viewId, first, p, eraseSource ? { copies: locked, flips: items.filter((e) => !locked.includes(e)) } : { copies: items });
         return 'done';
       },
       onKeyword(word) {

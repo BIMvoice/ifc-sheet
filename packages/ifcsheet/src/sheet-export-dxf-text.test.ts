@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ProjectDocument, ProjectSheet } from './document.js';
-import { exportDxf } from './export.js';
+import { asWritten, dxfText } from './__fixtures__/dxf-text.js';
 import { sheetGraphic } from './sheet-graphic.js';
 
 /** The review's title: ă, ș, ț (escaped) beside Î and â (windows-1252 bytes). */
@@ -38,14 +38,14 @@ export function textsOf(dxf: string): { layer: string; value: string }[] {
 
 describe('the CLI sheet DXF carries the sheet text', () => {
   const graphic = sheetGraphic(sheet, doc, new Map());
-  const dxf = exportDxf(graphic);
+  const dxf = dxfText(graphic);
   const texts = textsOf(dxf);
 
-  it('has a TEXT for every non-blank text of the sheet, on one layer', () => {
+  it('has a TEXT for every non-blank text of the sheet, on the title block\'s layer', () => {
     const wanted = graphic.texts.map((t) => t.text).filter((t) => t.trim());
     expect(wanted.length).toBeGreaterThan(3);
-    expect(texts.map((t) => t.value).sort()).toEqual(wanted.map((t) => t.replace(/[ășț]/g, (c) => `\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`)).sort());
-    expect(new Set(texts.map((t) => t.layer))).toEqual(new Set(['SHEET-TEXT']));
+    expect(texts.map((t) => t.value).sort()).toEqual(wanted.map((t) => asWritten(t.replace(/[ășț]/g, (c) => `\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`))).sort());
+    expect(new Set(texts.map((t) => t.layer))).toEqual(new Set(['TITLEBLOCK']));
   });
 
   it('keeps the title block\'s "Planșeu țiglă ă Î â": ă, ș, ț as escapes, Î and â as themselves', () => {
@@ -55,7 +55,7 @@ describe('the CLI sheet DXF carries the sheet text', () => {
   });
 
   it('writes a literal backslash-U+ as text, not as an escape', () => {
-    const odd = exportDxf({ ...graphic, texts: [{ at: { x: 10, y: 10 }, text: 'a\\U+0041b', size: 3 }] });
+    const odd = dxfText({ ...graphic, texts: [{ at: { x: 10, y: 10 }, text: 'a\\U+0041b', size: 3 }] });
     expect(textsOf(odd).map((t) => t.value)).toEqual(['a\\U+005CU+0041b']);
   });
 });

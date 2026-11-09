@@ -116,6 +116,14 @@ export function doorOperationOf(live: Live, expressId: number, typeId: number | 
   return inherited ? parseDoorOperation(inherited) : null;
 }
 
+/**
+ * The hand a door is drawn with when neither it nor its type states one (OperationType unset or NOTDEFINED), relative to its own placement:
+ * hinged on local -X, the leaf opening to local +Y, i.e. SINGLE_SWING_LEFT. IfcOpenShell's `add_door_representation` defaults
+ * `operation_type` to "SINGLE_SWING_LEFT", and a door Bonsai made without stating one (Lloyd's D2 to D5, #679) has exactly that body: hinge at
+ * local x = 0, leaf and arc to +Y, whatever its placement. Used for the flips only: the symbol still draws a wide door as a pair of leaves, as it did.
+ */
+export const UNSTATED_DOOR_OPERATION: DoorOperation = { motion: 'swing', hinge: 'left', towards: null, leaves: 1, doubleActing: false };
+
 export interface Dir2 { x: number; y: number }
 
 /**

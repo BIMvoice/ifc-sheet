@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { RelationshipType } from '@ifc-lite/data';
 import { composeIfcx, parseIfcx, type IfcxFile } from '@ifc-lite/ifcx';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import type { GeometryResult } from '@ifc-lite/geometry';
@@ -51,5 +52,53 @@ describe('export writes the classes the file states, not the ones the reader der
     expect(Object.fromEntries(exported)).toEqual(Object.fromEntries(source));
     expect(exported.get(TYPE)).toBe('IfcWindow');
     for (const path of MATERIALS) expect(exported.has(path)).toBe(false);
+  });
+
+  it('load, export, load again: the window type and every material come back with what they define (round-trip loss)', async () => {
+    const bytes = readFileSync(SAMPLE);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const parsed = await parseIfcx(buffer);
+    const store = { ...parsed, source: new Uint8Array(0), entityIndex: { byId: new Map(), byType: new Map() } } as unknown as IfcDataStore;
+    const out = new Ifc5Exporter(store, { meshes: parsed.meshes } as unknown as GeometryResult)
+      .export({ onlyTreeEntities: false, onlyKnownProperties: false });
+    const again = await parseIfcx(new TextEncoder().encode(out.content).buffer as ArrayBuffer);
+
+    const typeId = again.pathToId.get(TYPE)!;
+    expect(again.entities.getTypeName(typeId)).toBe('IfcWindowType');
+    expect(again.relationships.getRelated(typeId, RelationshipType.DefinesByType, 'forward')).toHaveLength(2);
+    const made = (path: string): number => again.relationships.getRelated(again.pathToId.get(path)!, RelationshipType.AssociatesMaterial, 'forward').length;
+    for (const path of MATERIALS) expect(made(path), `material ${path}`).toBeGreaterThan(0);
+    // Same material, same owners as the first load read.
+    for (const path of MATERIALS) {
+      const owners = (r: typeof parsed): string[] => r.relationships
+        .getRelated(r.pathToId.get(path)!, RelationshipType.AssociatesMaterial, 'forward').map((id) => r.idToPath.get(id)!).sort();
+      expect(owners(again), `owners of ${path}`).toEqual(owners(parsed));
+    }
+  });
+
+  it('load, export, load again: every material node keeps its diffuseColor and opacity (colour is lost on export)', async () => {
+    const bytes = readFileSync(SAMPLE);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const parsed = await parseIfcx(buffer);
+    const store = { ...parsed, source: new Uint8Array(0), entityIndex: { byId: new Map(), byType: new Map() } } as unknown as IfcDataStore;
+    const out = new Ifc5Exporter(store, { meshes: parsed.meshes } as unknown as GeometryResult)
+      .export({ onlyTreeEntities: false, onlyKnownProperties: false });
+
+    // What each material node says, composed from the file as the reader sees it.
+    const colours = (file: IfcxFile): Record<string, { diffuse: unknown; opacity: unknown }> => {
+      const found: Record<string, { diffuse: unknown; opacity: unknown }> = {};
+      for (const node of composeIfcx(file).values()) {
+        if (!MATERIALS.includes(node.path)) continue;
+        found[node.path] = {
+          diffuse: node.attributes.get('bsi::ifc::presentation::diffuseColor'),
+          opacity: node.attributes.get('bsi::ifc::presentation::opacity'),
+        };
+      }
+      return found;
+    };
+    const before = colours(JSON.parse(readFileSync(SAMPLE, 'utf8')) as IfcxFile);
+    expect(Object.keys(before).sort()).toEqual([...MATERIALS].sort());
+    expect(before[MATERIALS[0]].diffuse).toEqual([0.5, 0.5, 0.5]);
+    expect(colours(JSON.parse(out.content) as IfcxFile)).toEqual(before);
   });
 });

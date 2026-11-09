@@ -37,6 +37,7 @@ import { Ifc5Exporter, type Ifc5ExportOptions } from './ifc5-exporter.js';
 
 const FIXTURE = resolve(__dirname, '../../../tests/models/ifc5/Hello_Wall_hello-wall.ifcx');
 const FIXTURE_AVAILABLE = existsSync(FIXTURE);
+if (!FIXTURE_AVAILABLE) console.warn('IFCX round-trip skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 function toArrayBuffer(buf: Buffer): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;

@@ -70,7 +70,7 @@ import { modelHighlight } from './drafting-shapes';
 
 import { useDraftingProviders } from './useDraftingProviders';
 
-import { CommandLine } from './CommandLine';
+import { DraftingPrompt } from './ToolPrompt';
 
 import { gripCursor, useDraftingPointer } from './useDraftingPointer';
 
@@ -81,7 +81,7 @@ import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
 import { ModifyBar } from './ModifyBar';
-
+import { TurnHandle } from './TurnHandle';
 import { gripsOf } from '@/drafting/grips';
 
 import { grippable } from '@/drafting/section-link';
@@ -95,10 +95,9 @@ import { screenToDrawing } from '@/drafting/frame';
 import { useModelCommandBridge } from './ModelCommandLayer';
 
 import { OpeningSymbolsLayer } from './OpeningSymbolsLayer';
-
 import { CutHatchLayer } from './CutHatchLayer';
-
 import { MembraneLayer } from './MembraneLayer';
+import { OnDrawingText } from './OnDrawingText';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
@@ -142,7 +141,6 @@ import { capturePointer } from '@/lib/pointer-capture';
 import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
-
 
 const NO_SHEET_TRANSFORM = { current: null };
 
@@ -293,7 +291,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   });
 
   const command = runningCommand();
-  const preview = command && state.cursor && command.preview ? command.preview(state.cursor) : [];
+  const preview = state.selectionDrag?.preview ?? (command && state.cursor && command.preview ? command.preview(state.cursor) : []);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -385,16 +383,18 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
           symbols={liveSymbols}
         />
         <RegionSelectHint hidden={!!command} />
+        <OnDrawingText transform={viewTransform} axis={axis} />
         {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
-        {selected.length === 1 && !state.gripDrag ? (
+        {selected.length === 1 && !state.gripDrag && !state.selectionDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
         {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
         {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
-        {selected.length > 0 && !state.gripDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag?.drag && !command ? <TurnHandle viewId={view.id} selection={selection} transform={viewTransform} axis={axis} turn={state.selectionDrag?.turn ?? null} cursor={state.cursor} /> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
         {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
-      <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
+      <DraftingPrompt ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
   );
 }

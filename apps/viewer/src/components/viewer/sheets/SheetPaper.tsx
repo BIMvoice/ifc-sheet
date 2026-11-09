@@ -39,7 +39,7 @@ import { dxfIgnore, SchemeHatchDxf } from './SchemeHatchDxf';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
-import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers } from '@bimvoice/ifcsheet';
+import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers, viewTitleLayout, type ViewTitleLayout } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { OverlayPaths } from './OverlayPaths';
@@ -73,6 +73,8 @@ export interface ViewportContent {
   drafts: DraftEntity[];
   /** The drawing's number on this sheet, printed in its title. */
   drawingNumber?: string;
+  /** The boxes of the cross-reference marks round the plan, drawing metres: the title keeps clear of them (`viewTitleLayout`). */
+  markBoxes?: readonly { min: { x: number; y: number }; max: { x: number; y: number } }[];
   /** A plan's symbols and roof lines by pen, drawing units. */
   overlays?: PlanOverlay[];
   /** A joinery schedule placed here instead of a view (paper millimetres). */
@@ -116,17 +118,16 @@ export function viewportTransform(vp: SheetViewport, drawing: Drawing2D | null, 
   return { scale: s, x: vp.x - c.x * kx * s, y: vp.y - c.y * ky * s };
 }
 
-/** Width on paper of the drawing number's ring, mm: round for one or two characters, longer for a longer number. */
-const numberWidth = (n: string, size: number): number => Math.max(size + 1, n.length * size * 0.6 + 2);
+/** The paper box of two opposite corners. */
+const paperBox = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
 
-/** The drawing's number in a ring at the start of its title, at the title's text size (mm): the number a mark elsewhere names. */
-function TitleNumber({ number, x, baseline, size }: { number: string | undefined; x: number; baseline: number; size: number }) {
-  if (!number) return null;
-  const w = numberWidth(number, size);
+/** The drawing's number in a ring at the start of its title, at the title's text size (mm): the number a mark elsewhere names. The ring is placed by `viewTitleLayout`, the same function the engine's PDF and DXF use. */
+function TitleNumber({ number, size }: { number: NonNullable<ViewTitleLayout['number']>; size: number }) {
+  const { ring } = number;
   return (
     <g {...penTags('VIEWPORT-LABELS', 0.25)}>
-      <rect x={x} y={baseline - size - 0.4} width={w} height={size + 1} rx={(size + 1) / 2} fill="none" stroke="#000" strokeWidth={0.25} />
-      <text x={x + w / 2} y={baseline - 0.2} fontSize={size * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number}</text>
+      <rect x={ring.x} y={ring.y} width={ring.w} height={ring.h} rx={ring.r} fill="none" stroke="#000" strokeWidth={0.25} />
+      <text x={number.at.x} y={number.at.y} fontSize={size * 0.8} fontWeight={700} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">{number.text}</text>
     </g>
   );
 }
@@ -193,6 +194,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const sheetLocale = useSheetLocale();
   const siteLabels = content.site ? coordinateLabels(drafts, factor, t, axis, live, layerColor) : undefined;
   const marks = viewportMarkShapes({ vp, view, drawing, drawingArea, north, locale: sheetLocale, ...(content.site ? { site: { drafts, toPaper: (p) => drawingToScreen(p, t, axis), labels: siteLabels } } : {}) });
+  const titleText = keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' });
+  // The title stands under the drawing and under the marks that stand there, as the engine's PDF places it (`viewTitleLayout`).
+  const markBoxes = (content.markBoxes ?? []).map((b) => paperBox(drawingToScreen(b.min, t, axis), drawingToScreen(b.max, t, axis)));
+  const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber, { text: titleText, marks: markBoxes, areaBottom: drawingArea.y + drawingArea.h });
   return (
     <g data-viewport-id={vp.id}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
@@ -223,9 +228,9 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
         stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
         data-export-ignore={selected ? 'true' : undefined}
       />
-      <TitleNumber number={content.drawingNumber} x={left} baseline={top + box.height + standard.type.viewTitle + 1.5} size={standard.type.viewTitle} />
-      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={left + (content.drawingNumber ? numberWidth(content.drawingNumber, standard.type.viewTitle) + 2 : 0)} y={top + box.height + standard.type.viewTitle + 1.5} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
-        {keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' })}
+      {title.number ? <TitleNumber number={title.number} size={standard.type.viewTitle} /> : null}
+      <text {...penTags('VIEWPORT-LABELS', 0.25)} x={title.textX} y={title.baseline} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
+        {titleText}
       </text>
       {content.site ? <SiteBalance x={left} y={top + box.height + standard.type.viewTitle + 4} /> : null}
     </g>

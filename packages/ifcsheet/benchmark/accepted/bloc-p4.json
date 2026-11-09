@@ -45,13 +45,13 @@
    },
    "cut": {
     "paths": 588,
-    "points": 6760,
-    "hash": "13c6245cb2b9e534"
+    "points": 6759,
+    "hash": "bc8c3cdcb9959907"
    },
    "lines": {
-    "paths": 6111,
-    "points": 12222,
-    "hash": "357768fb214ade26"
+    "paths": 6108,
+    "points": 12216,
+    "hash": "ce619b34b75e2766"
    },
    "marks": {
     "paths": 0,
@@ -62,50 +62,50 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 1613,
+     "paths": 1610,
      "regions": 0,
-     "points": 3226,
-     "hash": "98e5ae77785ddaf4"
+     "points": 3220,
+     "hash": "d1a212fd1673f007"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
      "dash": "",
-     "paths": 1601,
+     "paths": 1605,
      "regions": 0,
-     "points": 3202,
-     "hash": "229fcdce6b394718"
+     "points": 3210,
+     "hash": "96da266fdbfea4a9"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
      "dash": "",
      "paths": 0,
      "regions": 294,
-     "points": 3387,
-     "hash": "cddb98f9579dbf7c"
+     "points": 3384,
+     "hash": "61a03f582f7f24a5"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
      "regions": 294,
-     "points": 3373,
-     "hash": "66b1fe723da3b2fa"
+     "points": 3375,
+     "hash": "0ae31c229d62fdac"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 837,
+     "paths": 802,
      "regions": 0,
-     "points": 1674,
-     "hash": "686c9df92bbc663e"
+     "points": 1604,
+     "hash": "962c8e5371c649ae"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 930,
+     "paths": 908,
      "regions": 0,
-     "points": 1860,
-     "hash": "49cb2f726ac35d4b"
+     "points": 1816,
+     "hash": "87c737d6d7f47698"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
@@ -113,15 +113,15 @@
      "paths": 1465,
      "regions": 0,
      "points": 2930,
-     "hash": "57c5be07fb35c024"
+     "hash": "814bacb7fa13792a"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 1432,
+     "paths": 1428,
      "regions": 0,
-     "points": 2864,
-     "hash": "9d627364462f048f"
+     "points": 2856,
+     "hash": "f0980275cae0c74e"
     },
     "SYMBOLS stroke=#000000 fill=- #1": {
      "width": 0.13,
@@ -157,7 +157,13 @@
     }
    },
    "texts": [
+    "1 / A-201 @165.33,270.8 h2.5 left",
+    "1 / A-202 @294,201.95 h2.5 left rot90",
+    "1 @58.55,266.1 h2.8 center",
     "1:100 @536,405.5 h4.5",
+    "2 / A-201 @165.33,98.7 h2.5 left",
+    "2 / A-202 @49.3,201.95 h2.5 left rot90",
+    "2 @311.75,266.1 h2.8 center",
     "2026-10-21 @406,408 h3.5",
     "A-101 @536,389.5 h9",
     "Address @471,363.2 h2",
@@ -166,10 +172,10 @@
     "Client @406,373.2 h2",
     "Date @406,403.2 h2",
     "Drawn by @406,393.2 h2",
-    "Etaj 1  1:100 @423.6,269.3 h3.5 center",
+    "Etaj 1  1:100 @316,266.3 h3.5",
     "Floor plans 1 @406,388 h3.5",
     "Organisation @471,373.2 h2",
-    "Parter  1:100 @170.4,269.3 h3.5 center",
+    "Parter  1:100 @62.8,266.3 h3.5",
     "Project @406,363.2 h2",
     "Revision @471,403.2 h2",
     "Scale @536,397.2 h2",
@@ -202,13 +208,13 @@
    },
    "cut": {
     "paths": 588,
-    "points": 6747,
-    "hash": "aef032dff50be282"
+    "points": 6743,
+    "hash": "f65e8b3021543a29"
    },
    "lines": {
-    "paths": 6088,
-    "points": 12176,
-    "hash": "fe7a65e618d097b7"
+    "paths": 6077,
+    "points": 12154,
+    "hash": "7e6ddeb64a05ddbb"
    },
    "marks": {
     "paths": 0,
@@ -237,48 +243,48 @@
      "dash": "",
      "paths": 0,
      "regions": 294,
-     "points": 3377,
-     "hash": "2adcc4f3f7684e53"
+     "points": 3375,
+     "hash": "d85df4da4f3fc32a"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
      "regions": 294,
-     "points": 3370,
-     "hash": "84c31ea38d420f36"
+     "points": 3368,
+     "hash": "5fd2f58d87c2721a"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 715,
+     "paths": 615,
      "regions": 0,
-     "points": 1430,
-     "hash": "48cc1c8edde0945e"
+     "points": 1230,
+     "hash": "52645b9d62c290a4"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 851,
+     "paths": 793,
      "regions": 0,
-     "points": 1702,
-     "hash": "003fb4c209a1218f"
+     "points": 1586,
+     "hash": "09aec8cc4fad19b6"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1433,
+     "paths": 1428,
      "regions": 0,
-     "points": 2866,
-     "hash": "c3dcb217ff0d85fb"
+     "points": 2856,
+     "hash": "214b054f5cf0e726"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 1452,
+     "paths": 1446,
      "regions": 0,
-     "points": 2904,
-     "hash": "5b5b2d5b182ec603"
+     "points": 2892,
+     "hash": "7af1a31ebb39e7b0"
     },
     "SYMBOLS stroke=#000000 fill=- #1": {
      "width": 0.13,
@@ -314,7 +320,9 @@
     }
    },
    "texts": [
+    "1 @58.55,266.1 h2.8 center",
     "1:100 @536,405.5 h4.5",
+    "2 @311.75,266.1 h2.8 center",
     "2026-10-21 @406,408 h3.5",
     "A-102 @536,389.5 h9",
     "Address @471,363.2 h2",
@@ -323,8 +331,8 @@
     "Client @406,373.2 h2",
     "Date @406,403.2 h2",
     "Drawn by @406,393.2 h2",
-    "Etaj 2  1:100 @170.4,269.3 h3.5 center",
-    "Etaj 3  1:100 @423.6,269.3 h3.5 center",
+    "Etaj 2  1:100 @62.8,266.3 h3.5",
+    "Etaj 3  1:100 @316,266.3 h3.5",
     "Floor plans 2 @406,388 h3.5",
     "Organisation @471,373.2 h2",
     "Project @406,363.2 h2",
@@ -358,13 +366,13 @@
    },
    "cut": {
     "paths": 294,
-    "points": 3371,
-    "hash": "5f804cfc8c58c540"
+    "points": 3368,
+    "hash": "85fb0dca90d9ae32"
    },
    "lines": {
-    "paths": 3188,
-    "points": 6376,
-    "hash": "d60a8dd46de718d9"
+    "paths": 3434,
+    "points": 6868,
+    "hash": "5e247780c9444e68"
    },
    "marks": {
     "paths": 0,
@@ -375,34 +383,34 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 1601,
+     "paths": 1598,
      "regions": 0,
-     "points": 3202,
-     "hash": "6a2d8817fa764393"
+     "points": 3196,
+     "hash": "31a3228a43f72d1b"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
      "dash": "",
      "paths": 0,
      "regions": 294,
-     "points": 3371,
-     "hash": "ca995b22e3073e6d"
+     "points": 3368,
+     "hash": "fca1ce12a3671fea"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 745,
+     "paths": 194,
      "regions": 0,
-     "points": 1490,
-     "hash": "8525a6b583a7d61f"
+     "points": 388,
+     "hash": "4d4377803181f77d"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1587,
+     "paths": 1836,
      "regions": 0,
-     "points": 3174,
-     "hash": "62b747bfe247278d"
+     "points": 3672,
+     "hash": "4a5e7ce68833e76f"
     },
     "SYMBOLS stroke=#000000 fill=- #1": {
      "width": 0.13,
@@ -422,6 +430,7 @@
     }
    },
    "texts": [
+    "1 @185.15,266.1 h2.8 center",
     "1:100 @536,405.5 h4.5",
     "2026-10-21 @406,408 h3.5",
     "A-103 @536,389.5 h9",
@@ -431,7 +440,7 @@
     "Client @406,373.2 h2",
     "Date @406,403.2 h2",
     "Drawn by @406,393.2 h2",
-    "Etaj 4  1:100 @297,269.3 h3.5 center",
+    "Etaj 4  1:100 @189.4,266.3 h3.5",
     "Floor plans 3 @406,388 h3.5",
     "Organisation @471,373.2 h2",
     "Project @406,363.2 h2",
@@ -470,9 +479,9 @@
     "hash": "e3b0c44298fc1c14"
    },
    "lines": {
-    "paths": 2640,
-    "points": 5280,
-    "hash": "329351c48995424f"
+    "paths": 2701,
+    "points": 5402,
+    "hash": "0d4bf043c0e43084"
    },
    "marks": {
     "paths": 0,
@@ -483,22 +492,24 @@
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1150,
+     "paths": 1232,
      "regions": 0,
-     "points": 2300,
-     "hash": "3d8582e5170b6f26"
+     "points": 2464,
+     "hash": "e5a0130f728afa9e"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 1490,
+     "paths": 1469,
      "regions": 0,
-     "points": 2980,
-     "hash": "9bdb2849e0562b77"
+     "points": 2938,
+     "hash": "7026a91c986349b4"
     }
    },
    "texts": [
+    "1 @58.55,267.3 h2.8 center",
     "1:100 @536,405.5 h4.5",
+    "2 @311.75,267.3 h2.8 center",
     "2026-10-21 @406,408 h3.5",
     "A-201 @536,389.5 h9",
     "Address @471,363.2 h2",
@@ -508,13 +519,13 @@
     "Date @406,403.2 h2",
     "Drawn by @406,393.2 h2",
     "Elevations, south and north @406,388 h3.5",
-    "North Elevation  1:100 @423.6,270.5 h3.5 center",
+    "North Elevation  1:100 @316,267.5 h3.5",
     "Organisation @471,373.2 h2",
     "Project @406,363.2 h2",
     "Revision @471,403.2 h2",
     "Scale @536,397.2 h2",
     "Sheet no. @536,377.2 h2",
-    "South Elevation  1:100 @170.4,270.5 h3.5 center",
+    "South Elevation  1:100 @62.8,267.5 h3.5",
     "Title @406,383.2 h2",
     "ifc-lite @471,378 h3.5"
    ],
@@ -547,9 +558,9 @@
     "hash": "e3b0c44298fc1c14"
    },
    "lines": {
-    "paths": 2025,
-    "points": 4050,
-    "hash": "c68d57a27279032b"
+    "paths": 2045,
+    "points": 4090,
+    "hash": "698d12f8825e63ac"
    },
    "marks": {
     "paths": 0,
@@ -560,22 +571,24 @@
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1035,
+     "paths": 1020,
      "regions": 0,
-     "points": 2070,
-     "hash": "d23bada5f02d5561"
+     "points": 2040,
+     "hash": "5a447bfaf66cc34d"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 990,
+     "paths": 1025,
      "regions": 0,
-     "points": 1980,
-     "hash": "0fb9b7e1f11fca79"
+     "points": 2050,
+     "hash": "06692cc3efa2114d"
     }
    },
    "texts": [
+    "1 @134.15,267.3 h2.8 center",
     "1:100 @536,405.5 h4.5",
+    "2 @311.75,267.3 h2.8 center",
     "2026-10-21 @406,408 h3.5",
     "A-202 @536,389.5 h9",
     "Address @471,363.2 h2",
@@ -584,7 +597,7 @@
     "Client @406,373.2 h2",
     "Date @406,403.2 h2",
     "Drawn by @406,393.2 h2",
-    "East Elevation  1:100 @208.2,270.5 h3.5 center",
+    "East Elevation  1:100 @138.4,267.5 h3.5",
     "Elevations, east and west @406,388 h3.5",
     "Organisation @471,373.2 h2",
     "Project @406,363.2 h2",
@@ -592,7 +605,7 @@
     "Scale @536,397.2 h2",
     "Sheet no. @536,377.2 h2",
     "Title @406,383.2 h2",
-    "West Elevation  1:100 @385.8,270.5 h3.5 center",
+    "West Elevation  1:100 @316,267.5 h3.5",
     "ifc-lite @471,378 h3.5"
    ],
    "images": 0
@@ -619,14 +632,14 @@
     "hash": "36bcd358947d85d2"
    },
    "cut": {
-    "paths": 237,
-    "points": 2264,
-    "hash": "80a18d4d3dcf62ad"
+    "paths": 389,
+    "points": 3765,
+    "hash": "fe134c85b40f8762"
    },
    "lines": {
-    "paths": 2286,
-    "points": 4572,
-    "hash": "317286f29be88c3c"
+    "paths": 4178,
+    "points": 8356,
+    "hash": "68305bde4893d461"
    },
    "marks": {
     "paths": 0,
@@ -637,70 +650,72 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 833,
+     "paths": 832,
      "regions": 0,
-     "points": 1666,
-     "hash": "048e676c776fc674"
+     "points": 1664,
+     "hash": "bc5e0015b3b4aa8d"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
      "dash": "",
-     "paths": 100,
+     "paths": 739,
      "regions": 0,
-     "points": 200,
-     "hash": "5f073f9c831fd166"
+     "points": 1478,
+     "hash": "e422e1e2793fb361"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
      "dash": "",
      "paths": 0,
      "regions": 207,
-     "points": 2039,
-     "hash": "182b55f1502ca68c"
+     "points": 2013,
+     "hash": "d32bc656a8b32615"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 25,
-     "points": 225,
-     "hash": "61965366e14f4fd2"
+     "regions": 182,
+     "points": 1752,
+     "hash": "1cb26dd3a70b6bac"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 4417,
+     "paths": 3900,
      "regions": 0,
-     "points": 8834,
-     "hash": "eb9301622fe46610"
+     "points": 7800,
+     "hash": "3eb1b4ec7ff98ddc"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 42,
+     "paths": 6170,
      "regions": 0,
-     "points": 84,
-     "hash": "5f478d63c7ba116b"
+     "points": 12340,
+     "hash": "fd16bcf075dca7c2"
     },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 1231,
+     "paths": 1428,
      "regions": 0,
-     "points": 2462,
-     "hash": "0fc8eb33ca1b3b29"
+     "points": 2856,
+     "hash": "8d4562f63b593243"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
      "dash": "",
-     "paths": 122,
+     "paths": 1179,
      "regions": 0,
-     "points": 244,
-     "hash": "2fac226a8c81d46d"
+     "points": 2358,
+     "hash": "4e3c9f70e8d9888b"
     }
    },
    "texts": [
+    "1 @96.35,267.3 h2.8 center",
     "1:100 @536,405.5 h4.5",
+    "2 @273.95,267.3 h2.8 center",
     "2026-10-21 @406,408 h3.5",
     "A-301 @536,389.5 h9",
     "Address @471,363.2 h2",
@@ -713,8 +728,8 @@
     "Project @406,363.2 h2",
     "Revision @471,403.2 h2",
     "Scale @536,397.2 h2",
-    "Section A-A  1:100 @170.4,270.5 h3.5 center",
-    "Section B-B  1:100 @385.8,270.5 h3.5 center",
+    "Section A-A  1:100 @100.6,267.5 h3.5",
+    "Section B-B  1:100 @278.2,267.5 h3.5",
     "Sections @406,388 h3.5",
     "Sheet no. @536,377.2 h2",
     "Title @406,383.2 h2",

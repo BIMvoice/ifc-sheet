@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { dimensionChainCardEn } from '../catalogues/dimension-chain-card.en';
 import { addDrawingKindsEn } from '../catalogues/add-drawing-kinds.en';
 import { aiReportsEn } from '../catalogues/ai-reports.en';
 import { alignmentSectionEn } from '../catalogues/alignment-section.en';
@@ -73,6 +74,7 @@ import { drawOrderEn } from '../catalogues/draw-order.en';
 import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
 import { dxfViewEn } from '../catalogues/dxf-view.en';
 import { dxfSiteEn } from '../catalogues/dxf-site.en';
+import { doorFlipButtonsEn } from '../catalogues/door-flip-buttons.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
 import { exportDialogEn } from '../catalogues/export-dialog.en';
@@ -154,6 +156,7 @@ export const enAE = {
   ...drawingUnderlayEn,
   ...dxfViewEn,
   ...dxfSiteEn,
+  ...doorFlipButtonsEn,
   ...elementGraphicsEn,
   ...elementTypesEn,
   ...exportDialogEn,
@@ -161,4 +164,5 @@ export const enAE = {
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...extrusionInspectionEn,
+  ...dimensionChainCardEn,
 } as const;

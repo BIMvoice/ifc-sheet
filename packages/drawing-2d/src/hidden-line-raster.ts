@@ -34,9 +34,16 @@ import { signedDepth, projectPointForPlane } from './projection-bands.js';
 import type { RasterVertex } from './raster-core.js';
 import { getVertex, barycentricCoords, computeProjectedBounds } from './raster-core.js';
 
+/** One number per element across federated models: its express id within its model's slot. */
+export function ownerKey(expressId: number, modelIndex: number): number {
+  return modelIndex * 2 ** 32 + expressId;
+}
+
 export interface DepthRaster {
   /** Per-pixel minimum view depth; Infinity where nothing rasterized. */
   buffer: Float32Array;
+  /** The element nearest in each pixel (`ownerKey` of its mesh), -1 where nothing rasterized: whose surface a pixel shows. */
+  owners: Float64Array;
   width: number;
   height: number;
   bounds: Bounds2D;
@@ -98,8 +105,9 @@ export function buildDepthRaster(
 
   const buffer = new Float32Array(width * height);
   buffer.fill(Infinity);
+  const owners = new Float64Array(width * height).fill(-1);
 
-  const raster: DepthRaster = { buffer, width, height, bounds: b };
+  const raster: DepthRaster = { buffer, owners, width, height, bounds: b };
 
   for (const mesh of meshes) {
     rasterizeMesh(raster, mesh, plane, occluderDepth, depthBias);
@@ -117,6 +125,7 @@ function rasterizeMesh(
 ): void {
   const { positions, indices, origin } = mesh;
   const triangleCount = indices.length / 3;
+  const owner = ownerKey(mesh.expressId, mesh.modelIndex ?? 0);
 
   const inWindow = (viewDepth: number) => viewDepth >= 0 && viewDepth <= occluderDepth;
 
@@ -144,6 +153,7 @@ function rasterizeMesh(
       { x: uv1.x, y: uv1.y, depth: depth1 },
       { x: uv2.x, y: uv2.y, depth: depth2 },
       depthBias,
+      owner,
     );
   }
 }
@@ -154,8 +164,9 @@ function rasterizeTriangle(
   p1: RasterVertex,
   p2: RasterVertex,
   depthBias: number,
+  owner: number,
 ): void {
-  const { buffer, width, height, bounds } = raster;
+  const { buffer, owners, width, height, bounds } = raster;
 
   const toPixelX = (x: number) => ((x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
   const toPixelY = (y: number) =>
@@ -164,6 +175,18 @@ function rasterizeTriangle(
   const px0 = { x: toPixelX(p0.x), y: toPixelY(p0.y), depth: p0.depth };
   const px1 = { x: toPixelX(p1.x), y: toPixelY(p1.y), depth: p1.depth };
   const px2 = { x: toPixelX(p2.x), y: toPixelY(p2.y), depth: p2.depth };
+
+  // A face seen edge-on covers no area. Its Gram determinant below is a
+  // difference of two equal products of pixel coordinates, so it came out as
+  // rounding noise rather than 0 and the face filled a broken column of pixels
+  // at arbitrary depths between its vertices'. That column hid a sloped
+  // element's own outline once outline lines carried their own depth (FZK's
+  // roof slab, Refs #557). The cross product of the same edges is exactly 0.
+  const cross = (px1.x - px0.x) * (px2.y - px0.y) - (px1.y - px0.y) * (px2.x - px0.x);
+  const span = Math.max(Math.hypot(px1.x - px0.x, px1.y - px0.y), Math.hypot(px2.x - px0.x, px2.y - px0.y), Math.hypot(px2.x - px1.x, px2.y - px1.y));
+  if (Math.abs(cross) <= 1e-6 * span * span) {
+    return;
+  }
 
   const minX = Math.max(0, Math.floor(Math.min(px0.x, px1.x, px2.x)));
   const maxX = Math.min(width - 1, Math.ceil(Math.max(px0.x, px1.x, px2.x)));
@@ -186,6 +209,7 @@ function rasterizeTriangle(
         const idx = py * width + px;
         if (depth < buffer[idx]) {
           buffer[idx] = depth;
+          owners[idx] = owner;
         }
       }
     }

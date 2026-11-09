@@ -42,7 +42,8 @@ import { TitleBlockCard } from './TitleBlockForm';
 import { useWallNav } from './wall-nav';
 import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
-import { DRAW_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { DRAW_TOOLS, WALL_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
+import { registerRailStart } from './repeat-tool';
 import { steppedHandlers } from './stepped-keys';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
@@ -79,12 +80,15 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [tool, setTool] = useState<string | null>(null);
+  const [lastTool, setLastTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
   const [adding, setAdding] = useState(false);
   const [titling, setTitling] = useState(false);
   const [revising, setRevising] = useState(false);
   const [papering, setPapering] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  // The view being dragged from the card onto the paper (#168), while the drag lasts.
+  const [dragViewId, setDragViewId] = useState<string | null>(null);
   const [settingsKey, setSettingsKey] = useState(0);
   const cancelStart = useRef<() => void>(() => {});
   const slot = viewports.find((v) => v.id === chosen) ?? null;
@@ -181,6 +185,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }, [inDrawing]);
 
   const startTool = (command: string): void => {
+    setLastTool(command);
     cancelStart.current();
     ran.current = null;
     setAdding(false);
@@ -200,6 +205,13 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     setFocusId(target.id);
     cancelStart.current = startWhenAttached(target.id, command);
   };
+
+  // "Repeat last tool" starts through the rail, like a click on the tool. A tool the rail does not offer (typed, say) starts on its own.
+  const railStartRef = useRef(startTool);
+  railStartRef.current = startTool;
+  useEffect(() => registerRailStart((command) => {
+    if ([...DRAW_TOOLS, ...WALL_TOOLS].some((x) => x.command === command)) railStartRef.current(command); else startDraftCommand(command);
+  }), []);
 
   /** The tool's Done: ends it and lets the rail go, without Esc or Enter (#166). The dimension chain does not start again. */
   const stopTool = useCallback((): void => {
@@ -311,7 +323,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
-        <ToolRail active={tool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
+        <ToolRail active={tool} last={lastTool} onTool={(command) => (command === tool ? stopTool() : startTool(command))} adding={adding} onAdd={() => setAdding((a) => !a)} viewKind={focusView?.kind ?? view?.kind ?? null} onAll={runAll} />
         <main className="relative min-w-0 flex-1">
           {focusView ? (
             <div className="absolute inset-0 overflow-hidden rounded-md bg-white text-zinc-900">
@@ -319,7 +331,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
-              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} />
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
             </div>
           )}
           <div ref={cardHost} className={WALL_CARD_HOST}>
@@ -329,7 +341,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
-                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} />}
+                  : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} onDragView={setDragViewId} />}
           </div>
           {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
           {adding ? (

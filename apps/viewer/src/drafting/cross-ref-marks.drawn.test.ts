@@ -8,8 +8,11 @@ import type { ElevationDirection, ProjectSheet, ProjectView } from '@/project/ty
 import { textBox } from './annotation';
 import { screenSigns } from './frame';
 import { readableDeg } from './styles';
-import { elevationMarkDrafts, type Box } from './cross-ref-marks';
+import { elevationMarkDrafts, type ObstacleBox as Box } from '@bimvoice/ifcsheet';
+import { textWidthEm } from './text-width';
 import type { DraftEntity, Pt } from './types';
+
+const measure = { widthOf: textWidthEm, frame: { up: 1 as const, right: 1 as const } };
 
 /**
  * Audit #245: on the Schependomlaan plan the west elevation label "2 / A-202"
@@ -42,7 +45,7 @@ function drawnRotation(rotation: number): number {
 }
 const extent = (pts: Pt[]) => ({ x0: Math.min(...pts.map((p) => p.x)), x1: Math.max(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), y1: Math.max(...pts.map((p) => p.y)) });
 
-const marks = (): DraftEntity[] => elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1 });
+const marks = (): DraftEntity[] => elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1 });
 
 describe('an elevation label is drawn where its box is (#245)', () => {
   for (const direction of ['east', 'west'] as const) {
@@ -56,7 +59,7 @@ describe('an elevation label is drawn where its box is (#245)', () => {
 
     it(`${direction}: a reference where the label is DRAWN is kept clear of, not only where its box is`, () => {
       const at = (obstacles: Box[]) => {
-        const made = elevationMarkDrafts({ planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles });
+        const made = elevationMarkDrafts({ measure, planViewId: 'plan', layerId: '0', views, sheets, bounds: FOOTPRINT, paperUnit: 0.1, factor: 1, obstacles });
         const label = made.find((m) => m.id.includes(`e-${direction}`) && m.shape.type === 'text');
         assert.ok(label && label.shape.type === 'text');
         return extent(textBox(label.shape.p, label.shape.text, label.shape.height, drawnRotation(label.shape.rotation)));

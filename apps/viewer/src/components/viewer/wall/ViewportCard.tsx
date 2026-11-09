@@ -5,17 +5,18 @@
 /**
  * The card for the drawing chosen on a sheet: its name, its scale (`ScaleField`), its cut
  * or depth, opening it to draw in, taking it off the sheet; and below, any
- * drawing or schedule not yet on this sheet, to place on it.
+ * drawing or schedule not yet on this sheet, to place on it: a click puts it in the middle of the drawing area, and a
+ * view can be dragged onto the paper instead, to land where it is let go (#168, `SheetCanvas`).
  */
 
-import { templateKindOf } from '@bimvoice/ifcsheet';
+import { drawingNumbers, templateKindOf } from '@bimvoice/ifcsheet';
 import { useTranslation } from '@/i18n';
 import { placeLegend } from '@/legend/legend-actions';
 import { renameProjectItem, useProjectStore } from '@/project/project-store';
 import { addViewport, editViewport, removeViewport } from '@/project/sheets';
 import { isResizable } from '@/project/viewport-resize';
 import { isFittedSchedule } from '@/project/schedule-fit';
-import { drawingNumbers } from '@/drafting/cross-ref';
+import { PLACE_DRAG_TYPE, dropsAtTrueSize } from '@/project/viewport-drop';
 import { drawingArea } from '@/project/drawing-set';
 import type { ProjectSheet, SheetViewport } from '@/project/types';
 import { useLegendLabels } from '../legend/LegendGraphic';
@@ -59,9 +60,11 @@ interface ViewportCardProps {
   extent?: ModelExtent | null;
   /** Step into a joinery schedule's type view to draw on it (#656); without it the schedule's card offers no such way in. */
   onDrawIn?: (draft: JoineryDraft) => void;
+  /** A view of the list below starts (its id) or stops (null) being dragged onto the sheet; without it nothing is draggable. */
+  onDragView?: (viewId: string | null) => void;
 }
 
-export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null, onDrawIn }: ViewportCardProps) {
+export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = null, extent = null, onDrawIn, onDragView }: ViewportCardProps) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
   const schedules = useProjectStore((s) => s.schedules ?? []);
@@ -73,9 +76,10 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
   const name = view?.name ?? schedule?.name ?? legend?.name ?? '';
   const placed = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   const placeable = [
-    ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
-    ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name })),
-    ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name })),
+    // A view is sized by the model's extent, so it can be dropped at true size once the model is measured.
+    ...views.filter((v) => !placed.has(v.id)).map((v) => ({ id: v.id, name: v.name, drags: !!extent && !!onDragView && dropsAtTrueSize(v) })),
+    ...schedules.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, name: s.name, drags: false })),
+    ...legends.filter((l) => !placed.has(l.id)).map((l) => ({ id: l.id, name: l.name, drags: false })),
   ];
 
   const place = (id: string): void => {
@@ -145,13 +149,32 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
         <p className="m-0 text-sm text-sky-200">{t('wall.vp.none')}</p>
       )}
       {placeable.length > 0 ? (
-        <label className="mt-5 block border-t border-sky-300/20 pt-4 text-xs text-sky-200">
-          {t('wall.vp.place')}
-          <select className={field} value="" onChange={(e) => e.target.value && place(e.target.value)}>
-            <option value="">{t('wall.vp.placePick')}</option>
-            {placeable.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
+        <section className="mt-5 border-t border-sky-300/20 pt-4 text-xs text-sky-200" aria-labelledby="wall-vp-place">
+          <p id="wall-vp-place" className="m-0">{t('wall.vp.place')}</p>
+          {placeable.some((p) => p.drags) ? <p className="m-0 mt-1 text-2xs text-sky-200/70">{t('wall.drop.hint')}</p> : null}
+          <ul className="m-0 mt-2 flex max-h-48 list-none flex-col gap-1 overflow-y-auto p-0">
+            {placeable.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  data-place-item={p.id}
+                  draggable={p.drags}
+                  className={`${quiet} w-full text-left ${p.drags ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                  title={p.drags ? t('wall.drop.title') : undefined}
+                  onClick={() => place(p.id)}
+                  onDragStart={p.drags ? (e) => {
+                    e.dataTransfer.setData(PLACE_DRAG_TYPE, p.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                    onDragView?.(p.id);
+                  } : undefined}
+                  onDragEnd={p.drags ? () => onDragView?.(null) : undefined}
+                >
+                  {p.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </aside>
   );

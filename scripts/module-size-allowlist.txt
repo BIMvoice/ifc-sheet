@@ -197,7 +197,6 @@
    436 packages/drawing-2d/src/line-merger.ts
    417 packages/drawing-2d/src/object-styles.ts
    753 packages/drawing-2d/src/polygon-builder.ts
-   409 packages/drawing-2d/src/section-cutter.ts
    403 packages/drawing-2d/src/sheet/scale-stamp.ts
    599 packages/drawing-2d/src/sheet/title-block-renderer.ts
    489 packages/drawing-2d/src/styles.ts
@@ -224,6 +223,7 @@
    628 packages/ids/src/translation/service.ts
    636 packages/ids/src/types.ts
    773 packages/ids/src/validation/validator.ts
+  2802 packages/ifcsheet/src/dxf-r2000-skeleton.ts
    468 packages/ifcx/src/federated-composition.ts
    704 packages/ifcx/src/index.ts
    464 packages/lens/src/engine.ts

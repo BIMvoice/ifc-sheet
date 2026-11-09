@@ -9,11 +9,12 @@
  * (`apps/viewer/src/project/elevation-symbols-parity.fzk.test.ts`).
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
+import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
 import { sheetGraphic } from './sheet-graphic.js';
 import { viewOpeningSymbols } from './plan-openings.js';
 import { defaultWindowSpec } from '@ifc-lite/create';
@@ -57,7 +58,7 @@ describe.skipIf(missing !== null)('the sheets of AC20-FZK-Haus draw the door and
     expect(pens.every((p) => p.stroke === '#000000' && p.fill === null && p.runs.length > 0)).toBe(true);
     expect(new Set(pens.map((p) => p.width)), 'an unconfigured door has thin lines only').toEqual(new Set([PEN_TABLE.pens.hatch]));
     expect(pens.some((p) => !p.dash), 'a solid pen').toBe(true);
-    expect(exportDxf(sheet)).toContain('VIEW-SYMBOLS-013');
+    expect(dxfLayers(dxfText(sheet))).toContain('SYMBOLS');
   });
 
   it('draws the symbols over the elevation: its doors and windows are not taken off it, as a plan\'s are', async () => {

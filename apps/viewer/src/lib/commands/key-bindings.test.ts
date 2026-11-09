@@ -58,6 +58,7 @@ const SHIPPED: Readonly<Record<string, readonly KeyChord[]>> = {
   'drafting.cancel': [{ key: 'escape' }],
   'drafting.erase': [{ key: 'delete' }, { key: 'backspace' }],
   'drafting.confirm': [{ key: 'enter' }, { key: ' ' }],
+  'drafting.repeat': [],
 };
 
 const key = (k: string, mods: Omit<KeyChord, 'key'> = {}): KeyChord => ({ key: k, ...mods });

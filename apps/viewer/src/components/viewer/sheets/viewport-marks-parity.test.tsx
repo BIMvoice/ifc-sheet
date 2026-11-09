@@ -24,7 +24,7 @@ import { useViewerStore } from '@/store';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { northArrowRotation } from '@bimvoice/ifcsheet';
 import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
-import { exportDxf } from '@bimvoice/ifcsheet/headless';
+import { sheetGraphicToDxf } from '@bimvoice/ifcsheet/headless';
 import { SheetPaper } from './SheetPaper';
 import { sheetDxf } from './sheet-dxf';
 
@@ -34,7 +34,7 @@ const drawing = {
   lines: [], cutPolygons: [], projectionPolygons: [],
   stats: { cutLineCount: 0, projectionLineCount: 0, hiddenLineCount: 0, silhouetteLineCount: 0, polygonCount: 0, totalTriangles: 0, processingTimeMs: 0 },
 } as unknown as Drawing2D;
-const view = { id: 'v', kind: 'plan', name: 'Plan', createdAt: 0 } as unknown as ProjectView;
+const view = { id: 'v', kind: 'plan', name: 'Plan', createdAt: 0, level: { name: 'L0', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2, scale: 100 } as unknown as ProjectView;
 const viewport = (over: Partial<SheetViewport>): SheetViewport => ({ id: 'vp', viewId: 'v', x: 420, y: 297, scale: 50, width: 0, height: 0, center: null, ...over });
 const sheetOf = (vp: SheetViewport): ProjectSheet => ({ id: 's', number: 'A-101', name: 'Plan', createdAt: 0, paper: 'A1', orientation: 'landscape', viewports: [vp] });
 
@@ -57,7 +57,7 @@ async function bothSides(vp: SheetViewport, v: ProjectView = view, site?: object
   const layout = sheetGraphic(sheet, doc, new Map([['v', shown.drawing]]), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { north: northOfStore(store), locale: sheetFormat('en', units) },
     shown.drafts.length ? { annotations: { drafts: shown.drafts, layers: [], groups: [], book: { textStyles: [], dimStyles: [] }, site: siteFrameOf({ dataStore: store, coordinateInfo: undefined as never }), locale: sheetFormat('en', units) } } : undefined);
   const svg = ui.querySelector('svg') as unknown as SVGSVGElement;
-  return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: exportDxf(layout) };
+  return { marks, layout, screenDxf: new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet)), engineDxf: new TextDecoder('windows-1252').decode(sheetGraphicToDxf(layout)) };
 }
 
 describe('a viewport\'s north arrow and scale bar: the screen and the layout agree', () => {

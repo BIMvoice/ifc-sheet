@@ -17,6 +17,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
+import { isTerrainPredefinedType } from './terrain.js';
 
 /** The interval a view draws when it names none, metres. */
 export const CONTOUR_DEFAULT_INTERVAL = 0.5;
@@ -34,8 +35,13 @@ export interface ContourLine {
   points: { x: number; z: number }[];
 }
 
-/** Whether a mesh is a terrain surface the engine contours by itself: an IfcGeographicElement (what a LandXML terrain becomes in IFC). */
-export const isTerrainMesh = (mesh: Pick<MeshData, 'ifcType'>): boolean => mesh.ifcType?.toUpperCase() === 'IFCGEOGRAPHICELEMENT';
+/**
+ * Whether a mesh is a terrain surface the engine contours by itself: an IfcGeographicElement (what a LandXML terrain becomes in IFC)
+ * of PredefinedType TERRAIN, NOTDEFINED or none (`isTerrainPredefinedType`). `predefinedTypeOf` reads the element's PredefinedType;
+ * without it the mesh counts as one that states none.
+ */
+export const isTerrainMesh = (mesh: Pick<MeshData, 'ifcType' | 'expressId'>, predefinedTypeOf?: (expressId: number) => string | null): boolean =>
+  mesh.ifcType?.toUpperCase() === 'IFCGEOGRAPHICELEMENT' && isTerrainPredefinedType(predefinedTypeOf?.(mesh.expressId) ?? null);
 
 /** The levels of a surface spanning `min`..`max`: `index * interval`, `index` counted from datum 0, so levels agree between surfaces. */
 export function contourLevels(min: number, max: number, interval: number): { index: number; height: number; major: boolean }[] {

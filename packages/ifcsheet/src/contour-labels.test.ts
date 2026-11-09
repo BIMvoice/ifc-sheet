@@ -14,7 +14,7 @@ import { grid } from './__fixtures__/contour-grid.js';
 import { withContours } from './contour-drawing.js';
 import { CONTOUR_IFC_TYPE, contourLabelsOf, layoutContourLabels } from './contour-labels.js';
 import type { PlanProjectView, ProjectDocument } from './document.js';
-import { exportDxf } from './export.js';
+import { dxfText } from './__fixtures__/dxf-text.js';
 import { sheetGraphic } from './sheet-graphic.js';
 
 const cone = grid(40, 40, (x, z) => 12 - 0.5 * Math.hypot(x - 20, z - 20));
@@ -92,10 +92,10 @@ describe('contour height labels (#182)', () => {
     const labels = sheet.texts.filter((t) => ['0.00', '5.00', '10.00'].includes(t.text));
     expect(labels.length).toBeGreaterThan(3);
     expect(labels.every((t) => t.size === 2.5 && t.align === 'center')).toBe(true);
-    const dxf = exportDxf(sheet);
+    const dxf = dxfText(sheet);
     expect(dxf).toContain('10.00');
     expect(dxf).toContain('5.00');
     const ro = sheetGraphic(doc.sheets[0], doc, new Map([['site', contoured]]), null, new Map(), undefined, undefined, undefined, undefined, undefined, undefined, { north: null, locale: 'ro' });
-    expect(exportDxf(ro)).toContain('10,00');
+    expect(dxfText(ro)).toContain('10,00');
   });
 });

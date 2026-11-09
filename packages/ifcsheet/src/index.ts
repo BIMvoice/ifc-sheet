@@ -12,13 +12,13 @@
  * stores call into these functions and keep the UI state.
  *
  *     import { generateDefaultSet } from '@bimvoice/ifcsheet';
- *     import { exportDxf, exportPdf, openModel, sheetGraphics } from '@bimvoice/ifcsheet/headless';
+ *     import { sheetGraphicToDxf, exportPdf, openModel, sheetGraphics } from '@bimvoice/ifcsheet/headless';
  *
  *     const model = await openModel(bytes);
  *     const set = generateDefaultSet(model);
  *     const sheets = await sheetGraphics(set, model);
  *     const pdf = await exportPdf(sheets);
- *     const dxf = sheets.map(exportDxf);
+ *     const dxf = sheets.map((sheet) => sheetGraphicToDxf(sheet));
  *
  * This file only lists the sub-barrels in `exports/`. A feature adds its exports to the barrel of its own area
  * (create a new `exports/<area>.ts` and one line here if none fits), so concurrent PRs do not collide on this list.
@@ -41,3 +41,4 @@ export * from './exports/dimall.js';
 export * from './exports/tagall.js';
 export * from './exports/levelall.js';
 export * from './exports/annotate.js';
+export * from './exports/cross-ref.js';

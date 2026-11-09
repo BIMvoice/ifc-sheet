@@ -16,7 +16,7 @@ import { setPlatform } from '@/test/platform.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, editDrafts, newDraft } from '@/drafting/draft-store';
 import { clearClipboard } from '@/drafting/clipboard';
-import { cancelCommand, clickDrawing, pressEnter, useDraftingSession } from '@/drafting/session';
+import { cancelCommand, clickDrawing, pressEnter, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { undoLatest } from '@/project/unified-undo';
 import type { EntityShape } from '@/drafting/types';
 import type { ProjectView } from '@/project/types';
@@ -164,10 +164,11 @@ describe('Ctrl+D (#484)', () => {
 describe('the bar under the selection (#484)', () => {
   const button = (ui: HTMLElement, name: string) => ui.querySelector(`[role=toolbar] button[aria-label="${name}"]`) as HTMLButtonElement;
 
-  it('offers Copy, Move, Rotate and Mirror, and each starts its command on the selection', () => {
+  it('offers Copy, Move and Rotate, and each starts its command on the selection; the flips replace Mirror (#168)', () => {
     const ui = render(<DraftingView view={plan} />);
     seedSelectedLine();
-    for (const [name, id] of [['Copy', 'copy'], ['Move', 'move'], ['Rotate', 'rotate'], ['Mirror', 'mirror']] as const) {
+    assert.equal(button(ui, 'Mirror'), null);
+    for (const [name, id] of [['Copy', 'copy'], ['Move', 'move'], ['Rotate', 'rotate']] as const) {
       assert.ok(button(ui, name), `${name} button`);
       click(button(ui, name));
       assert.equal(useDraftingSession.getState().commandId, id);
@@ -185,7 +186,7 @@ describe('the bar under the selection (#484)', () => {
     assert.deepEqual(shapes(), [LINE]);
   });
 
-  it('Copy places a copy per click and ends with Enter; Rotate and Mirror are one step each', () => {
+  it('Copy places a copy per click and ends with Enter; the typed Mirror and Rotate are one step each', () => {
     const ui = render(<DraftingView view={plan} />);
     seedSelectedLine();
     click(button(ui, 'Copy'));
@@ -193,7 +194,7 @@ describe('the bar under the selection (#484)', () => {
     assert.equal(shapes().length, 2);
     act(() => undoLatest());
     assert.equal(shapes().length, 1);
-    click(button(ui, 'Mirror'));
+    act(() => { startDraftCommand('mirror'); });
     act(() => { clickDrawing({ x: 0, y: 1 }, 0.05, false); clickDrawing({ x: 1, y: 1 }, 0.05, false); });
     assert.equal(shapes().length, 2);
     act(() => undoLatest());

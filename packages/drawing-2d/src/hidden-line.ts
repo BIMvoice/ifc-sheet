@@ -19,7 +19,8 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
-import { buildDepthRaster, type DepthRaster } from './hidden-line-raster.js';
+import { buildDepthRaster, ownerKey, type DepthRaster } from './hidden-line-raster.js';
+import { PIXEL, hiddenByItself, ownSurfaceBeside, rasterPixel } from './hidden-line-own.js';
 import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -51,6 +52,12 @@ export interface VisibilityResult {
 export interface ExteriorViewOptions {
   /** Pixels of tolerance for an edge lying on its occluder's outline (`HiddenLineOptions.edgeTolerancePx`). Absent: none. */
   hiddenLineEdgeTolerancePx?: number;
+  /**
+   * The drawing is a view from a camera (an axonometric, the 3D-view PDF), not a section, a plan or an elevation. Such
+   * a view keeps the line work it always had for curved surfaces: no outline along smooth edges and no own surface
+   * depth for it (`silhouette-lines.ts`, #557), which on an axonometric let lines show past what is in front of them.
+   */
+  cameraView?: boolean;
   /**
    * Also draw the creases facing the viewer, not only the silhouette
    * (`EdgeExtractor.extractExteriorEdges`): the corners of a wall or a slab seen
@@ -162,6 +169,11 @@ export class HiddenLineClassifier {
     this.built = true;
   }
 
+  /** Whether `line` is hidden somewhere by its own element's surface (`hiddenByItself`): only then does own depth matter. */
+  coveredByItself(line: DrawingLine): boolean {
+    return this.raster !== null && hiddenByItself(this.raster, line, Math.max(2, this.options.samplesPerLine), this.options.depthBias);
+  }
+
   /**
    * Classify lines as visible or hidden based on depth buffer
    */
@@ -245,7 +257,8 @@ export class HiddenLineClassifier {
     const segments: VisibilitySegment[] = [];
     let currentStart = line.line.start;
     let currentT = 0;
-    let currentVisible = this.sampleVisibility(line.line.start, depthAt(0), depthBias);
+    const owner = ownerKey(line.entityId, line.modelIndex ?? 0);
+    let currentVisible = this.sampleVisibility(line.line.start, depthAt(0), depthBias, owner);
     let visibleCount = currentVisible ? 1 : 0;
 
     for (let i = 1; i <= numSamples; i++) {
@@ -256,7 +269,7 @@ export class HiddenLineClassifier {
       // misreading a fully occluded endpoint as visible (PR #2644 review).
       const point =
         i === numSamples ? line.line.end : point2DLerp(line.line.start, line.line.end, t);
-      const isVisible = this.sampleVisibility(point, depthAt(t), depthBias);
+      const isVisible = this.sampleVisibility(point, depthAt(t), depthBias, owner);
 
       if (isVisible) visibleCount++;
 
@@ -309,7 +322,7 @@ export class HiddenLineClassifier {
     return { line, segments, overallVisibility };
   }
 
-  private sampleVisibility(point: Point2D, lineDepth: number, depthBias: number): boolean {
+  private sampleVisibility(point: Point2D, lineDepth: number, depthBias: number, owner: number): boolean {
     const raster = this.raster;
     // No raster means no occluder rasterized into the kept half: nothing can
     // hide the line (issue #2639 - the previous code indexed the buffer with
@@ -318,30 +331,8 @@ export class HiddenLineClassifier {
 
     const { bounds, width, height, buffer } = raster;
 
-    // A sample outside the raster bounds has no occluder information: the
-    // raster only covers where occluders rasterized (plus margin), so had it
-    // extended here the pixels would read Infinity (visible). Clamping onto
-    // a border pixel instead can wrongly HIDE a line far from any occluder,
-    // e.g. when a straddling occluder's self-computed bounds collapse to a
-    // sliver of in-window vertices. Visible is the only safe default: it can
-    // at worst under-hide, never erase real geometry.
-    if (
-      point.x < bounds.min.x ||
-      point.x > bounds.max.x ||
-      point.y < bounds.min.y ||
-      point.y > bounds.max.y
-    ) {
-      return true;
-    }
-
-    // Convert to pixel coordinates
-    const px = ((point.x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
-    const py = ((point.y - bounds.min.y) / (bounds.max.y - bounds.min.y)) * (height - 1);
-    if (!Number.isFinite(px) || !Number.isFinite(py)) return true;
-
-    // Clamp to guard the floating-point edge at bounds.max.
-    const ix = Math.max(0, Math.min(width - 1, Math.floor(px)));
-    const iy = Math.max(0, Math.min(height - 1, Math.floor(py)));
+    if (!rasterPixel(raster, point)) return true;
+    const ix = PIXEL[0], iy = PIXEL[1];
 
     // Line is visible if it's at or in front of the depth buffer at the sample's
     // pixel. With a tolerance, the pixels within `reach` of it are consulted too
@@ -349,9 +340,10 @@ export class HiddenLineClassifier {
     // buffer's by up to `reach` pixels' worth of model: a pixel's centre sits up
     // to half a pixel off the edge that was sampled, and across a sloped face
     // that is a depth step larger than the bias, which would hide the inner
-    // corner of a wall and a slab.
+    // corner of a wall and a slab. Without a tolerance a covered sample is still
+    // visible when its own element shows at its depth in a pixel beside it (`ownSurfaceBeside`).
     const reach = this.edgeTolerancePx;
-    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias;
+    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias || ownSurfaceBeside(raster, ix, iy, lineDepth, owner, depthBias);
     const pixel = Math.max((bounds.max.x - bounds.min.x) / (width - 1), (bounds.max.y - bounds.min.y) / (height - 1));
     const slack = depthBias + reach * pixel;
     for (let y = iy - reach; y <= iy + reach; y++) {

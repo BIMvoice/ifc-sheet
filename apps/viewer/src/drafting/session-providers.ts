@@ -9,13 +9,12 @@
  * elements. The session reads them back through the getters here.
  */
 
-import type { ViewElement } from '@bimvoice/ifcsheet';
+import type { ObstacleBox as Box, ViewElement } from '@bimvoice/ifcsheet';
 import type { PlanPart } from '@bimvoice/ifcsheet';
 import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
 import type { ModelLinePick } from './commands/types';
-import type { Box } from './cross-ref-marks';
 import type { ElementBox } from './dimension-anchor';
 import type { LevelResolver } from './level-mark';
 import type { ViewInputs } from './view-inputs';

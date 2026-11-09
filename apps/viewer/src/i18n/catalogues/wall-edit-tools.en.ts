@@ -11,7 +11,7 @@ export const wallEditToolsEn = {
   'wall.draw.extend': 'Extend',
   'wall.draw.extend.body': 'Click near the end of a line to lengthen it up to the next line in its way. Works on drawn lines and on lines of the model.',
   'wall.draw.fillet': 'Fillet',
-  'wall.draw.fillet.body': 'Click two lines to round their corner. Type a radius first; 0 makes a sharp corner. Works on drawn lines and on lines of the model.',
+  'wall.draw.fillet.body': 'Click two lines to round their corner. Set the radius in the field below; 0 makes a sharp corner. Works on drawn lines and on lines of the model.',
   'wall.draw.offset': 'Offset',
-  'wall.draw.offset.body': 'Type a distance, click a line, then click the side to copy it to. A line of the model stays and the copy is drawn.',
+  'wall.draw.offset.body': 'Set the distance in the field below, click a line, then click the side to copy it to. A line of the model stays and the copy is drawn.',
 } as const satisfies Record<string, TranslationValue>;

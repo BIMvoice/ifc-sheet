@@ -41,7 +41,7 @@ import { contiguousSourceBytes, type IfcSourceBytes, type IfcSourceTransfer } fr
 import { scanIfcEntities } from './entity-scanner.js';
 import type { EntityRef } from './types.js';
 
-/** Fixture, relative to `tests/models`. Fixtures are NOT committed (AGENTS.md). */
+/** The manifest entry, relative to `tests/models`; the test reads the committed copy of the same bytes (FIXTURE_PATH). */
 const FIXTURE_RELPATH = 'ara3d/AC20-FZK-Haus.ifc';
 
 /**
@@ -55,7 +55,8 @@ const MIN_ENTITIES = 10_000;
 // it is run from the repo root (turbo) or from the package directory.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const MANIFEST_PATH = resolve(REPO_ROOT, 'tests', 'models', 'manifest.json');
-const FIXTURE_PATH = resolve(REPO_ROOT, 'tests', 'models', FIXTURE_RELPATH);
+// The committed copy (same bytes as the manifest's FIXTURE_RELPATH), so CI runs this instead of skipping.
+const FIXTURE_PATH = resolve(REPO_ROOT, 'apps', 'viewer', 'src', 'test', '__fixtures__', 'AC20-FZK-Haus.ifc');
 
 interface FixtureManifest {
   files?: { path?: string }[];

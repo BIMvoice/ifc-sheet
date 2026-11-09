@@ -15,7 +15,7 @@ import type { ViewElement } from '@bimvoice/ifcsheet';
 import type { PlanPart } from '@bimvoice/ifcsheet';
 import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { ProjectView } from '@/project/types';
-import type { Box } from '../cross-ref-marks';
+import type { ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import type { ElementBox } from '../dimension-anchor';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
 
@@ -142,6 +142,12 @@ export interface DraftCommand {
   /** The step wants free text (a note, a label): the whole line goes to `onText`. */
   wantsText?(): boolean;
   onText?(text: string): StepResult;
+  /** Where the words the step wants print (drawing space): the view opens its text editor there, unless AutoCAD mode keeps them in the command line (#168). */
+  textAt?(): Pt | null;
+  /** A one-click answer the step offers on the drawing beside `at` (a Note's "No bend"): pressing it is Enter. */
+  shortcut?(): { key: TranslationKey; at: Pt } | null;
+  /** Done (`endCommand`): finish with what is drawn so far. Without it, Done is Enter, and a step Enter only advances is cancelled. */
+  onDone?(): StepResult;
   /** A typed keyword (e.g. "C" to close); `undefined` if not understood. */
   onKeyword?(word: string): StepResult | undefined;
   onEnter?(): StepResult;

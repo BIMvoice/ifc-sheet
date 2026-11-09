@@ -23,6 +23,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import { RelationshipType } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { storeyElementIds } from './storey-elements.js';
+import { predefinedTypeReader } from './terrain.js';
 
 const OPENING_TYPES = ['IFCDOOR', 'IFCDOORSTANDARDCASE', 'IFCWINDOW', 'IFCWINDOWSTANDARDCASE'];
 /** A host: a wall, or a curtain wall (glass walls host doors in real models). */
@@ -91,7 +92,7 @@ export function storeyMembersOf(store: IfcDataStore, storeyGlobalIds: readonly s
   const wanted = new Set(storeyGlobalIds);
   const storeys = hierarchy ? new Set([...hierarchy.byStorey.keys(), ...hierarchy.elementToStorey.values()]) : new Set<number>();
   const found = [...storeys].filter((id) => wanted.has(store.entities.getGlobalId(id) ?? ''));
-  const members = new Set(hierarchy ? storeyElementIds(hierarchy, found, (id) => store.entities.getTypeEnum(id)) : []);
+  const members = new Set(hierarchy ? storeyElementIds(hierarchy, found, (id) => store.entities.getTypeEnum(id), predefinedTypeReader(store)) : []);
   byKey.set(key, members);
   return members;
 }

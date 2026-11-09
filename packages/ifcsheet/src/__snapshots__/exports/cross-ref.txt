@@ -1,0 +1,39 @@
+CIRCLE_POLE: value
+CIRCLE_R: value
+CrossRefBox: type (type-only)
+DETAIL_LINK: value
+DETAIL_PART: value
+ELEVATION_TEXT_MM: value
+ElevationMarkInput: type (type-only)
+FLAG_PAD: value
+FLAG_POINT: value
+FLAG_POLE: value
+PlanCrossRefs: type (type-only)
+SECTION_LINK: value
+SectionReferenceOptions: type (type-only)
+SymbolPlacement: type (type-only)
+TRIANGLE_HALF_BASE: value
+TRIANGLE_LEN: value
+TitleClear: type (type-only)
+ViewReference: type (type-only)
+ViewTitleLayout: type (type-only)
+boxOfPoints: value
+boxesOverlap: value
+crossReferenceMarks: value
+drawingNumbers: value
+elevationMarkDrafts: value
+elevationMarkPlan: value
+markHeadReach: value
+markedElevation: value
+obstacleBoxes: value
+placementOf: value
+referenceLabel: value
+sectionLink: value
+sectionNormal: value
+sectionReferenceDrafts: value
+sheetHolding: value
+symbolParts: value
+viewReference: value
+viewTitleLayout: value
+viewsNamedOnPlan: value
+withoutSectionLink: value

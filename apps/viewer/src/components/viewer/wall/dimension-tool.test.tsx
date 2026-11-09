@@ -87,7 +87,7 @@ describe('the Wall\'s dimension tool (#141)', () => {
     assert.deepEqual(chain.map((d) => [d.a.x, d.b.x]), [[0, 4], [4, 7], [7, 9]]);
     assert.ok(chain.every((d) => d.at.y === chain[0].at.y), 'one dimension line');
     assert.ok(runningCommand(), 'still running: the chain waits for the next point');
-    assert.match(ui.textContent ?? '', /Esc to stop/);
+    assert.match(ui.textContent ?? '', /Done stops it/);
   });
 
   it('ends on one Esc, and only the tool: the drawing stays forward and the sheet is not left', () => {

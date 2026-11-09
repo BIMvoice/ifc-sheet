@@ -18,8 +18,8 @@ import { createListDataProvider } from '@/lib/lists/adapter';
 import { runListFederated } from '@/lib/lists/run-list';
 import { ListBuilder } from './ListBuilder.js';
 
-const authoredIfc = fileURLToPath(new URL('../../../../../../tests/models/ara3d/AC20-FZK-Haus.ifc', import.meta.url));
-const missingFixture = !existsSync(authoredIfc) && 'Run pnpm fixtures to fetch AC20-FZK-Haus.ifc';
+const authoredIfc = fileURLToPath(new URL('../../../test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
+const missingFixture = !existsSync(authoredIfc) && 'the committed FZK fixture is missing';
 
 afterEach(() => { cleanup(); setLocale('en'); });
 

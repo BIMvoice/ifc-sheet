@@ -11,12 +11,13 @@
  * the one change it makes to the file, and checks the unchanged sample draws the same at every level.
  */
 
+import { dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { atDetailLevel, generateDefaultSet, type DefaultSet, type ProjectDocument, type ProjectSheet, type ProjectView } from './index.js';
-import { exportDxf, generateViewDrawings, openModel, sheetGraphic, type OpenedModel, type SheetGraphic } from './headless.js';
+import { generateViewDrawings, openModel, sheetGraphic, type OpenedModel, type SheetGraphic } from './headless.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -51,7 +52,7 @@ function sheetAt({ model, set, ground, drawing }: Loaded, scale: number, graphic
   const doc: ProjectDocument = { ...set.document, views, sheets: [sheet] };
   return sheetGraphic(sheet, doc, new Map([[ground.id, drawing]]), model.extent);
 }
-const dxfEntities = (sheet: SheetGraphic) => (exportDxf(sheet).match(/\n(LWPOLYLINE|POLYLINE|LINE)\r?\n/g) ?? []).length;
+const dxfEntities = (sheet: SheetGraphic) => (dxfText(sheet).match(/\n(LWPOLYLINE|POLYLINE|LINE)\r?\n/g) ?? []).length;
 
 describe.skipIf(missing !== null)('detail level of a 1:100 plan of AC20-FZK-Haus (#444)', () => {
   let one: Loaded;

@@ -8,7 +8,7 @@ import type { TranslationValue } from '../types';
 export const wallChamferEn = {
   'wall.edit': 'Edit',
   'wall.draw.chamfer': 'Chamfer',
-  'wall.draw.chamfer.body': 'Click two lines to cut their corner. Type a distance first; 0 makes a sharp corner. Works on drawn lines and on lines of the model.',
+  'wall.draw.chamfer.body': 'Click two lines to cut their corner. Set the distance in the field below; 0 makes a sharp corner. Works on drawn lines and on lines of the model.',
   'drafting.cmd.chamfer': 'CHAMFER',
   'drafting.prompt.chamferFirst': 'Select first line (distance {distance}) or type a distance:',
   'drafting.prompt.chamferSecond': 'Select second line:',

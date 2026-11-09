@@ -77,6 +77,12 @@ export function screenSigns(axis: SectionAxisName): { kx: 1 | -1; ky: 1 | -1 } {
   return paperSigns(CUT_AXIS[axis]);
 }
 
+/** Which way text and marks grow and which way x runs on screen, for a view cut on `axis`: a plan draws drawing-y downward (up = -1), a side view is mirrored (right = -1). The app's annotation frame and the engine's headless annotate step both read it, so they cannot drift. */
+export function annotationFrameOf(axis: SectionAxisName): { up: 1 | -1; right: 1 | -1 } {
+  const { kx, ky } = screenSigns(axis);
+  return { up: ky === 1 ? -1 : 1, right: kx };
+}
+
 /**
  * The world direction a view looks FROM, out of the drawing toward the
  * viewer: the custom plane's normal when the view has one (the frame
