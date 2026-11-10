@@ -20,6 +20,7 @@ import { crossReferenceMarks } from './cross-ref/plan.js';
 import type { OpeningSymbol } from './opening-symbols.js';
 import type { SheetAnnotations } from './sheet-annotations.js';
 import type { SheetLocale } from './units-and-numbers.js';
+import { turnOf, type DrawingPlane } from './drawing-frame.js';
 
 /**
  * The marks of `vp`'s view as annotations to print: the project's layers and styles (a set that carries none gets the standard layer and
@@ -29,7 +30,7 @@ import type { SheetLocale } from './units-and-numbers.js';
  */
 export function crossRefAnnotations(
   annotations: SheetAnnotations | undefined,
-  input: { doc: Pick<ProjectDocument, 'views' | 'sheets'>; vp: SheetViewport; drawing: Pick<Drawing2D, 'bounds'>; symbols: readonly OpeningSymbol[] | undefined; locale: SheetLocale },
+  input: { doc: Pick<ProjectDocument, 'views' | 'sheets'>; vp: SheetViewport; drawing: Pick<Drawing2D, 'bounds'> & { config?: { plane: DrawingPlane } }; symbols: readonly OpeningSymbol[] | undefined; locale: SheetLocale },
 ): SheetAnnotations | null {
   const { doc, vp, drawing } = input;
   const view = doc.views.find((v) => v.id === vp.viewId);
@@ -38,6 +39,7 @@ export function crossRefAnnotations(
   const marks = crossReferenceMarks({
     drafts: own, view, views: doc.views, sheets: doc.sheets, groundPlanId: elevationMarkPlan(doc.views)?.id, bounds: drawing.bounds,
     viewportScale: vp.scale, symbols: input.symbols ? openingObstacles(input.symbols) : [], measure: tableMeasure,
+    turn: drawing.config ? turnOf(drawing.config.plane) : 0,
   });
   if (marks.length === 0) return null;
   return annotations ? { ...annotations, drafts: marks } : { drafts: marks, layers: [DEFAULT_DRAFT_LAYER], groups: [], book: styleBookOf(undefined, undefined), locale: input.locale };

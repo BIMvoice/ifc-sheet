@@ -6,7 +6,8 @@
  * A plan drawn square to the building (Revit's project north): its drawing frame is turned by the IfcSite's rotation
  * about the vertical (`coordinateInfo.buildingRotation`), so walls the site turned 48 degrees run along the sheet's
  * axes, while the north arrow, read through the same frame, turns to point to real north. Text and marks stay upright
- * because they are placed in drawing space.
+ * because they are placed in drawing space. The turn is the rotation reduced to a quarter turn (`squareTurn`), so north
+ * stays within 45 degrees of up.
  *
  * The rule, one place for the engine and the app: a plan with `orientation: 'building'` (what a new plan gets) is
  * turned; a plan without the field (every plan saved before it) or with `'true-north'` is not, so a saved drawing and
@@ -33,13 +34,20 @@ export interface SquareFrame {
   max: Pt;
 }
 
-/** The turn a plan square to the building takes for a site rotated `rotation` radians: the rotation, in (-pi, pi], or 0 within `SQUARE_TOLERANCE_RAD` of a quarter turn (or when it is not known). */
+/**
+ * The turn a plan square to the building takes for a site rotated `rotation` radians: the rotation reduced to a quarter
+ * turn, in (-pi/4, pi/4], so the walls run along the sheet's axes while north stays roughly up (a site turned -132 degrees
+ * turns 42). 0 when that residual is within `SQUARE_TOLERANCE_RAD` (the building is square to the world already) or the
+ * rotation is not known.
+ */
 export function squareTurn(rotation: number | null | undefined): number {
   if (typeof rotation !== 'number' || !Number.isFinite(rotation)) return 0;
   const quarter = Math.PI / 2;
-  if (Math.abs(rotation - Math.round(rotation / quarter) * quarter) <= SQUARE_TOLERANCE_RAD) return 0;
-  const turn = Math.atan2(Math.sin(rotation), Math.cos(rotation));
-  return Object.is(turn, -0) ? 0 : turn;
+  let turn = rotation - Math.round(rotation / quarter) * quarter;
+  // `Math.round` sends a residual of exactly -45 degrees to -45; the range keeps +45.
+  if (turn <= -quarter / 2) turn += quarter;
+  if (Math.abs(turn) <= SQUARE_TOLERANCE_RAD) return 0;
+  return turn;
 }
 
 /** Whether `view` is drawn square to the building: a plan, not a site plan, that says `orientation: 'building'`. */

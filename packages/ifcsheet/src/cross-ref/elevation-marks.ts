@@ -17,6 +17,7 @@ import { groundPlan } from '../ground-plan.js';
 import { anchorFor, boxesOverlap, boxOfPoints, halfAlong, type CrossRefBox } from './boxes.js';
 import { referenceLabel, viewReference } from './reference.js';
 import { XREF } from './section-marks.js';
+import { turnedPoint } from '../drawing-frame.js';
 
 /** Paper millimetres: the elevation mark's text height, its arrow, and the gap to the building. */
 export const ELEVATION_TEXT_MM = 2.5;
@@ -65,6 +66,11 @@ export interface ElevationMarkInput {
   obstacles?: readonly CrossRefBox[];
   /** How the mark is headed (the project's graphic standard); absent: the arrow. */
   markStyle?: MarkStyle;
+  /**
+   * A plan square to the building (`DrawingPlane.turn`): each mark stands on the side facing the world direction its
+   * elevation looks from, through the plan's frame (`turnedMarkDrafts`). Absent or 0: north is the top of the plan.
+   */
+  turn?: number;
 }
 
 /**
@@ -76,6 +82,7 @@ export interface ElevationMarkInput {
  * before it, slides along the side to the nearest place that is clear.
  */
 export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
+  if (input.turn) return turnedMarkDrafts(input, input.turn);
   const { planViewId, layerId, views, sheets, bounds, paperUnit, factor, measure } = input;
   const viewIds = new Set(views.map((v) => v.id));
   const mid = { x: (bounds.min.x + bounds.max.x) / 2, y: (bounds.min.y + bounds.max.y) / 2 };
@@ -159,6 +166,60 @@ export function elevationMarkDrafts(input: ElevationMarkInput): DraftEntity[] {
     let found: ReturnType<typeof nearestClear> = null;
     for (let step = 0; step <= LIFT_STEPS && !found; step++) found = nearestClear(step * margin);
     const placed = found?.placed ?? build(0, 0);
+    taken.push(placed.box);
+    out.push(...placed.drafts);
+  }
+  return out;
+}
+
+/**
+ * The elevation marks of a plan turned by `turn` (`elevationMarkDrafts`): each points at the building from the world
+ * direction its elevation looks from, that direction taken through the plan's frame (`turnedPoint`), so on a plan square to
+ * a building its site turns, the north mark stands where north is. The label stays upright; a mark that meets what is
+ * already on the plan moves further out (it does not slide along the side). A flag head is drawn as the arrow.
+ */
+function turnedMarkDrafts(input: ElevationMarkInput, turn: number): DraftEntity[] {
+  const { planViewId, layerId, views, sheets, bounds, paperUnit, factor, measure } = input;
+  const viewIds = new Set(views.map((v) => v.id));
+  const mid = { x: (bounds.min.x + bounds.max.x) / 2, y: (bounds.min.y + bounds.max.y) / 2 };
+  const hx = (bounds.max.x - bounds.min.x) / 2, hy = (bounds.max.y - bounds.min.y) / 2;
+  const textH = ELEVATION_TEXT_MM * paperUnit;
+  const margin = MARK_MARGIN_MM * paperUnit;
+  const half = (ARROW_MM / 2) * paperUnit;
+  const taken: CrossRefBox[] = [...(input.obstacles ?? [])];
+  const out: DraftEntity[] = [];
+  const plan = { axis: 'y' as const, position: 0, flipped: false, turn };
+  for (const view of views) {
+    if (!markedElevation(view)) continue;
+    const ref = viewReference(view.id, viewIds, sheets);
+    if (!ref) continue;
+    const d = turnedPoint(plan, SIDES[view.direction].out);
+    const across = { x: -d.y, y: d.x };
+    const at = (along: number, side: number): Pt => ({ x: mid.x + d.x * along + across.x * side, y: mid.y + d.y * along + across.y * side });
+    // The building's box reaches this far along `d`: the arrow stands clear of it.
+    const edge = hx * Math.abs(d.x) + hy * Math.abs(d.y);
+    const label = referenceLabel(ref);
+    const labelBox = textBoxIn(measure, { x: 0, y: 0 }, label, textH, 0);
+    const build = (lift: number): { drafts: DraftEntity[]; box: CrossRefBox } => {
+      const tip = edge + GAP_MM * paperUnit + lift;
+      const base = tip + ARROW_MM * paperUnit;
+      const triangle = [at(tip, 0), at(base, -half), at(base, half)];
+      const circle = input.markStyle === 'circle';
+      const r = half;
+      const shapes: (DraftShape | AnnotationShape)[] = circle
+        ? [{ type: 'hatch', loops: [triangle], pattern: 'SOLID', scale: 1, angle: 0 }, { type: 'circle', c: at(base + r, 0), r }]
+        : [{ type: 'line', a: triangle[0], b: triangle[1] }, { type: 'line', a: triangle[0], b: triangle[2] }, { type: 'line', a: triangle[1], b: triangle[2] }];
+      const c = at(base + r, 0);
+      const pts = circle ? [...triangle, { x: c.x - r, y: c.y - r }, { x: c.x + r, y: c.y + r }] : triangle;
+      const labelMid = base + (circle ? 2 * r : 0) + LABEL_GAP_MM * paperUnit + halfAlong(labelBox, d);
+      const p = anchorFor(measure, at(labelMid, 0), label, textH, 0);
+      const id = `${planViewId}:elevation:${view.id}${XREF}`;
+      const drafts: DraftEntity[] = shapes.map((shape, i) => ({ id: `${id}:${i}`, viewId: planViewId, layerId, shape, params: {} }));
+      drafts.push({ id: `${id}:label`, viewId: planViewId, layerId, shape: { type: 'text', p, text: label, height: textH / factor, rotation: 0 }, params: {} });
+      return { drafts, box: boxOfPoints([...pts, ...textBoxIn(measure, p, label, textH, 0)]) };
+    };
+    let placed = build(0);
+    for (let step = 1; step <= LIFT_STEPS && !taken.every((t) => !boxesOverlap(placed.box, t, margin)); step++) placed = build(step * margin);
     taken.push(placed.box);
     out.push(...placed.drafts);
   }
