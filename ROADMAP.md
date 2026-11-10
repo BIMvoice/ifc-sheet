@@ -1,6 +1,6 @@
 # Roadmap: what is planned but not being built
 
-The issue list holds only what is being built now and what users report. Ideas, directions and umbrellas that nobody is building yet live here, with a link to the closed issue that holds their full text. When a user asks for one of them, open a new issue that links back here, and build it.
+Issues are for users: bugs and requests that people report. Our own planned and in-progress work is never an issue. Directions and parked ideas live here, with a link to the closed issue that holds their full text where there is one; work being built now lives on the project board and in open pull requests. When a user asks for one of these, they open an issue and we build it.
 
 ## Directions
 
