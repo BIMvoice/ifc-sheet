@@ -7,13 +7,20 @@
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { Rect } from './sheet-frame.js';
 
+/**
+ * How far past the box a line may lie and still count as on its edge, in sheet mm. The viewport box comes from the model extent and the
+ * drawing from its own bounds, so a ridge on the top edge can fall 1e-7 mm outside it, one float32 step out of level; an exact test then cut
+ * 12% off the Bonsai roof ridge (#557). A micrometre on paper is far below anything printed.
+ */
+const EDGE_MM = 1e-3;
+
 /** The part of segment `a`–`b` inside `box`, or `null` when none is. */
 export function clipSegment(a: Point2D, b: Point2D, box: Rect): [Point2D, Point2D] | null {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   let t0 = 0;
   let t1 = 1;
-  const edges: [number, number][] = [[-dx, a.x - box.x], [dx, box.x + box.w - a.x], [-dy, a.y - box.y], [dy, box.y + box.h - a.y]];
+  const edges: [number, number][] = [[-dx, a.x - box.x + EDGE_MM], [dx, box.x + box.w + EDGE_MM - a.x], [-dy, a.y - box.y + EDGE_MM], [dy, box.y + box.h + EDGE_MM - a.y]];
   for (const [p, q] of edges) {
     if (p === 0) {
       if (q < 0) return null;
@@ -24,7 +31,12 @@ export function clipSegment(a: Point2D, b: Point2D, box: Rect): [Point2D, Point2
     else t1 = Math.min(t1, r);
     if (t0 > t1) return null;
   }
-  return [{ x: a.x + t0 * dx, y: a.y + t0 * dy }, { x: a.x + t1 * dx, y: a.y + t1 * dy }];
+  // A point the tolerance let in is put back on the box, so nothing is ever drawn outside it.
+  const on = (t: number): Point2D => ({
+    x: Math.min(Math.max(a.x + t * dx, box.x), box.x + box.w),
+    y: Math.min(Math.max(a.y + t * dy, box.y), box.y + box.h),
+  });
+  return [on(t0), on(t1)];
 }
 
 /** `points` clipped to `box`: the runs that stay inside, each an open run of points; a run wholly inside comes back as it was. */
@@ -85,3 +97,6 @@ export function clipPolygon(loop: readonly Point2D[], box: Rect): Point2D[] {
   }
   return out;
 }
+
+/** Whether `p` is in `box` (its edge counts). A text cannot be cut like a line: one whose anchor is outside the box is not on the sheet. */
+export const pointInBox = (p: Point2D, box: Rect): boolean => p.x >= box.x - 1e-6 && p.x <= box.x + box.w + 1e-6 && p.y >= box.y - 1e-6 && p.y <= box.y + box.h + 1e-6;

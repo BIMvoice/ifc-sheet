@@ -9,9 +9,43 @@
 
 export { readJoineryList, readJoinerySpec } from './joinery-spec-read.js';
 export {
+  FANLIGHT_SHARE, MAX_BARS, MAX_LEAVES, cleanBars, cleanHead, cleanOpening, configureTypeOpening, leafOperations, openingOfSpec, specFromOpening, typeEntryId, typedSillOf,
+  type ConfigureTypeInput, type ProjectJoinery, type TypeOpening,
+} from './joinery-type-config.js';
+export {
+  MAX_BLOCK_PATHS, MAX_BLOCK_POINTS, blockPlanStrokes, listDxfBlocks, mirrorsBlock, readDxfBlock, readJoineryBlock, withPlanBlock,
+  type BlockStroke, type DxfBlockRead, type DxfBlockReport,
+} from './joinery-block-symbol.js';
+export {
+  DRAWN_SYMBOL_NAME, blockAsShapes, blockFromDrafts, isDrawnSymbol, symbolCanvas, type SymbolCanvas,
+} from './joinery-drawn-symbol.js';
+export {
+  JOINERY_VIEW_DETAILS, joineryViewLineId, joineryViewLines, withHiddenLinesShown, withViewDetail, withViewLineHidden,
+  type JoineryViewLineLike, type JoineryViewName,
+} from './joinery-view-detail.js';
+export {
+  isJoineryDraftType, joineryViewDraftPrims, joineryViewDrafts, readJoineryViewDrafts, withViewDrafts, type JoineryDraftPrim,
+} from './joinery-view-drafts.js';
+export {
   attributes, drawnJoineryOf, elementFacts, joineryOfElement, joineryScheduleData, occurrenceMark, storedName, typeIndex,
   type DrawnJoinery, type JoineryElement, type JoineryProject, type Live, type ScheduleData, type ScheduleEntry, type ScheduleKind, type ScheduleModel, type ScheduleOccurrence,
 } from './joinery-schedule.js';
-export { projectSubReportChecks, readProjectFile, readinessWithProject, type ProjectFacts } from './project-read.js';
+export {
+  elementFrame, elementViews,
+  type ElementView, type ElementViewOptions, type ElementViews, type V2, type ViewLine, type ViewLineKind,
+} from './joinery-element-views.js';
+export { planFrame, planRoom, sectionRoom, viewPrims, viewRegions, type ViewRegion } from './joinery-element-views-layout.js';
+export {
+  cellTextOf, joineryExport, joineryScheduleLayout, operationText, scheduleMinBox, schedulePages,
+  type JoineryExportLabels, type ScheduleLabels, type ScheduleLayoutOptions,
+} from './joinery-schedule-layout.js';
+export { boxOptions, joineryPages, layoutJoineryOnSheet } from './joinery-schedule-place.js';
+export { entryViews, type EntryViewHooks } from './joinery-entry-views.js';
+export { roomInputsOf } from './room-finishes-read.js';
+export { takeoffElementsOf } from './material-takeoff-read.js';
+export { typeElementsOf, typeQuantitiesOver } from './type-quantities-read.js';
+export { scheduleModelsOf, type OpenedScheduleSource } from './schedule-models.js';
+export { discoverModelRows, mergeFound, readModelRowCells, readModelRowValues, type ModelRowCells, type FoundModelRows, type ModelRowSource } from './joinery-model-values.js';
+export { projectSubReportChecks, readProjectFile, readSymbolFlips, readinessWithProject, type ProjectFacts } from './project-read.js';
 export { boqScales, boqQuantities, materialNamesOf, readBoqElements, storeSource, type BoqScales, type BoqSource } from './boq-read.js';
-export { storeClassifications } from './classification-read.js';
+export { modelClassification, storeClassifications } from './classification-read.js';

@@ -15,7 +15,7 @@ import type { ProjectMaterial } from '@bimvoice/ifcsheet/materials';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import type { ViewTransform } from '@/drafting/frame';
 import { viewportPens, type Pen } from '@/components/viewer/sheets/viewport-pens';
-import { materialDrawing } from './material-drawing';
+import { materialDrawing } from '@bimvoice/ifcsheet/material-drawing';
 import { membraneOverlays } from './membrane-overlays';
 import type { PlanOverlay } from './plan-overlays';
 import { styledDrawing } from './view-graphics';

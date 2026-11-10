@@ -3,4 +3,4 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /** The issue reader lives with the project fields (no issue-pipeline imports); this keeps the old path. */
-export { readIssues } from '@/project/fields/issues-read';
+export { readIssues } from '@bimvoice/ifcsheet';

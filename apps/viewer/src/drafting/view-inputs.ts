@@ -17,15 +17,17 @@
  */
 
 import type { Drawing2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import { planParts } from '@/dimall/parts';
-import { viewElements } from '@/labels/view-elements';
+import { planParts } from '@bimvoice/ifcsheet';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import type { ProjectLevel, ProjectView } from '@/project/types';
 import { useProjectStore } from '@/project/project-store';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import { viewWorkPlane } from '@/project/view-plane-config';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
+import { renderIdGlobalId } from '@/project/element-guid';
+import { roomsOfCut } from '@bimvoice/ifcsheet';
 import { closedLoopsOf } from '@/components/viewer/drafting/drafting-shapes';
 import { drawingToWorld } from './frame';
 import { levelResolverFor, storeyOf } from './level-resolver';
@@ -33,7 +35,7 @@ import type { DraftContext } from './commands/types';
 import type { DraftEntity } from './types';
 
 /** The part of a command's context that comes from the view and its drawing. */
-export type ViewInputs = Pick<DraftContext, 'closedLoops' | 'levelAt' | 'levelRefAt' | 'resolveLevel' | 'plane' | 'viewKind' | 'view' | 'viewElements' | 'planParts' | 'planObstacles' | 'rooms'>;
+export type ViewInputs = Pick<DraftContext, 'closedLoops' | 'levelAt' | 'levelRefAt' | 'resolveLevel' | 'plane' | 'viewKind' | 'view' | 'viewElements' | 'planParts' | 'planObstacles' | 'rooms' | 'planLines'>;
 
 export interface ViewInputsSource {
   view: Exclude<ProjectView, { kind: '3d' }>;
@@ -50,11 +52,14 @@ export function viewInputs({ view, drawing, entities, plane, levels }: ViewInput
   const resolve = levelResolverFor(view, levels, plane);
   return {
     viewElements: () => (drawing ? viewElements(drawing) : []),
-    planParts: () => planParts(drawing),
+    planParts: () => planParts(drawing, currentDrawingRuntime().geometryResult?.meshes ?? []),
     // The door leaves, swings and window frames this plan draws, which a tag keeps clear of (the same symbols the marks keep clear of).
     planObstacles: () => planSymbolObstacles(view, levels, currentDrawingRuntime().geometryResult?.meshes ?? [], useProjectStore.getState().symbolFlips),
     // The rooms of this plan, each space cut at the plan's height (read as the check reads them).
-    rooms: () => roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult),
+    // A section or an elevation shows the rooms its plane cuts, by their cut outlines (#677).
+    rooms: () => (view.kind === 'plan' ? roomsOfPlan(view, levels, currentDrawingRuntime().geometryResult, renderIdGlobalId) : roomsOfCut(plane ?? drawing?.config.plane, drawing, currentDrawingRuntime().geometryResult?.meshes ?? [], renderIdGlobalId)),
+    // Every line the drawing carries, hidden ones too: a figure inside a room keeps off them, and a dimension line does not run along one.
+    planLines: () => (drawing?.lines ?? []).map((l) => ({ a: { x: l.line.start.x, y: l.line.start.y }, b: { x: l.line.end.x, y: l.line.end.y } })),
     // Hatch boundaries: drafted closed shapes and the drawing's cut outlines.
     closedLoops: () => closedLoopsOf(entities, drawing),
     // Level marks: the plan's level, or the point's height on a section / elevation.

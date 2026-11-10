@@ -29,4 +29,12 @@ describe.skipIf(missing !== null)('the readiness of AC20-FZK-Haus', () => {
     expect(findings).toEqual(modelReadiness(facts));
     expect(findings.map((f) => [f.kind, f.params])).toEqual([['noMaterials', { count: 4, total: 82 }]]);
   }, 120_000);
+
+  it('judges drawability only when the geometry was read: opened with geometry: false it says nothing, with an empty extent read it says noGeometry', async () => {
+    const model = await openModel(new Uint8Array(readFileSync(FZK)), { geometry: false });
+    expect(model.geometryRead).toBe(false);
+    expect(model.extent).toBeNull();
+    expect(readinessOfModel(model).map((f) => f.kind)).not.toContain('noGeometry');
+    expect(readinessOfModel({ ...model, geometryRead: true }).map((f) => f.kind)).toContain('noGeometry');
+  }, 120_000);
 });

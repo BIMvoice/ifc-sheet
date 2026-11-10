@@ -1,0 +1,4 @@
+resultScope.all
+resultScope.filtered
+resultScope.label
+resultScope.selected

@@ -1,0 +1,10 @@
+ElementMeasure: type (type-only)
+MeasureMesh: type (type-only)
+MeasureRefusal: type (type-only)
+MeasuredAreaKind: type (type-only)
+MeasuredFigure: type (type-only)
+QuantitySource: type (type-only)
+SourcedQuantities: type (type-only)
+measureElement: value
+measuredAreaKind: value
+withMeasured: value

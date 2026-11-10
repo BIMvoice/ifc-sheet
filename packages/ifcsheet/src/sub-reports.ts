@@ -18,6 +18,7 @@
 import { applyContent, contentOf, readScheduleContent, type ContentEntry, type ScheduleContent } from './schedule-content.js';
 import { filterPropertyNames, readSubReportFilter, subReportData, type OccurrenceFacts, type SubReportFilter } from './schedule-filter.js';
 import { readScheduleTextRows, textRowsOf, type ScheduleTextRow } from './schedule-text.js';
+import type { JoineryCellOverride } from './joinery-overrides.js';
 import { readListScheduleDef, type ListScheduleDef } from './list-schedule.js';
 
 export type { SubReportFilter };
@@ -154,12 +155,15 @@ export function scheduleOf<E extends ContentEntry>(
   schedules: readonly (Pick<ProjectSchedule, 'id' | 'sub' | 'content'> & { textRows?: ScheduleTextRow[] })[],
   schedule: Pick<ProjectSchedule, 'id' | 'sub'>,
   whole: SplitData<E>,
-): SplitData<E> & { textRows?: ScheduleTextRow[]; content?: ScheduleContent } {
+  overrides?: readonly JoineryCellOverride[],
+): SplitData<E> & { textRows?: ScheduleTextRow[]; content?: ScheduleContent; overrides?: JoineryCellOverride[]; groups?: readonly E[] } {
   const content = contentOf(schedules, schedule);
   const data = subReportData(applyContent(whole, content), schedule.sub?.filter);
   const textRows = textRowsOf(schedules, schedule);
   // A schedule with nothing chosen and no text is the model's rows themselves (callers memoise on that).
-  return textRows || content ? { ...data, ...(textRows ? { textRows } : {}), ...(content ? { content } : {}) } : data;
+  // The project's typed cells (#446) apply to the type's cell in every joinery schedule, a part of a split included. They come with every
+  // group of the kind (`groups`, before the cut): a saved cell belongs to the nearest live group (#485), which may sit in another part.
+  return textRows || content || overrides?.length ? { ...data, ...(textRows ? { textRows } : {}), ...(content ? { content } : {}), ...(overrides?.length ? { overrides: [...overrides], groups: whole.entries } : {}) } : data;
 }
 
 /**

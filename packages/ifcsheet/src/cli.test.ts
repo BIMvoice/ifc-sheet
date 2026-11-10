@@ -105,16 +105,16 @@ describe.skipIf(!existsSync(FZK))('ifcsheet check, on AC20-FZK-Haus', () => {
 });
 
 describe('the ifcsheet command line', () => {
-  it('exits 0 and says so when the model lacks nothing', async () => {
+  it('exits 1 for a file with no entities at all: nothing to draw (#604), where it once said the model lacked nothing', async () => {
     const dir = scratch();
     const file = join(dir, 'empty.ifc');
     writeFileSync(file, 'ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((\'ViewDefinition [CoordinationView]\'),\'2;1\');\nFILE_NAME(\'e.ifc\',\'\',(\'\'),(\'\'),\'\',\'\',\'\');\nFILE_SCHEMA((\'IFC4\'));\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n');
     const c = capture();
-    expect(await run(['check', file, '--json'], c.io)).toBe(EXIT.ok);
-    expect(JSON.parse(c.out())).toEqual({ file, ready: true, findings: [] });
+    expect(await run(['check', file, '--json'], c.io)).toBe(EXIT.failed);
+    expect(JSON.parse(c.out())).toMatchObject({ file, ready: false, findings: [{ kind: 'noGeometry', missing: 'The model has no geometry to draw.' }] });
     const t = capture();
-    expect(await run(['check', file], t.io)).toBe(EXIT.ok);
-    expect(t.out()).toContain('the model has what the drawing set reads');
+    expect(await run(['check', file], t.io)).toBe(EXIT.failed);
+    expect(t.out()).toContain('The model has no geometry to draw.');
   });
 
   it('fails on a missing file for check as for build', async () => {

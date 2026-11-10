@@ -5,16 +5,14 @@
 /**
  * A set as files, from the sheet layouts (`sheet-graphic.ts`): one PDF with a
  * page per sheet, each page the sheet's paper size at true scale, and one DXF
- * per sheet in paper millimetres. Both run in Node: jsPDF draws vector lines
+ * per sheet (`sheet-dxf.ts`) in paper millimetres. The PDF runs in Node: jsPDF draws vector lines
  * and text in an embedded Inter (the font the app's issued PDFs embed, for
- * ș, ț and the rest of Latin Extended), needing no canvas or DOM, and the DXF
- * is written by `@ifc-lite/drawing-2d`'s exporter.
+ * ș, ț and the rest of Latin Extended), needing no canvas or DOM.
  *
  * Not yet what the app exports: the app prints its sheet SVG through svg2pdf
- * (with layers, embedded fonts and archival metadata, `issue/pdf-build.ts`)
- * and writes R2000 DXF with CAD layers and text (`sheet-dxf.ts`). Both need
- * the sheet SVG, which only the browser renders today. The DXF here carries
- * linework only; its text is written once the app's DXF writer moves here.
+ * (with layers, embedded fonts and archival metadata, `issue/pdf-build.ts`),
+ * which only the browser renders today. The DXF is `sheet-dxf.ts`'s: the app's
+ * R2000 writer and CAD layer standard, the same layers for the same things (#619).
  *
  * The underlays a sheet prints (#457) are drawn under its drawings, as the app's sheet draws them; the DXF leaves them out.
  *
@@ -25,11 +23,11 @@
  * paper-mm width, dash and fill the app's sheet gives the same item.
  */
 
-import { exportToDXF, type Drawing2D } from '@ifc-lite/drawing-2d';
-import type { Polyline, SheetGraphic, SheetPen } from './sheet-graphic.js';
+import type { Polyline, SheetGraphic, SheetText } from './sheet-graphic.js';
+import { FILL_HATCH } from './sheet-colours.js';
 
 /** jsPDF line widths, mm, of the sheet's own marks (the drawings take their pens from `sheet.pens`). */
-const PEN = { frame: 0.5, mark: 0.18 } as const;
+const PEN = { frame: 0.5, mark: 0.18, symbol: 0.25 } as const;
 
 /** The font file the package ships (`fonts/Inter-Regular.ttf`, SIL Open Font License), read from disk in Node. */
 async function packagedFont(): Promise<Uint8Array> {
@@ -37,11 +35,42 @@ async function packagedFont(): Promise<Uint8Array> {
   return new Uint8Array(await readFile(new URL('../fonts/Inter-Regular.ttf', import.meta.url)));
 }
 
+/**
+ * The bold file the package ships next to it (`fonts/Inter-Bold.ttf`). Missing, bold text is set in the regular
+ * face and the run says so; any other read error is not a missing file and is thrown.
+ */
+async function packagedBold(): Promise<Uint8Array | undefined> {
+  const { readFile } = await import('node:fs/promises');
+  try {
+    return new Uint8Array(await readFile(new URL('../fonts/Inter-Bold.ttf', import.meta.url)));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    console.warn('[ifcsheet] fonts/Inter-Bold.ttf is not in the package; bold text is set in the regular face');
+    return undefined;
+  }
+}
+
+/** The characters beyond WinAnsi's printable Latin-1 and its 27 extras, which jsPDF's standard fonts (Times, Courier, Helvetica) can show. */
+const WIN_ANSI_EXTRA = new Set('€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ');
+const winAnsi = (text: string): boolean => {
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (!(c < 0x7f || (c >= 0xa0 && c <= 0xff) || WIN_ANSI_EXTRA.has(ch))) return false;
+  }
+  return true;
+};
+
 const binary = (bytes: Uint8Array): string => {
   let out = '';
   for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return out;
 };
+
+/** Draws what follows at `value` opacity, fills and lines alike (jsPDF builds its graphics state with `new`, which its typings leave out). */
+function opacity(doc: import('jspdf').jsPDF, value: number): void {
+  const State = doc.GState as unknown as new (parameters: Record<string, number>) => Parameters<import('jspdf').jsPDF['setGState']>[0];
+  doc.setGState(new State({ opacity: value, 'stroke-opacity': value }));
+}
 
 export interface PdfOptions {
   title?: string;
@@ -51,6 +80,8 @@ export interface PdfOptions {
    * same file at `fonts/Inter-Regular.ttf`).
    */
   font?: Uint8Array;
+  /** The bold of that font. Default: the Inter Bold the package ships (Node); absent, bold text is set in the regular face. */
+  boldFont?: Uint8Array;
 }
 
 /** The set as one PDF, a page per sheet in the order given. Empty input makes no PDF. */
@@ -63,10 +94,15 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
   doc.setProperties({ title: options.title ?? '', creator: 'IfcSheet' });
   doc.addFileToVFS('Inter-Regular.ttf', binary(font));
   doc.addFont('Inter-Regular.ttf', 'Inter', 'normal', undefined, 'Identity-H');
+  const bold = options.boldFont ?? (options.font ? undefined : await packagedBold());
+  if (bold) {
+    doc.addFileToVFS('Inter-Bold.ttf', binary(bold));
+    doc.addFont('Inter-Bold.ttf', 'Inter', 'bold', undefined, 'Identity-H');
+  }
   doc.setFont('Inter', 'normal');
   sheets.forEach((sheet, i) => {
     if (i > 0) doc.addPage(page(sheet).format, page(sheet).orientation);
-    const stroke = (polylines: SheetGraphic['frame'], width: number) => {
+    const stroke = (polylines: readonly Polyline[], width: number) => {
       doc.setLineWidth(width);
       for (const pts of polylines) {
         if (pts.length < 2) continue;
@@ -99,7 +135,17 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     for (const fill of sheet.fills) {
       const ops = fill.loops.flatMap((pts) => [{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
       doc.setFillColor(fill.colour);
-      doc.path(ops).fillEvenOdd();
+      if (fill.surface) {
+        // A coloured surface is filled non-zero and stroked with a hairline of its own colour, as the app's sheet draws it: viewers anti-alias the seam between two filled triangles into a faint line.
+        doc.setDrawColor(fill.colour);
+        doc.setLineWidth(0.1);
+        doc.path(ops).fillStroke();
+      } else doc.path(ops).fillEvenOdd();
+      // A value's hatch (#493) goes over its colour and under every line.
+      if (fill.hatch) {
+        doc.setDrawColor(FILL_HATCH.ink);
+        stroke(fill.hatch.strokes, fill.hatch.width);
+      }
     }
     // The drawings by pen, in the app's paint order: the cut faces' fills, then the hidden, seen and cut lines.
     for (const pen of sheet.pens) {
@@ -116,9 +162,34 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
     doc.setDrawColor('#000000');
     stroke(sheet.frame, PEN.frame);
     stroke(sheet.marks, PEN.mark);
+    // What the project drew with its own pens (#479): the drafts' layer pens, the dimensions' lines and ticks, the schedules' rules.
+    for (const s of sheet.strokes ?? []) {
+      if (s.opacity !== undefined) opacity(doc, s.opacity);
+      if (s.fill) {
+        doc.setFillColor(s.colour);
+        const closed = s.runs.filter((run) => run.length > 2).map((run) => [{ op: 'm', c: [run[0].x, run[0].y] }, ...run.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]);
+        // A region is one even-odd path, so an island stays open; any other fill is a path to itself.
+        if (s.region) { if (closed.length) doc.path(closed.flat()).fillEvenOdd(); } else for (const ops of closed) doc.path(ops).fill();
+      } else {
+        doc.setDrawColor(s.colour);
+        doc.setLineDashPattern(s.dash ? [...s.dash] : [], 0);
+        if (s.round) doc.setLineCap('round');
+        stroke(s.runs, s.width);
+        if (s.round) doc.setLineCap('butt');
+      }
+      if (s.opacity !== undefined) opacity(doc, 1);
+    }
+    doc.setLineDashPattern([], 0);
+    doc.setDrawColor('#000000');
+    // The viewports' north arrows and scale bars: the solid halves in black, every outline at the pen of the app's SITE-SYMBOLS layer.
+    doc.setFillColor('#000000');
+    for (const pts of sheet.symbols.solids) doc.path([{ op: 'm', c: [pts[0].x, pts[0].y] }, ...pts.slice(1, -1).map((p) => ({ op: 'l', c: [p.x, p.y] })), { op: 'h' }]).fill();
+    stroke(sheet.symbols.strokes, PEN.symbol);
     for (const t of sheet.texts) {
       // jsPDF sizes text in points.
       doc.setFontSize((t.size / 25.4) * 72);
+      doc.setFont(...pdfFont(t, Boolean(bold)));
+      doc.setTextColor(t.colour ?? '#000000');
       doc.text(t.text, t.at.x, t.at.y, { align: t.align ?? 'left', ...(t.angle ? { angle: t.angle } : {}) });
     }
     // The logo: fitted whole and centred in its box (the app's `xMidYMid meet`); in a strip it reads upward.
@@ -140,59 +211,23 @@ export async function exportPdf(sheets: readonly SheetGraphic[], options: PdfOpt
         console.warn('[ifcsheet] the logo could not be drawn in the PDF', error);
       }
     }
+    doc.setFont('Inter', 'normal');
+    doc.setTextColor('#000000');
     doc.outline.add(null, `${sheet.number} ${sheet.name}`.trim(), { pageNumber: i + 1 });
   });
   return new Uint8Array(doc.output('arraybuffer'));
 }
 
-/** A drawing with nothing in it: the sheet's shapes travel as the exporter's extra layers. */
-function emptyDrawing(paper: { w: number; h: number }): Drawing2D {
-  return {
-    config: { plane: { axis: 'y', position: 0, flipped: false }, projectionDepth: 0, includeHiddenLines: false, creaseAngle: 30, scale: 1 },
-    lines: [], cutPolygons: [], projectionPolygons: [],
-    bounds: { min: { x: 0, y: 0 }, max: { x: paper.w, y: paper.h } },
-    stats: { cutLineCount: 0, projectionLineCount: 0, hiddenLineCount: 0, silhouetteLineCount: 0, polygonCount: 0, totalTriangles: 0, processingTimeMs: 0 },
-  };
-}
-
 /**
- * A colour scheme's fills as DXF layers (#92), one per colour (`COLOUR-77AADD`): R12 has no hatch, so each region is the closed
- * polylines of its boundary, as the exporter writes a cut face's hatch region, in the colour's nearest ACI colour.
+ * The PDF font of a text: Inter (regular, or bold when `bold` and the bold file is embedded). A text with a face of its own (the "Tables"
+ * style: serif, mono or italic) is set in Times, Courier or Helvetica when every letter is in WinAnsi, which those standard fonts have,
+ * and in Inter when not (ș, ț, ă are not), as the app's issued PDF does (`issue/pdf-fonts.ts`).
  */
-function colourLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
-  const byColour = new Map<string, Polyline[]>();
-  for (const fill of sheet.fills) byColour.set(fill.colour, [...(byColour.get(fill.colour) ?? []), ...fill.loops.map((l) => l.slice(0, -1))]);
-  return [...byColour].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([colour, polylines]) => ({ name: `COLOUR-${colour.slice(1).toUpperCase()}`, color: colour, polylines, closed: true }));
-}
-
-/**
- * The drawings' stroke pens as DXF layers: R12 has no line weight, so a pen's layer names its kind and width in hundredths of a
- * millimetre (`VIEW-CUT-050`, `VIEW-SEEN-025`, `VIEW-HIDDEN-018`), and a colour other than black (`VIEW-CUT-050-C62828`); the layer
- * carries the colour. The cut faces' grey fills are not written: R12 has no hatch, and their outlines are the cut lines already.
- */
-function penLayers(sheet: SheetGraphic): { name: string; color: string; polylines: Polyline[]; closed: boolean }[] {
-  const byName = new Map<string, { name: string; color: string; polylines: Polyline[]; closed: boolean }>();
-  for (const pen of sheet.pens.filter((p): p is SheetPen & { stroke: string } => p.stroke !== null && p.runs.length > 0)) {
-    const colour = pen.stroke.toLowerCase() === '#000000' ? '' : `-${pen.stroke.slice(1).toUpperCase()}`;
-    const name = `VIEW-${pen.layer}-${String(Math.round(pen.width * 100)).padStart(3, '0')}${colour}`;
-    const layer = byName.get(name) ?? { name, color: pen.stroke, polylines: [], closed: false };
-    layer.polylines.push(...pen.runs);
-    byName.set(name, layer);
+export function pdfFont(t: Pick<SheetText, 'text' | 'bold' | 'face'>, hasBold: boolean): [string, string] {
+  const face = t.face;
+  if (face && (face.font !== 'sans' || face.italic) && winAnsi(t.text)) {
+    const family = face.font === 'serif' ? 'times' : face.font === 'mono' ? 'courier' : 'helvetica';
+    return [family, t.bold ? (face.italic ? 'bolditalic' : 'bold') : face.italic ? 'italic' : 'normal'];
   }
-  return [...byName.values()];
-}
-
-/** One sheet as DXF text (R12), paper millimetres with y up and the origin at the paper's bottom-left corner. */
-export function exportDxf(sheet: SheetGraphic): string {
-  const flip = (p: { x: number; y: number }) => ({ x: p.x, y: sheet.paper.h - p.y });
-  return exportToDXF(emptyDrawing(sheet.paper), {
-    metadataComment: `IfcSheet ${sheet.number} ${sheet.name}; units: paper millimetres`,
-    coordinateTransform: flip,
-    polylineLayers: [
-      { name: 'SHEET-FRAME', color: '#000000', polylines: sheet.frame, closed: false },
-      ...penLayers(sheet),
-      { name: 'SHEET-MARKS', color: '#000000', polylines: sheet.marks, closed: false },
-      ...colourLayers(sheet),
-    ],
-  });
+  return ['Inter', t.bold && hasBold ? 'bold' : 'normal'];
 }

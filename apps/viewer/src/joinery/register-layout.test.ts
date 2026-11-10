@@ -4,8 +4,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutRegister, layoutRegisterPage, registerFit, type RegisterLabels } from './register-layout';
-import { PAD } from './paged-table';
+import { layoutRegister, layoutRegisterPage, registerFit, type RegisterLabels } from '@bimvoice/ifcsheet';
+import { PAD } from '@bimvoice/ifcsheet';
 import type { RegisterRow } from '@/project/drawing-register';
 
 const labels: RegisterLabels = { title: 'Drawing register', number: 'No.', sheetTitle: 'Title', scale: 'Scale', revision: 'Rev.', date: 'Date' };

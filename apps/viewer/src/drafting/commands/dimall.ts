@@ -8,15 +8,38 @@
  * dimensions, one undo step, and a second run adds only what is missing.
  */
 
-import { dimensionDrafts, isDimAll } from '@/dimall/apply';
-import { stringsThroughHeads, symbolPieces } from '@/dimall/avoid';
-import { planDimensions } from '@/dimall/plan';
+import { dimStyleOf, planDimAll, type DimAllInputs } from '@bimvoice/ifcsheet';
+import { draftReader } from '@/dimall/reader';
+import { rectsOf } from '@/labels/label-annotations';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { paperUnitOf, styleBook } from '@/project/drafting-standards';
-import { dimStyleOf } from '../styles';
 import { useProjectStore } from '@/project/project-store';
+import { freshProjectId } from '@/project/view-defaults';
 import { draftsOfView, editDrafts } from '../draft-store';
-import type { DraftCommandDef } from './types';
+import type { DraftEntity } from '../types';
+import type { DraftCommandDef, DraftContext } from './types';
+
+/** DIMALL's complete inputs on the plan `ctx` is on; `placed` is the view's drafts when the caller keeps them (default: the store's). */
+export function dimAllInputs(ctx: DraftContext, newId: () => string, placed?: readonly DraftEntity[]): DimAllInputs {
+  const book = styleBook();
+  return {
+    viewId: ctx.viewId,
+    layerId: ctx.layerId,
+    placed: placed ?? draftsOfView(ctx.viewId, useProjectStore.getState().drafts),
+    parts: ctx.planParts(),
+    rooms: ctx.rooms(),
+    obstacles: ctx.planObstacles(),
+    lines: ctx.planLines?.() ?? [],
+    newId,
+    book,
+    paperUnit: paperUnitOf(ctx.viewId),
+    firstMm: dimStyleOf(book, ctx.settings.currentDimStyle).allOffset,
+    settings: { textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle },
+    guidOf: renderIdGlobalId,
+    reader: draftReader(),
+    rectsOf,
+  };
+}
 
 export const dimAllCommand: DraftCommandDef = {
   id: 'dimall',
@@ -33,20 +56,8 @@ export const dimAllCommand: DraftCommandDef = {
       ctx.say('drafting.msg.dimAllNotOnDetail');
       return;
     }
-    const plan = planDimensions(ctx.planParts(), { paperUnit: paperUnitOf(ctx.viewId), textHeight: ctx.settings.textHeight, firstMm: dimStyleOf(styleBook(), ctx.settings.currentDimStyle).allOffset });
-    if (plan.strings.length === 0) {
-      ctx.say('drafting.msg.dimAllNone');
-      return;
-    }
-    const here = draftsOfView(ctx.viewId, useProjectStore.getState().drafts);
-    const drafts = dimensionDrafts(plan, { viewId: ctx.viewId, layerId: ctx.layerId, textHeight: ctx.settings.textHeight, textStyle: ctx.settings.currentTextStyle, dimStyle: ctx.settings.currentDimStyle, guidOf: renderIdGlobalId }, here.filter(isDimAll), here);
-    if (drafts.length === 0) {
-      ctx.say('drafting.msg.dimAllHave');
-      return;
-    }
-    editDrafts({ add: drafts });
-    const crossed = stringsThroughHeads(plan.strings, symbolPieces(here), ctx.settings.textHeight);
-    ctx.say('drafting.msg.dimAllDone', { count: drafts.length, strings: plan.strings.length, skipped: plan.skippedFacades });
-    if (crossed > 0) ctx.say('drafting.msg.dimAllHeads', { count: crossed });
+    const result = planDimAll(dimAllInputs(ctx, () => freshProjectId('draft')));
+    if (result.add.length > 0) editDrafts({ add: result.add, update: result.update });
+    for (const m of result.messages) ctx.say(m.key, m.params);
   },
 };

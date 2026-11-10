@@ -16,6 +16,7 @@ import { paperOf } from '@/project/sheets';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import { SteppedSheet } from './SteppedSheet.js';
+import { fitWidth } from './sheet-fit.js';
 
 /**
  * Issue #141: the Wall's dimension tool is continuous. After the first
@@ -42,7 +43,8 @@ function stepIn(): HTMLElement {
   const vp = (sheet.viewports ?? []).find((v) => v.viewId === plan.id)!;
   const canvas = ui.querySelector<HTMLElement>('[data-sheet-canvas]');
   assert.ok(canvas);
-  const { width, height } = canvas.getBoundingClientRect();
+  const { height } = canvas.getBoundingClientRect();
+  const width = fitWidth(canvas); // the card covers the canvas's right side, Fit leaves it free
   const k = Math.min((width - 24) / paper.w, (height - 24) / paper.h);
   const at = { clientX: (width - paper.w * k) / 2 + vp.x * k, clientY: (height - paper.h * k) / 2 + vp.y * k };
   for (const type of ['pointerdown', 'pointerup']) act(() => { canvas.dispatchEvent(new window.PointerEvent(type, { ...at, bubbles: true, button: 0, pointerId: 1 })); });
@@ -87,7 +89,7 @@ describe('the Wall\'s dimension tool (#141)', () => {
     assert.deepEqual(chain.map((d) => [d.a.x, d.b.x]), [[0, 4], [4, 7], [7, 9]]);
     assert.ok(chain.every((d) => d.at.y === chain[0].at.y), 'one dimension line');
     assert.ok(runningCommand(), 'still running: the chain waits for the next point');
-    assert.match(ui.textContent ?? '', /Esc to stop/);
+    assert.match(ui.textContent ?? '', /Done stops it/);
   });
 
   it('ends on one Esc, and only the tool: the drawing stays forward and the sheet is not left', () => {

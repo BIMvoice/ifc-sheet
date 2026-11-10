@@ -1,0 +1,16 @@
+placement.applied
+placement.apply
+placement.keepWorld
+placement.keepWorldHint
+placement.none
+placement.relativeTo.parent
+placement.relativeTo.storey
+placement.reset
+placement.rx
+placement.ry
+placement.rz
+placement.storey
+placement.title
+placement.x
+placement.y
+placement.z

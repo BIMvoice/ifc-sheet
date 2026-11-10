@@ -2,16 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { starEn } from '../catalogues/star.en';
+import { trackingEn } from '../catalogues/tracking.en';
 import { underlayEn } from '../catalogues/underlay.en';
 import { scanToBimEn } from '../catalogues/scan-to-bim.en';
 import { sceneActionsEn } from '../catalogues/scene-actions.en';
 import { scheduleExportEn } from '../catalogues/schedule-export.en';
+import { scaleFieldEn } from '../catalogues/scale-field.en';
 import { scheduleEn } from '../catalogues/schedule.en';
 import { scriptPanelEn } from '../catalogues/script-panel.en';
 import { searchFiltersEn } from '../catalogues/search-filters.en';
 import { searchModalEn } from '../catalogues/search-modal.en';
 import { section2dEn } from '../catalogues/section-2d.en';
+import { sectionCreatedDocsEn } from '../catalogues/section-created-docs.en';
 import { sectionToolEn } from '../catalogues/section-tool.en';
+import { selectionTurnEn } from '../catalogues/selection-turn.en';
 import { semanticIdentityEn } from '../catalogues/semantic-identity.en';
 import { semanticResultsEn } from '../catalogues/semantic-results.en';
 import { semanticEn } from '../catalogues/semantic.en';
@@ -34,10 +39,16 @@ import { styleRulesEn } from '../catalogues/style-rules.en';
 import { sweptDiskInspectionEn } from '../catalogues/swept-disk-inspection.en';
 import { tableCorrectionsEn } from '../catalogues/table-corrections.en';
 import { tagFieldsEn } from '../catalogues/tag-fields.en';
+import { tagShowsEn } from '../catalogues/tag-shows.en';
+import { tagCardEn } from '../catalogues/tag-card.en';
+import { tagCustomEn } from '../catalogues/tag-custom.en';
+import { symbolToolFieldsEn } from '../catalogues/symbol-tool-fields.en';
 import { terrainImageryEn } from '../catalogues/terrain-imagery.en';
 import { titleBlockParamsEn } from '../catalogues/title-block-params.en';
 import { titleBlockRoEn } from '../catalogues/title-block-ro.en';
 import { titleBlockSourcesEn } from '../catalogues/title-block-sources.en';
+import { textLinesEn } from '../catalogues/text-lines.en';
+import { textOnDrawingEn } from '../catalogues/text-on-drawing.en';
 import { toursEn } from '../catalogues/tours.en';
 import { trimExtendEn } from '../catalogues/trim-extend.en';
 import { unitsNumbersEn } from '../catalogues/units-numbers.en';
@@ -52,13 +63,20 @@ import { visibilityReasonsEn } from '../catalogues/visibility-reasons.en';
 import { wallArrangeEn } from '../catalogues/wall-arrange.en';
 import { wallExitsEn } from '../catalogues/wall-exits.en';
 import { wallFindEn } from '../catalogues/wall-find.en';
+import { wallDropEn } from '../catalogues/wall-drop.en';
 import { wallZoomEn } from '../catalogues/wall-zoom.en';
 import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
+import { wallEditToolsEn } from '../catalogues/wall-edit-tools.en';
+import { wallChamferEn } from '../catalogues/wall-chamfer.en';
+import { wallEditFieldsEn } from '../catalogues/wall-edit-fields.en';
+import { wallRectangleEn } from '../catalogues/wall-rectangle.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
 import { wallMaterialsEn } from '../catalogues/wall-materials.en';
 import { wallRelayoutEn } from '../catalogues/wall-relayout.en';
 import { wallReviewEn } from '../catalogues/wall-review.en';
+import { wallPhasesEn } from '../catalogues/wall-phases.en';
+import { sectionRoomTagsEn } from '../catalogues/section-room-tags.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
 import { wallEn } from '../catalogues/wall.en';
 import { webgpuTroubleshootingEn } from '../catalogues/webgpu-troubleshooting.en';
@@ -70,12 +88,14 @@ export const enSZ = {
   ...scanToBimEn,
   ...sceneActionsEn,
   ...scheduleExportEn,
+  ...scaleFieldEn,
   ...scheduleEn,
   ...scriptPanelEn,
   ...searchFiltersEn,
   ...searchModalEn,
   ...section2dEn,
   ...sectionToolEn,
+  ...selectionTurnEn,
   ...semanticIdentityEn,
   ...semanticResultsEn,
   ...semanticEn,
@@ -98,10 +118,16 @@ export const enSZ = {
   ...sweptDiskInspectionEn,
   ...tableCorrectionsEn,
   ...tagFieldsEn,
+  ...symbolToolFieldsEn,
+  ...tagShowsEn,
+  ...tagCardEn,
+  ...tagCustomEn,
   ...terrainImageryEn,
   ...titleBlockParamsEn,
   ...titleBlockRoEn,
   ...titleBlockSourcesEn,
+  ...textLinesEn,
+  ...textOnDrawingEn,
   ...toursEn,
   ...trimExtendEn,
   ...unitsNumbersEn,
@@ -118,12 +144,22 @@ export const enSZ = {
   ...wallFindEn,
   ...wallRelayoutEn,
   ...wallZoomEn,
+  ...wallDropEn,
   ...wallCompareEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,
+  ...wallEditToolsEn,
+  ...wallChamferEn,
+  ...wallEditFieldsEn,
+  ...wallRectangleEn,
   ...wallMaterialsEn,
   ...wallReviewEn,
+  ...wallPhasesEn,
+  ...starEn,
+  ...trackingEn,
   ...underlayEn,
+  ...sectionRoomTagsEn,
+  ...sectionCreatedDocsEn,
   ...wallSectionsEn,
   ...wallEn,
   ...webgpuTroubleshootingEn,

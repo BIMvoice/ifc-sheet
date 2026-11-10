@@ -13,9 +13,10 @@ import { sectionAxisRange, type AxisBounds } from './section-distance';
 
 /** A plan's depth below its cut, counted from the model top when the cut is above it (#226): one rule with the engine. */
 export { planDepthBelowCut } from '@bimvoice/ifcsheet';
+import { automaticDepthOfSpan, SECTION_VIEW_DEPTH_FRACTION } from '@bimvoice/ifcsheet';
 
 /** Half the model's depth along the cut (its diagonal for a plane that is not along an axis). */
-export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
+export { SECTION_VIEW_DEPTH_FRACTION };
 
 /** The depth a vertical cut sees with no depth of its own, or `null` when the bounds cannot say. */
 export function automaticViewDepth(plane: { axis: SectionPlaneAxis; custom?: unknown }, bounds: AxisBounds | null): number | null {
@@ -23,5 +24,5 @@ export function automaticViewDepth(plane: { axis: SectionPlaneAxis; custom?: unk
   const span = plane.custom
     ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, bounds.max.z - bounds.min.z)
     : (() => { const r = sectionAxisRange(bounds, plane.axis); return r ? r.max - r.min : null; })();
-  return span === null ? null : Math.max(span * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+  return span === null ? null : automaticDepthOfSpan(span);
 }

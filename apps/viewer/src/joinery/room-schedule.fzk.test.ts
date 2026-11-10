@@ -25,9 +25,10 @@ import { collectRoomRecords, collectUrbanAreas } from '@/urban/urban-models';
 import { urbanIndicators } from '@/urban/indicators';
 import { labelElementByGlobalId } from '@/labels/label-element';
 import { refreshParametricLabels } from '@/labels/label-sync';
-import { planTagAll, modelArea } from '@/tagall/plan';
-import { TAGALL_TYPES } from '@/tagall/types';
-import { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from './room-schedule-layout';
+import { planTagAllInApp } from '@/tagall/plan';
+import { modelArea } from '@bimvoice/ifcsheet';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
+import { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
 
 const FZK = resolve(import.meta.dirname, '../../src/test/__fixtures__/AC20-FZK-Haus.ifc');
 const NET = [['1', 'Flur', 11.185458], ['2', 'Buero', 12.59545], ['3', 'Bad', 12.127619], ['4', 'Schlafzimmer', 21.410325], ['5', 'Wohnen', 25.2088935], ['6', 'Küche', 16.30545], ['7', 'Galerie', 74.5092415823]] as const;
@@ -131,7 +132,7 @@ describe('the room and area schedule of AC20-FZK-Haus (#42)', () => {
     const [markType, roomType] = TAGALL_TYPES;
     const ring = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 4 }, { x: 0, y: 4 }];
     const placement = { viewId: 'v', layerId: '0', textHeight: 0.25, textStyle: 'standard', dimStyle: 'standard', paperUnit: 0.1, locale: 'en' };
-    const { drafts } = planTagAll({ elements: [], targets: [], rooms: [{ renderId: 1, guid: bedroom.id, ring, at: 'cut' }], existing: [], placement, types: { mark: markType, room: roomType }, read: labelElementByGlobalId });
+    const { add: drafts } = planTagAllInApp({ elements: [], targets: [], rooms: [{ renderId: 1, guid: bedroom.id, ring, at: 'cut' }], existing: [], placement, types: { mark: markType, room: roomType }, read: labelElementByGlobalId });
     useProjectStore.setState({ drafts, annotationTypes: TAGALL_TYPES.map((x) => structuredClone(x)) });
     const labelText = () => { const d = useProjectStore.getState().drafts[0]; return d.shape.type === 'text' ? d.shape.text : ''; };
     assert.equal(labelText(), '4\nSchlafzimmer\n21.41 m²');

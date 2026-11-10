@@ -17,7 +17,7 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
-import { roomFinishes } from './room-finishes.js';
+import { roomFinishes } from '@bimvoice/ifcsheet';
 import { collectRoomInputs } from './room-finishes-models.js';
 
 const STEP = `ISO-10303-21;

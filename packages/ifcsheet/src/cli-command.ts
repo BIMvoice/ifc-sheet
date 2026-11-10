@@ -28,6 +28,7 @@ export interface CliValues {
   template?: string;
   project?: string;
   standard?: string;
+  ids?: string;
   schedule?: string;
   system?: string;
   json?: boolean;
@@ -36,6 +37,7 @@ export interface CliValues {
   locale?: string;
   'include-far-elements'?: boolean;
   pac?: boolean;
+  annotate?: string;
   intervention?: string;
   'pac-mode'?: string;
   help?: boolean;

@@ -9,10 +9,14 @@
  * moves and undoes like any other drawing.
  */
 
+import {
+  CIRCLE_POLE, CIRCLE_R, FLAG_PAD, FLAG_POINT, FLAG_POLE, TRIANGLE_HALF_BASE, TRIANGLE_LEN, markHeadReach, sectionLink, sectionNormal, withoutSectionLink,
+  type MarkStyle,
+} from '@bimvoice/ifcsheet';
 import { registeredTranslations, resolveName } from '@/i18n/registry';
-import type { AnnotationShape, DraftEntity, DraftParamValue, DraftShape, Pt } from './types';
+import type { AnnotationShape, DraftEntity, DraftShape, Pt } from './types';
 import { nextAxisLabel, textBox } from './annotation';
-import { DETAIL_LINK, detailLink, isDetailMark, PART } from './detail-mark';
+import { detailLink, isDetailMark } from './detail-mark';
 
 /** Stem length in text heights. */
 const STEM = 4;
@@ -20,31 +24,57 @@ const STEM = 4;
 const BARB = 0.8;
 const BARB_HALF_ANGLE = Math.PI / 7;
 
-/** The unit normal of the cut line a-b on the side `side` is on (the way the section looks); `null` for a line of no length. */
-export function sectionNormal(a: Pt, b: Pt, side: Pt): Pt | null {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-9) return null;
-  const n = { x: -dy / len, y: dx / len };
-  return (side.x - a.x) * n.x + (side.y - a.y) * n.y < 0 ? { x: -n.x, y: -n.y } : n;
-}
+// The head sizes, the way the section looks and how far a head reaches past the letter are the engine's (`cross-ref/section-geometry.ts`), so the references under the letters stand clear of the symbol in the PDF as in the app.
+export { markHeadReach, sectionLink, sectionNormal, withoutSectionLink };
 
-export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number): (DraftShape | AnnotationShape)[] {
+const solidTriangle = (pts: Pt[]): AnnotationShape => ({ type: 'hatch', loops: [pts], pattern: 'SOLID', scale: 1, angle: 0 });
+
+/**
+ * The symbol of a section: the cut line a-b, then a pole at each end toward the side the section looks, ending in a
+ * head. The first two lines are always the cut line and the first pole (`placementOf` reads them), whatever the head.
+ * Heads (`MarkStyle`): "arrow" two barbs; "circle" a circle holding the letter with a filled triangle on its far side;
+ * "flag" a box holding the letter whose far edge comes to a point.
+ */
+export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height: number, style: MarkStyle = 'arrow'): (DraftShape | AnnotationShape)[] {
   const normal = sectionNormal(a, b, side);
   if (!normal) return [];
   const { x: nx, y: ny } = normal;
-  const stem = STEM * height;
-  const tip = (p: Pt): Pt => ({ x: p.x + nx * stem, y: p.y + ny * stem });
-  // The name sits clear of the arrowhead, its box centred on the stem's line: a text's anchor is a corner of its box.
+  const along = { x: -ny, y: nx };
+  // The name's box centred on the head's centre: a text's anchor is a corner of its box.
   const box = textBox({ x: 0, y: 0 }, name, height, 0);
   const halfW = box[1].x / 2;
   const halfH = box[3].y / 2;
-  const clear = Math.abs(nx) * Math.abs(halfW) + Math.abs(ny) * Math.abs(halfH) + height * 0.4;
-  const label = (p: Pt): AnnotationShape => {
-    const t = tip(p);
-    return { type: 'text', p: { x: t.x + nx * clear - halfW, y: t.y + ny * clear - halfH }, text: name, height, rotation: 0 };
-  };
+  const halfN = Math.abs(nx) * Math.abs(halfW) + Math.abs(ny) * Math.abs(halfH);
+  const halfT = Math.abs(along.x) * Math.abs(halfW) + Math.abs(along.y) * Math.abs(halfH);
+  const at = (p: Pt, n: number, t = 0): Pt => ({ x: p.x + nx * n + along.x * t, y: p.y + ny * n + along.y * t });
+  const letter = (c: Pt): AnnotationShape => ({ type: 'text', p: { x: c.x - halfW, y: c.y - halfH }, text: name, height, rotation: 0 });
+  const poleLength = style === 'circle' ? CIRCLE_POLE * height : style === 'flag' ? FLAG_POLE * height : STEM * height;
+  const out: (DraftShape | AnnotationShape)[] = [{ type: 'line', a, b }, { type: 'line', a, b: at(a, poleLength) }, { type: 'line', a: b, b: at(b, poleLength) }];
+  const ends = [a, b];
+  if (style === 'circle') {
+    const r = CIRCLE_R * height;
+    // The pole ends at the circle; the triangle's base lies on the circle's far side, its point the way the section looks.
+    const heads = ends.map((p) => {
+      const c = at(p, poleLength + r);
+      const w = TRIANGLE_HALF_BASE * r;
+      const foot = Math.sqrt(r * r - w * w);
+      return [{ type: 'circle' as const, c, r }, solidTriangle([at(c, foot, -w), at(c, foot, w), at(c, r + TRIANGLE_LEN * height)]), letter(c)];
+    });
+    return [...out, ...heads.flat()];
+  }
+  if (style === 'flag') {
+    const depth = 2 * halfN + 2 * FLAG_PAD * height;
+    const width = 2 * halfT + 2 * FLAG_PAD * height;
+    const heads = ends.map((p) => {
+      const c = at(p, poleLength + depth / 2);
+      const pts = [at(c, -depth / 2, -width / 2), at(c, -depth / 2, width / 2), at(c, depth / 2, width / 2), at(c, depth / 2 + FLAG_POINT * height), at(c, depth / 2, -width / 2)];
+      return [{ type: 'polyline' as const, pts, closed: true }, letter(c)];
+    });
+    return [...out, ...heads.flat()];
+  }
+  const tip = (p: Pt): Pt => at(p, poleLength);
+  // The name sits clear of the arrowhead, its box centred on the stem's line.
+  const clear = halfN + height * 0.4;
   // Two barbs sweeping back from the tip toward the cut line close the stem into an arrow.
   const barbs = (p: Pt): DraftShape[] => {
     const t = tip(p);
@@ -58,19 +88,8 @@ export function sectionSymbolShapes(a: Pt, b: Pt, side: Pt, name: string, height
       b: { x: t.x + r * (-nx * c - k * -ny * s), y: t.y + r * (-ny * c + k * -nx * s) },
     }));
   };
-  return [
-    { type: 'line', a, b },
-    { type: 'line', a, b: tip(a) },
-    { type: 'line', a: b, b: tip(b) },
-    ...barbs(a),
-    ...barbs(b),
-    label(a),
-    label(b),
-  ];
+  return [...out, ...barbs(a), ...barbs(b), letter(at(tip(a), clear)), letter(at(tip(b), clear))];
 }
-
-/** The parameter that ties a drafted shape to the section view whose symbol it belongs to. */
-const LINK = 'sectionOf';
 
 /** `Section A-A`: how drawings name a section view. */
 export function sectionViewName(mark: string): string {
@@ -100,11 +119,6 @@ export function nextSectionMark(views: readonly { kind: string; name: string }[]
   return mark;
 }
 
-export const sectionLink = (e: Pick<DraftEntity, 'params'>): string | null => {
-  const id = e.params[LINK];
-  return typeof id === 'string' ? id : null;
-};
-
 /** A shape of the symbol of a section view that still exists. Such shapes are locked to their section. */
 export function isSectionSymbol(e: Pick<DraftEntity, 'params'>, views: readonly { id: string }[]): boolean {
   const id = sectionLink(e);
@@ -133,15 +147,6 @@ export function withSectionParts(ids: ReadonlySet<string>, entities: readonly Dr
     if (link && sections.has(link)) out.add(e.id);
   }
   return out;
-}
-
-/** The parameters of a copy: the same, minus the claim to be a section's symbol or a detail's mark. */
-export function withoutSectionLink(params: Readonly<Record<string, DraftParamValue>>): Record<string, DraftParamValue> {
-  const rest = { ...params };
-  delete rest[LINK];
-  delete rest[DETAIL_LINK];
-  delete rest[PART];
-  return rest;
 }
 
 /** The drafts with the symbol of `viewId` showing the mark of `name`. Unchanged (same array) when nothing shows it. */

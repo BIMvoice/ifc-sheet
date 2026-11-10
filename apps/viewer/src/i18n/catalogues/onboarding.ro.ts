@@ -52,7 +52,7 @@ export const onboardingRo = {
   'onboarding.howto.dimension.step1': 'Dublu clic pe o planșă cu planuri, pe panou, o deschide.',
   'onboarding.howto.dimension.step2': 'Alegeți Cotare în coloana din stânga.',
   'onboarding.howto.dimension.step3': 'Faceți clic pe două puncte; continuați să faceți clic și lanțul de cote se prelungește. Fiecare lungime este citită din model.',
-  'onboarding.howto.dimension.step4': 'Apăsați Esc, sau alegeți Gata, ca să opriți.',
+  'onboarding.howto.dimension.step4': 'Alegeți Gata ca să opriți (merge și Esc).',
   'onboarding.howto.dimension.step5': 'Alegeți Etichetă, apoi faceți clic pe o ușă, o fereastră sau o încăpere. Eticheta se completează singură din model.',
 
   'onboarding.howto.schedules.title': 'Tabele',

@@ -4,5 +4,5 @@
 
 /** Moved to the engine package (`packages/ifcsheet/src/section-proposals.ts`); re-exported here so the app's imports stay as they were. */
 
-export { CUT_OVERHANG_M, SAME_CUT_M, SMALLEST_ROOM_M2, proposeSections } from '@bimvoice/ifcsheet';
+export { CUT_OVERHANG_M, PROPOSAL_WALL_TYPES, SAME_CUT_M, SMALLEST_ROOM_M2, proposeSections } from '@bimvoice/ifcsheet';
 export type { Footprint, ProposalInput, RoomFootprint, SectionProposal } from '@bimvoice/ifcsheet';

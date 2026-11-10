@@ -1,0 +1,6 @@
+geometryModeBanner.detailPinRemoved
+geometryModeBanner.dismissAriaLabel
+geometryModeBanner.exactEnabled
+geometryModeBanner.fastEnabled
+geometryModeBanner.reloadButton
+geometryModeBanner.reloadHint

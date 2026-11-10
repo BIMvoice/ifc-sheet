@@ -16,8 +16,8 @@ import { GRAPHIC_STANDARDS, type GraphicStandard } from '@bimvoice/ifcsheet';
 import type { DimStyle, TextStyle } from './styles';
 
 export {
-  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, GERMAN_PRACTICE, ISO_3098_HEIGHTS, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, standardValues,
-  type GraphicStandard, type WeightPair,
+  DEFAULT_GRAPHIC_STANDARD, GRAPHIC_STANDARDS, ISO_128_LINE_WIDTHS, GERMAN_PRACTICE, ISO_3098_HEIGHTS, MARK_STYLES, ROMANIAN_PRACTICE, graphicStandardOf, knownGraphicStandard, markStyleOf, standardValues,
+  type GraphicStandard, type MarkStyle, type WeightPair,
 } from '@bimvoice/ifcsheet';
 
 /** A style as comparable text: flat objects, keys sorted, so a file round trip that reorders keys still compares equal. */

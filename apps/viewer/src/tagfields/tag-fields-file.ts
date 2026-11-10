@@ -11,7 +11,7 @@
  */
 
 import { fail } from '@/catalogue/readers';
-import { SOURCE_ATTRIBUTES, TAG_FIELD_IDS, TAG_KINDS, type TagFieldConfig, type TagFieldId, type TagKind, type TagSource } from './tag-fields';
+import { SOURCE_ATTRIBUTES, TAG_FIELD_IDS, TAG_KINDS, type TagFieldConfig, type TagFieldId, type TagKind, type TagSource } from '@bimvoice/ifcsheet/tag-fields';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);

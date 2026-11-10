@@ -81,6 +81,17 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Tilt and turn | Oscilo-batant | |
 | Pivot, horizontal axis | Pivotant, ax orizontal | The only opening "basculant" may describe |
 | Pivot, vertical axis | Pivotant, ax vertical | |
+| Frame (of a door or window) | Toc | "Toc și canat" for the section; the frame's depth and width are "Adâncime toc", "Lățime toc" (`joinery.*`, #475) |
+| Mullion / transom | Montant / traversă | The vertical and horizontal bars between the fields of a window |
+| Panel (a field of the window grid) | Câmp | Not "panou", which is the Wall |
+| Window board / external sill | Glaf interior / glaf exterior | Not "parapet", which is the wall under the window |
+| Threshold | Prag | |
+| Glazing | Vitraj | The glass colour is "Sticlă" |
+| Layer / line type / weight (drafting standards) | Strat / tip de linie / grosime | `standards.layer.*` (#513); "Activ" for a layer that is on; line types Continuă, Întreruptă, Punctată, Linie-punct |
+| Text style / text height | Stil de text / înălțimea textului | "Stil de cotare" for a dimension style; `standards.text.*`, `standards.dim.*` |
+| Font (sans serif / serif / monospace) | Font (fără serife / cu serife / monospațiat) | "Font" is the same word in both languages; font names (Inter, Times, Courier) are never translated |
+| Tables style (the text style schedules, reports and the register follow) | Stil pentru tabele | "Tabele" names the style, as in the generated sheet names; the register is "registrul de desene" |
+| Extension gap / extension beyond | Distanța liniei de ajutor / depășirea liniei de ajutor | |
 | Library | Bibliotecă | |
 | Project navigator | Navigatorul de proiect | |
 | Keyboard (settings) | Tastatură | |
@@ -100,16 +111,24 @@ Command names typed by the user (CHECKSET, ISSUE, WHATCHANGED, DRAFTSET, LINE, T
 | Revision cloud (REVCLOUD) | Nor de revizie | |
 | Grid axis / bubble | Axă / bulă | |
 | Offset / Trim / Extend / Fillet / Mirror | Decalare / Tăiere / Prelungire / Racordare / Oglindire | Commands stay OFFSET, TRIM, EXTEND, FILLET, MIRROR |
+| Split (SPLIT tool) | Divizare / divizează | One verb for the SPLIT command everywhere (`splitTool.*`, `commands.*`); "Taie" / "Tăiere" is TRIM only |
 | Erase / Move / Copy / Rotate | Ștergere / Mutare / Copiere / Rotire | Commands stay ERASE, MOVE, COPY, ROTATE |
 | Ceiling plan (reflected) | Plan de plafoane (reflectat) | CEILTAG |
 | Info (the dialog behind Keyboard) | Informații | Tabs: Despre, Noutăți, Comenzi rapide, Învățare |
 | Sheet template | Șablon de planșă | The built-in ones: Planuri, Detalii, Fațade în format lung, Tabele; the paper follows in parentheses |
+| Phase: existing / proposed / to demolish / temporary | Existent / Propus / De demolat / Provizoriu | `phase.*`, the renovation status of an element |
+| Roof edge: eave / gable / overhang | Streașină / Fronton / Debord | `roof.edge.*`; the pitch is "Pantă" |
+| Hollow section profiles: lip / web / flange | Buză / Inimă / Talpă | `profileSection.*`: L is "Cornier", a hollow circle "Țeavă rotundă"; the wall of a hollow section is "Grosimea peretelui" |
+| Model tag | Etichetă de model | Organisation only, never written to the IFC |
+| Share (the collaboration session) / invite link | Partajare / link de invitație | Roles: Vizualizare, Comentariu, Editare |
+| Panel group (Author, Check, Coordinate, Quantify, Site, Automate) | Autor, Verificare, Coordonare, Cantități, Amplasament, Automatizare | `shellChrome.panelGroups.*` |
+| Validation verdict: pass / fail / not checked | Admis / Respins / Neverificat | Manual validation checklists; an IDS result is "Reușite / Eșuate" |
 
 ## Not translated yet
 
 The 3D viewer around the Wall (ribbon, panels, dialogs; the face covers it and makes it inert, so only what `IfcSheetShell` keeps is translated: the command palette, the Settings dialog, the feedback dialog and a drawing's annotation bar, and the export dialogs its palette opens: IFC, GLB, KMZ, USD, energy model, the to-scale PDF, the anonymized subset, the review before the modified IFC and the Cesium ion upload), the drafting tools' panels
 and ribbon labels (`drafting.tool.*`, `drafting.props.*`; the command line and its messages are Romanian since #314), the sheet PDF setup and title-block dialogs (`sheetsPdf.sheetSetup.*`, `sheetsPdf.titleBlock.*`) and the
-drafting standards stay English except the layer print flag, the line types editor and the per-element line overrides (`catalogues/drafting-standards.ro.ts`: strat, tip de linie, tipar, grosime, culoare, tipărire); a missing key falls back to English one by one.
+annotation types, symbols, library and CAD layers tabs of the drafting standards stay English (its layers, text style, dimension style tabs, line types editor and per-element line overrides are Romanian since #513); a missing key falls back to English one by one.
 The "Detail marks" drafting layer name, the sheet name of a new blank schedule
 sheet made before this change, and anything a person typed are stored text and stay
 as they were. Storey names come from the IFC and are never translated.

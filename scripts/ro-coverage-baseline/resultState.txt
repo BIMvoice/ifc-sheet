@@ -1,0 +1,6 @@
+resultState.failed
+resultState.filtered
+resultState.noFindings
+resultState.noPopulation
+resultState.partial
+resultState.unsupported

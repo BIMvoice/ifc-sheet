@@ -68,6 +68,7 @@ You need `--out`, `--handover`, or both. The options:
 | `--project file` | A saved project, `.ifclite-project.json`. Uses its pens and title block layout. |
 | `--standard ro` | The Romanian pack: its pens and its title block with Romanian captions. |
 | `--template office.bvset` | Make the sheets by the rules of your office's set template. |
+| `--annotate` | Draft the dimensions, tags and level marks of "Annotate the set" before writing: dimension strings and door, window and room tags on the plans, level marks on the elevations and sections. `--annotate=dimension,tag` picks commands (`dimension`, `tag`, `level`); `--annotate="Name"` runs an annotation preset of the `--project`. What the project already drew is kept, and a second run adds only what is missing. |
 | `--include-far-elements` | Frame the views on everything, including small objects far from the building. |
 
 ### With a project and the Romanian standard
@@ -86,7 +87,7 @@ Leichtbeton 102890359 240      5             54,19
 Total                         13            190,47
 ```
 
-`--standard` wins over the project's own pens and title block. An unknown id stops with the list of known ones (today only `ro`). When you give `--project`, the schedules saved in it are printed after the build. The PDF has no schedule sheets. The app draws those.
+`--standard` wins over the project's own pens and title block. An unknown id stops with the list of known ones (today only `ro`). When you give `--project`, the schedules saved in it are printed after the build. If the project holds sheets, the PDF is the project's own set: its sheets with the views where you put them, the dimensions (linear, aligned, radial and angular), texts, leaders, level marks, grid axes, hatches, symbols (the north arrow turns to the model's north, the scale bar fits the viewport's scale), lines, circles and arcs you drew on the views, and the schedules you placed: lists, the room and area schedule, the room finishes schedule, the material takeoff, the quantities by type, the areas and urban indicators, the bill of quantities, the drawing register, and the door, window and combined schedules (each card with the views cut from the model's own geometry, the typed cells, the sub-reports and the text rows). A project without sheets gets the starting set. The build says on stderr which one it printed, and names per sheet what it does not print yet (a coordinate point on a georeferenced model, a text's frame or leader, and a dimension figure moved off its line). A door or window schedule of a model with no door or window is left out and said.
 
 ### Permit project (PAC)
 

@@ -8,9 +8,9 @@
  * value it reads now. The picker lists these; nobody types a set name from memory.
  */
 
-import { formatValue } from './label-format';
-import { readFieldValue, type LabelElement } from './label-resolve';
-import { ATTRIBUTE_FIELDS, fieldPath, type FieldRef } from './label-template';
+import { formatValue } from '@bimvoice/ifcsheet';
+import { readFieldValue, type LabelElement } from '@bimvoice/ifcsheet';
+import { ATTRIBUTE_FIELDS, fieldPath, type FieldRef } from '@bimvoice/ifcsheet';
 
 export interface PickableField {
   /** What to insert in a template, braces included. */

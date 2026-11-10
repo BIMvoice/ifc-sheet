@@ -1,0 +1,1 @@
+  ifcsheet check <model.ifc> [--project <file>] [--ids byggesaksbim] [--json] [--include-far-elements] [--locale <ro|en>]

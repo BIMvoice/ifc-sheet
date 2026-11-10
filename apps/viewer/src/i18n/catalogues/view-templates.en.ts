@@ -26,6 +26,8 @@ export const viewTemplatesEn = {
   'wall.gfx.weightOf': 'Line weight of {category}',
   'wall.gfx.weightSet': 'As set',
   'wall.gfx.overridden': 'Set on this drawing, not by its template',
+  'wall.gfx.coloured': 'Coloured surfaces',
+  'wall.gfx.colouredHint': 'Fill the visible surfaces with the colours of the model\'s materials, under the lines. The DXF keeps the lines only.',
   'wall.gfx.layers': 'Layers hidden on this sheet',
   'wall.gfx.layersNone': 'This project has no drafting layers yet.',
   'wall.gfx.layerShown': 'Show layer {layer} in this viewport',

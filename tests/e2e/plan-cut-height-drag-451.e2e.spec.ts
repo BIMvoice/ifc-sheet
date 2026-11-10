@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// e2e-lane: viewer-e2e
+
 /**
  * A plan's cut height moves when its dot is dragged (#451). The ruler is 220 px
  * tall and its dot sits at the stored height; the control under the dot used to be

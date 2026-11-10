@@ -14,14 +14,12 @@ import assert from 'node:assert/strict';
 import { dimensionLayout, formatLevel } from '@/drafting/annotation';
 import { formatDimension } from '@/drafting/styles';
 import type { AnnotationShape } from '@/drafting/types';
-import { formatValue, parseFormatSpec } from '@/labels/label-format';
-import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@/joinery/type-quantities-layout';
+import { formatValue, parseFormatSpec } from '@bimvoice/ifcsheet';
+import { layoutTypeQuantities, typeQuantityTable, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { joineryCsv, tableCsv } from '@/joinery/export-test-util';
-import { layoutMaterialTakeoff, takeoffTable } from '@/joinery/material-takeoff-layout';
-import { finishTable, layoutRoomFinishes, type RoomFinishLabels } from '@/joinery/room-finishes-layout';
-import { roomFinishes } from '@/joinery/room-finishes';
+import { finishTable, layoutRoomFinishes, type RoomFinishLabels, roomFinishes, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 import { layoutSchedule, type ScheduleLabels } from '@/joinery/schedule-layout';
-import type { TypeQuantities } from '@/joinery/type-quantities';
+import type { TypeQuantities } from '@bimvoice/ifcsheet';
 import type { ScheduleData } from '@/joinery/schedule-data';
 import { defaultWindowSpec } from '@ifc-lite/create';
 

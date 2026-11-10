@@ -10,11 +10,10 @@
  * which the template carries for the app to apply.
  */
 
-import { captureSetTemplate, layoutOf, sheetGroup, type AnnotationCommand, type ScheduleRule, type SetTemplate } from '@bimvoice/ifcsheet';
-import { isDimAll } from '@/dimall/apply';
+import { captureSetTemplate, isDimAll, layoutOf, sheetGroup, type AnnotationCommand, type ScheduleRule, type SetTemplate } from '@bimvoice/ifcsheet';
 import type { DraftEntity } from '@/drafting/types';
 import { useProjectStore, type ProjectState } from '@/project/project-store';
-import { MARK_TYPE_ID, ROOM_TYPE_ID } from '@/tagall/types';
+import { MARK_TYPE_ID, ROOM_TYPE_ID } from '@bimvoice/ifcsheet';
 
 /** The annotation commands each view's drafts show they were given: TAGALL's labels, DIMALL's strings, LEVELALL's level marks. */
 function annotationsByView(drafts: readonly DraftEntity[]): Map<string, AnnotationCommand[]> {

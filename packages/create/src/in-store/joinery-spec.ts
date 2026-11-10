@@ -98,6 +98,73 @@ export interface JoineryCommonProps {
   reference?: string;
 }
 
+/** How much of a type's real front, plan and section a schedule draws: outline only, frame and leaves, or everything modelled. */
+export type JoineryViewDetail = 'outline' | 'frame' | 'all';
+
+/**
+ * The schedule-view choices stored with a type (#449), applied to every schedule that shows it. `hidden` are line ids from the
+ * engine's `joineryViewLineId` (a line's rounded end points in the type's own frame, not an index).
+ */
+export interface JoineryViewChoice {
+  /** Absent: everything modelled. */
+  detail?: JoineryViewDetail;
+  hidden?: string[];
+  /** What the user drew on the type's views (#492), in each view's own frame (metres, the type's frame of `symbols.ts`). */
+  drafts?: JoineryViewDrafts;
+}
+
+/** The shape of a type's head (its top edge) in elevation: square, a semicircle, a segmental arch (circular, flatter than a semicircle) or a pointed (Gothic) arch of two arcs. */
+export type JoineryHeadShape = 'square' | 'round' | 'segmental' | 'pointed';
+
+/** The head of a type (#448). The overall width and height stay the opening's; the arch rises inside that height, so its crown is at the top. */
+export interface JoineryHead {
+  shape: JoineryHeadShape;
+  /** Segmental and pointed: how far the crown rises above the springing line, metres. Absent: a default (a fifth of the width; an equilateral arch). */
+  rise?: number;
+}
+
+/** Glazing bars (#448): how many divide each panel's glass, horizontal (across) and vertical (up and down). */
+export interface JoineryGlazingBars {
+  horizontal: number;
+  vertical: number;
+}
+
+/**
+ * A property the user typed in for a type, shown in the schedule like a model's (#448); kept in the project, never written to the IFC.
+ * `key` marks a suggested one the schedule's own U value and fire rating rows read.
+ */
+export interface JoineryCustomProp {
+  name: string;
+  value: string;
+  key?: 'thermalTransmittance' | 'fireRating';
+}
+
+/** The shapes of a type's drafted views: lines, polylines, circles, arcs, text and hatches. A shape keeps the fields the drafting commands wrote. */
+export type JoineryDraftShape = { type: 'line' | 'polyline' | 'circle' | 'arc' | 'text' | 'hatch'; [field: string]: unknown };
+
+/** One drafted entity of a type's view: its shape and the pen the layer gave it when it was drawn (paper millimetres; a dashed or dotted layer prints dashed). */
+export interface JoineryViewDraft {
+  id: string;
+  shape: JoineryDraftShape;
+  /** The drafting layer it was drawn on (kept so the drafting view can put it back on its layer). */
+  layerId?: string;
+  weight?: number;
+  lineType?: 'dashed' | 'dotted' | 'dashdot';
+  /** The entity's drafting parameters (text style and the like), kept so the drafting view draws it as it was. */
+  params?: Record<string, string | number | boolean>;
+}
+
+export type JoineryViewDrafts = { front?: JoineryViewDraft[]; plan?: JoineryViewDraft[]; section?: JoineryViewDraft[] };
+
+/** One stroke of an imported plan block: points in metres, relative to the block's base point; closed, or dashed (a non-continuous linetype). */
+export interface JoineryBlockPath { pts: Array<[number, number]>; closed?: true; dashed?: true }
+
+/**
+ * A DXF block the user assigned as the plan symbol of a door or window type (#448): its strokes in the block's own frame (metres,
+ * origin at the block's base point, drawn as a left-hand opening with +Y towards the exterior). Fitted to each opening at draw time.
+ */
+export interface JoineryBlockSymbol { name: string; paths: JoineryBlockPath[] }
+
 export interface JoinerySpec {
   /** The project catalogue entry this type is (one type object per entry per model). */
   id?: string;
@@ -110,6 +177,8 @@ export interface JoinerySpec {
   height: number;
   /** Windows: default sill height above the floor for a new placement. */
   sillHeight: number;
+  /** A type entry (#448): `true` when the user typed the sill (even one equal to the default). Absent: not stated, the default stands unprinted. */
+  sillTyped?: true;
   frame: JoineryFrame;
   sash: JoinerySash;
   /** Column widths and row heights as proportions; normalised to the inside of the frame. */
@@ -121,6 +190,16 @@ export interface JoinerySpec {
   threshold: number;
   colors: { frame: string; glass: string; leaf: string };
   props: JoineryCommonProps;
+  /** The detail level and hidden lines of the type's schedule views. */
+  view?: JoineryViewChoice;
+  /** The shape of the head in elevation. Absent: square. */
+  head?: JoineryHead;
+  /** Glazing bars dividing the glass of every panel in elevation. Absent: none (the panes are plain). */
+  glazingBars?: JoineryGlazingBars;
+  /** Properties typed in by hand for this type. Absent: none. */
+  custom?: JoineryCustomProp[];
+  /** An imported DXF block drawn in plan in place of the generated symbol (#448). Absent: the generated symbol. */
+  planBlock?: JoineryBlockSymbol;
 }
 
 export function defaultWindowSpec(name = 'Window'): JoinerySpec {

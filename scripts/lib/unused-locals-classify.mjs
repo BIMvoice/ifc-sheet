@@ -154,3 +154,28 @@ export function untrustworthyExitReason(err) {
   }
   return null;
 }
+
+/**
+ * Map an async `execFile` rejection onto the `execFileSync` error shape that
+ * untrustworthyExitReason reads, so the check can run several tsc processes
+ * at once without changing what it trusts.
+ *
+ * The async API reports a normal non-zero exit as a NUMBER in `err.code`, and
+ * a spawn or buffer failure as a STRING in the same field ('ENOENT',
+ * 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'). Passed through unchanged, every tsc
+ * run that printed diagnostics would read as a failed spawn; read the other
+ * way, a truncated run would read as a normal exit. So the number becomes
+ * `status`, a string stays `code`, and a signal stays a signal.
+ *
+ * @param {{ code?: number|string|null, signal?: string|null, stdout?: string, stderr?: string }} err
+ * @returns {{ code: string|undefined, status: number|null, signal: string|null, stdout?: string, stderr?: string }}
+ */
+export function syncExitShape(err) {
+  return {
+    code: typeof err?.code === 'string' ? err.code : undefined,
+    status: typeof err?.code === 'number' ? err.code : null,
+    signal: err?.signal ?? null,
+    stdout: err?.stdout,
+    stderr: err?.stderr,
+  };
+}

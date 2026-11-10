@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { IFCLITE_URL } from '@/lib/credits';
+import { STAR_URL } from '@/lib/star';
 import { ChevronDown, ChevronRight, Package, ShieldCheck, ExternalLink } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { InstallAppEntry } from '@/offline/InstallAppEntry';
@@ -129,6 +130,14 @@ export function AboutTab() {
         >
           <GithubIcon className="h-3.5 w-3.5" />
           {t('keyboardShortcuts.about.githubLink')}
+        </a>
+        <a
+          href={STAR_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {t('star.link')}
         </a>
         <a
           href={IFCLITE_GITHUB_URL}

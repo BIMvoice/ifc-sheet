@@ -12,26 +12,29 @@
  * and command-line keywords, and drives the command state machine.
  */
 
+import { isJoineryDraftViewId, joineryCommandAllowed } from '@/joinery/view-draft-id';
 import { create } from 'zustand';
 import type { TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { draftCommandById } from './commands/registry';
 import { namedCommand } from './command-name';
 import type { DraftCommand, DraftCommandDef, DraftContext, DraftSettings, Prompt, StepResult } from './commands/types';
-import { entityBounds, nearestOnEntity, setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
+import { setAnnotationScreenRight, setAnnotationScreenUp } from './annotation';
 import { applyTypedLine } from './command-line';
+import { boxRegion, entityInRegion, type Region } from './region-select';
 import { applyOrtho } from './input';
 import type { SectionAxisName } from './frame';
 import { defaultDraftSettings, scaledDraftSettings } from './session-settings';
-import { draftsOfView } from './draft-store';
+import { nearestEntity, visibleEntities } from './session-entities';
 import { withSectionParts } from './section-symbol';
-import { elementBoxesAt, hasModelPicker, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
+import { markWitnessPoint } from './witness-point';
+import { elementBoxesAt, hasModelPicker, modelLineAt, installedViewInputs, modelElementAt, pickModel, referenceShapesIn, setReferenceProvider } from './session-providers';
 import { annotationFrameOf, makeContext } from './view-context';
 import type { DraftEntity, DraftShape, Pt } from './types';
 
 // What the view in front installs (providers, pickers) lives in `session-providers.ts`; callers keep importing it from here.
 export {
-  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
+  activeWorkPlane, clearViewInputs, installViewInputs, levelRefAt, resolveLevelRef, setAnnotationProviders, setElementBoxProvider, setElementPicker, setLevelReferenceProviders, setModelLinePicker, setModelPicker, setPlanObstaclesProvider, setPlanPartsProvider, setRoomsProvider, setViewElementsProvider, setWorkPlaneProvider,
 } from './session-providers';
 
 export interface HistoryLine {
@@ -91,10 +94,10 @@ export function setCurrentStyles(patch: { textStyle?: string; dimStyle?: string;
   set({ revision: get().revision + 1 });
 }
 
-/** Change the drafting settings the commands read (an annotation type applying its options, the symbol to place…). */
+/** Change the drafting settings the commands read (an annotation type applying its options, the symbol to place…). A running tool's sentence is asked again, so it follows the change. */
 export function patchDraftSettings(patch: Partial<DraftSettings>): void {
   Object.assign(settings, patch);
-  set({ revision: get().revision + 1 });
+  set({ prompt: command ? command.prompt() : get().prompt, revision: get().revision + 1 });
 }
 
 export function currentStyles(): { textStyle: string; dimStyle: string } {
@@ -113,12 +116,7 @@ export function echoLine(key: TranslationKey, params?: Record<string, string | n
   say({ key, params });
 }
 
-/** The view's drafted entities on visible, unlocked layers: what a command sees as already there. */
-export function visibleEntities(viewId: string): DraftEntity[] {
-  const { drafts, draftLayers } = useProjectStore.getState();
-  const usable = new Set(draftLayers.filter((l) => l.visible && !l.locked).map((l) => l.id));
-  return draftsOfView(viewId, drafts).filter((d) => usable.has(d.layerId));
-}
+export { visibleEntities };
 
 function context(viewId: string): DraftContext {
   return makeContext(viewId, { ...installedViewInputs(), referenceShapes: referenceShapesIn, elementAt: modelElementAt, elementBoxesAt }, {
@@ -154,7 +152,19 @@ function finish(result: StepResult): void {
   refresh();
 }
 
-/** Point the session at the view in front (or none). A running command is cancelled on a view change. */
+/**
+ * The session as it is now, all of it (state, running command and what it was waiting for, settings, layer, origin, size scale); the
+ * returned function puts it back exactly, whatever the session was used for meanwhile (the plan symbol editor, #448).
+ */
+export function parkSession(): () => void {
+  const kept = { state: get(), command, pending, endedByUser, activeLayerId, sizeScale, userOrigin, settings: { ...settings } };
+  return () => {
+    ({ command, pending, endedByUser, activeLayerId, sizeScale, userOrigin } = kept);
+    Object.assign(settings, kept.settings);
+    useDraftingSession.setState(kept.state, true);
+  };
+}
+
 /**
  * Annotation sizes (text height, hatch scale) are model metres on a view; a
  * sheet drafts in paper millimetres, where the same settings read ×10
@@ -166,10 +176,11 @@ let sizeScale = 1;
 export const draftSizeScale = (): number => sizeScale;
 
 /** The settings as commands see them on the current target. */
-const scaledSettings = scaledDraftSettings(settings, () => sizeScale);
+const scaledSettings = scaledDraftSettings(settings, () => sizeScale, () => set({ revision: get().revision + 1 }));
 
 /** Where typed absolute coordinates count from, in drawing space (`frame.ts`). */
 let userOrigin: Pt = { x: 0, y: 0 };
+/** Point the session at the view in front (or none). A running command is cancelled on a view change. */
 export function attachDraftingView(viewId: string | null, axis: SectionAxisName, references: (min: Pt, max: Pt) => DraftShape[], unitsScale = 1, origin: Pt = { x: 0, y: 0 }): void {
   userOrigin = origin;
   setReferenceProvider(references);
@@ -192,6 +203,8 @@ export function startDraftCommand(id: string, args = ''): boolean {
   const def = draftCommandById(id);
   const viewId = get().viewId ?? (def?.projectWide ? '' : null);
   if (!def || viewId === null) return false;
+  // A joinery type's view keeps only some shapes: a command that would make another is refused, not drawn and lost (#492).
+  if (isJoineryDraftViewId(viewId) && !joineryCommandAllowed(viewId, def.id)) { say({ key: 'joinery.draft.refused' }); return true; }
   cancelCommand();
   endedByUser = false;
   say({ key: def.labelKey });
@@ -228,16 +241,7 @@ export function cancelCommand(): void {
 export function pickEntity(p: Pt, tolerance: number): DraftEntity | null {
   const { viewId } = get();
   if (!viewId) return null;
-  let best: DraftEntity | null = null;
-  let bestDist = tolerance;
-  for (const entity of visibleEntities(viewId)) {
-    const d = nearestOnEntity(entity.shape, p).dist;
-    if (d <= bestDist) {
-      best = entity;
-      bestDist = d;
-    }
-  }
-  return best;
+  return nearestEntity(visibleEntities(viewId), p, tolerance);
 }
 
 /** Ortho constrains a point against the command's base point, while its toggle is on or Ctrl is held. */
@@ -274,12 +278,14 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
       }
     }
     set({ selection: next });
+    markWitnessPoint(next, additive || selecting ? null : hit, p, tolerance);
     refresh();
     return;
   }
   if (command.input() === 'pick') {
     const hit = pickEntity(p, tolerance);
     if (hit && command.onPick) finish(command.onPick(hit, p));
+    else if (!hit && command.onPickModelLine) { const m = modelLineAt(p, tolerance); if (m) finish(command.onPickModelLine(m, p)); }
     return;
   }
   if (command.onPoint) finish(command.onPoint(constrainPoint(p)));
@@ -287,18 +293,17 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
 
 /** Window (fully inside) or crossing (touching) selection of a drawn rectangle. */
 export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean): void {
-  const { viewId } = get();
+  selectIn(boxRegion(a, b), crossing, additive);
+}
+
+/** Selects what a box (window or crossing) or a freehand loop (lasso, #666) takes in. */
+export function selectIn(region: Region, crossing: boolean, additive: boolean): void {
+  const { viewId, selection, selecting } = get();
   if (!viewId) return;
-  const min = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
-  const max = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) };
-  const next = new Set(additive || get().selecting ? get().selection : []);
-  for (const entity of visibleEntities(viewId)) {
-    const bb = entityBounds(entity.shape);
-    const inside = bb.min.x >= min.x && bb.max.x <= max.x && bb.min.y >= min.y && bb.max.y <= max.y;
-    const touches = bb.max.x >= min.x && bb.min.x <= max.x && bb.max.y >= min.y && bb.min.y <= max.y;
-    if (inside || (crossing && touches)) next.add(entity.id);
-  }
-  set({ selection: withSectionParts(next, visibleEntities(viewId)) });
+  const entities = visibleEntities(viewId);
+  const next = new Set(additive || selecting ? selection : []);
+  for (const entity of entities) if (entityInRegion(entity.shape, region, crossing)) next.add(entity.id);
+  set({ selection: withSectionParts(next, entities) });
   refresh();
 }
 
@@ -321,14 +326,14 @@ let endedByUser = false;
 
 /**
  * Done: the visible way to end the running command or the object selection it waits for, for
- * a person without Esc or Enter at hand (an iPad, #166). What the command has drafted stays,
- * as Enter leaves it; a command that Enter would only advance is cancelled. Does nothing when
- * nothing runs (Enter on an idle line would repeat the last command).
+ * a person without Esc or Enter at hand (an iPad, #166). A command that says how (`onDone`) finishes with what is drawn (a Note
+ * keeps its leader, #168); else Enter, and a step that Enter would only advance is cancelled. Does nothing when nothing runs
+ * (Enter on an idle line would repeat the last command).
  */
 export function endCommand(): void {
   if (!command && !pending) return;
   endedByUser = true;
-  pressEnter();
+  if (command?.onDone) finish(command.onDone()); else pressEnter();
   if (command || pending) cancelCommand();
 }
 

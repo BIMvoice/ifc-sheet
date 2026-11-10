@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type { ProjectRevision } from '@bimvoice/ifcsheet';
-import { readRevisions } from '../revision-file';
+import { readRevisions } from '@bimvoice/ifcsheet';
 import { listField } from './define';
 
 /** The record is the engine's (`packages/ifcsheet/src/revisions.ts`): the PDF's title block prints the same revision. */

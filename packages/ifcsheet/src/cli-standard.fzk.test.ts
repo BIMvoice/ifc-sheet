@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { dxfLayerWeight } from './__fixtures__/dxf-text.js';
 import { EXIT, run } from './cli.js';
+import { buildStandard } from './cli-standard.js';
+import { DEFAULT_SCHEME } from './numbering.js';
 
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -43,14 +46,14 @@ async function pdfTexts(bytes: Uint8Array): Promise<string[]> {
   }
 }
 
-/** The DXF layers of the drawing pens of a sheet's file: `VIEW-CUT-070` is the cut line at 0.7 mm. */
-const penLayers = (dxf: string): string[] => [...new Set(dxf.match(/VIEW-[A-Z]+-\d+/g))].sort();
+/** The cut layer's line weights across a set's files, in hundredths of a millimetre: 70 is the cut line at 0.7 mm. */
+const penLayers = (dxf: string): string[] => { const w = dxfLayerWeight(dxf, 'CUT'); return w === undefined ? [] : [`CUT-${String(w).padStart(3, '0')}`]; };
 
 async function build(...extra: string[]): Promise<{ code: number; err: string; texts: string[]; layers: string[] }> {
   const dir = scratch();
   const c = capture();
   const code = await run(['build', FZK, '--out', join(dir, 'set.pdf'), '--dxf', join(dir, 'dxf'), ...extra], c.io);
-  const layers = existsSync(join(dir, 'dxf')) ? [...new Set(readdirSync(join(dir, 'dxf')).flatMap((f) => penLayers(readFileSync(join(dir, 'dxf', f), 'utf8'))))].sort() : [];
+  const layers = existsSync(join(dir, 'dxf')) ? [...new Set(readdirSync(join(dir, 'dxf')).flatMap((f) => penLayers(readFileSync(join(dir, 'dxf', f), 'latin1'))))].sort() : [];
   return { code, err: c.err(), texts: existsSync(join(dir, 'set.pdf')) ? await pdfTexts(new Uint8Array(readFileSync(join(dir, 'set.pdf')))) : [], layers };
 }
 
@@ -62,8 +65,8 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     for (const caption of ['Proiectant general', 'Șef proiect', 'Proiectat', 'Faza', 'Proiect nr.', 'Titlu proiect', 'Semnătura', 'Verificator / expert', 'Cerința', 'Planșa nr.']) {
       expect(ro.texts, caption).toContain(caption);
     }
-    expect(ro.layers).toContain('VIEW-CUT-070');
-    expect(ro.layers).not.toContain('VIEW-CUT-050');
+    expect(ro.layers).toContain('CUT-070');
+    expect(ro.layers).not.toContain('CUT-050');
   }, 120_000);
 
   it('de: the German title block captions are printed, and the Romanian ones are not', async () => {
@@ -72,16 +75,16 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     expect(de.code).toBe(EXIT.ok);
     for (const caption of ['Bauvorhaben', 'Bauherr', 'Entwurfsverfasser', 'Planinhalt', 'Maßstab']) expect(de.texts, caption).toContain(caption);
     expect(de.texts).not.toContain('Proiectant general');
-    expect(de.layers).toContain('VIEW-CUT-050');
-    expect(de.layers).not.toContain('VIEW-CUT-070');
+    expect(de.layers).toContain('CUT-050');
+    expect(de.layers).not.toContain('CUT-070');
   }, 120_000);
 
   it('without --standard the build is what it was: the standard title block and the cut line at 0.5', async () => {
     const plain = await build();
     expect(plain.code).toBe(EXIT.ok);
     expect(plain.texts).not.toContain('Proiectant general');
-    expect(plain.layers).toContain('VIEW-CUT-050');
-    expect(plain.layers).not.toContain('VIEW-CUT-070');
+    expect(plain.layers).toContain('CUT-050');
+    expect(plain.layers).not.toContain('CUT-070');
   }, 120_000);
 
   it('an unknown id fails with a usage error that names it and lists the known ids, and writes nothing', async () => {
@@ -94,7 +97,36 @@ describe.skipIf(missing !== null)('ifcsheet build --standard, on AC20-FZK-Haus',
     expect(existsSync(join(dir, 'set.pdf'))).toBe(false);
   });
 
-  it('is an option of build only', async () => {
+  it('ro and de: the standard\'s numbering scheme numbers the sheets, and its sheet numbers are printed', async () => {
+    // No standard prescribes a pattern, so both packs state the default scheme; the build takes it from the pack, not from the engine's fallback.
+    expect(buildStandard('ro', undefined)?.sheetNumbering).toEqual(DEFAULT_SCHEME);
+    expect(buildStandard('de', undefined)?.sheetNumbering).toEqual(DEFAULT_SCHEME);
+    expect(buildStandard(undefined, undefined)?.sheetNumbering).toBeUndefined();
+    const ro = await build('--standard', 'ro');
+    expect(ro.code).toBe(EXIT.ok);
+    expect(ro.texts).toContain('A-101');
+  }, 120_000);
+
+  it('materials --standard: the pack\'s hatch rows are laid over the table, and Romanian and German differ', async () => {
+    const hatches = async (...extra: string[]) => {
+      const c = capture();
+      const code = await run(['materials', FZK, '--json', ...extra], c.io);
+      expect(c.err()).toBe('');
+      expect(code).toBe(EXIT.ok);
+      return Object.fromEntries((JSON.parse(c.out()) as { materials: { name: string; hatch: string | null; auto: boolean }[] }).materials.map((m) => [m.name, m]));
+    };
+    const plain = await hatches();
+    expect(plain.Holz).toMatchObject({ hatch: null, auto: true });
+    const ro = await hatches('--standard', 'ro');
+    expect(ro.Holz).toMatchObject({ hatch: null, auto: true });
+    const de = await hatches('--standard', 'de');
+    expect(de.Holz).toMatchObject({ hatch: 'WOOD', auto: false });
+    const c = capture();
+    expect(await run(['materials', FZK, '--standard', 'din'], c.io)).toBe(EXIT.usage);
+    expect(c.err()).toContain('unknown standard "din"');
+  }, 120_000);
+
+  it('is an option of build and materials only', async () => {
     const c = capture();
     expect(await run(['check', FZK, '--standard', 'ro'], c.io)).toBe(EXIT.usage);
     expect(c.err()).toContain('--standard');

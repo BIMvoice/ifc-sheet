@@ -1,0 +1,5 @@
+landXml.unitsPrompt.dismiss
+landXml.unitsPrompt.message
+landXml.unitsPrompt.retry
+landXml.unitsPrompt.selectLabel
+landXml.unitsPrompt.selectPlaceholder

@@ -1,12 +1,70 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
-import type { TranslationKey } from '../en';
 import type { TranslationValue } from '../types';
 
-/** Romanian for the layer print flag, the line types editor and the per-element line overrides of `drafting-standards.en.ts`. Term choices: `../ro-glossary.md`. */
+/**
+ * Romanian for `drafting-standards.en.ts` (#513): the drafting standards dialog (layers, text styles, dimension
+ * styles). The keys that already have a Romanian entry in `selection-bar.ro.ts` (`standards.open`, `standards.el.style`,
+ * `standards.el.height`, `standards.el.editText`, `standards.el.reset`, `standards.text.bold`, `standards.text.italic`,
+ * `standards.dim.placement.*`, `standards.dim.arrow*`) and in `face.ro.ts` (`standards.layer.ungrouped`,
+ * `standards.viewport.layers`) are not repeated here. Term choices: `../ro-glossary.md`.
+ */
 export const draftingStandardsRo = {
+  'standards.title': 'Standarde de desen',
+  'standards.tab.layers': 'Straturi',
+  'standards.tab.text': 'Stiluri de text',
+  'standards.tab.dim': 'Stiluri de cotare',
+  'standards.close': 'Închide',
+  'standards.layer.name': 'Strat',
+  'standards.layer.color': 'Culoare',
+  'standards.layer.weight': 'Grosime',
+  'standards.layer.type': 'Tip de linie',
+  'standards.layer.visible': 'Activ',
+  'standards.layer.locked': 'Blocat',
+  'standards.layer.inView': 'În {view}',
+  'standards.layer.group': 'Grup',
+  'standards.layer.current': 'Curent',
+  'standards.layer.add': 'Strat nou',
+  'standards.layer.addGroup': 'Grup nou',
+  'standards.layer.delete': 'Ștergeți stratul {name}',
+  'standards.layer.deleteGroup': 'Ștergeți grupul {name} (straturile rămân)',
+  'standards.layer.newName': 'Stratul {n}',
+  'standards.layer.newGroup': 'Grupul {n}',
+  'standards.layer.groupName': 'Denumirea grupului',
+  'standards.layer.type.continuous': 'Continuă',
+  'standards.layer.type.dashed': 'Întreruptă',
+  'standards.layer.type.dotted': 'Punctată',
+  'standards.layer.type.dashdot': 'Linie-punct',
+  'standards.layer.hint': 'Un strat se vede când este activ, grupul lui este activ, iar vederea (sau fereastra planșei) nu îl ascunde.',
+  'standards.style.name': 'Denumire',
+  'standards.style.current': 'Curent',
+  'standards.style.makeCurrent': 'Folosește la adnotările noi',
+  'standards.style.duplicate': 'Duplicare',
+  'standards.style.delete': 'Ștergere',
+  'standards.style.copyName': 'Copie a {name}',
+  'standards.style.byLayer': 'După strat',
+  'standards.text.height': 'Înălțimea textului (mm pe hârtie)',
+  'standards.text.font': 'Font',
+  'standards.text.font.sans': 'Fără serife',
+  'standards.text.font.serif': 'Cu serife',
+  'standards.text.font.mono': 'Monospațiat',
+  'standards.text.color': 'Culoare',
+  'standards.dim.textStyle': 'Stil de text',
+  'standards.dim.arrowSize': 'Mărimea capetelor (mm)',
+  'standards.dim.extGap': 'Distanța liniei de ajutor (mm)',
+  'standards.dim.extOver': 'Depășirea liniei de ajutor (mm)',
+  'standards.dim.placement': 'Valoare',
+  'standards.dim.textGap': 'Distanța valorii (mm)',
+  'standards.dim.precision': 'Zecimale',
+  'standards.dim.unit': 'Unitate',
+  'standards.dim.preview': 'Previzualizare la 1:100',
+  'standards.dim.rule': 'Valorile se citesc mereu de la stânga la dreapta, iar pe liniile verticale de jos în sus; „Deasupra” le pune în stânga unei linii verticale.',
+  'standards.el.byStyle': 'După stil',
+  'standards.el.overridden': 'Modificat pe acest element',
+  'standards.tables.name': 'Tabele',
+  'standards.tables.make': 'Adăugați un stil pentru tabele',
+  'standards.tables.fontsNote': 'Tabelele, rapoartele și registrul de desene urmează acest stil (font și cursiv). Sunt oferite doar cele trei familii de caractere pe care PDF-ul le poate scrie: fără serife (Inter), cu serife (Times) și monospațiat (Courier). Dimensiunile rămân neschimbate.',
   'standards.layer.print': 'Tipărire',
   'standards.layer.printHint': 'Un strat care nu se tipărește rămâne pe ecran și în DXF (ca strat netipărit) și lipsește din SVG-ul și din PDF-ul planșei.',
   'standards.lineTypes.title': 'Tipuri de linie',
@@ -22,4 +80,4 @@ export const draftingStandardsRo = {
   'standards.el.lineType': 'Tip de linie',
   'standards.el.byLayer': 'După strat',
   'standards.el.line': 'Linie',
-} as const satisfies Partial<Record<TranslationKey, TranslationValue>>;
+} as const satisfies Record<string, TranslationValue>;

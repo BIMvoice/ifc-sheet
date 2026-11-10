@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -26,21 +26,25 @@ import { settleLevelDrafts } from '@/drafting/level-sync';
 import { levelResolverFor } from '@/drafting/level-resolver';
 import { isRasterView } from '@/project/axonometric';
 import { isAutosaveRasterRef } from '@/project/autosave-rasters';
-import { drawingNumbers } from '@/drafting/cross-ref';
-import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
 import { viewScreenUp } from '@/project/view-screen-up';
+import { crossReferenceBoxes } from '@/drafting/cross-ref-title-boxes';
 import { fitWithCrossReferences, withCrossReferences, type PlanCrossRefInput } from '@/drafting/cross-ref-plan';
 import type { ProjectSheet, ProjectView, SheetViewport, ViewRaster } from '@/project/types';
 import { hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
 import { schemeResultOf } from '@/project/view-colour-scheme';
+import { withSurfaceFills } from '@/project/view-surface-fills';
+import { withViewContours } from '@/project/view-contours';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
 import { viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
+import { contourOverlays } from '@/project/contour-overlay';
+import { useSheetLocale } from '@/project/units-and-numbers';
+import { withViewPlanSymbols } from '@/project/plan-symbols';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { entityStyles } from '@/project/model-styles';
 import { useSheetSchedules } from '../joinery/ScheduleGraphic';
@@ -100,6 +104,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const phaseSource = useProjectStore((s) => s.phaseSource);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const { geometryResult } = useDrawingRuntime();
+  const sheetLocale = useSheetLocale();
   // Linked models in their own style (#96): follows the loaded models and the project's model list.
   const loadedModels = useViewerStore((s) => s.models);
   const projectModels = useProjectStore((s) => s.models);
@@ -119,27 +124,30 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         // What the view hides element by element (#33) is left out first, so no hatch, membrane or symbol is made for it.
         // The detail level (#444) at the viewport's scale, the function the headless sheets call (`sheetGraphic`).
         const detail = resolveDetailLevel(graphics, vp.scale);
-        const kept = raw ? atDetailLevel(withoutHiddenElements(raw, graphics, renderIdGlobalId), detail) : null;
-        const drawing = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(raw, view, loadedModels, geometryResult, { scale: vp.scale, locale: sheetLocale }), graphics, renderIdGlobalId), view, graphics), detail) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
-        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...membraneOverlays(drawing)];
+        const styledKept = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        // The coloured style of an elevation or section (#499): the visible surfaces in the materials' colours, under the linework.
+        const drawing = styledKept ? withSurfaceFills(styledKept, view, graphics, symbolMeshes, hiddenClasses(graphics), materialsTable ?? []) : null;
+        const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...(view?.kind === 'plan' ? contourOverlays(kept, vp.scale, sheetLocale) : []), ...membraneOverlays(drawing)];
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw
-        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard], style)
+        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale], style)
         : style());
     }
     return out;
-  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard]);
+  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.
   const levels = useProjectStore((s) => s.levels);
+  const draftLayers = useProjectStore((s) => s.draftLayers);
   const settledDrafts = useCallback((viewId: string) => {
     const view = views.find((v) => v.id === viewId);
-    const own = draftsOfView(viewId, drafts);
+    const own = draftsOfView(viewId, drafts, draftLayers);
     return view ? settleLevelDrafts(own, levelResolverFor(view, levels, drawingOf.get(viewId)?.config.plane)) : own;
-  }, [views, drafts, levels, drawingOf]);
+  }, [views, drafts, draftLayers, levels, drawingOf]);
   const placedLegends = useSheetLegends(sheet);
   // A site plan's plot and footprint; its viewport fits and centres on the whole plot (`siteBounds`).
   const rawDrawing = useCallback((viewId: string) => drawingOf.get(viewId) ?? null, [drawingOf]);
@@ -149,6 +157,8 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const viewIds = useMemo(() => new Set(views.map((v) => v.id)), [views]);
   const numbers = useMemo(() => drawingNumbers(sheet, viewIds), [sheet, viewIds]);
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
+  // Section and elevation marks are headed as the project's graphic standard says (#447).
+  const markStyle = markStyleOf(standard);
   // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
   // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
   // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
@@ -159,12 +169,12 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const view = views.find((v) => v.id === vp.viewId);
       const overlays = styled.get(vp.viewId)?.overlays;
       const screenUp = viewScreenUp(vp.viewId);
-      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays], () => ({
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle,
       }));
     };
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
@@ -186,10 +196,11 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
     drawing: siteDrawing(vp),
     drafts: draftsFor(vp),
     drawingNumber: numbers.get(vp.id),
+    markBoxes: crossReferenceBoxes(crossRefInput(vp)),
     overlays: styled.get(vp.viewId)?.overlays,
     site: vp.keyPlanOf ? undefined : sites.get(vp.viewId),
     styleOf,
-  }), [views, styled, draftsFor, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites, styleOf]);
+  }), [views, styled, draftsFor, crossRefInput, numbers, placedSchedules, placedCivil, placedLegends, siteDrawing, sites, styleOf]);
 
   const boxOf = useCallback((v: SheetViewport) => {
     const placed = placedSchedules.get(v.viewId) ?? placedCivil.get(v.viewId) ?? placedLegends.get(v.viewId);

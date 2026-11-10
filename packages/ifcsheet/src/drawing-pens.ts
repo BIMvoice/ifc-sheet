@@ -11,8 +11,8 @@
 
 import type { ItemStyle, StyleItem, ViewStyler } from './view-style.js';
 
-/** The layer a pen goes on: a colour scheme's fill, a cut face's fill, and the hidden, seen and cut lines. */
-export type PenLayer = 'COLOUR' | 'FILL' | 'HIDDEN' | 'SEEN' | 'CUT';
+/** The layer a pen goes on: a colour scheme's fill, a cut face's fill, the hidden, seen and cut lines, a plan's door and window symbols, a material's hatch and its membrane lines (#645). */
+export type PenLayer = 'COLOUR' | 'FILL' | 'HIDDEN' | 'SEEN' | 'CUT' | 'SYMBOLS' | 'HATCH' | 'MEMBRANE';
 
 export interface PenGroup<F, L> {
   key: string;
@@ -53,7 +53,7 @@ export function penGroups<F extends StyleItem, L extends StyleItem>(
     if (!s.visible) continue;
     const who = split ? split(line) : '';
     const dash = s.dash.length ? s.dash.join(' ') : undefined;
-    const key = s.kind === 'hidden' ? `hidden:${s.stroke}${who}` : `${s.kind === 'cut' ? 'cut' : 'seen'}:${s.stroke}:${s.weight}:${dash ?? ''}${who}`;
+    const key = s.kind === 'hidden' ? `hidden:${s.stroke}:${s.weight}:${dash ?? ''}${who}` : `${s.kind === 'cut' ? 'cut' : 'seen'}:${s.stroke}:${s.weight}:${dash ?? ''}${who}`;
     const layer: PenLayer = s.kind === 'hidden' ? 'HIDDEN' : s.kind === 'cut' ? 'CUT' : 'SEEN';
     at(key, () => ({ layer, stroke: s.stroke, width: s.weight, fill: null, ...(dash ? { dash } : {}) })).lines.push(line);
   }

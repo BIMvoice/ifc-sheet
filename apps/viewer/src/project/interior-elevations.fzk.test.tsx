@@ -141,9 +141,29 @@ describe('facade elevations and sections are unchanged', () => {
   }
   const ON_MAIN: Record<string, string> = {
     // north, east and west re-recorded for #218: a facade elevation with no plane of its own now stands outside the bounds (it stood 5 cm inside and cut the wall that reaches them).
-    north: '193/0/0/2000451137', south: '241/0/0/1942490408', east: '363/0/0/-141235747', west: '421/0/0/155999563',
-    'north-deep': '200/0/0/2058618608', 'south-deep': '258/0/0/1672430668', 'east-deep': '371/0/0/-464167292', 'west-deep': '371/0/0/-1001212464',
-    s1: '712/84/0/1814603118', s2: '2008/32/0/1592352504', s3: '1901/43/0/-787997569',
+    // All eight re-recorded for #648: the ground line stops 0.2 m past the building. With GROUND_OVERHANG_M at 1e9 the previous values still pass, so clipping is the only difference.
+    // All eleven re-recorded for #557 (outline-depth.ts): an outline line takes the depth of its element's own surface, so the
+    // 42 rafters under the roof slab are hidden on north and south and the inner corners of walls behind a mitred corner on
+    // all four; a face seen edge-on no longer fills a column of the depth raster, and a point on the raster's far edge reads
+    // the last pixel that can be filled. Before: north 200, south 246, east 390, west 527, north-deep 206, south-deep 266,
+    // east-deep 398, west-deep 481, s1 609, s2 2044, s3 2050 lines.
+    north: '172/0/0/53495229', south: '215/0/0/1673163390', east: '377/0/0/353450951', west: '513/0/0/338119489',
+    // The four deep views and s1 to s3 re-recorded for #749: a line behind the plane is left out where it lies inside a cut face, so
+    // the pieces behind the walls and slabs a section or a deep view cuts are gone. The cut faces are the same. Before: north-deep
+    // '161/0/0/-588991310', south-deep '221/0/0/2015243806', east-deep '389/0/0/2056835847', west-deep '525/0/0/779790265',
+    // s1 '621/65/0/929328739', s2 '2062/32/0/1176559827', s3 '2071/39/0/707328083'.
+    'north-deep': '159/0/0/-10355214', 'south-deep': '219/0/0/1404858974', 'east-deep': '387/0/0/-197624601', 'west-deep': '523/0/0/-449604071',
+    // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
+    // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
+    // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
+    // All eleven re-recorded for #768 (hidden-line.ts sampleVisibility): a covered edge is drawn where its own element shows at
+    // its depth in a pixel beside it, so an edge on the outline of a surface in front of it is drawn whole. Another element's
+    // surface at the same depth does not count. A pixel diff of the FZK set's sheets against main at 120 dpi: under 100 pixels
+    // on the elevations, under 600 on the sections, short pieces of frames and eaves. Before (main): north 193, south 241, east 363, west 421,
+    // north-deep 200, south-deep 258, east-deep 371, west-deep 371, s1 624, s2 2008, s3 1894 lines.
+    // s3 re-recorded for #557 (curved outlines): the oblique section looks into the spiral stair, and its handrails, rails,
+    // column and stringer now draw their long lines (s3 was '2039/39/0/670656729').
+    s1: '649/65/0/-1827319273', s2: '1913/32/0/1672971738', s3: '2025/39/0/-2130442263',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };

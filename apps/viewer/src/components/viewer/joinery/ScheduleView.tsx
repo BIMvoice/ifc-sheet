@@ -22,9 +22,15 @@ import { openJoinery } from '@/joinery/dialog-store';
 import { writeOccurrenceNumbers } from '@/joinery/schedule-numbering';
 import { toast } from '@/components/ui/toast';
 import { svgToDxf } from '../sheets/sheet-dxf';
+import { svgDocumentText } from '../sheets/sheet-export';
 import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
 import { TAB_EXPORT } from '../wall/wall-type';
 import { ScheduleGraphic, useScheduleLayout } from './ScheduleGraphic';
+import { ViewDetailControls } from './ViewDetailControls';
+import { hideViewLine } from '@/joinery/view-choice-actions';
+import type { JoineryViewName } from '@bimvoice/ifcsheet/project';
+import { JoineryViewDrafting } from './JoineryViewDrafting';
+import { joineryDraftSource } from './joinery-draft-source';
 import { RegisterView } from './RegisterView';
 import { RoomFinishesView } from './RoomFinishesView';
 import { RoomScheduleView } from './RoomScheduleView';
@@ -54,6 +60,9 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const result = useScheduleLayout(schedule);
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(3);
+  const [typeId, setTypeId] = useState<string>();
+  const [hiding, setHiding] = useState(false);
+  const [drafting, setDrafting] = useState<{ typeId: string; view: JoineryViewName }>();
   if (!result) return null;
   const { data, layout } = result;
   const w = layout.width + 2 * MARGIN, h = layout.height + 2 * MARGIN;
@@ -62,10 +71,7 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const exportSvg = () => {
     const svg = svgRef.current;
     if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute('width', `${w}mm`);
-    clone.setAttribute('height', `${h}mm`);
-    downloadFile(`<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`, `${stem}.svg`, 'image/svg+xml');
+    downloadFile(svgDocumentText(svg, w, h), `${stem}.svg`, 'image/svg+xml');
   };
   const number = () => {
     const out = writeOccurrenceNumbers(data);
@@ -75,6 +81,19 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
   const exportDxf = () => {
     if (svgRef.current) downloadFile(svgToDxf(svgRef.current, h, `units: millimetres (paper), schedule ${schedule.name}`), `${stem}.dxf`, 'application/dxf');
   };
+
+  // Double-click a type's front, plan or section to draw on it (#492): the view becomes a drafting view.
+  const enter = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current, ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const hit = layout.regions?.find((r) => p.x >= r.box.x && p.x <= r.box.x + r.box.w && p.y >= r.box.y && p.y <= r.box.y + r.box.h);
+    if (hit) setDrafting({ typeId: hit.type, view: hit.view });
+  };
+  const draftSource = drafting ? joineryDraftSource(result, drafting.typeId) : null;
+  if (drafting && draftSource) {
+    return <JoineryViewDrafting spec={draftSource.spec} view={drafting.view} views={draftSource.views} scale={schedule.scale ?? 50} onDone={() => setDrafting(undefined)} />;
+  }
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -88,7 +107,8 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
         <select aria-label={t('schedule.scale')} className={SELECT} value={schedule.scale ?? 50} onChange={(e) => updateSchedule(schedule.id, { scale: Number(e.target.value) })}>
           {SCALES.map((s) => <option key={s} value={s}>1:{s}</option>)}
         </select>
-        <span className="text-zinc-500">{t('schedule.count', { types: data.entries.length, elements: data.entries.reduce((s, e) => s + e.total, 0) })}</span>
+        <ViewDetailControls data={data} typeId={typeId} onType={setTypeId} hiding={hiding} onHiding={setHiding} />
+        <span className="text-zinc-500" title={t('joinery.draft.enter')}>{t('schedule.count', { types: data.entries.length, elements: data.entries.reduce((s, e) => s + e.total, 0) })}</span>
         <span className="flex-1" />
         <IconButton label={t('schedule.zoomOut')} className="size-7" onClick={() => setZoom((z) => Math.max(1, z / 1.25))}><Minus className="size-3.5" /></IconButton>
         <IconButton label={t('schedule.zoomIn')} className="size-7" onClick={() => setZoom((z) => Math.min(12, z * 1.25))}><Plus className="size-3.5" /></IconButton>
@@ -100,9 +120,9 @@ function JoineryScheduleView({ schedule }: { schedule: ProjectSchedule }) {
       </div>
       <div className="min-h-0 flex-1 overflow-auto bg-zinc-200 p-4 dark:bg-zinc-900">
         {data.entries.length === 0 ? <p className="p-4 text-sm text-zinc-500">{t('schedule.empty')}</p> : (
-          <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" width={w * zoom} height={h * zoom} viewBox={`${-MARGIN} ${-MARGIN} ${w} ${h}`} className="block bg-white shadow-lg" data-schedule-paper>
+          <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" width={w * zoom} height={h * zoom} viewBox={`${-MARGIN} ${-MARGIN} ${w} ${h}`} className="block bg-white shadow-lg" data-schedule-paper onDoubleClick={enter}>
             <rect data-export-ignore-dxf="true" x={-MARGIN} y={-MARGIN} width={w} height={h} fill="#fff" />
-            <ScheduleGraphic layout={layout} />
+            <ScheduleGraphic layout={layout} onPick={hiding ? (type, line) => { if (type === typeId) hideViewLine(type, line); } : undefined} />
           </svg>
         )}
       </div>

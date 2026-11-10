@@ -22,7 +22,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyTscOutput, untrustworthyExitReason } from './unused-locals-classify.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { classifyTscOutput, syncExitShape, untrustworthyExitReason } from './unused-locals-classify.mjs';
 
 test('a single recognised unused-locals diagnostic counts as a violation', () => {
   const output = "src/a.ts(1,1): error TS6133: 'x' is declared but its value is never read.\n";
@@ -163,4 +165,41 @@ test('an exit with no status and no signal at all is not trusted', () => {
   // Nothing here says tsc ran to completion, so its output cannot be assumed
   // to be a complete diagnostic list.
   assert.notEqual(untrustworthyExitReason({ status: null, signal: null }), null);
+});
+
+// ---- The async spawn shape (check-unused-locals runs packages in parallel).
+//
+// Real child processes, not hand-built objects: the point is that Node's
+// async `execFile` rejection, mapped by syncExitShape, is vetted exactly as
+// the `execFileSync` error was.
+
+const execFileAsync = promisify(execFile);
+const rejectionOf = (args, opts = {}) => execFileAsync(process.execPath, args, opts).then(
+  () => assert.fail('expected the child to fail'),
+  (err) => err,
+);
+
+test('async: a normal non-zero exit with output is trusted, and keeps its output', async () => {
+  const err = syncExitShape(await rejectionOf(['-e', 'console.log("diag"); process.exit(2)']));
+  assert.equal(err.status, 2);
+  assert.equal(untrustworthyExitReason(err), null);
+  assert.match(err.stdout, /diag/);
+});
+
+test('async: a run cut short by maxBuffer is not trusted', async () => {
+  const err = syncExitShape(await rejectionOf(['-e', 'process.stdout.write("x".repeat(100000))'], { maxBuffer: 1000 }));
+  assert.notEqual(untrustworthyExitReason(err), null);
+});
+
+test('async: a killed run is not trusted', async () => {
+  const err = syncExitShape(await rejectionOf(['-e', 'process.kill(process.pid, "SIGKILL")']));
+  assert.match(untrustworthyExitReason(err) ?? '', /SIGKILL/);
+});
+
+test('async: a spawn failure is not trusted', async () => {
+  const err = syncExitShape(await execFileAsync('definitely-not-a-binary-6a1f').then(
+    () => assert.fail('expected the spawn to fail'),
+    (e) => e,
+  ));
+  assert.match(untrustworthyExitReason(err) ?? '', /ENOENT/);
 });

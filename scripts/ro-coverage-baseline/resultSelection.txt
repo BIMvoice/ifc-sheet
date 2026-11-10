@@ -1,0 +1,12 @@
+resultSelection.clear
+resultSelection.failed
+resultSelection.highlighted
+resultSelection.included
+resultSelection.pageSelected
+resultSelection.populationSelected
+resultSelection.resolving
+resultSelection.retry
+resultSelection.selectEverything
+resultSelection.selectPage
+resultSelection.selectPopulation
+resultSelection.selected

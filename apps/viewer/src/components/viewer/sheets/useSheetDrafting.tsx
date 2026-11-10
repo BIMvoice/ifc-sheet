@@ -24,6 +24,7 @@ import {
 import { isGeometry, type Pt, type SnapHit, type SnapMode } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { DraftOverlay } from '../drafting/DraftOverlay';
+import { OnDrawingText } from '../drafting/OnDrawingText';
 
 const SNAP_PX = 10;
 const PICK_PX = 6;
@@ -41,7 +42,7 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
   const snapOn = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
   const paperHeight = useProjectStore((s) => { const sheet = s.sheets.find((o) => o.id === sheetId); return sheet ? paperOf(sheet).h : 0; });
-  const entities = useMemo(() => draftsOfView(sheetId, drafts), [drafts, sheetId]);
+  const entities = useMemo(() => draftsOfView(sheetId, drafts, layers), [drafts, layers, sheetId]);
   const shapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   const [cursor, setCursor] = useState<{ p: Pt; snap: SnapHit | null } | null>(null);
 
@@ -85,7 +86,10 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
 
   const command = runningCommand();
   const preview = command && cursor && command.preview ? command.preview(cursor.p) : NO_SHAPES;
+  const transform = { scale: pan.k, x: pan.x, y: pan.y };
+  // The words of a new text are written on the paper where they print (#168).
   const overlay = (
+    <>
     <DraftOverlay
       entities={entities.filter((e) => selection.has(e.id))}
       layers={layers}
@@ -97,10 +101,12 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
       window={null}
       highlight={NO_SHAPES}
       extraPatterns={extraPatterns}
-      transform={{ scale: pan.k, x: pan.x, y: pan.y }}
+      transform={transform}
       axis="down"
       paperUnit={1}
     />
+    <OnDrawingText transform={transform} axis="down" />
+    </>
   );
   return { entities, down, move, overlay, drafting: command !== null };
 }

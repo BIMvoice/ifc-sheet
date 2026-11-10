@@ -201,7 +201,7 @@ describe.skipIf(noWasm !== null || !existsSync(SKOLEBYGG))('Skolebygg', () => {
     const e = model.extent!;
     expect(e.min.x).toBeCloseTo(108.2, 1);
     expect(e.max.x).toBeCloseTo(198.5, 1);
-    expect(e.min.z).toBeCloseTo(-206.3, 1);
+    expect(e.min.z).toBeCloseTo(-206.4, 1); // the curtain wall's glass, 12 cm outside the walls, framed since #586
     expect(e.max.z).toBeCloseTo(-121.9, 1);
     const old = all.extent!;
     expect(old.min.x).toBeCloseTo(-1.7, 1);

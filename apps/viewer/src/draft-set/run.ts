@@ -46,7 +46,7 @@ export function makeDraftSet(): DraftSetOutcome {
   const report = ensureDrawingSet(meshes, extent);
   const { sheets, views } = useProjectStore.getState();
   const sheetLines = sheets.filter((s) => ['plans', 'elevations', 'sections'].includes(sheetGroup(s) ?? '')).flatMap((s) => {
-    const why = sheetScaleReason(s, views, extent);
+    const why = sheetScaleReason(s, views, extent, sheets);
     return why ? [line(`${s.number} ${s.name}: ${sayReason(why.reason)}`)] : [];
   });
   const notes = report.notes.map((n) => line(sayReason(n)));

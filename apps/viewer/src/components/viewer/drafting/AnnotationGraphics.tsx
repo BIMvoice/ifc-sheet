@@ -16,10 +16,9 @@
  */
 
 import { memo, useId, useMemo } from 'react';
+import { arrowMark, flattenShape, missingSymbolMark, placeSymbol, liveSymbol, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
-import { flattenShape, missingSymbolMark, placeSymbol } from '@/drafting/symbols';
-import { liveSymbol, type LiveSymbolContext } from '@/siteplan/live-symbols';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
 import { leaderTextRight } from '@/drafting/leader-segments';
 import { findPattern } from '@/drafting/hatch/library';
@@ -120,27 +119,15 @@ function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, 
   );
 }
 
-/** An arrow end of the kind the style asks for, at `p` pointing along `dir` (screen). */
+/** An arrow end of the kind the style asks for, at `p` pointing along `dir` (screen): the engine's mark (`arrowMark`), as a path. */
 function arrowPath(kind: DimStyle['arrow'], p: Pt, dir: Pt, size: number): { d: string; fill: boolean } {
-  const ang = Math.atan2(dir.y, dir.x);
-  switch (kind) {
-    case 'arrow': {
-      const back = (da: number) => `${p.x - size * Math.cos(ang + da)} ${p.y - size * Math.sin(ang + da)}`;
-      return { d: `M${p.x} ${p.y}L${back(0.3)}L${back(-0.3)}Z`, fill: true };
-    }
-    case 'dot': {
-      const r = size * 0.3;
-      return { d: `M${p.x - r} ${p.y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`, fill: true };
-    }
-    case 'none':
-      return { d: '', fill: false };
-    default: {
-      // Architectural tick: 45° across the line.
-      const h = size * 0.5;
-      const c = Math.cos(ang + Math.PI / 4) * h, s = Math.sin(ang + Math.PI / 4) * h;
-      return { d: `M${p.x - c} ${p.y - s}L${p.x + c} ${p.y + s}`, fill: false };
-    }
+  const mark = arrowMark(kind, p, dir, size);
+  if (!mark) return { d: '', fill: false };
+  if (mark.kind === 'dot') {
+    const { c, r } = mark;
+    return { d: `M${c.x - r} ${c.y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`, fill: true };
   }
+  return { d: `M${mark.pts.map((q) => `${q.x} ${q.y}`).join('L')}${mark.fill ? 'Z' : ''}`, fill: mark.fill };
 }
 
 function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<AnnotationShape, { type: 'hatch' }>; color: string; t: ViewTransform; axis: SectionAxisName; extraPatterns: readonly HatchPattern[]; k: number }) {
@@ -152,7 +139,11 @@ function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<Ann
     () => (pattern && !pattern.solid ? hatchSegments(shape.loops, pattern, { scale: shape.scale * HATCH_UNIT_M, angleDeg: shape.angle }).segments : []),
     [shape.loops, shape.scale, shape.angle, pattern],
   );
-  if (!pattern || pattern.solid) return <path d={outline} fill={color} fillOpacity={pattern ? 0.85 : 0.15} fillRule="evenodd" stroke={color} strokeWidth={0.75 * k} />;
+  if (!pattern || pattern.solid) {
+    // A masking fill (#681) is opaque and in its own colour, so it hides what is drawn before it; the DXF reads the fill colour.
+    const mask = shape.opaque === true && !!pattern;
+    return <path d={outline} data-dxf-fill={pattern ? 'solid' : undefined} fill={mask ? shape.fill ?? '#ffffff' : color} fillOpacity={mask ? 1 : pattern ? 0.85 : 0.15} fillRule="evenodd" stroke={color} strokeWidth={0.75 * k} />;
+  }
   const d = segments.map((s) => {
     const a = drawingToScreen(s.a, t, axis);
     const b = drawingToScreen(s.b, t, axis);
@@ -194,11 +185,13 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
   if (shape.type === 'symbol') return <Symbol shape={shape} color={selected ? '#2563eb' : base} t={t} axis={axis} k={k} look={look} live={symbols} />;
   const textColor = selected ? '#2563eb' : look.text.color ?? base;
   const px = shape.height * t.scale;
+  // Which way is up on the screen in this view's drawing y: a text's leader and a moved figure's leader sit by it, not by the session's.
+  const up: 1 | -1 = screenSigns(axis).ky === 1 ? -1 : 1;
   /** Paper millimetres → screen px. */
   const mm = (v: number) => v * paperUnit * t.scale;
   switch (shape.type) {
     case 'text': {
-      const line = textLeader(shape);
+      const line = textLeader(shape, up);
       const label = <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
       if (!line) return label;
       // The same line and arrow an element tag's leader has.
@@ -279,7 +272,7 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
         extOver: dim.extOver * paperUnit,
         format: (m) => formatDimension(locale, m, dim),
         locale,
-      });
+      }, { up, right: screenSigns(axis).kx });
       const lineColor = selected ? '#2563eb' : dim.color ?? base;
       const lines = layout.lines.map((l) => polyline([l.a, l.b], t, axis)).join('');
       const size = Math.max(mm(dim.arrowSize), 3 * k);

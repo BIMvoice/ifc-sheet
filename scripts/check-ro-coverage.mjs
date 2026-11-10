@@ -12,8 +12,13 @@
  * This gate covers ALL English catalogue keys. A key is missing when the
  * Romanian catalogue the app serves (`locales/ro.ts`, which merges every
  * `*.ro.ts` and the engine tables) has no entry for it. The committed
- * baseline (`scripts/ro-coverage-baseline.json`, a sorted array: the exact
- * keys, not a count) records today's missing keys. It fails when
+ * baseline records today's missing keys (the exact keys, not a count), one
+ * file per key namespace: `scripts/ro-coverage-baseline/<namespace>.txt`
+ * holds the sorted keys that start with `<namespace>.`, one per line. Two PRs
+ * that translate keys of different features shrink different files, so they
+ * never touch neighbouring lines (one sorted array did: removals at the
+ * boundary between two namespaces, and the comma before a removed last key,
+ * conflicted). It fails when
  *
  *   - a key is missing and NOT in the baseline (a new English key with no
  *     Romanian: translate it), and
@@ -25,14 +30,16 @@
  * `compareToBaseline` from `scripts/lib/count-ratchet.mjs` with one per key.
  *
  * Flags:
- *   --baseline <path>  read/write this baseline instead of the committed one
+ *   --baseline <path>  read/write this baseline instead of the committed one: a
+ *                      directory of `<namespace>.txt` files, or a path ending in
+ *                      `.json` for one sorted array (the tests use that)
  *   --measured <path>  read the missing keys from this JSON (an array, or
  *                      { missing: [...] }) instead of running the probe (tests)
  *   --json             also print { unlisted, stale } (the two failing sets) on stdout
  *   --update           rewrite the baseline to the measured list (shrink only)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +57,7 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const out = { baseline: join(SCRIPTS_DIR, 'ro-coverage-baseline.json'), measured: null, update: false, json: false };
+  const out = { baseline: join(SCRIPTS_DIR, 'ro-coverage-baseline'), measured: null, update: false, json: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--baseline' || flag === '--measured') {
@@ -80,6 +87,51 @@ function readKeys(path, what) {
   return list;
 }
 
+/** The namespace of a key: what comes before its first dot. It names the baseline file the key is listed in. */
+const namespaceOf = (key) => key.split('.')[0];
+const NAMESPACE = /^[A-Za-z0-9_-]+$/;
+const isJsonBaseline = (path) => path.endsWith('.json');
+
+/** The baselined keys, from a `.json` array or a directory of `<namespace>.txt` files; null when there is none. */
+function readBaseline(path) {
+  if (!existsSync(path)) return null;
+  if (isJsonBaseline(path)) return readKeys(path, 'baseline');
+  const keys = [];
+  for (const file of readdirSync(path).filter((f) => f.endsWith('.txt')).sort()) {
+    const namespace = file.slice(0, -'.txt'.length);
+    const listed = readFileSync(join(path, file), 'utf8').split('\n').map((line) => line.trim()).filter((line) => line !== '');
+    for (const key of listed) {
+      if (namespaceOf(key) !== namespace) fail(`${relative(REPO_ROOT, join(path, file))} lists ${key}, which belongs in ${namespaceOf(key)}.txt. Regenerate the baseline with \`${SELF} --update\`.`);
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+/** Writes `keys` as the baseline: one sorted `.json` array, or one sorted `<namespace>.txt` per namespace (a namespace with none left loses its file). */
+function writeBaseline(path, keys) {
+  const sorted = [...keys].sort();
+  if (isJsonBaseline(path)) {
+    writeFileSync(path, `${JSON.stringify(sorted, null, 2)}\n`);
+    return;
+  }
+  const byNamespace = new Map();
+  for (const key of sorted) {
+    const namespace = namespaceOf(key);
+    if (!NAMESPACE.test(namespace)) fail(`the key ${key} has a namespace that cannot name a file; nothing was written.`);
+    byNamespace.set(namespace, [...(byNamespace.get(namespace) ?? []), key]);
+  }
+  mkdirSync(path, { recursive: true });
+  for (const file of readdirSync(path).filter((f) => f.endsWith('.txt'))) {
+    if (!byNamespace.has(file.slice(0, -'.txt'.length))) rmSync(join(path, file));
+  }
+  for (const [namespace, list] of byNamespace) {
+    const file = join(path, `${namespace}.txt`);
+    const text = `${list.join('\n')}\n`;
+    if (!existsSync(file) || readFileSync(file, 'utf8') !== text) writeFileSync(file, text);
+  }
+}
+
 function measure(args) {
   if (args.measured !== null) return { missing: readKeys(args.measured, 'measured list'), total: null };
   const run = spawnSync('pnpm', ['exec', 'tsx', '--import', './src/test/vite-module-hooks.mjs', PROBE], {
@@ -102,7 +154,7 @@ function measure(args) {
 const args = parseArgs(process.argv.slice(2));
 const { missing, total } = measure(args);
 const measuredCounts = Object.fromEntries(missing.map((k) => [k, 1]));
-const baselineKeys = existsSync(args.baseline) ? readKeys(args.baseline, 'baseline') : null;
+const baselineKeys = readBaseline(args.baseline);
 if (baselineKeys === null && !args.update) fail(`no baseline at ${args.baseline}. Run: ${SELF} --update`);
 const { regressions, improvements } = compareToBaseline(measuredCounts, Object.fromEntries((baselineKeys ?? []).map((k) => [k, 1])));
 
@@ -115,7 +167,7 @@ if (args.update) {
         `${regressions.map((r) => `  ${r.key}`).join('\n')}\n\nAdd the Romanian entry (in the key's \`*.ro.ts\`, wired into barrels/ro-*.ts). Nothing was written.`,
     );
   }
-  writeFileSync(args.baseline, `${JSON.stringify([...missing].sort(), null, 2)}\n`);
+  writeBaseline(args.baseline, missing);
   console.log(`check-ro-coverage: wrote ${missing.length} key(s) to ${relative(REPO_ROOT, args.baseline)}.`);
   process.exit(0);
 }

@@ -45,7 +45,7 @@ import { installedViewInputs } from '@/drafting/session-providers';
 
 const BLOC = fileURLToPath(new URL('../../public/samples/bloc-p4.ifc', import.meta.url));
 
-const COMMAND_LINE: Record<AnnotatedKind, readonly string[]> = { plan: ['TAGALL', 'DIMALL'], elevation: ['LEVELALL'], section: ['LEVELALL'] };
+const COMMAND_LINE: Record<AnnotatedKind, readonly string[]> = { plan: ['TAGALL', 'DIMALL'], elevation: ['TAGALL', 'LEVELALL'], section: ['TAGALL', 'LEVELALL'] };
 
 /** What drafts are, apart from their random ids: the shape, the layer and the parameters. */
 function signatureOf(drafts: readonly DraftEntity[]): string[] {
@@ -189,7 +189,9 @@ for (const [name, path] of [['the demo block (bloc-p4)', BLOC], ['AC20-FZK-Haus'
     }
     const planResults = summary.views.filter((v) => v.kind === 'plan').flatMap((v) => v.results.map((r) => r.command));
     assert.ok(planResults.includes('tagall') && planResults.includes('dimall'));
-    assert.ok(!summary.views.some((v) => v.kind !== 'plan' && v.results.some((r) => r.command !== 'levelall')));
+    assert.ok(!summary.views.some((v) => v.kind !== 'plan' && v.results.some((r) => r.command === 'dimall')), 'DIMALL stays on plans');
+    // A section tags its rooms (#677): the demo block and the house both have rooms the sections cut.
+    assert.ok(summary.views.some((v) => v.kind === 'section' && v.results.some((r) => r.command === 'tagall' && r.outcome === 'added')), 'a section is tagged');
   });
 
   it('is one undo step: one Undo removes everything, and Redo puts it back', async () => {

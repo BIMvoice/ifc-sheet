@@ -1,0 +1,58 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * A saved project's drawing set (#479): the readers of its views, sheets, drafts and styles, which the app's file reader and the
+ * engine's both use, and what draws its drafts and placed schedules on a sheet, which the app's sheet and the engine's PDF both use.
+ * Add new exports of this area here, not in `../index.ts`.
+ */
+
+// Reading the set from a project file
+export { DISCIPLINE_IDS, fail, isDisciplineId, isNumber, isObject, isString, listAt, readLevel, readSheet, readView, type Json } from '../set-read.js';
+export { readGraphics, readPhaseSource } from '../view-graphics-read.js';
+export { readViewTemplate, readViewTemplates } from '../view-templates-read.js';
+export { readDimStyles, readGraphicStandard, readLayerGroups, readStandards, readTextStyles } from '../standards-read.js';
+export { readDraft, readDraftLayer, readShape } from '../draft-read.js';
+export { holdsSet, projectSetOf, readProjectSet, type ProjectSet, type ProjectSetFacts } from '../project-set.js';
+export { PHASES, type PhaseMapping, type PhaseSource } from '../view-graphics-types.js';
+// The drafted shapes and how one looks
+export {
+  TEXT_FRAMES, asTextFrame, isGeometry,
+  type AnnotationShape, type AxisEnds, type AxisShape, type DraftEntity, type DraftLayer, type DraftParamValue, type DraftShape, type EntityShape, type LevelRef, type Pt,
+  type SnapHit, type SnapMode, type SymbolInstanceShape, type TextFrame,
+} from '../draft-types.js';
+export {
+  DEFAULT_TEXT_STYLE, DIM_OVERRIDES, PEN_OVERRIDES, TABLES_STYLE_ID, tablesFace, TEXT_OVERRIDES, dashFor, dashOf, dimStyleOf, entityPen, formatDimension, layerLocked, layerPen, layerPrints, layerShows, lookOf, naturalDecimals, overrideKey,
+  readableDeg, resolveDim, resolveText, textStyleOf, unitFactor, type CustomLineType, type LayerGroup, type LayerVisibilityScope, type LineType, type StyleBook,
+} from '../draft-look.js';
+export { angularLayout, arcPoints, arrowMark, axisLayout, formatLength, formatLevel, leaderTextRight, levelWitness, linearLayout, radialLayout, unitVector, type ArrowMark, type DimensionLayout, type LayoutOptions } from '../dimension-layout.js';
+export { DEFAULT_VIEW_SCALE, annotationAtFactor, annotationFactor, viewportPaperUnit } from '../viewport-annotation.js';
+// A schedule on paper, and where it sits on a sheet
+export type { ScheduleCell, ScheduleLayout, SchedulePrim } from '../schedule-prim.js';
+export {
+  PAD, PEN, ROW, TEXT, layoutPagedTable, pageTitle, textWidth, wrapNote,
+  type PagedOptions, type TableBlock, type TableItem,
+} from '../paged-table.js';
+export { layoutListSchedule, type ListSheetLabels } from '../list-schedule-layout.js';
+export { layoutOnSheet, layoutTableOnSheet, registerHolders, scheduleBox, scheduleHomeBox, sheetDrawingArea } from '../schedule-place.js';
+// Hatches: the pattern format, the built-in library and the strokes a pattern makes inside a region
+export { parsePat, serializePat, type HatchLineFamily, type HatchPattern } from '../hatch-pattern.js';
+export { hatchSegments, type HatchOptions, type HatchResult, type HatchSegment } from '../hatch-fill.js';
+export { HATCH_UNIT_M, builtInPatterns, findPattern } from '../hatch-library.js';
+// Symbols: the library, the project's own, how one is placed, and the live ones (scale bar, north arrow, coordinate point)
+export { BUILT_IN_SYMBOLS, allSymbols, findSymbol, flattenShape, isBuiltInSymbol, missingSymbolMark, placeSymbol, setSymbolLibrary, symbolDrawingScale, type DraftSymbol, type PlacedSymbol, type SymbolInstance, type SymbolShape } from '../symbols.js';
+export { readSymbol } from '../symbol-read.js';
+export { SCALE_BAR_TARGET_MM, scaleBarShapes, scaleBarStep, scaleBarTicks } from '../scale-bar.js';
+export { COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, liveSymbol, type LiveSymbolContext } from '../live-symbols.js';
+export { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from '../true-north.js';
+export { COORDINATE_LABELS, drawingPointToLocal, liveSymbolContext, siteFrameOf, type CoordinateLabeller, type SiteFrame } from '../site-frame.js';
+export { AXIS_NAME, annotationFrameOf, drawingToWorld, screenSigns, viewNormal, worldToDrawing, type SectionAxisName, type Vec3 } from '../drawing-frame.js';
+export { EPS, TAU, normAngle, polar, rotatePt, sweepOf } from '../draft-vec.js';
+export { hasStandardGeoreferencing } from '../georef-gate.js';
+// A text's frame and leader and a moved dimension figure's leader, which the app's sheet and the engine's PDF both place (#479)
+export { GLYPH_ASCENT, GLYPH_DESCENT, LINE_PITCH, textBlock, textLines, type FrameShape, type TextBlock } from '../text-block.js';
+export { tableWidthEm, type TextFace } from '../text-advance.js';
+export { clampToRect, leaderStart, rectCentre, textBoxOf, textLeaderOf, type Rect as LeaderRect } from '../text-leader.js';
+export { dimensionLayout, type ScreenFrame } from '../dimension-figure.js';
+export { LIFT_DOWN, LIFT_UP, figureUp, layoutFacade, leaderOf, type FacadeString, type FigureBox, type FigureOptions, type FigurePlace } from '../figure-layout.js';

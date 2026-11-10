@@ -37,6 +37,7 @@ const fixturesDir = path.join(repoRoot, 'tests/models/ifc5');
 // suite cleanly rather than throwing ENOENT when the fixture is not staged.
 const FIXTURE_PATH = path.join(fixturesDir, 'Hello_Wall_hello-wall.ifcx');
 const FIXTURES_AVAILABLE = fs.existsSync(FIXTURE_PATH);
+if (!FIXTURES_AVAILABLE) console.warn('collab round-trip skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 function loadFixture(name: string): string {
   return fs.readFileSync(path.join(fixturesDir, name), 'utf-8');

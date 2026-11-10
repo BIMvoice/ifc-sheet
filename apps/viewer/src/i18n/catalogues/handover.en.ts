@@ -6,7 +6,7 @@ import type { TranslationValue } from '../types';
 /** The handover package (#83): the issued PDF, DXF, IFC, schedules and drawing list in one ZIP. Romanian: `handover.ro.ts`. */
 export const handoverEn = {
   'handover.action': 'Hand over (ZIP)',
-  'handover.hint': 'Issues the set as above and packs it with the IFC as loaded, every schedule as XLSX and the drawing list as XLSX. Drawings go as DXF; DWG follows with #52.',
+  'handover.hint': 'Issues the set as above and packs it with the IFC as loaded, every schedule as XLSX and the drawing list as XLSX. Drawings go as DXF; DWG export is not available yet.',
   'handover.pattern': 'File name pattern',
   'handover.pattern.hint': 'Tokens: {tokens}. Names are plain ASCII, without slashes, at most 100 characters; two files with one name get (2).',
   'handover.pattern.example': 'Example: {name}',

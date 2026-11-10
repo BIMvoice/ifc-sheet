@@ -12,7 +12,7 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { clearDraftHistory, newDraft } from './draft-store.js';
-import { readDraft } from './draft-file.js';
+import { readDraft } from '@bimvoice/ifcsheet';
 import { mirrorEntity, rotateEntity, translateEntity } from './annotation.js';
 import { gripAt, gripsOf, moveGrip } from './grips.js';
 import {

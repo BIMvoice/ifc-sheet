@@ -88,12 +88,17 @@ it('records the streaming batches, upload slices, camera fit, queue drain, refit
   render(<Viewport renderer={renderer} />);
 
   const all = meshes(6);
+  // The hook's effects run a task after the render that changed its inputs (#154).
+  const settled = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
   await act(async () => { setStreaming(true); });
+  await settled();
   for (let end = 2; end <= all.length; end += 2) {
     await act(async () => { useViewerStore.setState({ models: new Map([['ifc', model(all.slice(0, end))]]) }); });
+    await settled();
     flushPlacementGeometry(native.scene, native.device, native.pipeline, false);
   }
   await act(async () => { setStreaming(false); });
+  await settled();
   // startFinalize runs on a 0 ms timer; the rebuild then resolves on its own.
   await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 

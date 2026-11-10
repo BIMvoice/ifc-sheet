@@ -18,10 +18,11 @@ import type { DraftShape } from '@/drafting/types';
 import { phaseMeshes } from '@/project/phase-view';
 import { renderIdGlobalId } from '@/project/element-guid';
 import { withoutHiddenElementMeshes } from '@/project/view-element-filter';
-import type { DetailLevel } from '@bimvoice/ifcsheet';
+import type { DetailLevel, ProjectLevel } from '@bimvoice/ifcsheet';
 import type { ViewGraphics } from '@/project/types';
 import type { PhaseView } from '@/project/view-graphics';
 import { shapePath } from './DraftOverlay';
+import { DoorFlipButtons } from './DoorFlipButtons';
 
 const NO_FLIPS: Record<string, number> = {};
 
@@ -38,11 +39,13 @@ interface Props {
   graphics?: ViewGraphics;
   /** The view's detail level (#444): coarse and medium simplify the openings. */
   detail?: DetailLevel;
+  /** A plan's own storey: the doors and windows the host-wall rule draws (#586). */
+  level?: ProjectLevel;
   transform: ViewTransform;
   axis: SectionAxisName;
 }
 
-export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, phases, graphics, detail = 'fine', transform, axis }: Props) {
+export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, drawing, hidden, phases, graphics, detail = 'fine', level, transform, axis }: Props) {
   const { geometryResult } = useDrawingRuntime();
   const flips = useProjectStore((s) => s.symbolFlips) ?? NO_FLIPS;
   // Symbols follow the catalogue and the symbol mapping too.
@@ -52,11 +55,11 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
     () => {
       if (!plane || !geometryResult?.meshes) return [];
       const meshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult.meshes, phases ?? null), graphics, renderIdGlobalId) ?? geometryResult.meshes;
-      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail);
-      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, detail) : [];
+      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail, level);
+      return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail) : [];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping are read through the project store
-    [plane, drawing, geometryResult, flips, hidden, phases, graphics, detail, catalogue, mapping],
+    [plane, drawing, geometryResult, flips, hidden, phases, graphics, detail, level, catalogue, mapping],
   );
   if (symbols.length === 0) return null;
   const path = (shapes: DraftShape[]) => shapes.map((s) => shapePath(s, transform, axis)).join('');
@@ -73,9 +76,12 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
     </g>
   );
   return (
+    <>
     <svg data-opening-symbols className="absolute inset-0 h-full w-full pointer-events-none text-zinc-800 dark:text-zinc-200" aria-hidden="true">
       {draw(group(symbols.filter((s) => !turned(s))), '')}
       {draw(group(symbols.filter(turned)), 'text-primary', 'data-flipped-symbols')}
     </svg>
+    {plane?.axis === 'y' ? <DoorFlipButtons symbols={symbols} transform={transform} axis={axis} /> : null}
+    </>
   );
 });

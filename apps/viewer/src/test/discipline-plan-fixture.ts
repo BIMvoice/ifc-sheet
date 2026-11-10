@@ -56,7 +56,7 @@ export interface LoadedPlanModel {
  * `.wasm` off disk only without a `window`, and happy-dom's `fetch` refuses
  * `file:` (same shim as `useDrawingGeneration.projection.test.tsx`).
  */
-function serveWasmFromDisk(): void {
+export function serveWasmFromDisk(): void {
   const upstream = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const href = input instanceof URL ? input.href : typeof input === 'string' ? input : input.url;
@@ -129,3 +129,6 @@ export async function loadPlanModel(path: string, options: { geometryHashes?: bo
   const drawnClasses = (drawing: Drawing2D) => new Set([...drawnIds(drawing)].map(classOf).filter(Boolean));
   return { levels, idsByName, nameOf, classOf, planOf, drawnNames, drawnClasses, drawnIds };
 }
+
+/** The IfcOpenHouse sample, committed beside the FZK-Haus (the same file `pnpm fixtures` fetches to `tests/models/ara3d/`): one storey, a roof, no site. */
+export const OPEN_HOUSE = fileURLToPath(new URL('./__fixtures__/IfcOpenHouse_IFC4.ifc', import.meta.url));

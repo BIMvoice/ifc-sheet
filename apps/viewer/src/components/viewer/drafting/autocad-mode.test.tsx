@@ -40,7 +40,7 @@ function counting(offer: (id: WallKeyId) => boolean = () => true): { handlers: W
 
 /** The drafting view's command line, wired as `DraftingView` wires it. */
 function Drafting({ handlers, cursor = null }: { handlers: WallHandlers; cursor?: Pt | null }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', cursor) });
   useWallKeys(handlers);
@@ -55,13 +55,13 @@ function Drafting({ handlers, cursor = null }: { handlers: WallHandlers; cursor?
   );
 }
 
-function mount(handlers = counting().handlers, cursor: Pt | null = null): HTMLInputElement {
+function mount(handlers = counting().handlers, cursor: Pt | null = null): HTMLTextAreaElement {
   const ui = render(<Drafting handlers={handlers} cursor={cursor} />);
-  return ui.querySelector('input[aria-label="Command line"]') as HTMLInputElement;
+  return ui.querySelector('textarea[aria-label="Command line"]') as HTMLTextAreaElement;
 }
 
 /** Type a line on the page (CAD style, with no click into the line first) and press Enter. */
-function enter(line: HTMLInputElement, text: string): void {
+function enter(line: HTMLTextAreaElement, text: string): void {
   for (const ch of text) press(document.body, ch);
   press(line, 'Enter');
 }
@@ -364,8 +364,8 @@ describe('AutoCAD mode on: a focused control keeps Enter and Space', () => {
   });
 });
 
-describe('AutoCAD mode off: Enter on a focused button confirms, as on main', () => {
-  it('repeats the last drawing command', () => {
+describe('AutoCAD mode off: Enter on a focused button no longer repeats (#168)', () => {
+  it('does not start the last drawing command again', () => {
     const line = mount();
     enter(line, 'l');
     enter(line, '0,0');
@@ -374,7 +374,7 @@ describe('AutoCAD mode off: Enter on a focused button confirms, as on main', () 
     const button = document.createElement('button');
     document.body.appendChild(button);
     press(button, 'Enter');
-    assert.equal(useDraftingSession.getState().commandId, 'line');
+    assert.equal(useDraftingSession.getState().commandId, null);
     button.remove();
   });
 });

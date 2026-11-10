@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "build",
+  "m.ifc",
+  "--pac",
+  "--pac-mode",
+  "bogus",
+  "--out",
+  "a.pdf"
+ ],
+ "code": 2,
+ "stdout": "",
+ "stderr": "ifcsheet build --pac-mode is one of full, rural.\n"
+}

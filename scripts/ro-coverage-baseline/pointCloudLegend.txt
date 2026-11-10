@@ -1,0 +1,6 @@
+pointCloudLegend.heightLabel
+pointCloudLegend.heightRampAriaLabel
+pointCloudLegend.high
+pointCloudLegend.intensityLabel
+pointCloudLegend.intensityRampAriaLabel
+pointCloudLegend.low

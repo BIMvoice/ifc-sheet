@@ -134,7 +134,7 @@ describe.skipIf(missing !== null)('ifcsheet build --pac, on AC20-FZK-Haus (#364)
       const pdf = join(dir, `${args.join('_').replace(/[^\w]/g, '')}.pdf`);
       expect(await run(['build', FZK, '--pac', '--out', pdf, ...args], c.io)).toBe(EXIT.ok);
       const [first] = await readPages(new Uint8Array(readFileSync(pdf)));
-      return { title: first.map((i) => i.str).join(' '), said: c.err() };
+      return { title: first.map((i) => i.str).join(' '), said: c.err().split('\n').filter((l) => !l.includes('holds no drawing set')).join('\n') };
     };
     // A project that records en: the opis is English without --locale; the project wins over --locale ro, and says so.
     const en = await opisTitle(['--project', projectFile('en')]);

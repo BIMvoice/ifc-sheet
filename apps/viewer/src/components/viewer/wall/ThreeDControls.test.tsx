@@ -29,6 +29,13 @@ function choose(select: HTMLSelectElement, value: string): void {
   });
 }
 
+/** Place a view by a click on it in the card's list. */
+function place(ui: HTMLElement, viewId: string): void {
+  const item = ui.querySelector<HTMLButtonElement>(`[data-place-item="${viewId}"]`);
+  assert.ok(item, viewId);
+  act(() => { item.click(); });
+}
+
 const sheet = () => useProjectStore.getState().sheets[0];
 const view = () => useProjectStore.getState().views[0];
 
@@ -39,11 +46,10 @@ describe('3D views on the Wall', () => {
     addProjectSheet('Presentation');
     const placed: string[] = [];
     const ui = render(<ViewportCard sheet={sheet()} slot={null} onOpen={() => {}} onChoose={(id) => id && placed.push(id)} />);
-    const pick = ui.querySelector('select')!;
-    assert.deepEqual([...pick.querySelectorAll('option')].map((o) => o.textContent), ['Choose what to place…', 'Axo', 'Perspective']);
+    assert.deepEqual([...ui.querySelectorAll('[data-place-item]')].map((o) => o.textContent), ['Axo', 'Perspective']);
 
-    choose(pick, useProjectStore.getState().views[0].id);
-    choose(pick, useProjectStore.getState().views[1].id);
+    place(ui, useProjectStore.getState().views[0].id);
+    place(ui, useProjectStore.getState().views[1].id);
     const [axo, persp] = sheet().viewports!;
     assert.equal(placed.length, 2);
     assert.deepEqual([axo.scale, axo.width, axo.height], [200, 0, 0], 'an axonometric keeps its scale and fits its drawing');

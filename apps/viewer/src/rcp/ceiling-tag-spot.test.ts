@@ -5,8 +5,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { textBox } from '@/drafting/annotation';
-import { centredAnchor } from '@/labels/label-place';
-import type { Box } from '@/drafting/cross-ref-marks';
+import { centredAnchor } from '@bimvoice/ifcsheet';
+import { textWidthEm } from '@/drafting/text-width';
+import type { ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import { clearTagSpot } from './ceiling-tag-spot';
 
 /** A 4 x 3 m ceiling with its tag at the centre; a door leaf and swing are drawn across that centre (#271). */
@@ -14,7 +15,7 @@ const EXTENT: Box = { x0: 0, y0: 0, x1: 4, y1: 3 };
 const CENTRE = { x: 2, y: 1.5 };
 const HEIGHT = 0.25;
 const boxAt = (c: { x: number; y: number }, text: string): Box => {
-  const pts = textBox(centredAnchor(c, text, HEIGHT, undefined, 1), text, HEIGHT, 0);
+  const pts = textBox(centredAnchor(c, text, HEIGHT, undefined, 1, textWidthEm), text, HEIGHT, 0);
   return { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
 };
 const meet = (a: Box, b: Box): boolean => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;

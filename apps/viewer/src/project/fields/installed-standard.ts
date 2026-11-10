@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { readNumberingScheme, readUnitsAndNumbers, type NumberingScheme, type UnitsAndNumbers } from '@bimvoice/ifcsheet';
+import { readMaterials, type ProjectMaterial } from '@bimvoice/ifcsheet/materials';
 import { readTitleBlockTemplate } from '../title-block-file';
 import type { TitleBlockTemplate } from '../title-block-template';
 import { optionalField, type FieldReader } from './define';
@@ -15,9 +16,13 @@ import { optionalField, type FieldReader } from './define';
  */
 export interface StandardPreviousValues {
   graphicStandard?: string | null;
+  /** The direction of the opening lines in elevation: choosing a graphic standard sets it, so a reset has to put the project's own choice back. */
+  openingLines?: 'handle' | 'hinge' | null;
   titleBlockTemplate?: TitleBlockTemplate | null;
   unitsAndNumbers?: UnitsAndNumbers | null;
   sheetNumbering?: NumberingScheme | null;
+  /** The project's whole material table (#90) as it was; null: it had none. */
+  materials?: ProjectMaterial[] | null;
 }
 
 /** The standards pack installed in the project: which one, its version, and the values it replaced. */
@@ -44,9 +49,11 @@ function readPrevious(raw: unknown): StandardPreviousValues {
     else if (r[key] !== undefined) { const v = read(r[key]); if (v !== undefined) out[key] = v; }
   };
   take('graphicStandard', (v) => (typeof v === 'string' ? v : undefined));
+  take('openingLines', (v) => (v === 'handle' || v === 'hinge' ? v : undefined));
   take('titleBlockTemplate', readTitleBlockTemplate);
   take('unitsAndNumbers', readUnitsAndNumbers);
   take('sheetNumbering', readNumberingScheme);
+  take('materials', (v) => (Array.isArray(v) ? readMaterials(v) : undefined));
   return out;
 }
 

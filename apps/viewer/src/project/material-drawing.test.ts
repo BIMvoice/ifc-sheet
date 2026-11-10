@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
-import { coincide, materialDrawing, type LayerRef, type MaterialResolver } from './material-drawing';
+import { coincide, materialDrawing, type LayerRef, type MaterialResolver } from '@bimvoice/ifcsheet/material-drawing';
 import { guessMaterial, materialGraphics } from './materials';
 import { styledDrawing, cutHatches } from './view-graphics';
 
@@ -45,7 +45,7 @@ describe('building materials in a cut', () => {
   it('guesses hatches and membranes from material names', () => {
     assert.equal(guessMaterial('Concrete C25/30').hatch, 'CONCRETE');
     assert.equal(guessMaterial('Mineral wool').hatch, 'INSULATION');
-    assert.equal(guessMaterial('Cărămidă plină'.normalize('NFD').replace(/[̀-ͯ]/g, '')).hatch, 'BRICK');
+    assert.equal(guessMaterial('Cărămidă plină'.normalize('NFD').replace(/[̀-ͯ]/g, '')).hatch, 'BRICKCUT');
     assert.equal(guessMaterial('Vapour barrier').membrane, true);
     assert.equal(guessMaterial('Something else').hatch, null);
   });

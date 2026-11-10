@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { dimensionChainCardEn } from '../catalogues/dimension-chain-card.en';
+import { addDrawingKindsEn } from '../catalogues/add-drawing-kinds.en';
 import { aiReportsEn } from '../catalogues/ai-reports.en';
 import { alignmentSectionEn } from '../catalogues/alignment-section.en';
 import { analysisPanelEn } from '../catalogues/analysis-panel.en';
@@ -29,7 +31,9 @@ import { automationEditorEn } from '../catalogues/automation-editor.en';
 import { bcfDraftsEn } from '../catalogues/bcf-drafts.en';
 import { bcfEn } from '../catalogues/bcf.en';
 import { boqEn } from '../catalogues/boq.en';
+import { byggesaksbimEn } from '../catalogues/byggesaksbim.en';
 import { bulkPropertyEditorEn } from '../catalogues/bulk-property-editor.en';
+import { contoursEn } from '../catalogues/contours.en';
 import { cadLayersEn } from '../catalogues/cad-layers.en';
 import { catalogueEn } from '../catalogues/catalogue.en';
 import { cesiumGeoEn } from '../catalogues/cesium-geo.en';
@@ -39,6 +43,7 @@ import { chartsEn } from '../catalogues/charts.en';
 import { chatByokEn } from '../catalogues/chat-byok.en';
 import { chatEn } from '../catalogues/chat.en';
 import { checkAuthoringEn } from '../catalogues/check-authoring.en';
+import { checkLineEditEn } from '../catalogues/check-line-edit.en';
 import { checkReadyEn } from '../catalogues/check-ready.en';
 import { checkEn } from '../catalogues/check.en';
 import { civilDrawingsEn } from '../catalogues/civil-drawings.en';
@@ -65,7 +70,11 @@ import { creditsEn } from '../catalogues/credits.en';
 import { draftSetEn } from '../catalogues/draft-set.en';
 import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import { draftingEn } from '../catalogues/drafting.en';
+import { drawOrderEn } from '../catalogues/draw-order.en';
 import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
+import { dxfViewEn } from '../catalogues/dxf-view.en';
+import { dxfSiteEn } from '../catalogues/dxf-site.en';
+import { doorFlipButtonsEn } from '../catalogues/door-flip-buttons.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
 import { exportDialogEn } from '../catalogues/export-dialog.en';
@@ -79,6 +88,8 @@ export const enAE = {
   ...aiReportsEn,
   ...alignmentSectionEn,
   ...analysisPanelEn,
+  ...addDrawingKindsEn,
+  ...contoursEn,
   ...annotateAllEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
@@ -103,6 +114,7 @@ export const enAE = {
   ...bcfDraftsEn,
   ...bcfEn,
   ...boqEn,
+  ...byggesaksbimEn,
   ...bulkPropertyEditorEn,
   ...cadLayersEn,
   ...catalogueEn,
@@ -113,6 +125,7 @@ export const enAE = {
   ...chatByokEn,
   ...chatEn,
   ...checkAuthoringEn,
+  ...checkLineEditEn,
   ...checkReadyEn,
   ...checkEn,
   ...civilDrawingsEn,
@@ -139,7 +152,11 @@ export const enAE = {
   ...draftSetEn,
   ...draftingStandardsEn,
   ...draftingEn,
+  ...drawOrderEn,
   ...drawingUnderlayEn,
+  ...dxfViewEn,
+  ...dxfSiteEn,
+  ...doorFlipButtonsEn,
   ...elementGraphicsEn,
   ...elementTypesEn,
   ...exportDialogEn,
@@ -147,4 +164,5 @@ export const enAE = {
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...extrusionInspectionEn,
+  ...dimensionChainCardEn,
 } as const;

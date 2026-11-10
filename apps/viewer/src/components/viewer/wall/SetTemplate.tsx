@@ -17,6 +17,8 @@ import { EVENT_LOAD_FILE } from '@/lib/tours/events';
 import { useProjectStore } from '@/project/project-store';
 import { captureProjectTemplate } from '@/set-template/capture';
 import { armTemplate, forgetTemplate, keepTemplate, useSetTemplates } from '@/set-template/store';
+import { GermanyLandSelect } from './drawer-sections/germany';
+import { germanyTemplateFor } from './germany-template';
 import { libraryAction } from './library-style';
 
 const FIELD = 'rounded border border-sky-300/40 bg-[#061a36] px-1.5 py-1 text-xs text-white';
@@ -114,6 +116,10 @@ export function NewFromTemplate() {
           </label>
           <button type="button" className={libraryAction} onClick={() => armTemplate(pacSetTemplate({ name: t('pac.set.name'), plans: t('pac.set.plans'), facades: t('pac.set.facades'), sections: t('pac.set.sections') }))}>{t('pac.useSet')}</button>
           <button type="button" className={libraryAction} onClick={() => armTemplate(norwaySetTemplate({ name: t('norway.set.name'), plans: t('norway.set.plans'), sections: t('norway.set.sections'), facades: t('norway.set.facades'), site: t('norway.set.site'), siteNotes: [t('norway.set.siteScale'), t('norway.set.siteToAdd')] }))}>{t('norway.useSet')}</button>
+          <span className="flex items-center gap-1.5">
+            <button type="button" className={libraryAction} onClick={() => armTemplate(germanyTemplateFor(t, useProjectStore.getState().germanyLand))}>{t('germany.useSet')}</button>
+            <GermanyLandSelect className="flex items-center gap-1 text-xs text-sky-100" />
+          </span>
           <button type="button" className={libraryAction} onClick={() => armTemplate(pacRuralSetTemplate({ name: t('pac.rural.set.name'), plans: t('pac.set.plans'), facades: t('pac.set.facades'), sections: t('pac.set.sections') }))}>{t('pac.useRuralSet')}</button>
           {kept.length > 0 ? (
             <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label={t('wall.setTemplate.keptTitle')}>

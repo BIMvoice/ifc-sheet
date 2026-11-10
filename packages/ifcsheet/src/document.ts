@@ -23,8 +23,9 @@ import type { TitleBlockTemplate } from './title-block-template.js';
 import type { Paper, SheetFrame, SheetTemplate, TemplateSeries } from './sheet-types.js';
 import type { UnitsAndNumbers } from './units-and-numbers.js';
 import type { ViewUnderlay } from './underlay.js';
+import type { ViewDxfUnderlay } from './dxf-underlay.js';
 
-export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
+export type { CategoryGraphics, CategoryLineWeight, ElementGraphics, ElementLineStyle, GlobalId, GridEnds, LineStyleOverride, LineStyleType, PhaseId, PhaseStyle, ResolvedViewGraphics, StyleRule, StyleRuleStyle, ViewGraphics, ViewGridGraphics, ViewPhases } from './view-graphics-types.js';
 export type { ProjectViewTemplate, TemplateGraphics, ViewTemplateKind } from './view-templates.js';
 export type { AxonometricPreset, CameraViewpoint, ProjectionMode, ThreeDProjection, ThreeDProjectView, ViewRaster } from './view-3d-types.js';
 export type { CustomPaper, ElongatedPaper, Paper, SheetFrame, SheetTemplate, TemplateSeries, TitleBlockPosition } from './sheet-types.js';
@@ -108,6 +109,8 @@ export interface ProjectViewBase {
   scale?: number;
   /** Drafting layers this view hides (by id), over their own switches. */
   hiddenLayers?: string[];
+  /** A site plan's terrain contours (#182): metres between two contours, 0 for none; absent: 0.5 (`CONTOUR_DEFAULT_INTERVAL`), every fifth a major one. */
+  contourInterval?: number;
 }
 
 /** The area a detail view shows of its source view. */
@@ -216,6 +219,12 @@ export interface SheetViewport {
   placedPages?: { page: number; x: number; y: number }[];
   /** A key plan: the viewport (on the same sheet) whose extent it outlines on the whole plan (`siteplan/key-plan.ts`). */
   keyPlanOf?: string;
+  /**
+   * A north arrow in the viewport's corner, turned to the model's true north (plans only), and a graphic scale bar sized for its scale
+   * (`viewport-marks.ts`). `true` / `false` is the user's choice; absent: off, a site plan too.
+   */
+  northArrow?: boolean;
+  scaleBar?: boolean;
   /** The drawing number printed in its title, chosen; absent: numbered 1, 2, 3 … in reading order (`drafting/cross-ref.ts`). */
   drawingNumber?: string;
 }
@@ -309,6 +318,8 @@ export interface ProjectDocument {
   titleBlockParams?: TitleBlockParam[];
   /** The project's own sheet templates (the built-in ones are in code, `sheet-templates.ts`). */
   sheetTemplates?: SheetTemplate[];
+  /** The project's own hatch patterns, as `.pat` text (built-ins are not stored): a colour scheme's hatches may name them (#493). */
+  hatchPatterns?: string;
   /** The project's view templates (#44): named graphics that views follow by `templateId`. */
   viewTemplates?: ProjectViewTemplate[];
   /** The template new sheets of a series start from, by template id. */
@@ -325,4 +336,6 @@ export interface ProjectDocument {
   unitsAndNumbers?: UnitsAndNumbers;
   /** PDF pages and images laid under views (#457); a sheet prints those that name it in `printOnSheets` (`underlay.ts`). */
   underlays?: ViewUnderlay[];
+  /** DXF drawings laid under plan views as linework (#547); a sheet prints those that name it in `printOnSheets` (`dxf-underlay.ts`). */
+  dxfUnderlays?: ViewDxfUnderlay[];
 }

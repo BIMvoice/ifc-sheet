@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
 import { useSheetLocale } from '@/project/units-and-numbers';
 import type { ProjectSchedule } from '@/project/types';
-import { layoutListSchedule } from '@/joinery/list-schedule-layout';
+import { layoutListSchedule } from '@bimvoice/ifcsheet';
 import { ScheduleGraphic } from '../joinery/ScheduleGraphic';
 import { useListScheduleRun, useListTable } from './useListSchedule';
 

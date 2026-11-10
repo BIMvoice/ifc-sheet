@@ -14,4 +14,8 @@ export const catalogueRo = {
   'library.kind.details': 'Detalii (vederi de desenare)',
   'library.kind.tagFields': 'Surse ale câmpurilor de etichetă',
   'library.kind.sheetTemplates': 'Șabloane de planșe',
+  'drafting.props.symbol': 'Simbol',
+  'drafting.props.symbolFactor': 'Factor de mărime',
+  'drafting.props.symbolRotation': 'Rotire (°)',
+  'drafting.props.typeSymbol': 'Simbol',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

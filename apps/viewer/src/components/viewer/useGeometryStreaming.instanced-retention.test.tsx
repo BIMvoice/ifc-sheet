@@ -99,10 +99,12 @@ class FakeScene {
     const had = this.instancedModelIndices.delete(modelIndex);
     return had ? 1 : 0;
   }
-  addInstancedShard(_device: unknown, _shard: unknown, modelIndex = 0): void {
+  registerInstancedShard(_shard: unknown, modelIndex = 0): void {
     this.calls.push('addInstancedShard');
     this.instancedModelIndices.add(modelIndex);
   }
+  hasDeferredInstancedUploads(): boolean { return false; }
+  uploadDeferredInstanced(): void {}
   appendToBatches(): void { this.calls.push('appendToBatches'); }
   queueMeshes(): void { this.calls.push('queueMeshes'); }
   hasQueuedMeshes(): boolean { return false; }
@@ -205,12 +207,17 @@ function baseParams(scene: FakeScene, overrides: ReshapeOverrides) {
   };
 }
 
+/** The hook's effects run a task after the render that changed its inputs (#154): let that task pass. */
+async function settled(): Promise<void> {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+}
+
 function mountHarness(container: HTMLDivElement): Root {
   return createRoot(container);
 }
 
 describe('useGeometryStreaming — instanced-template retention across scene.clear() (#2073)', () => {
-  it('retains a still-present model\'s instanced geometry across a non-streaming reshape', () => {
+  it('retains a still-present model\'s instanced geometry across a non-streaming reshape', async () => {
     const scene = new FakeScene();
     const container = document.createElement('div');
     const root = mountHarness(container);
@@ -230,6 +237,7 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
         />
       );
     });
+    await settled();
 
     assert.deepEqual(
       scene.calls,
@@ -257,6 +265,7 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
         />
       );
     });
+    await settled();
 
     // Shape asserted in the issue: a flat-geometry clear + re-append, and
     // — critically — NO second addInstancedShard (nothing re-uploads the
@@ -275,7 +284,7 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
     act(() => { root.unmount(); });
   });
 
-  it('does NOT retain a removed model\'s instanced geometry (the case the naive fix breaks)', () => {
+  it('does NOT retain a removed model\'s instanced geometry (the case the naive fix breaks)', async () => {
     const scene = new FakeScene();
     const container = document.createElement('div');
     const root = mountHarness(container);
@@ -299,6 +308,7 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
         />
       );
     });
+    await settled();
     // Seed model 1's instanced ownership directly (see comment above).
     scene.instancedModelIndices.add(1);
     assert.deepEqual([...scene.instancedModelIndices].sort(), [0, 1], 'both models own instanced templates');
@@ -313,12 +323,14 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
       geometry: [], geometryVersion: 2, modelCount: 2,
       presentInstancedModelIndices: loadedInstancedModelIndices(loadedModels, modelIndices),
     })} initialShardBytes={[SHARD_BYTES]} />));
+    await settled();
     assert.deepEqual([...scene.instancedModelIndices].sort(), [0, 1], 'all-hidden reshape retains uploads');
     for (const model of loadedModels.values()) model.visible = true;
     act(() => root.render(<Harness {...baseParams(scene, {
       geometry: [mesh(1, 0), mesh(2, 1)], geometryVersion: 3, modelCount: 2,
       presentInstancedModelIndices: loadedInstancedModelIndices(loadedModels, modelIndices),
     })} initialShardBytes={[SHARD_BYTES]} />));
+    await settled();
     assert.deepEqual([...scene.instancedModelIndices].sort(), [0, 1], 'show restores without replaying shards');
 
     // Reshape: model 1 is removed — geometry shrinks to model 0's mesh,
@@ -338,6 +350,7 @@ describe('useGeometryStreaming — instanced-template retention across scene.cle
         />
       );
     });
+    await settled();
 
     assert.deepEqual(
       [...scene.instancedModelIndices],

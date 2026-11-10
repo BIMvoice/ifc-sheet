@@ -13,8 +13,7 @@
  */
 
 import type { DraftEntity } from '@/drafting/types';
-import { viewReference, type ViewReference } from '@/drafting/cross-ref';
-import { viewsNamedOnPlan } from '@/drafting/cross-ref-marks';
+import { viewReference, viewsNamedOnPlan, type ViewReference } from '@bimvoice/ifcsheet';
 import { isAutomaticCloud, sheetRevisions } from './revisions';
 import type { ProjectDocument, ProjectRevision, ProjectSheet, ProjectView } from './types';
 

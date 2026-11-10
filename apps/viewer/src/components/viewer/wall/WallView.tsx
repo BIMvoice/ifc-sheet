@@ -13,11 +13,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { useNextTaskValue } from '@/hooks/useNextTaskValue';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
-import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { isSetSheet } from '@/project/drawing-set';
 import { sectionProposals } from '@/project/drawing-set-actions';
 import { startSet } from '@/set-template/start';
-import { setExtent } from '@/draft-set/body';
+import { wallExtent } from '@/project/wall-extent';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
@@ -40,6 +39,7 @@ export function WallView() {
   // The geometry arrives in batches: the starting set is laid out from the whole model, never from its first batch (#313).
   const streaming = useViewerStore((s) => s.geometryStreamingActive);
   const meshes = streaming ? null : geometryResult?.meshes ?? null;
+  const loading = useViewerStore((s) => s.loading);
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);
@@ -48,8 +48,15 @@ export function WallView() {
   // out from the same settled meshes as the extent, so it always starts from a matching pair.
   const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy }), [levels, meshes, models, legacy]));
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
-  const extent = useMemo(() => setExtent(settled.levels, settled.meshes, mergedSectionBounds(settled.models, settled.legacy)).extent, [settled]);
+  const extent = useMemo(() => wallExtent(settled), [settled]);
   const settledMeshes = settled.meshes;
+  // A model that has finished loading and brought no geometry never gets a set laid out (#603): say so instead of waiting.
+  // A model whose geometry failed stays in `models` with `loadState: 'error'`: that is a failure to report, not an absence of geometry.
+  const failed = [...models.values()].filter((m) => m.loadState === 'error');
+  const loaded = [...models.values()].filter((m) => m.loadState !== 'error');
+  const allFailed = failed.length > 0 && loaded.length === 0;
+  const noGeometry = loaded.length > 0 && !loading && !streaming && (settledMeshes?.length ?? 0) === 0;
+  const failures = failed.map((m) => (m.loadError ? t('wall.intro.loadFailedWhy', { name: m.name, error: m.loadError }) : t('wall.intro.loadFailed', { name: m.name })));
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, panel, review } = useWallNav();
 
@@ -77,13 +84,15 @@ export function WallView() {
       {models.size === 0 && !legacy ? (
         <div className="flex h-full flex-col items-center justify-center gap-5 text-base text-sky-200/80">
           <p className="m-0">{t('wall.empty')}</p>
-          <button type="button" className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
+          <button type="button" className="max-w-md rounded-md bg-sky-600 px-4 py-2 text-center text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
             {t('wall.demo')}
           </button>
           <NewFromTemplate />
         </div>
       ) : sheets.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-base text-sky-200/80">{t('wall.intro.waiting')}</div>
+        <output className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
+          {allFailed ? failures.join(' ') : noGeometry ? t('wall.intro.noGeometry', { name: loaded[0]?.name ?? '' }) : t('wall.intro.waiting')}
+        </output>
       ) : intro && extent ? (
         <WallIntro modelName={modelName} extent={extent} onHang={hang} />
       ) : steppedSheet ? (
@@ -91,6 +100,9 @@ export function WallView() {
       ) : (
         <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
+      {failed.length > 0 && !(allFailed && sheets.length === 0) ? (
+        <p role="alert" className="absolute inset-x-0 top-0 z-10 m-0 bg-red-950/90 px-4 py-2 text-center text-sm text-red-100">{failures.join(' ')}</p>
+      ) : null}
       <WallCompare />
       {panel === 'drawer' ? <ProjectDrawer extent={extent} onClose={closeFrontPanel} /> : null}
       {review ? <SubReportReview scheduleId={review} onClose={() => setReview(null)} /> : null}

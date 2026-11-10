@@ -1,0 +1,45 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+name: Download the wasm package
+description: >-
+  Download the wasm-pkg artifact into packages/wasm/pkg, waiting and trying again
+  when the download fails. GitHub's artifact storage can answer "Egress is over
+  the account limit" for a while, which download-artifact's own quick retries do
+  not outlast, and one failed download otherwise fails a run whose code is fine.
+
+runs:
+  using: composite
+  steps:
+    - id: first
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: wasm-pkg
+        path: packages/wasm/pkg
+
+    - if: steps.first.outcome == 'failure'
+      shell: bash
+      run: sleep 60
+
+    - id: second
+      if: steps.first.outcome == 'failure'
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: wasm-pkg
+        path: packages/wasm/pkg
+
+    - if: steps.second.outcome == 'failure'
+      shell: bash
+      run: sleep 180
+
+    - if: steps.second.outcome == 'failure'
+      uses: actions/download-artifact@v8
+      with:
+        name: wasm-pkg
+        path: packages/wasm/pkg
+
+    - shell: bash
+      run: test -f packages/wasm/pkg/ifc-lite_bg.wasm

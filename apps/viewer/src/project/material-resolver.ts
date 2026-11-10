@@ -12,12 +12,13 @@
 
 import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { meshMaterialName } from '@bimvoice/ifcsheet/material-colour';
 import { useViewerStore } from '@/store';
 import { layerSetOf, liveConforms, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { idOf } from '@/joinery/object-id';
 import { useProjectStore } from './project-store';
-import { materialDrawing, type LayerRef, type MaterialDrawing } from './material-drawing';
-import { MEMBRANE_THICKNESS_M, ifcMaterialName, materialGraphics } from './materials';
+import { materialDrawing, materialResolver, type LayerRef, type MaterialDrawing } from '@bimvoice/ifcsheet/material-drawing';
+import { ifcMaterialName } from './materials';
 
 export function modelOf(entityId: number) {
   const s = useViewerStore.getState();
@@ -57,6 +58,12 @@ function polygonMaterialName(p: DrawingPolygon, soleToo: boolean): string | null
   if (!m) return null;
   if (p.materialId !== undefined) return materialName(m, p.materialId);
   return soleToo ? soleMaterialName(m, relationsFor(m)) : null;
+}
+
+/** The IfcMaterial a mesh is painted by (`meshMaterialName`, the engine's, which the headless sheets name it with too); null for one with none. */
+export function meshMaterialOf(mesh: { expressId: number; materialId?: number }): string | null {
+  const m = modelOf(mesh.expressId);
+  return m ? meshMaterialName(m.dataStore, m.expressId, mesh.materialId) : null;
 }
 
 /** The distinct IfcMaterial names cut in a drawing (empty when there is none). */
@@ -108,14 +115,8 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
   const key = `${useViewerStore.getState().mutationVersion}:${JSON.stringify(table)}`;
   const hit = cache.get(drawing);
   if (hit && hit.key === key) return hit.value;
-  const value = materialDrawing(drawing, {
-    graphics(p) {
-      const name = polygonMaterialName(p, table.length > 0);
-      if (!name) return null;
-      const g = materialGraphics(name, table);
-      // A material the project has no row for keeps the cut an element of one piece has always had: no hatch from its name alone.
-      return p.materialId === undefined && g.auto ? null : g;
-    },
+  const value = materialDrawing(drawing, materialResolver({
+    nameOf: polygonMaterialName,
     layers(entityId) {
       const m = modelOf(entityId);
       if (!m) return null;
@@ -124,8 +125,7 @@ export function viewMaterials(drawing: Drawing2D | null): MaterialDrawing | null
       if (!m || !set) return null;
       return set.layers.map((l): LayerRef => ({ materialId: l.materialId, name: (l.materialId !== null ? materialName(m, l.materialId) : null) ?? '', thickness: l.thickness }));
     },
-    membrane: (layer) => layer.thickness < MEMBRANE_THICKNESS_M || (!!layer.name && !!materialGraphics(layer.name, table).membrane),
-  });
+  }, table));
   cache.set(drawing, { key, value });
   return value;
 }

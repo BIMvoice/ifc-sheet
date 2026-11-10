@@ -13,6 +13,7 @@
 import { useEffect } from 'react';
 import { useTranslation } from '@/i18n';
 import { IFCLITE_URL } from '@/lib/credits';
+import { STAR_URL } from '@/lib/star';
 import { exportProjectFile } from '@/project/project-file';
 import { projectDocument, useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
@@ -32,7 +33,8 @@ import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { useIfcSheetTour } from './useIfcSheetTour';
 import { WALL_PILL } from '../wall/wall-type';
 
-const quiet = WALL_PILL;
+// Tighter than the Wall's pill: the header carries about fifteen of them and, measured at 1280 and 1400 px, they added up to more than the window, which put Feedback, Tour and Help out of reach. The model's name and the sheet count (information, not controls) show from 1536 px; below that they were squeezed to nothing anyway.
+const quiet = WALL_PILL.replace('px-3', 'px-1.5');
 
 export function IfcSheetShell() {
   const { t } = useTranslation();
@@ -52,16 +54,16 @@ export function IfcSheetShell() {
   return (
     <div data-ifcsheet-shell className="fixed inset-0 z-50 flex flex-col bg-[#061a36] text-sky-50">
       {files.fileInputs}
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-sky-300/10 px-4">
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-1 gap-y-1 border-b border-sky-300/10 px-3 py-1">
         <button type="button" aria-pressed={drawer} className={quiet} onClick={() => setPanel(drawer ? null : 'drawer')}>{t('wall.shell.project')}</button>
         <img src="/logo.png" alt="" className="size-6 shrink-0" />
         <span className="text-base font-semibold text-white">IfcSheet</span>
         <span className="h-5 w-px bg-sky-300/20" />
-        <span className="min-w-0 truncate text-sm text-sky-200/80">{modelName ?? t('wall.shell.untitled')}</span>
+        <span className="hidden min-w-0 truncate text-sm text-sky-200/80 2xl:inline" title={modelName ?? undefined}>{modelName ?? t('wall.shell.untitled')}</span>
         <span className="flex-1" />
         {sheets.length > 0 ? <WhatChanged /> : null}
         {sheets.length > 0 ? <AnnotateSet /> : null}
-        {sheets.length > 0 ? <span className="whitespace-nowrap text-xs text-sky-200/80">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
+        {sheets.length > 0 ? <span className="hidden whitespace-nowrap text-xs text-sky-200/80 2xl:inline">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         {sheets.length > 0 ? (
           <>
             <button type="button" aria-pressed={panel === 'missing'} className={quiet} onClick={() => setPanel(panel === 'missing' ? null : 'missing')}>{t('check.section')}</button>
@@ -93,7 +95,16 @@ export function IfcSheetShell() {
         <WallView />
       </div>
       {/* The status bar's credit sits under this face, so the face says it itself. Screen chrome only: no sheet, print or export reads it. */}
-      <footer data-ifcsheet-credit className="flex h-6 shrink-0 items-center justify-end border-t border-sky-300/10 px-4">
+      <footer data-ifcsheet-credit className="flex h-6 shrink-0 items-center justify-end gap-4 border-t border-sky-300/10 px-4">
+        <a
+          href={STAR_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={t('star.linkAria')}
+          className="text-xs text-sky-200/60 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
+        >
+          {t('star.link')}
+        </a>
         <a
           href={IFCLITE_URL}
           target="_blank"

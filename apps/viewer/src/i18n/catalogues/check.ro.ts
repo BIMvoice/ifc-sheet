@@ -61,6 +61,11 @@ export const checkRo = {
     few: '{schedule} pe {sheet}: {count} valori introduse pentru {element}, care nu mai există în model.',
     other: '{schedule} pe {sheet}: {count} de valori introduse pentru {element}, care nu mai există în model.',
   },
+  'check.orphanedJoineryOverride': {
+    one: '{count} valoare introdusă pentru tipul {type}, pe {sheet}, care nu mai există în model.',
+    few: '{count} valori introduse pentru tipul {type}, pe {sheet}, care nu mai există în model.',
+    other: '{count} de valori introduse pentru tipul {type}, pe {sheet}, care nu mai există în model.',
+  },
   'check.remedy.dropHint': 'Elimină din tabel valorile introduse pentru acest element',
   'check.remedy.delete': 'Șterge',
   'check.remedy.reattach': 'Reatașează',

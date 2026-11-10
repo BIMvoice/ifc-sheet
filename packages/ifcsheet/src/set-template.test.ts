@@ -85,6 +85,20 @@ describe('the site rule finds the site plan, never a detail of it', () => {
     expect(findByRule({ kind: 'site' }, [detailOfSite])).toBeNull();
     expect(findByRule({ kind: 'site' }, [])).toBeNull();
   });
+
+  it('finds a further site plan by `nth`, in the order the views are in, and none past the last', () => {
+    const second = { ...site, id: 'site-2', name: 'Site 2' };
+    expect(findByRule({ kind: 'site', nth: 1 }, [site, detailOfSite, second])?.id).toBe('site-2');
+    expect(findByRule({ kind: 'site', nth: 1 }, [site])).toBeNull();
+    expect(findByRule({ kind: 'site', nth: 0 }, [site, second])?.id).toBe('site-1');
+  });
+
+  it('reads `nth` from the file as a whole number from 1, and refuses anything else', () => {
+    const file = (nth: unknown) => JSON.stringify({ format: 'bvset', version: 1, name: 'x', sheets: [{ name: 'S', series: 'plans', layout: { paper: 'A1', orientation: 'landscape' }, slots: [{ view: { kind: 'site', nth } }] }] });
+    expect(parseSetTemplate(file(1)).sheets[0].slots[0].view).toEqual({ kind: 'site', nth: 1 });
+    expect(parseSetTemplate(file(undefined)).sheets[0].slots[0].view).toEqual({ kind: 'site' });
+    for (const bad of [0, -1, 1.5, '1']) expect(() => parseSetTemplate(file(bad)), String(bad)).toThrow('/nth');
+  });
 });
 
 describe('a sheet rule\'s notes', () => {

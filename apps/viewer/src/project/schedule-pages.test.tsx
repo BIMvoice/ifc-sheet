@@ -16,7 +16,7 @@ import { SubReportCard } from '@/components/viewer/wall/SubReportCard';
 import { openSection } from '@/test/open-section.js';
 import { addSchedule, addSubReport, scheduleById } from '@/joinery/schedules.js';
 import { manyTypes } from '@/joinery/schedule-fit.test.js';
-import { layoutPagedTable, type TableBlock } from '@/joinery/paged-table.js';
+import { layoutPagedTable, type TableBlock } from '@bimvoice/ifcsheet';
 import { layoutSchedule, type ScheduleLabels, type SchedulePrim } from '@/joinery/schedule-layout.js';
 import type { ScheduleData, ScheduleEntry } from '@/joinery/schedule-data.js';
 import { wallArrangeEn as enCatalogue } from '@/i18n/catalogues/wall-arrange.en.js';

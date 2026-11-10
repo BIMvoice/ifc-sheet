@@ -19,7 +19,7 @@ import { sheetSvgText } from '@/components/viewer/sheets/sheet-export';
 import { addUnderlay, scaleUnderlay, setUnderlayLocked, setUnderlayPrintsOn } from './underlay-actions';
 import { dataUrl, renderWithinCap, UnderlayImportError, type Rendered } from './underlay-import';
 import { readUnderlay } from './underlay-file';
-import { omittedUnderlayViewNames, pixelToDrawing, drawingToPixel, UNDERLAY_MAX_BYTES, type ViewUnderlay } from './underlay';
+import { matrixText, omittedUnderlayViewNames, pixelToDrawing, drawingToPixel, UNDERLAY_MAX_BYTES, type ViewUnderlay } from './underlay';
 
 /**
  * #457: a scanned page laid under a plan, scaled from a known 5 m dimension to within 0.5 %, traced with lines, and
@@ -171,7 +171,7 @@ describe('what a sheet prints of an underlay (#457)', () => {
     // 5 m at 1:100 is 50 mm on the paper: the line is 1200 of the picture's pixels.
     const m = /matrix\(([^)]*)\)/.exec(shown[0]!.getAttribute('transform') ?? '');
     assert.ok(m);
-    const [a, b] = m[1]!.split(' ').map(Number) as [number, number];
+    const [a, b] = m[1]!.split(/[ ,]+/).map(Number) as [number, number];
     const mmPerPx = Math.hypot(a, b);
     assert.ok(Math.abs(1200 * mmPerPx - 50) / 50 < 0.005, `${1200 * mmPerPx} mm on the paper, wanted 50`);
     // The same document is what the PDF print and the SVG export carry.
@@ -221,5 +221,13 @@ describe('the size cap (#457)', () => {
     assert.throws(() => readUnderlay({ ...good, href: 'https://example.com/scan.png' }, '/u'));
     assert.throws(() => readUnderlay({ ...good, href: `data:image/png;base64,${'A'.repeat(Math.ceil(UNDERLAY_MAX_BYTES * 4 / 3) + 100)}` }, '/u'));
     assert.throws(() => readUnderlay({ ...good, mPerPx: 0 }, '/u'));
+  });
+});
+
+describe('#457 the matrix text (found in a real browser)', () => {
+  it('is comma separated, as CSS needs for the on-screen layer; the space form is dropped by the browser and the picture is drawn untransformed', () => {
+    assert.equal(matrixText([0.5, 0, 0, -0.5, 12.25, 3]), 'matrix(0.5, 0, 0, -0.5, 12.25, 3)');
+    // A pixel on a sheet is about 0.001 mm: kept to nine decimals, not six.
+    assert.equal(matrixText([0.000792, 0, 0, 0.000792, 1, 2]), 'matrix(0.000792, 0, 0, 0.000792, 1, 2)');
   });
 });

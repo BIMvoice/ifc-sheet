@@ -22,6 +22,7 @@ export const materialsEn = {
   'materials.penOf': 'Hatch pen of {name}',
   'materials.membraneOf': '{name} draws as a membrane',
   'materials.fillModeOf': 'Fill of {name}',
+  'materials.fill.default': 'Default (unset)',
   'materials.fill.ifc': 'IFC colour',
   'materials.fill.none': 'None (white)',
   'materials.fill.own': 'Colour',

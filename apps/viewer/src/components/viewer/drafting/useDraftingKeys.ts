@@ -14,9 +14,12 @@
 import { useEffect, useRef } from 'react';
 import { getCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { pressEnter, pressEscape, startDraftCommand, setOrthoHeld, useDraftingSession } from '@/drafting/session';
+import { clipboardEmpty } from '@/drafting/clipboard';
 import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
 import type { DraftingKeyId } from '@/lib/commands/drafting-key-commands';
+import { removeMarkedWitnessPoint } from '@/drafting/witness-point';
+import { repeatLastTool } from '../wall/repeat-tool';
 import { claimWallKey } from '../wall/wall-key-bus';
 import { isDraftingKey } from './drafting-key-match';
 import { runDraftingAction, type DraftingRunId } from './run-action';
@@ -25,18 +28,21 @@ import { runDraftingAction, type DraftingRunId } from './run-action';
 const TOGGLES: readonly DraftingRunId[] = ['drafting.undo', 'drafting.redo', 'drafting.snap', 'drafting.ortho'];
 
 interface Params {
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  inputRef: React.RefObject<CommandFieldEl | null>;
   setText: React.Dispatch<React.SetStateAction<string>>;
   /** Confirm with an empty line (Enter / Space outside the input). */
   submit: () => void;
 }
+
+/** The command line's field (a textarea since #673); tests may hand an input. */
+type CommandFieldEl = HTMLInputElement | HTMLTextAreaElement;
 
 /**
  * Whether a key event belongs to another text field than the command line,
  * or to a panel that keeps its own keys (`data-owns-keys`: Enter and Space
  * press its buttons, and nothing it is given reaches a running tool).
  */
-function inOtherField(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+function inOtherField(target: EventTarget | null, input: CommandFieldEl | null): boolean {
   if (!(target instanceof HTMLElement) || target === input) return false;
   if (target.closest('[data-owns-keys]')) return true;
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
@@ -61,7 +67,7 @@ const INTERACTIVE = 'button, a[href], [role="button"], select, textarea, input, 
  * line, which `submit`s on its own, aside). In AutoCAD mode (#168) `confirm`
  * repeats the last alias, so a Space that presses a button must not also do that.
  */
-function onInteractiveControl(target: EventTarget | null, input: HTMLInputElement | null): boolean {
+function onInteractiveControl(target: EventTarget | null, input: CommandFieldEl | null): boolean {
   return target instanceof Element && target !== input && target.closest(INTERACTIVE) !== null;
 }
 
@@ -84,11 +90,23 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       const isKey = (id: DraftingKeyId) => isDraftingKey(id, e, textFirst);
       const toggle = TOGGLES.find(isKey);
       if (toggle) {
+        // Undo and redo with words in the command line are the field's own: they take back a typed letter or a "m²" made from "m2" (#674), not a drawing step.
+        if (e.target === input && (toggle === 'drafting.undo' || toggle === 'drafting.redo') && (input?.value ?? '') !== '') return;
         e.preventDefault();
         runDraftingAction(toggle);
         return;
       }
       if (e.target === input) return; // the command line handles its own Enter / Escape / typing
+      // Copy, paste and duplicate leave the browser's own keys alone unless there is drawing to act on.
+      const idle = !useDraftingSession.getState().commandId;
+      const hasSelection = useDraftingSession.getState().selection.size > 0;
+      const clip = (id: DraftingKeyId, command: string, applies: boolean) => {
+        if (!idle || !applies || !isKey(id)) return false;
+        e.preventDefault();
+        startDraftCommand(command);
+        return true;
+      };
+      if (clip('drafting.copy', 'copyclip', hasSelection) || clip('drafting.duplicate', 'duplicate', hasSelection) || clip('drafting.paste', 'paste', !clipboardEmpty())) return;
       if (isKey('drafting.cancel')) {
         pressEscape();
         return;
@@ -96,18 +114,34 @@ export function useDraftingKeys({ inputRef, setText, submit }: Params): void {
       if (isKey('drafting.erase')) {
         if (useDraftingSession.getState().selection.size > 0 && !useDraftingSession.getState().commandId) {
           e.preventDefault();
+          // A picked witness point of a dimension chain goes alone (as DIMREMOVEPOINT does); anything else is erased.
+          if (removeMarkedWitnessPoint(useDraftingSession.getState().selection)) return;
           startDraftCommand('erase');
           pressEnter();
         }
         return;
       }
+      if (isKey('drafting.repeat')) {
+        // A visible, bound action (#168): the last tool starts again only when nothing runs.
+        e.preventDefault();
+        repeatLastTool();
+        return;
+      }
       if (isKey('drafting.confirm')) {
         if (autocadModeOn() && onInteractiveControl(e.target, input)) return;
         e.preventDefault();
-        submitRef.current();
+        // Outside AutoCAD mode Enter and Space end a running command or send what the command line holds, and otherwise do nothing:
+        // repeating the last tool is `drafting.repeat` (#168).
+        const running = useDraftingSession.getState().commandId !== null || useDraftingSession.getState().selecting;
+        if (running || typing || autocadModeOn()) submitRef.current();
         return;
       }
-      if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key) && input) {
+      if (!mod && !e.altKey && e.key.length === 1 && /[\w@<.,-]/.test(e.key)) {
+        // With AutoCAD mode off the drawing has no command line to type into (#168): a bare letter does nothing unless bound to a key.
+        if (!input) {
+          if (!textFirst && claimWallKey(e)) e.preventDefault();
+          return;
+        }
         e.preventDefault();
         // A bare key the person bound to a Wall action runs it at once (#166), unless text is being
         // typed or AutoCAD mode is on. Any other key reaches the Wall's handlers on its own; the

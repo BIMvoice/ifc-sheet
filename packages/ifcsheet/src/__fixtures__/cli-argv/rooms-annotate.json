@@ -1,0 +1,10 @@
+{
+ "argv": [
+  "rooms",
+  "m.ifc",
+  "--annotate"
+ ],
+ "code": 2,
+ "stdout": "",
+ "stderr": "ifcsheet rooms has no --annotate; it is an option of build.\n"
+}

@@ -1,0 +1,12 @@
+grid.field.spacingU
+grid.field.spacingV
+grid.hint.corner
+grid.hint.opposite
+grid.label
+grid.noArea
+grid.palette
+grid.summary
+grid.tags.label
+grid.tags.letters
+grid.tags.numbers
+grid.tooManyAxes

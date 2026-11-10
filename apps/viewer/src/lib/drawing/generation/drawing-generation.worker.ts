@@ -39,6 +39,8 @@ export type GenerationRequest =
 
 export type GenerationReply =
   | { type: 'progress'; id: number; stage: string; progress: number }
+  /** Sent from inside a long stage ({@link withHeartbeat}): the worker is busy, not dead. */
+  | { type: 'alive'; id: number }
   /** A slice of one of the drawing's long lists, sent ahead of `done` (see {@link postDrawing}). */
   | { type: 'part'; id: number; key: string; items: unknown[] }
   | { type: 'done'; id: number; drawing: Drawing2D }
@@ -71,6 +73,30 @@ export function __setOutlineLoaderForTest(loader: OutlineLoader | null): void {
 }
 
 type Post = (reply: GenerationReply) => void;
+
+/** A busy worker says it is alive at most this often: far inside the client's silence limit, and far from flooding the page. */
+export const HEARTBEAT_MS = 2_000;
+
+/**
+ * `Drawing2DGenerator.generate` is one synchronous call and reports progress only at the start and end of a
+ * stage, so a stage of tens of seconds on a large model says nothing, and a timer in the worker cannot tick
+ * while it computes. The one place the call comes back to this module between meshes is the outline binding it
+ * is given, once per mesh drawn: wrapping that is the heartbeat. `beat` fires at most every `intervalMs`.
+ */
+export function withHeartbeat(
+  fn: MeshOutline2dFn | undefined,
+  beat: () => void,
+  intervalMs: number = HEARTBEAT_MS,
+  now: () => number = Date.now,
+): MeshOutline2dFn | undefined {
+  if (!fn) return fn;
+  let last = now();
+  return ((...args: Parameters<MeshOutline2dFn>) => {
+    const t = now();
+    if (t - last >= intervalMs) { last = t; beat(); }
+    return fn(...args);
+  }) as MeshOutline2dFn;
+}
 
 /** Items per `part` message: small enough that the main thread reads each in a few milliseconds. */
 export const PART_SIZE = 5_000;
@@ -124,7 +150,8 @@ async function run(request: GenerationRequest, post: Post): Promise<void> {
       // draw differently from the main thread, so the job fails and the client runs it there.
       if (!outline) throw new Error('drawing generation: the meshOutline2d binding is not available in the worker');
     }
-    const drawing = await runGenerateJob({ meshes, config, options, profiles, axonometric }, outline,
+    const drawing = await runGenerateJob({ meshes, config, options, profiles, axonometric },
+      withHeartbeat(outline, () => post({ type: 'alive', id })),
       (stage, progress) => post({ type: 'progress', id, stage, progress }));
     postDrawing(id, drawing, post);
   } catch (error) {

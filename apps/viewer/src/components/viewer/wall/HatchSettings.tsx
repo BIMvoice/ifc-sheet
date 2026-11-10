@@ -19,6 +19,7 @@ import type { AnnotationShape, DraftEntity } from '@/drafting/types';
 
 type HatchShape = Extract<AnnotationShape, { type: 'hatch' }>;
 import { useProjectStore } from '@/project/project-store';
+import { AddHatchPatternButton } from './AddHatchPatternButton';
 import { DraftNumber } from './DraftNumber';
 import { WALL_FIELD } from './wall-type';
 
@@ -54,6 +55,7 @@ export function HatchSettings({ selected = [] }: { selected?: readonly (DraftEnt
           {names.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
+      <AddHatchPatternButton className="col-span-2 justify-self-start" onAdded={(name) => change({ pattern: name }, { hatchPattern: name })} />
       <label>
         {t('wall.hatch.scale')}
         <DraftNumber value={scale} min={0.05} step={0.05} accept={(v) => v > 0} onValid={(v) => change({ scale: v * size }, { hatchScale: v })} />

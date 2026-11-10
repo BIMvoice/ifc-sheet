@@ -15,6 +15,9 @@
 
 import { compareKeys, schemeEntries, valueKey, valueText, type ColourScheme, type SchemeEntry } from './colour-scheme.js';
 import type { ProjectLevel, ProjectView } from './document.js';
+import { resolveViewGraphics, type ProjectViewTemplate } from './view-templates.js';
+import { elementShown } from './element-graphics.js';
+import type { GlobalId, ViewGraphics } from './view-graphics-types.js';
 import { roomFootprints, type Pt, type SpaceMesh } from './footprint.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 
@@ -28,6 +31,8 @@ export interface SchemeFill {
   colour: string;
   /** The value key it was coloured for. */
   key: string;
+  /** The pattern the value is hatched with over its colour (#493), when it has one. */
+  hatch?: string;
 }
 
 export interface SchemeResult {
@@ -37,6 +42,20 @@ export interface SchemeResult {
   elementColours: Map<number, string>;
   /** The values the view shows, with their colours: what the legend lists. */
   entries: SchemeEntry[];
+}
+
+/**
+ * The scheme without the rooms the view hides (the Spaces category, or the one room), and the legend entries of values none of the shown rooms carries. A room's colour and its hatch are both made from
+ * `fills`, so this is the one visibility check for the two: a hidden room keeps neither on the paper. The app's sheets (`styledDrawing`)
+ * and the headless build (`sheetGraphic`) both call it.
+ */
+export function shownRooms(scheme: SchemeResult | null | undefined, graphics: ViewGraphics | undefined, globalIdOf?: (entityId: number) => GlobalId | string | null | undefined): SchemeResult | null | undefined {
+  if (!scheme || !graphics) return scheme;
+  const fills = scheme.fills.filter((f) => elementShown(graphics, globalIdOf?.(f.entityId) as GlobalId | null | undefined, 'IfcSpace'));
+  if (fills.length === scheme.fills.length) return scheme;
+  // The legend lists the values a room still carries: a value whose only rooms are hidden is not on the sheet.
+  const kept = new Set(fills.map((f) => f.key));
+  return { ...scheme, fills, entries: scheme.entries.filter((e) => kept.has(e.key)) };
 }
 
 export interface SchemeSource {
@@ -50,10 +69,21 @@ export interface SchemeSource {
   valueOf(renderId: number, ifcType?: string): unknown;
 }
 
+/**
+ * The colour scheme `view` is drawn with (#92, #493): its own, else its template's; `undefined` for neither and for a scheme that is
+ * switched off. Every reader of a view's scheme (the app's drawing and legend, the headless sheets) asks here, so they cannot disagree.
+ */
+export function activeColourScheme(view: Pick<ProjectView, 'graphics' | 'templateId'> | undefined, templates: readonly ProjectViewTemplate[] | undefined): ColourScheme | undefined {
+  const scheme = resolveViewGraphics(view, templates)?.colourScheme;
+  return scheme && !scheme.off ? scheme : undefined;
+}
+
 const EMPTY: SchemeResult = { fills: [], elementColours: new Map(), entries: [] };
 
 /** What `scheme` paints on a view drawn from `source`. */
 export function resolveScheme(scheme: ColourScheme, source: SchemeSource): SchemeResult {
+  // A switched-off scheme paints nothing and lists nothing (#493).
+  if (scheme.off) return EMPTY;
   const found = new Map<string, { label: string; ids: Set<number> }>();
   const seen = (id: number, raw: unknown): string | null => {
     const text = valueText(raw);
@@ -77,8 +107,9 @@ export function resolveScheme(scheme: ColourScheme, source: SchemeSource): Schem
     const rooms = roomFootprints(source.meshes, source.plan.cut, source.plan.floor)
       .flatMap((r) => { const key = keyOf(r.renderId, 'IfcSpace'); return key === null ? [] : [{ r, key }]; });
     const colours = schemeEntriesOf(found, scheme);
+    const hatchOf = new Map(colours.entries.flatMap((e) => (e.hatch ? [[e.key, e.hatch] as const] : [])));
     return {
-      fills: rooms.map(({ r, key }) => ({ entityId: r.renderId, outer: r.ring, holes: [], colour: colours.byKey.get(key)!, key })),
+      fills: rooms.map(({ r, key }) => ({ entityId: r.renderId, outer: r.ring, holes: [], colour: colours.byKey.get(key)!, key, ...(hatchOf.has(key) ? { hatch: hatchOf.get(key) } : {}) })),
       elementColours: new Map(),
       entries: colours.entries,
     };
@@ -94,7 +125,8 @@ export function resolveScheme(scheme: ColourScheme, source: SchemeSource): Schem
   const colours = schemeEntriesOf(found, scheme);
   const elementColours = new Map<number, string>();
   for (const [id, key] of painted) elementColours.set(id, colours.byKey.get(key)!);
-  return { fills: [], elementColours, entries: colours.entries };
+  // Elements are painted by colour only: a hatch the scheme holds for a value would be listed and never drawn.
+  return { fills: [], elementColours, entries: colours.entries.map(({ hatch: _hatch, ...rest }) => rest) };
 }
 
 function schemeEntriesOf(found: ReadonlyMap<string, { label: string; ids: ReadonlySet<number> }>, scheme: ColourScheme): { entries: SchemeEntry[]; byKey: Map<string, string> } {

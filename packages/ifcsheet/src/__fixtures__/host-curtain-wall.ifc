@@ -1,0 +1,77 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('ViewDefinition[DesignTransferView]'),'2;1');
+FILE_NAME('host-curtain-wall.ifc','2026-10-30T00:00:00',('IfcSheet'),('IfcSheet'),'hand-written','hand-written','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+/* #586, the curtain wall twin of host-wall-window.ifc. Level 0 (plan cut 1.2 m) holds two glass walls, both 3 m high from the floor, so the plan cuts them: */
+/* curtain wall #48 (x 0..4) with a door #75 in it through an opening (IfcRelVoidsElement / IfcRelFillsElement), and */
+/* curtain wall #57 (x 6..10), a container with no body of its own whose plate #58 spans it, with a door #85 aggregated into it */
+/* (IfcRelAggregates, no opening). Both doors stand over 1.5 to 2.1 m, wholly above the cut. */
+#1=IFCPROJECT('3hostCurtainProject01',$,'Host curtain wall',$,$,$,$,(#14),#9);
+#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#6=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=IFCUNITASSIGNMENT((#2,#6));
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCDIRECTION((0.,0.,1.));
+#12=IFCDIRECTION((1.,0.,0.));
+#13=IFCAXIS2PLACEMENT3D(#10,#11,#12);
+#14=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,$);
+#15=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#14,$,.MODEL_VIEW.,$);
+#22=IFCLOCALPLACEMENT($,#13);
+#23=IFCLOCALPLACEMENT(#22,#13);
+#24=IFCLOCALPLACEMENT(#23,#13);
+#30=IFCSITE('3hostCurtainSite000001',$,'Site',$,$,#22,$,$,.ELEMENT.,$,$,$,$,$);
+#31=IFCBUILDING('3hostCurtainBuilding01',$,'Building',$,$,#23,$,$,.ELEMENT.,$,$,$);
+#32=IFCBUILDINGSTOREY('3hostCurtainLevel000001',$,'Level 0',$,$,#24,$,$,.ELEMENT.,0.);
+#34=IFCRELAGGREGATES('3hostCurtainAggProj001',$,$,$,#1,(#30));
+#35=IFCRELAGGREGATES('3hostCurtainAggSite01',$,$,$,#30,(#31));
+#36=IFCRELAGGREGATES('3hostCurtainAggBuild1',$,$,$,#31,(#32));
+#40=IFCDIRECTION((1.,0.));
+#47=IFCLOCALPLACEMENT(#24,#13);
+#100=IFCCARTESIANPOINT((0.,0.,0.));
+#101=IFCAXIS2PLACEMENT3D(#100,#11,#12);
+/* curtain wall #48 */
+#41=IFCCARTESIANPOINT((2.,0.05));
+#42=IFCAXIS2PLACEMENT2D(#41,#40);
+#43=IFCRECTANGLEPROFILEDEF(.AREA.,'CW1',#42,4.,0.1);
+#44=IFCEXTRUDEDAREASOLID(#43,#101,#11,3.);
+#45=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#44));
+#46=IFCPRODUCTDEFINITIONSHAPE($,$,(#45));
+#48=IFCCURTAINWALL('3hostCurtainWallA0001',$,'Curtain wall A',$,$,#47,#46,$,$);
+/* its opening and door */
+#60=IFCCARTESIANPOINT((2.,0.05,1.5));
+#61=IFCAXIS2PLACEMENT3D(#60,#11,#12);
+#62=IFCLOCALPLACEMENT(#24,#61);
+#63=IFCCARTESIANPOINT((0.,0.));
+#64=IFCAXIS2PLACEMENT2D(#63,#40);
+#65=IFCRECTANGLEPROFILEDEF(.AREA.,'Opening',#64,1.,0.5);
+#66=IFCEXTRUDEDAREASOLID(#65,#13,#11,0.6);
+#67=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#66));
+#68=IFCPRODUCTDEFINITIONSHAPE($,$,(#67));
+#69=IFCOPENINGELEMENT('3hostCurtainOpening001',$,'Opening',$,$,#62,#68,$,.OPENING.);
+#70=IFCRELVOIDSELEMENT('3hostCurtainVoids0001',$,$,$,#48,#69);
+#71=IFCRECTANGLEPROFILEDEF(.AREA.,'Door',#64,0.9,0.2);
+#72=IFCEXTRUDEDAREASOLID(#71,#13,#11,0.6);
+#73=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#72));
+#74=IFCPRODUCTDEFINITIONSHAPE($,$,(#73));
+#75=IFCDOOR('3hostCurtainDoorOpen001',$,'Door in an opening',$,$,#62,#74,$,0.6,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
+#76=IFCRELFILLSELEMENT('3hostCurtainFills00001',$,$,$,#69,#75);
+/* curtain wall #57: no body, a plate #58 and a door #85 as its aggregated parts */
+#57=IFCCURTAINWALL('3hostCurtainWallB0001',$,'Curtain wall B',$,$,#47,$,$,$);
+#51=IFCCARTESIANPOINT((8.,0.05));
+#52=IFCAXIS2PLACEMENT2D(#51,#40);
+#53=IFCRECTANGLEPROFILEDEF(.AREA.,'Plate',#52,4.,0.1);
+#54=IFCEXTRUDEDAREASOLID(#53,#101,#11,3.);
+#55=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#54));
+#56=IFCPRODUCTDEFINITIONSHAPE($,$,(#55));
+#58=IFCPLATE('3hostCurtainPlate00001',$,'Glass',$,$,#47,#56,$,.CURTAIN_PANEL.);
+#80=IFCCARTESIANPOINT((8.,0.05,1.5));
+#81=IFCAXIS2PLACEMENT3D(#80,#11,#12);
+#82=IFCLOCALPLACEMENT(#24,#81);
+#85=IFCDOOR('3hostCurtainDoorPart0001',$,'Door aggregated into the curtain wall',$,$,#82,#74,$,0.6,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
+#86=IFCRELAGGREGATES('3hostCurtainAggParts001',$,$,$,#57,(#58,#85));
+#90=IFCRELCONTAINEDINSPATIALSTRUCTURE('3hostCurtainContainL001',$,$,$,(#48,#57,#75),#32);
+ENDSEC;
+END-ISO-10303-21;

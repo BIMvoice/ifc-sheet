@@ -12,138 +12,25 @@
 import { nearestOnShape, shapeBounds } from './curves';
 import { placeSymbol as placeLevelMark } from './level-mark';
 import { mirrorShape, rotateShape, translateShape } from './transform';
-import { findSymbol, missingSymbolMark, placeSymbol } from './symbols';
-import { add, dist, mirrorPt, rotatePt, scale, sub } from './vec';
-import { figureUp, leaderOf } from './figure-layout';
+import { findSymbol, missingSymbolMark, placeSymbol, axisLayout as engineAxisLayout, dimensionLayout as engineDimensionLayout, formatLength, formatLevel, textBoxOf, textLeaderOf, type DimensionLayout, type LayoutOptions } from '@bimvoice/ifcsheet';
+import { add, mirrorPt, rotatePt } from './vec';
 import { leaderTextRight } from './leader-segments';
-import { leaderStart } from '@/labels/label-leader';
-import { decimalsOf, lengthUnitOf, sheetLevel, sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
 import { textBlock, type TextFrame } from './text-block';
-import { naturalDecimals, unitFactor } from './styles';
+import { textWidthEm } from './text-width';
+// A linear dimension's layout and the length format are the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` prints the same figure (#479).
+export { formatLength, type DimensionLayout, type LayoutOptions };
 import { isGeometry, type AnnotationShape, type AxisShape, type DraftShape, type EntityShape, type Pt } from './types';
 
-export interface DimensionLayout {
-  /** Extension and dimension lines. */
-  lines: { a: Pt; b: Pt }[];
-  /** Arrow / tick tips with the direction they point. */
-  ticks: { at: Pt; dir: Pt }[];
-  textAt: Pt;
-  /** Text direction in drawing space (radians). */
-  textAngle: number;
-  label: string;
-}
-
-const EXT_GAP = 0.1;
-const EXT_OVER = 0.15;
-
-export function formatLength(locale: SheetLocale, m: number): string {
-  // Metres with two decimals unless the project names its length unit (#88): then that unit, with the places such a unit is drawn to.
-  const unit = lengthUnitOf(locale, 'm');
-  return sheetNumber(locale, m * unitFactor(unit), decimalsOf(locale, 'length', naturalDecimals(unit)), { group: false });
-}
-
-/** A level mark: +2,70, −1,50 (the true minus), ±0,00. */
-export function formatLevel(locale: SheetLocale, m: number): string {
-  return sheetLevel(locale, m, { minus: '−' });
-}
-
-function unit(v: Pt): Pt {
-  const l = Math.hypot(v.x, v.y);
-  return l > 1e-12 ? { x: v.x / l, y: v.y / l } : { x: 1, y: 0 };
-}
+// The level figure, the radial and angular layouts and the axis bubbles are the engine's too (`dimension-layout.ts`).
+export { formatLevel };
 
 /**
- * The short leader a figure carries when it was moved off its dimension line (above, below, or past the end of
- * the string): from the middle of the line to the figure's near edge. Nothing for a figure left on the line.
+ * A dimension's layout, with the leader of a figure moved off its line: the engine's one function (`dimension-figure.ts`), which the
+ * PDF of `ifcsheet build` calls too. `frame` is the view the dimension is in (default: the view being annotated); the figure's width
+ * is measured with the browser's font.
  */
-function figureLeader(layout: DimensionLayout, textAt: Pt, height: number): { a: Pt; b: Pt }[] {
-  const line = layout.lines[2];
-  const along = { x: Math.cos(layout.textAngle), y: Math.sin(layout.textAngle) };
-  const l = leaderOf(add(line.a, scale(sub(line.b, line.a), 0.5)), textAt, height, figureUp(along, screenUp, screenRight), along, textBlock(layout.label, height).outer.x1);
-  return l ? [l] : [];
-}
-
-/** Drawing-unit sizes and the number format a dimension style gives its layout. */
-export interface LayoutOptions {
-  extGap?: number;
-  extOver?: number;
-  format?: (metres: number) => string;
-  /**
-   * The language of the default `format`. Left out by the callers that read
-   * only the lines and the text position of a layout; whatever draws the
-   * label passes `format` itself.
-   */
-  locale?: SheetLocale;
-}
-
-/** A linear / aligned dimension: extension lines from the points to the dimension line through `at`. */
-function linearLayout(a: Pt, b: Pt, at: Pt, variant: 'aligned' | 'linear', text: string | undefined, o: LayoutOptions): DimensionLayout {
-  const gap = o.extGap ?? EXT_GAP, over = o.extOver ?? EXT_OVER, format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
-  let dir: Pt;
-  if (variant === 'aligned') {
-    dir = unit(sub(b, a));
-  } else {
-    // Linear: horizontal or vertical, whichever way the line was pulled.
-    const mid = scale(add(a, b), 0.5);
-    dir = Math.abs(at.y - mid.y) >= Math.abs(at.x - mid.x) ? { x: 1, y: 0 } : { x: 0, y: 1 };
-  }
-  const n = { x: -dir.y, y: dir.x };
-  const offA = (at.x - a.x) * n.x + (at.y - a.y) * n.y;
-  const offB = (at.x - b.x) * n.x + (at.y - b.y) * n.y;
-  const pa = add(a, scale(n, offA));
-  const pb = add(b, scale(n, offB));
-  const extA = { a: add(a, scale(n, Math.sign(offA) * Math.min(gap, Math.abs(offA)))), b: add(pa, scale(n, Math.sign(offA) * over)) };
-  const extB = { a: add(b, scale(n, Math.sign(offB) * Math.min(gap, Math.abs(offB)))), b: add(pb, scale(n, Math.sign(offB) * over)) };
-  const value = Math.abs((b.x - a.x) * dir.x + (b.y - a.y) * dir.y);
-  const along = unit(sub(pb, pa));
-  return {
-    lines: [extA, extB, { a: pa, b: pb }],
-    ticks: [{ at: pa, dir: scale(along, -1) }, { at: pb, dir: along }],
-    textAt: scale(add(pa, pb), 0.5),
-    textAngle: Math.atan2(along.y, along.x),
-    label: text ?? format(value),
-  };
-}
-
-export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}): DimensionLayout {
-  const format = o.format ?? ((m: number) => formatLength(o.locale ?? 'en', m));
-  if (shape.type === 'dimension') {
-    const layout = linearLayout(shape.a, shape.b, shape.at, shape.variant, shape.text, o);
-    return shape.textAt ? { ...layout, lines: [...layout.lines, ...figureLeader(layout, shape.textAt, shape.height)], textAt: shape.textAt } : layout;
-  }
-  if (shape.type === 'radial') {
-    const dir = unit(sub(shape.at, shape.c));
-    const rim = add(shape.c, scale(dir, shape.r));
-    const from = shape.diameter ? add(shape.c, scale(dir, -shape.r)) : shape.c;
-    return {
-      lines: [{ a: from, b: dist(shape.at, shape.c) > shape.r ? shape.at : rim }],
-      ticks: shape.diameter ? [{ at: rim, dir }, { at: from, dir: scale(dir, -1) }] : [{ at: rim, dir }],
-      textAt: shape.at,
-      textAngle: Math.atan2(dir.y, dir.x),
-      label: `${shape.diameter ? 'Ø' : 'R'} ${format(shape.diameter ? shape.r * 2 : shape.r)}`,
-    };
-  }
-  const r = Math.max(dist(shape.at, shape.c), 1e-6);
-  const a0 = Math.atan2(shape.a.y - shape.c.y, shape.a.x - shape.c.x);
-  const a1 = Math.atan2(shape.b.y - shape.c.y, shape.b.x - shape.c.x);
-  let sweep = a1 - a0;
-  while (sweep <= -Math.PI) sweep += Math.PI * 2;
-  while (sweep > Math.PI) sweep -= Math.PI * 2;
-  const steps = 24;
-  const lines: { a: Pt; b: Pt }[] = [];
-  for (let i = 0; i < steps; i++) {
-    const t0 = a0 + (sweep * i) / steps;
-    const t1 = a0 + (sweep * (i + 1)) / steps;
-    lines.push({ a: { x: shape.c.x + r * Math.cos(t0), y: shape.c.y + r * Math.sin(t0) }, b: { x: shape.c.x + r * Math.cos(t1), y: shape.c.y + r * Math.sin(t1) } });
-  }
-  const mid = a0 + sweep / 2;
-  return {
-    lines,
-    ticks: [],
-    textAt: { x: shape.c.x + r * Math.cos(mid), y: shape.c.y + r * Math.sin(mid) },
-    textAngle: mid + Math.PI / 2,
-    label: `${sheetNumber(o.locale ?? 'en', (Math.abs(sweep) * 180) / Math.PI, 1, { group: false })}°`,
-  };
+export function dimensionLayout(shape: Extract<AnnotationShape, { type: 'dimension' | 'radial' | 'angular' }>, o: LayoutOptions = {}, frame: { up: 1 | -1; right: 1 | -1 } = { up: screenUp, right: screenRight }): DimensionLayout {
+  return engineDimensionLayout(shape, o, frame, textWidthEm);
 }
 
 /**
@@ -191,36 +78,22 @@ export function withAnnotationFrame<T>(up: 1 | -1, right: 1 | -1, fn: () => T): 
   }
 }
 
-/** Model metres per hatch-pattern unit at scale 1: patterns are drawn in paper millimetres, views default to 1:100. */
-export const HATCH_UNIT_M = 0.1;
+export { HATCH_UNIT_M } from '@bimvoice/ifcsheet';
 
-/** The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element. */
-export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>): { from: Pt; tip: Pt } | null {
-  if (!shape.leader) return null;
-  const pts = textBox(shape.p, shape.text, shape.height, shape.rotation, shape.frame);
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-  const from = leaderStart({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, shape.frame === 'bubble', shape.leader);
-  return from ? { from, tip: shape.leader } : null;
+/**
+ * The leader a text carries, drawing coordinates: from the edge of its frame to the tip on the element (the engine's `textLeaderOf`,
+ * which the PDF of `ifcsheet build` places it with). `up` is the screen-up of the view the text is in (default: the view being annotated).
+ */
+export function textLeader(shape: Extract<AnnotationShape, { type: 'text' }>, up: 1 | -1 = screenUp): { from: Pt; tip: Pt } | null {
+  return textLeaderOf(shape, up, textWidthEm);
 }
 
 /** A text box's corners (frame included), as the text block lays it out. */
 export function textBox(p: Pt, text: string, height: number, rotation: number, frame?: TextFrame): Pt[] {
-  const { outer } = textBlock(text, height, frame);
-  const at = (x: number, y: number): Pt => ({ x: p.x + x, y: p.y - y * screenUp });
-  return [at(outer.x0, outer.y1), at(outer.x1, outer.y1), at(outer.x1, outer.y0), at(outer.x0, outer.y0)].map((c) => rotatePt(c, p, rotation));
+  return textBoxOf(p, text, height, rotation, frame, screenUp, textWidthEm);
 }
 
-/** Where an axis's bubbles sit: centres just past its ends (along the line), and their radius / half side. */
-export function axisLayout(shape: AxisShape): { bubbles: Pt[]; r: number } {
-  // The bubble holds the label: at least `size`, wider for a long label.
-  const textHalf = (Math.max(1, shape.label.length) * shape.height * 0.62) / 2;
-  const r = Math.max(shape.size / 2, textHalf + shape.height * 0.45, shape.height * 0.9);
-  const dir = unit(sub(shape.b, shape.a));
-  const bubbles: Pt[] = [];
-  if (shape.ends === 'both' || shape.ends === 'start') bubbles.push(add(shape.a, scale(dir, -r)));
-  if (shape.ends === 'both' || shape.ends === 'end') bubbles.push(add(shape.b, scale(dir, r)));
-  return { bubbles, r };
-}
+export const axisLayout: (shape: AxisShape) => { bubbles: Pt[]; r: number } = engineAxisLayout;
 
 /** The next label in a series: 1 → 2, A → B, Z → AA, A1 → A2, B' → C'. */
 export function nextAxisLabel(label: string): string {
@@ -295,13 +168,23 @@ export function entityBounds(shape: EntityShape): { min: Pt; max: Pt } {
 
 /** Distance from `p` to the entity; inside a hatch or a text box counts as on it. */
 export function nearestOnEntity(shape: EntityShape, p: Pt): { point: Pt; dist: number } {
+  if (insideArea(shape, p)) return { point: p, dist: 0 };
+  return nearestOnEdges(shape, p);
+}
+
+/** Distance from `p` to the entity's lines only: a hatch's boundary or a text box's outline, never their interior. */
+export function nearestOnEdges(shape: EntityShape, p: Pt): { point: Pt; dist: number } {
   let best = { point: p, dist: Infinity };
   for (const part of entitySkeleton(shape)) {
     const hit = nearestOnShape(part, p);
     if (hit.dist < best.dist) best = hit;
   }
-  if ((shape.type === 'hatch' || shape.type === 'text') && insideAny(entitySkeleton(shape), p)) return { point: p, dist: 0 };
   return best;
+}
+
+/** True when `p` lies inside a hatch or a text box: an area that counts as picked anywhere within it. */
+export function insideArea(shape: EntityShape, p: Pt): boolean {
+  return (shape.type === 'hatch' || shape.type === 'text') && insideAny(entitySkeleton(shape), p);
 }
 
 function insideAny(parts: DraftShape[], p: Pt): boolean {

@@ -16,7 +16,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { instanceCount, duplicateSymbol, removeSymbol, renameSymbol, setSymbolUnit } from '@/catalogue/symbol-actions';
 import type { DraftSymbol } from '@/catalogue/types';
 import { patchDraftSettings, startDraftCommand } from '@/drafting/session';
-import { BUILT_IN_SYMBOLS, flattenShape, isBuiltInSymbol, placeSymbol } from '@/drafting/symbols';
+import { BUILT_IN_SYMBOLS, flattenShape, isBuiltInSymbol, placeSymbol } from '@bimvoice/ifcsheet';
 import { isDrawingTabActive } from '@/project/document-tabs';
 import { useProjectStore } from '@/project/project-store';
 import { closeStandards } from '@/project/standards-dialog-store';

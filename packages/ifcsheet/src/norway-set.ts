@@ -98,15 +98,21 @@ export function norwaySetTemplate(names: NorwaySheetNames): SetTemplate {
   // The scale is the regulation's "normal" one, so the paper steps up rather than the scale changing (`SheetLayoutRule.stepUp`).
   const layout = { paper: SET_PAPER, orientation: 'landscape' as const, stepUp: [...NORWAY_STEP_UP] };
   const scale = NORWAY_DRAWING_SCALE;
+  // Marks. Site plan north arrow: SOURCED, the situasjonskart a situasjonsplan is built on "skal merkes med nordpil" (draft SAK
+  // § 5-8 f, consultation of 30.04.2026, NOT in force). Everything else is CONVENTION, not required by SAK10 § 5-4 or the DiBK
+  // pages (they ask for the scale, not for a scale bar or a north arrow on the building drawings): a north arrow on the floor
+  // plans, a scale bar on every scaled view.
+  const plan = { scaleBar: true, northArrow: true };
+  const scaled = { scaleBar: true };
   return {
     name: names.name,
     schedules: [],
     annotations: {},
     sheets: [
-      { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'allPlans' }, scale }] },
-      { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 }, scale }, { view: { kind: 'section', place: 1 }, scale }] },
-      { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction }, scale })) },
-      { name: names.site, series: 'plans', layout, slots: [{ view: { kind: 'site' }, scale: NORWAY_SITE_SCALE }], notes: [...names.siteNotes] },
+      { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'allPlans' }, scale, ...plan }] },
+      { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 }, scale, ...scaled }, { view: { kind: 'section', place: 1 }, scale, ...scaled }] },
+      { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction }, scale, ...scaled })) },
+      { name: names.site, series: 'plans', layout, slots: [{ view: { kind: 'site' }, scale: NORWAY_SITE_SCALE, ...plan }], notes: [...names.siteNotes] },
     ],
   };
 }

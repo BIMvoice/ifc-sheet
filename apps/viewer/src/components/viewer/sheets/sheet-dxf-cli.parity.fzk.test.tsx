@@ -1,0 +1,183 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * #619: `ifcsheet build --dxf` and the app's sheet DXF for the same sheet of AC20-FZK-Haus. The CLI runs for real (`run(['build', ...])`, the
+ * file it writes is read back); the app lays the default set out (`startDrawingSet`), draws A-101 (`SheetPaper` through `captureSheets`) and writes
+ * it with `svgToDxf`. Both are DXF R2000, name their layers from the one CAD layer standard (`@bimvoice/ifcsheet/dxf`), and carry the same TEXT.
+ * Two differences remain, both explained below: the drawing numbers in the rings before the view titles, and the marks of the two sections the
+ * app's default set holds and the CLI's generated set does not. A project's own CAD rules are held by the
+ * engine's `sheet-dxf.test.ts`.
+ */
+
+import '@/test/setup-dom.js';
+import { after, afterEach, before, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { EXIT, run } from '@bimvoice/ifcsheet/cli';
+import { commitDrafts, newDraft } from '@/drafting/draft-store';
+import { addLayer } from '@/project/drafting-standards';
+import { projectDocument } from '@/project/project-store';
+import { serializeProject } from '@/project/project-file';
+import { setExtent } from '@/draft-set/body';
+import { clearDraftHistory } from '@/drafting/draft-store';
+import { captureSheets } from '@/issue/capture';
+import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { mergedSectionBounds } from '@/lib/section/section-distance';
+import { startDrawingSet } from '@/project/drawing-set-actions';
+import { modelLevels } from '@/project/model-levels';
+import { resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
+import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
+import { useViewerStore } from '@/store';
+import { FZK_HAUS, loadPlanModel, planModelMissing, type LoadedPlanModel } from '@/test/discipline-plan-fixture';
+
+/** One entity of a DXF text: its type, layer and TEXT value, read from the group codes. */
+interface Entity { type: string; layer: string; value: string }
+function entitiesOf(dxf: string): { version: string; entities: Entity[] } {
+  const lines = dxf.split(/\r?\n/);
+  const at = lines.findIndex((l, i) => l.trim() === '$ACADVER' && lines[i - 1]?.trim() === '9');
+  const entities: Entity[] = [];
+  const start = lines.findIndex((l, i) => l.trim() === 'ENTITIES' && lines[i - 1]?.trim() === '2');
+  for (let i = start + 1; i + 1 < lines.length; i += 2) {
+    if (lines[i].trim() !== '0') continue;
+    const type = lines[i + 1].trim();
+    if (type === 'ENDSEC') break;
+    let layer = '';
+    let value = '';
+    for (let j = i + 2; j + 1 < lines.length && lines[j].trim() !== '0'; j += 2) {
+      if (lines[j].trim() === '8') layer = lines[j + 1];
+      if (lines[j].trim() === '1') value = lines[j + 1];
+    }
+    entities.push({ type, layer, value });
+  }
+  return { version: lines[at + 2]?.trim() ?? '', entities };
+}
+const layersOf = (entities: readonly Entity[]) => [...new Set(entities.map((e) => e.layer))].sort();
+const textsOf = (entities: readonly Entity[]) => entities.filter((e) => e.type === 'TEXT').map((e) => e.value).sort();
+
+const WASM = new URL('../../../../../../packages/wasm/pkg/ifc-lite_bg.wasm', import.meta.url);
+const skip = planModelMissing(FZK_HAUS) || (existsSync(WASM) ? false : 'the wasm bundle is not built: run `pnpm build:wasm:fetch`');
+
+describe('A-101 of AC20-FZK-Haus: ifcsheet build --dxf and the app write the same DXF (#619)', { skip }, () => {
+  let model: LoadedPlanModel;
+  const dir = skip ? '' : mkdtempSync(join(tmpdir(), 'dxf-parity-'));
+  before(async () => {
+    model = await loadPlanModel(FZK_HAUS);
+    const geometryResult = [...useViewerStore.getState().models.values()][0].geometryResult;
+    publishDrawingRuntime({ geometryResult, sourceCoordinateInfo: undefined, generateDrawing: async () => {}, isRegenerating: false });
+  });
+  after(() => {
+    publishDrawingRuntime(null);
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+  afterEach(() => resetProject());
+
+  // happy-dom has no layout and does not map presentation attributes to computed style, which the DXF walker needs: a screen CTM (the identity: the sheet's units are
+  // millimetres, only the layers and the text are compared here, not the places) and the stroke and fill an element's attributes give.
+  const proto = SVGElement.prototype as unknown as { getScreenCTM?: () => DOMMatrix };
+  const ownCtm = Object.getOwnPropertyDescriptor(proto, 'getScreenCTM');
+  const realStyle = window.getComputedStyle.bind(window);
+  before(() => {
+    proto.getScreenCTM = () => new DOMMatrix();
+    window.getComputedStyle = ((el: Element, pseudo?: string | null) => new Proxy(realStyle(el, pseudo), {
+      get: (target, key) => (key === 'stroke' || key === 'fill' ? target[key] || el.getAttribute(key) || '' : Reflect.get(target, key) instanceof Function ? Reflect.get(target, key).bind(target) : Reflect.get(target, key)),
+    })) as typeof window.getComputedStyle;
+  });
+  after(() => {
+    window.getComputedStyle = realStyle;
+    if (ownCtm) Object.defineProperty(proto, 'getScreenCTM', ownCtm); else delete proto.getScreenCTM;
+  });
+
+  /** The app's A-101, as the DXF button writes it. */
+  async function appDxf(draft?: { layer: string }): Promise<string> {
+    resetProject();
+    clearDraftHistory();
+    useViewDrawings.setState({ byView: {} });
+    syncProjectWithModels([{ key: 'm', name: 'm' }], modelLevels('m'));
+    const meshes = [...useViewerStore.getState().models.values()].flatMap((m) => m.geometryResult?.meshes ?? []);
+    const { models, geometryResult } = useViewerStore.getState();
+    const extent = setExtent(useProjectStore.getState().levels, meshes, mergedSectionBounds(models, geometryResult)).extent;
+    assert.ok(startDrawingSet(meshes, extent), 'the Wall lays out a set');
+    for (const view of useProjectStore.getState().views) {
+      if (view.kind === '3d') continue;
+      const drawing = await model.planOf(view);
+      useViewDrawings.setState((s) => ({ byView: { ...s.byView, [view.id]: { ...EMPTY_VIEW_DRAWING, drawing, status: 'ready' } } }));
+    }
+    const sheet = useProjectStore.getState().sheets.find((s) => s.number === 'A-101');
+    assert.ok(sheet, `the set has an A-101 (${useProjectStore.getState().sheets.map((s) => s.number).join(', ')})`);
+    if (draft) {
+      // A line drafted by hand on a layer of its own, on the plan this sheet prints.
+      const vp = sheet.viewports?.find((v) => useProjectStore.getState().views.find((w) => w.id === v.viewId)?.kind === 'plan');
+      assert.ok(vp?.center, 'A-101 prints a plan that keeps its centre');
+      const layerId = addLayer(draft.layer);
+      commitDrafts([...useProjectStore.getState().drafts, newDraft(vp.viewId, layerId, { type: 'line', a: { x: vp.center.x - 3, y: vp.center.y }, b: { x: vp.center.x + 3, y: vp.center.y } }), newDraft(vp.viewId, layerId, { type: 'text', p: { x: vp.center.x - 3, y: vp.center.y + 1 }, text: 'Hand note', height: 0.25, rotation: 0 })]);
+    }
+    const captured = await captureSheets([sheet], { dxf: true });
+    assert.deepEqual(captured.failed, []);
+    return Buffer.from(captured.dxfs.get(sheet.id) ?? []).toString('latin1');
+  }
+
+  /** `ifcsheet build FZK --dxf`: the file the CLI wrote for A-101. */
+  async function cliDxf(project = false): Promise<string> {
+    const out = mkdtempSync(join(dir, 'run-'));
+    const err: string[] = [];
+    // The project the app holds now, saved as the app saves it (`build --project`): its drafts, the section marks and the hand-drawn line among them.
+    const saved = project ? ['--project', (writeFileSync(join(out, 'set.ifcsheet'), serializeProject(projectDocument())), join(out, 'set.ifcsheet'))] : [];
+    const code = await run(['build', FZK_HAUS, ...saved, '--out', join(out, 'set.pdf'), '--dxf', join(out, 'dxf')], { stdout: () => undefined, stderr: (t) => void err.push(t) });
+    assert.equal(code, EXIT.ok, err.join(''));
+    return readFileSync(join(out, 'dxf', 'A-101.dxf')).toString('latin1');
+  }
+
+  it('write DXF R2000, the same layers and the same TEXT but the drawing numbers and the section marks', async () => {
+    const app = entitiesOf(await appDxf());
+    const cli = entitiesOf(await cliDxf());
+    assert.equal(app.version, 'AC1015');
+    assert.equal(cli.version, 'AC1015');
+    assert.ok(cli.entities.length > 100, `the CLI file holds the drawing (${cli.entities.length} entities)`);
+    // Both sides draw the plan's elevation marks ("1 / A-201", ...) and its sections' marks now (the engine's `cross-ref/`, #619), as drafts on
+    // the drafting layer "0", so the layers are compared whole.
+    const marks = app.entities.filter((e) => e.layer === '0');
+    assert.ok(marks.every((e) => e.type === 'LINE' || e.type === 'TEXT'), 'the drafting layer holds only the reference marks (lines and their labels)');
+    assert.ok(cli.entities.some((e) => e.layer === '0'), 'the CLI draws the reference marks on the drafting layer "0" too');
+    assert.deepEqual(layersOf(cli.entities), layersOf(app.entities));
+    const drawn = app.entities;
+    const appTexts = textsOf(drawn);
+    const cliTexts = textsOf(cli.entities);
+    assert.ok(cliTexts.length >= 18, `the CLI keeps the 18 TEXT values #624 wrote (${cliTexts.length})`);
+    // The app draws each view's drawing number in a ring before its title (`TitleNumber`: "1", "2"); the engine's view title has no number yet.
+    // Every other TEXT, the project name included, is the same on both sides.
+    const rest = [...appTexts];
+    for (const text of cliTexts) {
+      const at = rest.indexOf(text);
+      assert.ok(at >= 0, `the CLI writes "${text}" and the app does not`);
+      rest.splice(at, 1);
+    }
+    // The app's default set also holds two sections the CLI's generated set does not (A, B and "n / A-301" on the sheet that prints them); the
+    // elevation marks ("n / A-201") are the engine's on both sides. Stored sections reach the CLI through `--project`, compared in the next test.
+    const sectionMark = (t: string): boolean => /^[A-Z]$/.test(t) || /^\d+ \/ A-301$/.test(t);
+    assert.ok(rest.length > 0 && rest.every((t) => /^\d+$/.test(t) || sectionMark(t)), `what only the app writes is the views' drawing numbers and the section marks (${rest.join(', ')})`);
+  });
+
+  it('write the section marks and a drafted line on the layers the app gives them, from a saved project (#619)', async () => {
+    const app = entitiesOf(await appDxf({ layer: 'A-WALL-DRAFT' }));
+    const cli = entitiesOf(await cliDxf(true));
+    const marks = app.entities.filter((e) => e.layer === '0');
+    assert.ok(marks.some((e) => e.type === 'LINE') && marks.some((e) => e.type === 'TEXT'), 'the app draws the reference marks on the drafting layer "0"');
+    // The same layers: the stored section symbols on the drafting layer "0", the hand-drawn line and text on the layer of their own, none on SHEET.
+    assert.deepEqual(layersOf(cli.entities), layersOf(app.entities));
+    assert.ok(!layersOf(cli.entities).includes('SHEET'), `nothing is left on the generic SHEET layer (${layersOf(cli.entities).join(', ')})`);
+    // The app writes a line as a LINE and a polyline as a polyline, the engine's writer a run as a polyline: strokes are counted together. What the app
+    // also writes on "0" and the engine does not is the derived reference marks ("1 / A-301", the elevation marks: `cross-ref-marks.ts`, made fresh when a
+    // sheet is drawn, not stored) and some stored marks the sheet leaves out of the viewport (not looked into here).
+    const strokes = (list: readonly Entity[], layer: string) => list.filter((e) => e.layer === layer && e.type !== 'TEXT').length;
+    assert.equal(strokes(cli.entities, 'A-WALL-DRAFT'), strokes(app.entities, 'A-WALL-DRAFT'), 'the drafted line');
+    assert.equal(strokes(cli.entities, 'A-WALL-DRAFT'), 1);
+    assert.deepEqual(textsOf(cli.entities.filter((e) => e.layer === 'A-WALL-DRAFT')), ['Hand note']);
+    assert.deepEqual(textsOf(app.entities.filter((e) => e.layer === 'A-WALL-DRAFT')), ['Hand note']);
+    assert.ok(strokes(cli.entities, '0') > 0 && strokes(cli.entities, '0') <= strokes(app.entities, '0'), 'the stored marks the sheet draws are on "0"');
+    assert.ok(textsOf(cli.entities.filter((e) => e.layer === '0')).every((t) => textsOf(marks).includes(t)), 'the marks\' labels are the app\'s');
+  });
+});

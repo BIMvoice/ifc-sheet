@@ -11,13 +11,14 @@
  * `ensureDrawingSet` beside `generateDefaultSet` and holds the two equal.
  */
 
+import { dxfLayers, dxfText } from './__fixtures__/dxf-text.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import DxfParserModule from 'dxf-parser';
 import type { DxfParser as DxfParserInstance } from 'dxf-parser';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateDefaultSet, type DefaultSet } from './index.js';
-import { exportDxf, exportPdf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
+import { exportPdf, generateViewDrawings, openModel, sheetGraphics, type OpenedModel, type SheetGraphic } from './headless.js';
 
 // The copy committed with the viewer's test fixtures: CI does not run `pnpm fixtures`, so `tests/models/` is empty there.
 const FZK = fileURLToPath(new URL('../../../apps/viewer/src/test/__fixtures__/AC20-FZK-Haus.ifc', import.meta.url));
@@ -119,16 +120,16 @@ describe.skipIf(missing !== null)('the drawing set of AC20-FZK-Haus, from Node (
   it('writes each sheet as a DXF a reader parses, its drawings in ENTITIES', () => {
     const all = new Set<string>();
     for (const sheet of sheets) {
-      const text = exportDxf(sheet);
+      const text = dxfText(sheet);
       expect(text).toContain('ENTITIES');
       const parsed = new DxfParser().parseSync(text);
       expect(parsed?.entities.length, sheet.number).toBeGreaterThan(sheet.frame.length);
-      const layers = Object.keys(parsed?.tables.layer.layers ?? {});
-      expect(layers).toContain('SHEET-FRAME');
-      expect(layers.some((l) => /^VIEW-(CUT|SEEN|HIDDEN)-\d{3}$/.test(l)), sheet.number).toBe(true);
+      const layers = dxfLayers(text);
+      expect(layers).toContain('FRAME');
+      expect(layers.some((l) => ['CUT', 'SEEN', 'HIDDEN'].includes(l)), sheet.number).toBe(true);
       for (const l of layers) all.add(l);
     }
-    // The drawings by pen, as the app's sheet pens them (#34): the cut pen 0.5 mm, the seen pen 0.25 mm.
-    expect([...all]).toEqual(expect.arrayContaining(['VIEW-CUT-050', 'VIEW-SEEN-025']));
+    // The drawings by pen, as the app's sheet pens them (#34), on the app's layers (#619).
+    expect([...all]).toEqual(expect.arrayContaining(['CUT', 'SEEN']));
   });
 });

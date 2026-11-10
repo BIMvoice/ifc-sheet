@@ -54,8 +54,10 @@ export const PAC_RURAL_STEP_UP: readonly PaperSize[] = ['A2', 'A1'];
 export function pacRuralSetTemplate(names: PacSheetNames): SetTemplate {
   const layout = { paper: PAC_RURAL_PAPER, orientation: 'landscape' as const };
   const scale = PAC_RURAL_SCALE;
+  // Marks: CONVENTION, not required by Anexa 3 or Ordinul 975/2026 (the research file `ro-permit-requirements.md` found no north
+  // arrow and no scale bar in them). The convention: a north arrow on plans, a scale bar on every scaled view.
   const sheets = (name: string, series: RuledSeries, views: ViewRule[]): SheetRule[] =>
-    views.map((view, i) => ({ name: `${name} ${i + 1}`, series, layout: { ...layout, stepUp: [...PAC_RURAL_STEP_UP] }, slots: [{ view, scale }] }));
+    views.map((view, i) => ({ name: `${name} ${i + 1}`, series, layout: { ...layout, stepUp: [...PAC_RURAL_STEP_UP] }, slots: [{ view, scale, scaleBar: true, ...(series === 'plans' ? { northArrow: true } : {}) }] }));
   return {
     name: names.name,
     schedules: [],

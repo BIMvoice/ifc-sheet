@@ -16,6 +16,7 @@
  * them equal.
  */
 
+import { hasDrawableGeometry } from './drawable.js';
 import { buildDrawingSet, groundPlan, groupsThatDoNotFit, type ModelExtent, type SetGroup } from './drawing-set.js';
 import type { ElevationProjectView, NumberingScheme, PlanProjectView, ProjectDocument, ProjectLevel, ProjectView, SectionProjectView, SheetTemplate, TemplateSeries } from './document.js';
 import { freshProjectId } from './ids.js';
@@ -133,11 +134,15 @@ class Planner {
    * asks for. None when the project has one already (the app's `ensureSitePlan` keeps the first too) or has no plan.
    */
   sitePlan(template: SetTemplate | undefined): void {
-    const slot = template?.sheets.flatMap((s) => s.slots).find((s) => s.view.kind === 'site');
-    if (!slot || this.views.some((v) => v.kind === 'plan' && v.site)) return;
+    const slots = template?.sheets.flatMap((s) => s.slots).flatMap((s) => (s.view.kind === 'site' ? [{ nth: s.view.nth ?? 0, scale: s.scale }] : [])) ?? [];
     const ground = groundPlan(this.views.filter((v) => !v.detail));
-    if (!ground) return;
-    this.add<PlanProjectView>({ kind: 'plan', name: nameOf('names.view.site'), cutHeight: ground.cutHeight, level: ground.level, site: true, ...(slot.scale === undefined ? {} : { scale: slot.scale }) });
+    if (slots.length === 0 || !ground) return;
+    // A rule for a further site plan (`nth`) is met by a further site plan of its own: one already there is kept, never read twice.
+    const have = this.views.filter((v) => v.kind === 'plan' && v.site && !v.detail).length;
+    for (let nth = have; nth <= Math.max(...slots.map((s) => s.nth)); nth++) {
+      const slot = slots.find((s) => s.nth === nth);
+      this.add<PlanProjectView>({ kind: 'plan', name: nth === 0 ? nameOf('names.view.site') : `${nameOf('names.view.site')} ${nth + 1}`, cutHeight: ground.cutHeight, level: ground.level, site: true, ...(slot?.scale === undefined ? {} : { scale: slot.scale }) });
+    }
   }
 
   /** The four elevations, each plane outside its facade and each seeing through the building. */
@@ -198,7 +203,7 @@ export function generateDefaultSet(model: SetModel, options: DefaultSetOptions =
 }
 
 function generateSet(model: SetModel, options: DefaultSetOptions): DefaultSet | null {
-  if (!model.extent) return null;
+  if (!hasDrawableGeometry(model) || !model.extent) return null;
   const now = options.now ?? Date.now();
   const templates = options.templates ?? {};
   const levels = levelsFromStoreys(model.storeys);

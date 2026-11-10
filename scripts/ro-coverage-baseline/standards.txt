@@ -1,0 +1,4 @@
+standards.tab.cad
+standards.tab.library
+standards.tab.symbols
+standards.tab.types

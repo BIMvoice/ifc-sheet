@@ -1,0 +1,138 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/**
+ * How far a view looks past its cut: the one rule the app's drawing hook
+ * (`useDrawingGeneration`) and the engine's sheets (`view-drawings.ts`) both
+ * take their projection bands from (#615). The app once drew a plan the
+ * engine left blank because each kept its own copy of it.
+ */
+
+import { currentFloorBands, storeyFloorsFromMeshes, type StoreyFloorMesh } from '@ifc-lite/drawing-2d';
+import type { ProjectView } from './document.js';
+import { planDepthBelowCut } from './view-defaults.js';
+
+/** How deep the projection reaches on each side of the cut, metres: `below` toward the floor, `above` toward the ceiling. */
+export interface ProjectionBands {
+  below: number;
+  above: number;
+}
+
+/** What a view says about projection: whether it shows, and how deep (`null`: the automatic bands). */
+export interface ViewProjection {
+  showConstructionProjection: boolean;
+  constructionProjectionDepth: number | null;
+}
+
+/**
+ * Projection follows the view's depth: a plan with no depth of its own sees
+ * down to its level's floor (as deep as its cut is high), a section /
+ * elevation (and a reflected ceiling plan, which sees all that is above its
+ * cut) with no depth projects with the automatic bands, and an
+ * explicit depth always projects exactly that far (0: the cut only).
+ */
+export function viewProjection(view: Pick<ProjectView, 'kind' | 'viewDepth'> & { cutHeight?: number; reflected?: boolean }): ViewProjection {
+  const depth = typeof view.viewDepth === 'number' && view.viewDepth >= 0 ? view.viewDepth : null;
+  if (depth !== null) return { showConstructionProjection: depth > 0, constructionProjectionDepth: depth };
+  if (view.kind === 'plan' && !view.reflected) return { showConstructionProjection: (view.cutHeight ?? 0) > 0, constructionProjectionDepth: view.cutHeight ?? 0 };
+  return { showConstructionProjection: true, constructionProjectionDepth: null };
+}
+
+export interface BoundedBandsInput {
+  /** The view's bounded depth (`ViewProjection.constructionProjectionDepth`), metres. */
+  depth: number;
+  /** The cut's position along its axis, and the model's top along it, in the same frame. */
+  position: number;
+  axisMax: number;
+  /** The cut looks down (a plan: axis `down`). */
+  down: boolean;
+  /** A plain plan: looking down, not flipped, not reflected and not on a custom plane, the one cut that may sit above the model. */
+  plainPlan: boolean;
+}
+
+/**
+ * The bands of a view with a bounded depth, from `base`, the bands the cut has
+ * before its own depth is read (the whole model's extent on both sides, or the
+ * storey's when the app scopes a plan to its floor). The floor side is the
+ * depth itself, taken from the model top when a plain plan's cut is above the
+ * model (#226); the ceiling side is dropped for a depth of 0 and for a cut
+ * that is not a plan, and otherwise keeps `base`, so a plan sees what is
+ * overhead (a roof, a bridge deck) as far as `base` allows.
+ */
+export function boundedProjectionBands(base: ProjectionBands, input: BoundedBandsInput): ProjectionBands {
+  const below = input.plainPlan ? planDepthBelowCut(input.depth, input.position, input.axisMax) : input.depth;
+  return { below, above: input.depth === 0 || !input.down ? 0 : base.above };
+}
+
+/**
+ * The floors of a model's storeys along the cut axis, ascending, for `scopedBands`; `null` when the model cannot be
+ * scoped to one storey: more than one building (their staggered storeys would cap a cut with another building's
+ * floor) or no hierarchy. The app and the engine both read the floors here.
+ */
+export function storeyFloorsOf(meshes: ReadonlyArray<StoreyFloorMesh>, hierarchy: { byBuilding: ReadonlyMap<unknown, unknown>; elementToStorey: ReadonlyMap<number, number> } | null | undefined): number[] | null {
+  if (!hierarchy || hierarchy.byBuilding.size > 1) return null;
+  return storeyFloorsFromMeshes(meshes, hierarchy.elementToStorey);
+}
+
+export interface PlanBandsInput {
+  /** The view's bounded depth (`viewProjection`), or `null` for the automatic bands. */
+  depth: number | null;
+  /** Whether the view projects at all (not a bounded depth of 0, not switched off). */
+  projectionOn: boolean;
+  /** The storeys' floors (`storeyFloorsOf`), or `null` to leave the bands over the whole extent; with fewer than two there is no other floor to keep out. */
+  floors: readonly number[] | null;
+  position: number;
+  axisMin: number;
+  axisMax: number;
+  /** The cut looks down (a plan). */
+  down: boolean;
+  custom: boolean;
+  flipped: boolean;
+  reflected: boolean;
+  /** The automatic depth a section / elevation projects (the app reads it from its plane); read only off a plan. */
+  automaticDepth?: number | null;
+}
+
+/** What `createSectionConfig` takes from the bands: spread it into the config. */
+export interface PlanBandOptions {
+  projectionDepth: number;
+  clipProjectionBands: boolean;
+  projectionBelowDepth: number;
+  projectionAboveDepth: number;
+}
+
+/**
+ * The projection bands of a cut, the one computation the app's drawing hook and the engine's sheets share (#623):
+ * the whole extent on both sides of the cut, scoped to the storey the cut sits in from two floors up (a roof two
+ * levels up stays off the plan), then the view's own depth (`boundedProjectionBands`), then the one-sided band of a
+ * reflected plan. `currentFloorBands` speaks geometric depths (`below` toward the floor) and the band classifier
+ * speaks flip-adjusted ones, so a plane that looks up (flipped, reflected) swaps the two.
+ */
+export function planProjectionBands(i: PlanBandsInput): PlanBandOptions {
+  const fullExtent = Math.max(i.axisMax - i.axisMin, 1e-3);
+  let below = fullExtent;
+  let above = fullExtent;
+  if (i.projectionOn && i.down && !i.custom && i.floors && i.floors.length >= 2) {
+    const bands = currentFloorBands([...i.floors], i.position, i.axisMin, i.axisMax);
+    const up = i.flipped || i.reflected;
+    below = up ? bands.above : bands.below;
+    above = up ? bands.below : bands.above;
+  }
+  if (i.projectionOn && (i.custom || !i.down)) {
+    below = i.automaticDepth ?? 1e-3;
+    above = 1e-3;
+  }
+  const bounded = i.depth !== null && Number.isFinite(i.depth) && i.depth >= 0;
+  if (bounded) ({ below, above } = boundedProjectionBands({ below, above }, { depth: i.depth as number, position: i.position, axisMax: i.axisMax, down: i.down, plainPlan: i.down && !i.custom && !i.flipped && !i.reflected }));
+  if (i.reflected) above = 1e-3; // a reflected ceiling plan sees only above its cut
+  return { projectionDepth: bounded ? below : (i.axisMax - i.axisMin) * 0.5, clipProjectionBands: bounded, projectionBelowDepth: below, projectionAboveDepth: above };
+}
+
+/** Half the model's depth along the cut (its diagonal for a plane that is not along an axis). */
+export const SECTION_VIEW_DEPTH_FRACTION = 0.5;
+
+/** How far a section or elevation with no depth of its own looks behind its cut, from the model's `span` along the cut: the app's `automaticViewDepth` and the engine's sheets both read it here (#627). */
+export function automaticDepthOfSpan(span: number): number {
+  return Math.max(span * SECTION_VIEW_DEPTH_FRACTION, 1e-3);
+}

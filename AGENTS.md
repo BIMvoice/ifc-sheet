@@ -85,7 +85,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 
 **House rules.** No `as any` / `@ts-ignore` (fix the types or add a `.d.ts`); no silent `catch {}` (log or rethrow); split production modules over ~400 non-generated lines; new packages and features ship tests; package-specific deps go in the consuming package, never root.
 
-**Which of those a machine enforces, and which you self-police.** The TypeScript house rules above are SELF-POLICED: `tsc --strict` does not flag `as any`, `@ts-ignore` or `catch {}`, and no lint rule here does either. `pnpm lint` runs oxlint over `apps`, `packages` and `scripts`. It gates the ERROR tier (the curated `.oxlintrc.json` list: rules whose every hit here was a real defect) and any per-file RISE in jsx-a11y warnings (`check-jsx-a11y.mjs`). Other warnings are visible, not blocking; a rule absent from that config still runs at warn. oxlint honours `// eslint-disable-next-line <rule>` with the directive on the line DIRECTLY above the offence and a reason above that. Clear warnings in files you are already touching, never in a sweep.
+**Which of those a machine enforces, and which you self-police.** `tsc --strict` does not flag `as any`, `@ts-ignore` or `catch {}`, but `pnpm lint` does: `check-house-rules.mjs` counts `typescript/no-explicit-any`, `typescript/ban-ts-comment` (ts-ignore) and `no-empty` with `allowEmptyCatch: false` per file against `scripts/house-rules-baseline.json`. These three are RATCHETED: a new hit in any file fails Lint, existing hits are baselined and the baseline may only shrink (`node scripts/check-house-rules.mjs --update`; `--allow-raise` only when a rise is intended). Other TypeScript house rules stay SELF-POLICED. `pnpm lint` runs oxlint over `apps`, `packages` and `scripts`. It gates the ERROR tier (the curated `.oxlintrc.json` list: rules whose every hit here was a real defect), any per-file RISE in jsx-a11y warnings (`check-jsx-a11y.mjs`) and the house-rules ratchet above. Other warnings are visible, not blocking; a rule absent from that config still runs at warn. oxlint honours `// eslint-disable-next-line <rule>` with the directive on the line DIRECTLY above the offence and a reason above that. Clear warnings in files you are already touching, never in a sweep.
 
 **Rust is NOT self-policed.** CI runs `cargo clippy --workspace --all-targets -- -D warnings`, so a warning-only defect (an unused import, a needless borrow) is a hard CI failure even when `cargo test --workspace` is green locally, because `cargo test` does not fail on warnings. Run that clippy line verbatim before pushing Rust.
 
@@ -154,7 +154,7 @@ The sections below are the technical notes of the engine IfcSheet is built on, [
 - Prove removals: TS with `pnpm knip` (on-demand, not a CI gate); Rust with `cargo test --workspace`, **not** `cargo check` (check skips `#[cfg(test)]`, so a test-only reference to a deleted fn slips through). Intentionally-unused Rust items need `#[allow(dead_code)]` and a why.
 
 ## Test fixtures
-- Not committed (no LFS): catalogued in `tests/models/manifest.json`, fetched via `pnpm fixtures`. Tests must **skip** (never throw/panic) when a fixture is absent; point to `pnpm fixtures` in the skip message. Add one: drop under `tests/models/<group>/`, run `pnpm fixtures:manifest`, then `pnpm fixtures:upload`; commit only the manifest. CI runs `pnpm fixtures` before tests.
+- Not committed (no LFS): catalogued in `tests/models/manifest.json`, fetched via `pnpm fixtures`. Tests must **skip** (never throw/panic) when a fixture is absent; point to `pnpm fixtures` in the skip message. Add one: drop under `tests/models/<group>/`, run `pnpm fixtures:manifest`, then `pnpm fixtures:upload`; commit only the manifest. **CI does not run `pnpm fixtures`**: `tests/models/` is empty there, so every test that reads it skips in CI and is checked only on a machine that fetched them (one such test, `outline-gaps.models`, sat red on main unseen). A test that must run in CI reads a committed copy instead, as the FZK tests do from `apps/viewer/src/test/__fixtures__/`; after changing code a `tests/models` test covers, run that test locally with fixtures fetched.
 
 ## Bounding walks over file-supplied references
 
@@ -188,27 +188,55 @@ Entity references come from the file, so a recursive walk over a self-referentia
 
 ## Working in parallel: rules learned the hard way
 
+**Keep the queue small** (2026-10-29: about 50 open PRs re-conflicted each other on every merge; most CI time and agent work went into re-merging)
+- Two checks enforce the next two rules: `queue-guard` (`.github/workflows/queue-guard.yml`, areas in `.github/queue-areas.json`) turns the 6th open PR, or a second in one area, into a draft, and `no-stack` (a step of the CI `gates` job, `scripts/check-no-stack.mjs`) fails a PR built on another open PR.
+- At most 5 open agent PRs. Do not open a new one while 5 are open: get one merged first.
+- One open PR per area (joinery, drafting, engine/CLI, i18n, standards, permits, CI). A second change in the same area waits for the first to merge, then branches from `main`.
+- Update a PR with `main` only when it is next to merge. Every push requeues a full CI run, and a PR updated early conflicts again before its turn.
+- The files almost every conflict came from: `project/fields/index.ts`, the export snapshot (now one file per area, `__snapshots__/exports/<area>.txt`), the CLI fixtures `cli-usage.main.txt` and `cli-argv.main.json`, `ro-coverage-baseline.json`, the i18n barrels and `locales/ro.test.ts`, the command `registry.ts`, `STEP_FIELDS` in `draft-store.ts`, `playwright.config.ts`. Touch them only through their extension points (below), and regenerate generated files with their update command, never by hand.
+- A merge that git reports as clean can still duplicate code: a clean merge put the Germany pack into `standard-pack.ts` twice. After merging `main`, grep the touched files for duplicate exports, keys and ids.
+
 **Git**
 - Merge `origin/main` into your PR branch to resolve conflicts. Never rebase a pushed branch, never force-push, never `git stash` (the stash stack is shared across worktrees; use a second worktree).
 - After a merge, diff every conflicted file against BOTH parents (`git diff MERGE_HEAD <file>` and `git diff HEAD <file>`) for silently dropped lines; auto-merged test counts went wrong twice.
 - Never stack PRs: CI only runs against `main`. Do not start work that depends on an unmerged PR; wait for it.
 - To wait on a PR, poll with a loop that prints the state every round. A silent monitor missed a merge and cost 25 minutes.
 
+**Lists every feature adds to**
+- A list that many PRs extend is one file per entry, discovered, so two PRs adding different entries never edit the same line. In the viewer a registry finds its files with `import.meta.glob` (eager, patterns relative to the registry, `*` only in the file name). The node test runner rewrites exactly that subset (`apps/viewer/src/test/import-meta-glob.mjs`, loaded by `vite-module-hooks.mjs`) and leaves any other form alone, so it fails under test as it always did. The session import guard follows eager globs like static imports.
+
 **One code path for the app and the engine**
 - Logic that the app, the CLI and MCP all need lives once in `packages/ifcsheet` and the app calls it, with a parity test. Examples: `viewStyler` (`view-style.ts`), `classificationOf` (`classification.ts`).
-- A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits `index-exports.snapshot.json`.
+- A new public export of `@bimvoice/ifcsheet` goes in the sub-barrel of its area, `packages/ifcsheet/src/exports/<area>.ts`, not in `src/index.ts`. `src/index-exports.test.ts` pins the surface; an intended change reruns it with `IFCSHEET_SURFACE_UPDATE=1` and commits the per-sub-barrel snapshot `packages/ifcsheet/src/__snapshots__/exports/<area>.txt` (one name per line, so PRs adding to different areas do not collide).
+
+**The `ifcsheet` command line** (`packages/ifcsheet/src/`)
+- A new command is a file in `cli-commands/` and one line in `cli-commands/index.ts`; `run` and the help text read that list.
+- `cli-registry.test.ts` pins the help text and the answers to command lines that need no IFC file. Its fixtures are one file per section (`__fixtures__/cli-usage/<command>.usage.txt`, `<command>.help.txt`, `options.txt`) and one file per added command line (`__fixtures__/cli-argv/<name>.json`). `ARGV_CASES` and `cli-argv.main.json` are frozen: never append to them. To add a command line, write `__fixtures__/cli-argv/<name>.json` with just `{ "argv": [...] }`; then fill it in, or refresh every fixture after an intended change, with `IFCSHEET_CLI_FIXTURE_UPDATE=1 pnpm --filter @bimvoice/ifcsheet exec vitest run src/cli-registry.test.ts`, and review the diff.
 
 **Translations** (`apps/viewer/src/i18n/`)
 - New strings go in a NEW catalogue pair `catalogues/<feature>.en.ts` and `<feature>.ro.ts`, registered in the sub-barrel for its first letter: `barrels/en-a-e.ts`, `en-f-l.ts`, `en-m-r.ts`, `en-s-z.ts`; `barrels/ro-a-l.ts`, `ro-m-z.ts`.
 - Never define a key in two catalogues of one language; `catalogues-disjoint.test.ts` fails on it.
-- Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`.
+- Romanian coverage is gated by `locales/ro.test.ts` and `face-keys.ts`. A plural needs `one`, `few` and `other` in `ro`. To widen what `ro.test.ts` requires Romanian for, add `i18n/ro-scope/<feature>.ts` exporting `prefixes` and/or `keys` (see `ro-scope/drafting-standards.ts`); its `IN_SCOPE` and `IN_SCOPE_KEYS` lists are frozen. Put a new regression case in a test file of its own, not at the end of `ro.test.ts`.
+- Every English key without Romanian is listed in `scripts/ro-coverage-baseline/<namespace>.txt` (one file per key namespace, the part before the first dot), and the list only shrinks. After translating keys, run `pnpm lint:ro-coverage-baseline` and commit what it rewrites; never edit those files by hand.
 
 **A new project field** (`apps/viewer/src/project/fields/`; the steps are in the header of `index.ts`)
-- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`, then append the import and entry at the END of `DOCUMENT_FIELD_DEFS` in `index.ts`.
+- Add `<key>.ts` (the field, its reader, its type via `declare module '../types' { interface ProjectFieldTypes { ... } }`) and `<key>.sample.ts`. In `<key>.ts`, register it: `export const registeredFields = [myField] as const;` and `declare module './registered' { interface RegisteredFieldKeys { myKey: true } }` (see `germany-permit.ts`). `registered.ts` finds the file; edit no list. Never add to `DOCUMENT_FIELD_DEFS` in `index.ts`: that list is frozen and `fields.test.ts` pins it.
+- A field that a step of the drafting undo stack must put back (a standards pack, a dialog or a command sets it) carries `heldByUndo: true` on its definition (see `germanyLandField`). `FROZEN_STEP_FIELDS` in `drafting/draft-store.ts` is frozen; never add to it.
 - Never reorder existing fields and never add to `read-order.ts`: key order decides which bad field a file is refused for and what `projectFingerprint` hashes.
+
+**A new drafting command**
+- Add `apps/viewer/src/drafting/commands/<name>.command.ts` exporting `draftCommands: readonly DraftCommandDef[]` (see `underlay.command.ts`). `registry.ts` finds every `*.command.ts`; its list is frozen, never edit it. A command id or typed name already taken throws when the registry loads.
+
+**A new library (`.bvlib`) kind** (`apps/viewer/src/catalogue/`; the header of `registered-kinds.ts` has the steps)
+- Add `kinds/<key>.ts` exporting `registeredCatalogueKinds = [defineCatalogueKind({ key, empty, read, merge, fromProject, applyToProject })]` and `declare module '../registered-kinds' { interface RegisteredCatalogueData { myKey: MyItem[] } }` (see `kinds/classification-mappings.ts`). `registered-kinds.ts` finds the file; edit no list in `catalogue-file.ts`, `catalogue-merge.ts` or `catalogue-store.ts`. `FROZEN_CATALOGUE_KINDS` is frozen and `registered-kinds.test.ts` pins the assembled order. Registered kinds come after the frozen ones, by key.
+- A registered kind is counted by its list's length, exported whole, and merged on its own. One that needs a count of its own, a cut-down export or references to another kind is not supported yet: extend the registry first. Its dialog label `library.kind.<key>` goes in its own i18n catalogue file, and the project file needs its own field (above).
+- Not registries, on purpose: schedule kinds (the kind is a union in the engine's reader, and the dispatch, layout hooks and exports are five differently shaped chains, not one list) and the viewport content kinds in `SheetPaper.tsx` and `useSheetContent.ts` (four kinds, the last added 2026-10-19, and each is a typed field of `ViewportContent`).
 
 **A new drawer section**
 - Add a file in `apps/viewer/src/components/viewer/wall/drawer-sections/` and one import plus one entry in its `index.ts` (alphabetical). Do not edit `ProjectDrawer.tsx`.
+
+**A new e2e spec in the viewer lane**
+- Put the line `// e2e-lane: viewer-e2e` under the licence header of `tests/e2e/<name>.e2e.spec.ts` (see `hatch-card-452.e2e.spec.ts`); `playwright.config.ts` reads it for both `viewer-e2e` and `viewer-e2e-ci`. `FROZEN_VIEWER_E2E` there is frozen; never add to it. Check with `npx playwright test --list --project=viewer-e2e`.
 
 **Import guards**
 - `apps/viewer/src/drafting/session-imports.test.ts` forbids the drafting session from reaching the issue pipeline (`/issue/`), the sheet UI (`components/viewer/wall|sheets/`), `react-dom` and `fflate`. A shared registry such as `project/fields/` must import only light, pure modules: #347 tripped the guard through `issue/file.ts`.

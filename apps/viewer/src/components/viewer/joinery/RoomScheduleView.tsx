@@ -11,7 +11,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n';
-import { layoutRoomSchedule } from '@/joinery/room-schedule-layout';
+import { layoutRoomSchedule } from '@bimvoice/ifcsheet';
 import type { ProjectSchedule } from '@/project/types';
 import { ScheduleExportButtons } from '../wall/ScheduleExportButtons';
 import { TAB_EXPORT } from '../wall/wall-type';

@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { boqSayFor, computeBoq, newArticle, type BoqElement } from '@bimvoice/ifcsheet';
 import { sheetFormat } from '@bimvoice/ifcsheet/names';
-import { layoutBoq, type BoqSheetLabels } from './boq-layout';
+import { layoutBoq, type BoqSheetLabels } from '@bimvoice/ifcsheet';
 
 const DOOR: BoqElement = {
   modelId: 'm', expressId: 1, globalId: 'g1', name: 'D1', ifcClass: 'IfcDoor', predefinedType: null, typeClass: 'IfcDoorType', typeName: 'Door',

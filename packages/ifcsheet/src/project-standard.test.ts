@@ -77,3 +77,18 @@ describe('buildStandard', () => {
     expect(buildStandard(undefined, facts)?.titleBlockTemplate?.items[0]).toMatchObject({ text: 'Mine' });
   });
 });
+
+describe('the opening-line convention of the elevations (#587)', () => {
+  it('a project\'s setting is read, one it does not know is not, and the build takes it', () => {
+    expect(readProjectFile(file({ openingLines: 'hinge' })).openingLines).toBe('hinge');
+    expect(readProjectFile(file({ openingLines: 'handle' })).openingLines).toBe('handle');
+    expect(readProjectFile(file({})).openingLines).toBeUndefined();
+    expect(readProjectFile(file({ openingLines: 'sideways' })).openingLines).toBeUndefined();
+    expect(buildStandard(undefined, readProjectFile(file({ openingLines: 'hinge' })))?.openingLines).toBe('hinge');
+  });
+
+  it('a standard named with --standard sets it, as installing one does in the app, over the project\'s', () => {
+    expect(buildStandard('ro', readProjectFile(file({ openingLines: 'hinge' })))?.openingLines).toBe('handle');
+    expect(buildStandard(undefined, undefined)?.openingLines).toBeUndefined();
+  });
+});

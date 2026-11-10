@@ -11,13 +11,20 @@
 import type { TranslationKey } from '@/i18n';
 import type { TagFieldName } from '@/catalogue/types';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
-import type { ViewElement } from '@/labels/view-elements';
-import type { PlanPart } from '@/dimall/types';
-import type { RoomOfPlan } from '@/tagall/footprint';
+import type { ViewElement } from '@bimvoice/ifcsheet';
+import type { PlanPart } from '@bimvoice/ifcsheet';
+import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { ProjectView } from '@/project/types';
-import type { Box } from '../cross-ref-marks';
+import type { ObstacleBox as Box } from '@bimvoice/ifcsheet';
 import type { ElementBox } from '../dimension-anchor';
 import type { DraftEntity, DraftShape, LevelRef, Pt } from '../types';
+
+/** A line of the generated drawing picked by a command: its element and where it lies (drawing space). */
+export interface ModelLinePick {
+  globalId: string;
+  a: Pt;
+  b: Pt;
+}
 
 export type StepResult = 'continue' | 'done';
 
@@ -65,6 +72,8 @@ export interface DraftContext {
   planObstacles(): Box[];
   /** The rooms of the plan in front. */
   rooms(): RoomOfPlan[];
+  /** Every line the plan's drawing carries (cut, projected and hidden), drawing space: what a dimension inside a room keeps its figure and its line off. Absent: none. */
+  planLines?(): { a: Pt; b: Pt }[];
   /** +1, or −1 when the drawing is mirrored on screen (a user CCW angle is CW in drawing space). */
   orientation: 1 | -1;
   settings: DraftSettings;
@@ -74,6 +83,8 @@ export interface DraftContext {
 
 export interface DraftSettings {
   filletRadius: number;
+  /** CHAMFER: how far along each line the corner is cut. */
+  chamferDistance: number;
   offsetDistance: number | null;
   /** Annotation text height, model metres. */
   textHeight: number;
@@ -123,12 +134,22 @@ export interface DraftCommand {
   basePoint(): Pt | null;
   onPoint?(p: Pt): StepResult;
   onPick?(entity: DraftEntity, at: Pt): StepResult;
+  /** A pick step that found no drafted entity under the click: the model's drawing line there, if the command works on those (TRIM, EXTEND). */
+  onPickModelLine?(line: ModelLinePick, at: Pt): StepResult;
   /** A bare typed number when the step wants a value (radius, angle, distance) rather than a point. */
   wantsValue?(): boolean;
   onValue?(value: number): StepResult;
   /** The step wants free text (a note, a label): the whole line goes to `onText`. */
   wantsText?(): boolean;
   onText?(text: string): StepResult;
+  /** Where the words the step wants print (drawing space): the view opens its text editor there, unless AutoCAD mode keeps them in the command line (#168). */
+  textAt?(): Pt | null;
+  /** When the words follow a leader: the point its last segment runs from, so the editor sits on the side of the end where the words print. */
+  textFrom?(): Pt | null;
+  /** A one-click answer the step offers on the drawing beside `at` (a Note's "No bend"): pressing it is Enter. */
+  shortcut?(): { key: TranslationKey; at: Pt } | null;
+  /** Done (`endCommand`): finish with what is drawn so far. Without it, Done is Enter, and a step Enter only advances is cancelled. */
+  onDone?(): StepResult;
   /** A typed keyword (e.g. "C" to close); `undefined` if not understood. */
   onKeyword?(word: string): StepResult | undefined;
   onEnter?(): StepResult;

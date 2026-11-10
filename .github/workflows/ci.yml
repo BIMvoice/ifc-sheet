@@ -44,12 +44,24 @@
 #     of compiling it;
 #   - turbo's local cache (.turbo/cache), keyed on pnpm-lock.yaml and the
 #     commit, written only by the Typecheck job on a push to main and read by
-#     every job that runs turbo. Before it is saved it is cut down to the tasks
-#     that run produced, and the @ifc-lite/wasm task is dropped so a turbo hit
-#     can never put an older wasm build over this run's artifact. GITHUB_SHA is
-#     a build input of apps/viewer only (apps/viewer/turbo.json). As a root
-#     `build` input it made every task hash unique per run, so this cache never
-#     hit and each job repeated the ~85 s package build.
+#     every job that runs turbo (Lint and Script tests did not read it and
+#     rebuilt every package, about 75 s each). Before it is saved it is cut
+#     down to the tasks that run produced, and the @ifc-lite/wasm task is
+#     dropped so a turbo hit can never put an older wasm build over this run's
+#     artifact. GITHUB_SHA is a build input of apps/viewer only
+#     (apps/viewer/turbo.json). As a root `build` input it made every task hash
+#     unique per run, so this cache never hit and each job repeated the ~85 s
+#     package build.
+#
+# What runs where. A pull request runs the jobs its changes select (above); a
+# merge-queue entry and a push to main run every job with the full package set.
+# So everything a pull request may skip still runs before the code reaches
+# main: in the merge queue once it is on, and until then in the push-to-main
+# run. With the queue on, the push-to-main run repeats what the queue already
+# tested on the same tree; it stays for now because it is also the only run
+# that saves the turbo cache and Rust's cargo cache under main, where pull
+# requests can read them (a cache saved in the queue's temporary branch is not
+# visible to them). Dropping it needs a cache-only job on main first.
 #
 # No secrets are used, so Dependabot and fork pull requests run the same checks.
 # Nothing here is continue-on-error: a failing test is a red check.
@@ -72,8 +84,17 @@
 # something) whenever `changes` reports code, that is, on anything but a
 # docs-only pull request, and on every push to main.
 #
-# Deliberately out of scope for now (follow-up): the other scripts/check-*
-# gates (check-refwalk-guards, check-api-surface, the docs checks) and the
+# Also run, directly, in the gates job (nothing to build): check-refwalk-guards
+# and check-csv-escaper-copies.
+# Run in the Script tests job, which builds the packages first: the doc code
+# samples, check:bim-globals and check:templates (#563 item 3).
+#
+# Deliberately left out: check-api-surface, the generated doc regions and the
+# package READMEs. This fork publishes no package (every one is private), so the
+# API snapshot is an empty object, the README check has nothing to check, and the
+# regenerated package table in docs/api/typescript.md would come out empty: each
+# needs a decision on what is published first. Also out of
+# scope for now (follow-up): the other scripts/check-* gates and the
 # scripts/*.test.mjs files that the "Script tests" job leaves out (listed with
 # reasons above that job). Only check-module-size, check-test-wiring and
 # check-source-text-assertions are compared against the base.
@@ -247,10 +268,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -313,10 +331,17 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
+      - uses: ./.github/actions/download-wasm-pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       - run: pnpm turbo run build --filter='./packages/*'
       - run: pnpm lint
 
@@ -343,10 +368,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -409,7 +431,13 @@ jobs:
       TEST_SHARD: ${{ matrix.shard }}
       TEST_SHARDS: 8
       # Test files already run in separate processes; the runner has 4 CPUs.
-      TEST_CONCURRENCY: 2
+      # Most of a file's time is starting its process and loading modules, not
+      # its tests: going from 1 to 2 made the eight shards 1.69 times faster
+      # (9344 s to 5535 s of test step) while the same 674 top-level tests in
+      # shard 0 took no longer. 3, not 4: each test process also runs its
+      # module-hook thread, and the timing-bound tests are the first to fail
+      # when the CPUs are short.
+      TEST_CONCURRENCY: 3
     steps:
       - uses: actions/checkout@v7
 
@@ -422,10 +450,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -467,10 +492,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
-        with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+      - uses: ./.github/actions/download-wasm-pkg
 
       - name: Restore the turbo cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -490,6 +512,10 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # pull-requests: read lets the no-stack step list the open PRs and their commits.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -535,6 +561,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/check-wasm-test-skip.mjs
 
+      - name: The fixture-test-skip check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-fixture-test-skip.test.mjs
+
+      - name: Tests that read tests/models skip without it
+        if: ${{ !cancelled() }}
+        run: node scripts/check-fixture-test-skip.mjs
+
       - name: The changeset-required check itself
         if: ${{ !cancelled() }}
         run: node --test scripts/check-changeset-required.test.mjs
@@ -545,6 +579,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node scripts/check-changeset-required.mjs --base "$BASE_SHA"
 
+      - name: Added source files carry the MPL-2.0 header
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node scripts/check-license-header.mjs --base "$BASE_SHA"
+
       - name: Nothing outside the allowlist can be published to npm
         if: ${{ !cancelled() }}
         run: node scripts/check-publish-allowlist.mjs
@@ -552,6 +592,36 @@ jobs:
       - name: Changesets name workspace packages
         if: ${{ !cancelled() }}
         run: node scripts/check-changesets.mjs
+
+      - name: The no-stack check itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/check-no-stack.test.mjs
+
+      # Fails a PR whose base is not main or that carries another open PR's
+      # commits (#561). On merge_group it skips with a log line. Add this
+      # job's check to the main ruleset by hand: a maintainer does that.
+      - name: No stacked pull requests
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: node scripts/check-no-stack.mjs
+
+      - name: The queue guard decision itself
+        if: ${{ !cancelled() }}
+        run: node --test scripts/queue-guard.test.mjs
+
+      # #563 item 3: gates that existed but no workflow ran.
+      - name: Every file-supplied reference walk is bounded
+        if: ${{ !cancelled() }}
+        run: node scripts/check-refwalk-guards.mjs
+
+      - name: No new copy of the CSV escaper
+        if: ${{ !cancelled() }}
+        run: node scripts/check-csv-escaper-copies.mjs
 
   # Runs the scripts/*.test.mjs files listed below when `changes` reports code
   # (anything but a docs-only pull request, and every push to main). It is part
@@ -597,12 +667,31 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
+      - uses: ./.github/actions/download-wasm-pkg
+
+      - name: Restore the turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: wasm-pkg
-          path: packages/wasm/pkg
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       # Some of the tests import packages/*/dist and the wasm runtime.
       - run: pnpm turbo run build --filter='./packages/*'
+
+      # #563 item 3: gates that need the packages built and ran in no workflow.
+      - name: Docs code samples typecheck
+        run: node scripts/docs/check-doc-samples.mjs
+
+      - name: bim-globals.d.ts matches NAMESPACE_SCHEMAS
+        if: ${{ !cancelled() }}
+        run: node scripts/generate-bim-globals.mjs --check
+
+      - name: Built-in script templates typecheck against it
+        if: ${{ !cancelled() }}
+        run: pnpm check:templates
 
       # Every file runs in its own `node --test` process, four at a time, and
       # every file runs even when another fails, so one run names all. `q` only
@@ -632,12 +721,14 @@ jobs:
           q --test scripts/check-collab-room-model-target.test.mjs
           q --test scripts/check-css-vars.test.mjs
           q --test scripts/check-csv-escaper-copies.test.mjs
+          q --test scripts/check-house-rules.test.mjs
           q --test scripts/check-i18n-literals.test.mjs
           q --test scripts/check-icon-button-adoption.test.mjs
           q --test scripts/check-isolate-expansion-routing.test.mjs
           q --test scripts/check-jsx-a11y.test.mjs
           q --test scripts/check-lint-ran.test.mjs
           q --test scripts/check-publish-allowlist.test.mjs
+          q --test scripts/check-license-header.test.mjs
           q --test scripts/check-loader-hook-specifier-match.test.mjs
           q --test scripts/check-module-size.test.mjs
           q --test scripts/check-overlay-palette.test.mjs

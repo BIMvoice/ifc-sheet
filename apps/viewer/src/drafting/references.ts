@@ -72,6 +72,8 @@ export function pickModelElement(drawing: Drawing2D, set: ReferenceSet, p: Pt, t
   const min = { x: p.x - tolerance, y: p.y - tolerance };
   const max = { x: p.x + tolerance, y: p.y + tolerance };
   for (const i of set.index.query(min, max)) {
+    // A line with no owner (a DXF underlay's, `dxf-underlay-snap.ts`) is not a model element.
+    if (set.owners[i] < 0) continue;
     const d = nearestOnShape(set.shapes[i], p).dist;
     if (d <= tolerance && (!nearest || d < nearest.d)) nearest = { id: set.owners[i], d };
   }

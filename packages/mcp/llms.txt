@@ -20,12 +20,13 @@ Every path an `ifcsheet_*` tool reads or writes must lie inside `--allow`. The t
 ## Tools
 
 - `ifcsheet_open_model`: parse an IFC (`file_path` or `ifc_base64`); returns `model_id`, storeys with elevations, counts and the building's extent.
-- `ifcsheet_check_readiness`: what the model lacks that the drawings read (storeys, rooms, materials, quantities, unique GlobalIds); `ready` and the findings.
+- `ifcsheet_check_readiness`: what the model lacks that the drawings read (storeys, rooms, materials, quantities, unique GlobalIds); `ready` and the findings. With `ids: "byggesaksbim"`, or a project (`project_path`/`project_json`) that opted in, also Norway's ByggesaksBIM requirements (the same findings as `ifcsheet check --ids byggesaksbim`). The opt-in of an earlier `ifcsheet_load_project` is not remembered by this tool: pass `project_path`/`project_json` or `ids` on this call. A model that is not IFC4 gets one `byggesaksbimSchema` finding; a check that cannot run is a tool error.
 - `ifcsheet_generate_set`: the default set (a plan per storey, elevations, proposed sections); returns `document_id`, sheets, views.
 - `ifcsheet_apply_template`: lay the set out by a `.bvset` template; returns a new `document_id` and the notes of what its rules met.
 - `ifcsheet_load_project`: a set from a saved `.ifclite-project.json` on an opened model.
 - `ifcsheet_list_sheets`: the sheets (number, name, paper, views with slot and scale), the views not placed, the title block fields.
 - `ifcsheet_add_view`: add a plan (by `level`), elevation (by `direction`), section (by `axis` and `offset_m`, or a line `from`/`to`) or axonometric (by `preset`, optionally cut away); not on a sheet until placed.
+- `ifcsheet_annotate`: "Annotate the set": dimension strings and tags on the plans, level marks on the elevations and sections (`commands`, or a project `preset`; `tag_parts`, `views`, `dry_run`); drafted into the set, so exports print them; returns per view what was added and what was left out and why; one undo step.
 - `ifcsheet_place_view`: put a view on a sheet at a scale; without `sheet` the engine's rule chooses or makes one; errors when the views do not fit.
 - `ifcsheet_set_title_block`: set title block fields, project-wide or for one sheet (client, drawnBy, checkedBy, date, phase, projectNumber, projectManager, designer, address...); returns the fields in force and the ones that changed.
 - `ifcsheet_renumber`: renumber the sheets by a scheme (`default` A-101 style, `sequential` A01, A02...).

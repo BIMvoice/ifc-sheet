@@ -50,6 +50,4 @@ export const boqRo = {
   'boq.view.place': 'Așezați sumarul pe o planșă',
   'boq.view.placed': 'Sumarul este pe planșa {number}.',
   'boq.view.noModel': 'Deschideți un model pentru a aduna cantitățile.',
-  'ready.boqMissingQuantity': '{count} elemente nu au o cantitate pe care o ia un articol din antemăsurătoare: {list}.',
-  'ready.boqMissingQuantity.effect': 'Antemăsurătoarea le lasă în afara totalurilor acelor articole. Nu sunt numărate ca zero: cantitățile articolelor sunt mai mici cu cât dețin aceste elemente.',
 } as const satisfies Record<string, TranslationValue>;

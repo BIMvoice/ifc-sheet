@@ -14,7 +14,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { drawingToScreen, worldToDrawing } from '@/drafting/frame';
-import { flattenShape, placeSymbol } from '@/drafting/symbols';
+import { sitePlanEn } from '@/i18n/catalogues/site-plan.en';
+import { sheetTablesRo } from '@/i18n/catalogues/sheet-tables.ro';
+import { flattenShape, placeSymbol, liveSymbol, COORDINATE_LABELS, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, gridNorthOf, trueNorthOf } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt, SymbolInstanceShape } from '@/drafting/types';
 import { selectAnchorGeoref } from '@/lib/geo/select-anchor-georef';
 import { annotationAtFactor } from '@/project/viewport-annotation';
@@ -22,9 +24,11 @@ import type { ProjectView, SheetViewport } from '@/project/types';
 import { viewportTransform } from '@/components/viewer/sheets/SheetPaper';
 import { parseSiteFixture, SITE_FIXTURE } from '@/test/site-fixture';
 import { drawingPointToMap, type MapAnchor } from './map-coordinates';
-import { liveSymbol, COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID } from './live-symbols';
 import { liveSymbolContext, siteNorth, type SiteFrame } from './site-frame';
-import { gridNorthOf, trueNorthOf } from './true-north';
+import { northOfStore } from '@bimvoice/ifcsheet/true-north';
+import { northDegrees } from '@bimvoice/ifcsheet/viewport-marks';
+import { IfcParser } from '@ifc-lite/parser';
+import { siteFixtureStep } from '@/test/site-fixture';
 import { plotAreaOf, PLOT_BOUNDARY_LAYER, ringArea, setbacks } from './plot';
 import { keyPlanHighlight, viewportExtent } from './key-plan';
 import { footprintRings, offsetRing, outerRings } from './footprint';
@@ -105,6 +109,26 @@ describe('grid north when the model states no TrueNorth (#135 review)', () => {
     assert.deepEqual(siteNorth(null, null), { north: null, northSource: null });
     // A map conversion that states no X axis is unrotated: grid north is project +Y.
     assert.deepEqual(gridNorthOf(undefined, undefined), { x: 0, y: 1 });
+  });
+});
+
+describe('a viewport\'s north arrow on a model with a map conversion and no TrueNorth', () => {
+  it('points at grid north, on the screen\'s rule and the engine\'s alike', async () => {
+    // The fixture with no TrueNorth: the last attribute of both contexts ('Model' #12, 'Plan' #13) -> $.
+    const step = siteFixtureStep().replace('1.0E-5,#11,#12);', '1.0E-5,#11,$);').replace('1.0E-5,#11,#13);', '1.0E-5,#11,$);');
+    assert.notEqual(step, siteFixtureStep());
+    const bytes = new TextEncoder().encode(step);
+    const store = await new IfcParser().parseColumnar(bytes.buffer as ArrayBuffer, { disableWorkerScan: true });
+    assert.equal(trueNorthOf(store), null);
+    const selection = selectAnchorGeoref({ models: new Map(), legacyDataStore: store, georefMutations: new Map() });
+    assert.ok(selection);
+    const screen = siteNorth(null, { eff: selection.eff });
+    const engine = northOfStore(store);
+    assert.equal(screen.northSource, 'gridNorth');
+    assert.ok(engine && screen.north);
+    assert.ok(Math.abs(engine.x - screen.north.x) < 1e-9 && Math.abs(engine.y - screen.north.y) < 1e-9, 'one rule');
+    // Grid north of a map rotated 12 degrees lies 12 degrees clockwise of project +Y.
+    assert.ok(Math.abs((northDegrees({ axis: 'y' }, engine) ?? NaN) + 12) < 1e-9);
   });
 });
 
@@ -298,5 +322,15 @@ describe('footprint from the ground storey cut (#48)', () => {
     const rings = footprintRings([wallRing, furniture], (r) => r);
     assert.equal(rings.length, 1);
     assert.ok(Math.abs(ringArea(rings[0]) - 60) < 1e-9);
+  });
+});
+
+describe('the coordinate labels the engine prints (#479)', () => {
+  it('read as the app\'s catalogues word them, in both languages', () => {
+    const word = (catalogue: Record<string, string>, key: string, value: string) => catalogue[key].replace('{value}', value);
+    for (const catalogue of [sitePlanEn, sheetTablesRo] as Record<string, string>[]) {
+      assert.deepEqual(COORDINATE_LABELS('map', '1', '2'), [word(catalogue, 'site.coordinates.e', '1'), word(catalogue, 'site.coordinates.n', '2')]);
+      assert.deepEqual(COORDINATE_LABELS('local', '1', '2'), [word(catalogue, 'site.coordinates.x', '1'), word(catalogue, 'site.coordinates.y', '2')]);
+    }
   });
 });

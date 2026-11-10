@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import ts from 'typescript';
+import { FINISHES_WORDS_EN, JOINERY_WORDS_EN, TAKEOFF_WORDS_EN, TYPES_WORDS_EN, URBAN_WORDS_EN } from '@bimvoice/ifcsheet';
 import { en } from './en';
 import { KEY_COMMANDS } from '../lib/commands/keyboard-commands';
 import { shownOnTheWall } from '../lib/commands/wall-key-commands';
@@ -31,11 +32,14 @@ const FACE_SOURCES = [
   // #314: the drawing command line (its prompts, results and errors), the commands behind it, and the Info dialog the Keyboard button opens. Command names (LINE, TAGALL) are typed aliases and stay as they are.
   'drafting', 'components/viewer/drafting/CommandLine.tsx', 'components/viewer/KeyboardShortcutsDialog.tsx', 'components/viewer/KeyboardShortcutsDialogTabs.tsx', 'components/viewer/KeyboardShortcutsWhatsNewTab.tsx', 'components/viewer/ShortcutsTab.tsx', 'components/tours/LearnTab.tsx', 'project/model-command-bridge.ts', 'project/useLinkedElementSync.ts',
 ];
+/** #707: the command-line planners that moved into the engine return message keys the app then says (DIMALL, TAGALL, LEVELALL), so their folders are face sources too. */
+const ENGINE_FACE_SOURCES = ['annotate', 'dimall', 'tagall', 'levelall'];
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
-function faceFiles(rel: string): string[] {
-  const path = join(SRC_ROOT, rel);
+const ENGINE_ROOT = fileURLToPath(new URL('../../../../packages/ifcsheet/src/', import.meta.url));
+function faceFiles(rel: string, root = SRC_ROOT): string[] {
+  const path = join(root, rel);
   if (/\.tsx?$/.test(path)) return [path];
-  return readdirSync(path, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? faceFiles(join(rel, e.name)) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(path, e.name)] : []));
+  return readdirSync(path, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? faceFiles(join(rel, e.name), root) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(path, e.name)] : []));
 }
 
 /**
@@ -70,10 +74,43 @@ export function untranslatedFaceKeys(cat: Readonly<object>): string[] {
       }
     }
   }
+  for (const rel of ENGINE_FACE_SOURCES) {
+    for (const file of faceFiles(rel, ENGINE_ROOT)) {
+      for (const key of keysNamedBy(file)) {
+        if (Object.hasOwn(cat, key)) continue;
+        found.set(key, (found.get(key) ?? new Set()).add(`packages/ifcsheet/src/${file.slice(ENGINE_ROOT.length)}`));
+      }
+    }
+  }
   // #314: the Shortcuts tab builds its rows from a table, so no source file names their labels; the rows the Wall lists are read off the table itself.
   for (const row of shownOnTheWall(KEY_COMMANDS)) {
     if (Object.hasOwn(cat, row.labelKey)) continue;
     found.set(row.labelKey, (found.get(row.labelKey) ?? new Set()).add('lib/commands/keyboard-commands.ts'));
+  }
+  // #581: the finishes table's words come from the engine's word table, so no face file names them; its keys are read off the table.
+  for (const key of Object.keys(FINISHES_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/finishes-words.ts'));
+  }
+  // #581: likewise the material takeoff's words (`takeoff.*`, and `measuredQty.*` for the figures measured from geometry).
+  for (const key of Object.keys(TAKEOFF_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/takeoff-words.ts'));
+  }
+  // #581: likewise the quantities by type's words (`typeQty.*`).
+  for (const key of Object.keys(TYPES_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/type-quantities-words.ts'));
+  }
+  // #581: and the urban indicators' words (`urban.*`), which the engine words for `ifcsheet build`.
+  for (const key of Object.keys(URBAN_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/urban-words.ts'));
+  }
+  // #581: and the joinery schedules' words (`schedule.row.*`, `joineryRow.varies`, `joinery.op.*`), which the engine words for `ifcsheet build`.
+  for (const key of Object.keys(JOINERY_WORDS_EN)) {
+    if (!Object.hasOwn(en, key) || Object.hasOwn(cat, key)) continue;
+    found.set(key, (found.get(key) ?? new Set()).add('packages/ifcsheet/src/joinery-words.ts'));
   }
   return [...found].map(([key, files]) => `${key} (${[...files].join(', ')})`).sort();
 }

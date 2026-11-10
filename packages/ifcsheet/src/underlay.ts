@@ -86,7 +86,12 @@ export function underlayMatrix(u: Placed, toPlane: (p: Point2D) => Point2D): Und
   return [px.x - o.x, px.y - o.y, py.x - o.x, py.y - o.y, o.x, o.y];
 }
 
-export const matrixText = (m: readonly number[]): string => `matrix(${m.map((n) => +n.toFixed(6)).join(' ')})`;
+/**
+ * The matrix as text for both an SVG `transform` attribute and a CSS `transform`: the comma-separated form, since
+ * CSS rejects the space-separated one (the screen layer then drew the picture untransformed at its pixel size).
+ * Nine decimals: a pixel is a thousandth of a millimetre on paper and the picture is thousands of pixels wide.
+ */
+export const matrixText = (m: readonly number[]): string => `matrix(${m.map((n) => +n.toFixed(9)).join(', ')})`;
 
 /** Whether the underlay is on the paper of this sheet. */
 export const printsOnSheet = (u: Pick<ViewUnderlay, 'printOnSheets'>, sheetId: string): boolean => u.printOnSheets?.includes(sheetId) === true;
@@ -107,3 +112,8 @@ export function omittedUnderlayViewNames(
   const shown = new Set((sheet.viewports ?? []).map((vp) => vp.viewId));
   return views.filter((v) => shown.has(v.id) && printedUnderlays(all, v.id, sheet.id).length > 0).map((v) => v.name);
 }
+
+// The DXF linework laid under a plan view (#547) is its own module; this subpath carries it too.
+export * from './dxf-underlay.js';
+export type { ConvertedDxfText, DxfLabel } from './dxf-underlay-text.js';
+export * from './dxf-underlay-georef.js';

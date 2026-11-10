@@ -9,7 +9,7 @@
  * (`danglingAnnotations`, #298).
  */
 
-import { orphanedOverrides } from '@bimvoice/ifcsheet';
+import { orphanedJoineryOverrides, orphanedOverrides } from '@bimvoice/ifcsheet';
 import type { CheckInput, Finding } from './types';
 
 export function orphanedCellOverrides(input: CheckInput): Finding[] {
@@ -20,4 +20,19 @@ export function orphanedCellOverrides(input: CheckInput): Finding[] {
       params: { count: o.count, schedule: schedule.name, element: o.about ? `"${o.about}" · ${o.guid}` : o.guid, sheet: sheet?.number ?? '' },
     }));
   });
+}
+
+/**
+ * A value typed over a cell of a door and window schedule (#446) whose type is no longer in the model (or the catalogue). One finding per type,
+ * named by what the type was called when the value was typed, on the first sheet that shows a joinery schedule. The values are kept in case a newer
+ * model brings the type back; the finding's remedy drops them.
+ */
+export function orphanedJoineryCells(input: CheckInput): Finding[] {
+  if (!input.joinery) return [];
+  const holder = (input.schedules ?? []).find((s) => (s.kind === 'door' || s.kind === 'window' || s.kind === 'all') && input.sheets.some((sh) => (sh.viewports ?? []).some((vp) => vp.viewId === s.id)));
+  const sheet = holder ? input.sheets.find((s) => (s.viewports ?? []).some((vp) => vp.viewId === holder.id)) : undefined;
+  return orphanedJoineryOverrides(input.joinery.overrides, input.joinery.entries).map((o): Finding => ({
+    kind: 'orphanedJoineryOverride', key: 'check.orphanedJoineryOverride', sheetId: sheet?.id, typeKeys: [o.type], remedies: ['delete'],
+    params: { count: o.count, type: o.about ? `"${o.about}"` : o.type, sheet: sheet?.number ?? '' },
+  }));
 }

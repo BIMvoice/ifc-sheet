@@ -6,7 +6,7 @@
 /** Schedules and lists: readiness, the bill of quantities, list schedules, sub-reports and their checks, joinery, rooms and areas. Add new exports of this area here, not in `../index.ts`. */
 
 // What the model lacks (the counting, `readModelFacts`, is in `/headless` and `/readiness-read`: it loads the parser)
-export { READINESS_EN, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
+export { READINESS_EN, READINESS_RO, describeReadiness, modelReadiness, type ModelFacts, type ReadinessFinding, type ReadinessKind } from '../readiness.js';
 // The bill of quantities (antemasuratoare, #75). Reading it from models is `/project`: it loads the parser.
 export {
   BOQ_QUANTITIES, BOQ_UNITS, BOQ_UNIT_TEXT, COUNT_QUANTITY, MAX_WASTE, boqProblem, boqPropertyNames, hasSelector, newArticle, quantityDimension, readBoqArticle, readBoqArticles, unitDimension,
@@ -19,6 +19,12 @@ export {
 } from '../list-schedule.js';
 export { listFigure, listTableCells, listTableText } from '../list-figures.js';
 export { MAX_LIST_OVERRIDES, clearListOverride, listColumnKey, orphanedOverrides, overrideOf, readListOverrides, setListOverride, withListOverrides, type ListCellOverride } from '../list-overrides.js';
+export { fitFootprint, measureElementSize, meshesByExpressId, placedMeshes, type FootprintFit } from '../element-size.js';
+export {
+  MAX_JOINERY_OVERRIDES, OVERRIDABLE_ROWS, levelRowId, overrideNumbers, clearJoineryOverride, dropJoineryOverrides, isOverridableRow, joineryCellText, joineryOverrideOf, orphanedJoineryOverrides, readJoineryOverrides, setJoineryOverride, typeIdentityOf,
+  type JoineryCellOverride, type OverridableRow, type TypeFacts,
+} from '../joinery-overrides.js';
+export { MARK_ROW, elementMark, entryMarks, markCell, markIndex, markKey, occurrenceMarkFor, tagMark, type MarkInput, type MarkedEntry } from '../element-mark.js';
 export { withListClassification, withOfficeClassification, type ClassifiableListProvider, type ListClassificationContext, type OfficeClassificationAccessor } from '../list-classification.js';
 export { boqLineText, boqNotes, boqTable, boqTableCells, describeBoqProblem, tidy, boqTypeLabel, type BoqCell, type BoqTable } from '../boq-table.js';
 export { csvDelimiter, exportCsv, type ExportCell, type ExportTable, type ScheduleExport } from '../schedule-csv.js';
@@ -39,13 +45,17 @@ export {
   EXTERIOR, INTERIOR, PROPERTY_OPS, filterPropertyNames, isOpenFilter, passesElementFilter, passesPropertyTest, predefinedTypeText, propertyValueText, readPropertyTest,
   type OccurrenceFacts, type PropertyFact, type PropertyOp, type PropertyTest,
 } from '../schedule-filter.js';
+export { MAX_MODEL_ROWS, isModelRowId, modelRowId, modelRowLabel, modelRowNumber, modelRowText, modelRowsOf, readModelRows, type ModelRow } from '../joinery-model-rows.js';
 export {
   MARK_SCHEMES, MAX_START, ROW_IDS, SORTS, applyContent, contentOf, followedTags, orderedRows, readScheduleContent, shownRows, symbolsShown, textRowId,
   type ContentEntry, type RowId, type ScheduleContent, type ScheduleNumbering, type ScheduleSymbols, type ScheduleRows, type ScheduleSort, type SortBy, type TagWrite, type TaggedEntry,
 } from '../schedule-content.js';
 export { doorOperationOf, doorSwingFlips, parseDoorOperation, type DoorOperation, type Dir2 } from '../door-operation.js';
 export {
-  DEFAULT_JOINERY_MAPPING, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
+  CUSTOM_KEYS, MAX_CUSTOM_PROPS, cleanCustomProps, CUSTOM_PSET, customPropNames, customValueOf, fireOf, readCustomProps, thermalOf,
+} from '../joinery-custom-props.js';
+export {
+  DEFAULT_JOINERY_MAPPING, TYPE_ENTRY_PREFIX, fitToElement, normaliseName, readJoineryMapping, resolveMapping,
   type ElementFacts, type JoineryMapping, type MappingMatch, type MappingSource,
 } from '../joinery-mapping.js';
 export {
@@ -63,3 +73,43 @@ export { estimatedAreas, type EstimatedAreas } from '../room-estimates.js';
 // The urban settings of a project file, read by the app and the command line alike (the indicators themselves are `@bimvoice/ifcsheet/urban`, which loads the wasm)
 export { readUrbanSettings } from '../urban-settings-read.js';
 export { RURAL_MAX_LEVELS, RURAL_MAX_SD, ruralReadiness, type RuralScope } from '../readiness.js';
+// The schedules a sheet prints beyond the lists, laid out for paper (#479): the drawing register, the room and area schedule, the bill of quantities.
+export { REGISTER_MIN_TEXT_MM, layoutRegister, layoutRegisterPage, registerFit, registerTable, type RegisterFit, type RegisterLabels } from '../register-layout.js';
+export {
+  SET_ORDER, drawingRegisterRows, holdsRegister, inSetOrder, notDrawingIds, registerFitOn, registerPaper, registerRow, registerRowCache, registerRowsBuilt, registerSheetFit, sharedRegisterRows,
+  type RegisterInput, type RegisterRow,
+} from '../drawing-register.js';
+export { layoutBoq, type BoqSheetLabels } from '../boq-layout.js';
+export { layoutRoomSchedule, roomScheduleCells, type RoomScheduleLabels } from '../room-schedule-layout.js';
+export { summaryItems, summaryTable, type RoomSummaryBlock, type RoomSummaryWords } from '../room-summary-layout.js';
+export { readIssues } from '../issues-read.js';
+export { readRevisions } from '../revision-read.js';
+export type { ChangeReason, ChangedSheet, IssueChangeRecord, IssuedModel, IssuedSheet, ProjectIssue } from '../issue-types.js';
+export { SHEET_WORDS_EN, SHEET_WORDS_RO, registerLabelsOf, roomScheduleLabelsOf, sheetSayFor, type RoomScheduleData, type SheetSay, type SheetWordKey } from '../sheet-words.js';
+// The room finishes schedule (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  SURFACES, coveringArea, coveringPredefinedType, finishLines, hasSharedFinish, roomFinishes, surfaceOf,
+  type CoveringInput, type Finish, type FinishLine, type FinishSource, type RoomFinishes, type RoomInput, type Surface,
+} from '../room-finishes.js';
+export { finishHeader, finishRows, finishTable, layoutRoomFinishes, type RoomFinishLabels } from '../room-finishes-layout.js';
+export { FINISHES_WORDS_EN, FINISHES_WORDS_RO, finishLabelsOf, finishesSayFor, type FinishesSay, type FinishesWordKey } from '../finishes-words.js';
+// The material takeoff (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  elementQuantities, materialShares, takeoffRows,
+  type MaterialShare, type TakeoffElement, type TakeoffRow,
+} from '../material-takeoff.js';
+export { layoutMaterialTakeoff, takeoffTable, type TakeoffLabels } from '../material-takeoff-layout.js';
+export { MEASURED_MARK, marked, measuredCell, measuredNoteItems, type MeasuredWords } from '../measured-marks.js';
+export { TAKEOFF_WORDS_EN, TAKEOFF_WORDS_RO, measuredWordsOf, takeoffLabelsOf, takeoffSayFor, type PluralForms, type TakeoffSay, type TakeoffWordKey } from '../takeoff-words.js';
+// The quantities by type (#581): its rule, its layout and its words. Reading it from models is `/project`.
+export {
+  elementTypeQuantities, totalClassOf, typeQuantities,
+  type ClassTotal, type Totals, type TypeElement, type TypeQuantities, type TypeQuantitiesOptions, type TypeRow,
+} from '../type-quantities.js';
+export { layoutTypeQuantities, typeQuantityLines, typeQuantityTable, type TypeQuantityLabels, type TypeQuantityLine } from '../type-quantities-layout.js';
+// The urban indicators (#581): the layout, the words and the site area they are measured on. Measuring them from models is `/urban`.
+export { layoutUrban, signedLevel, urbanTable, NONE as URBAN_NONE, type UrbanLabels } from '../urban-layout.js';
+export { URBAN_WORDS_EN, URBAN_WORDS_RO, siteSourceNote, urbanLabelsOf, urbanSayFor, type UrbanLabelFacts, type UrbanSay, type UrbanWordKey } from '../urban-words.js';
+export { plotAreaOf, readSiteArea, siteAreaOf, type SiteAreaChoice, type SiteAreaProject, type SiteAreaSource } from '../site-area.js';
+export { TYPES_WORDS_EN, TYPES_WORDS_RO, typeLabelsOf, typesSayFor, type TypesSay, type TypesWordKey } from '../type-quantities-words.js';
+export { JOINERY_WORDS_EN, JOINERY_WORDS_RO, joineryLabelsOf, joinerySayFor, type JoinerySay, type JoineryWordKey } from '../joinery-words.js';

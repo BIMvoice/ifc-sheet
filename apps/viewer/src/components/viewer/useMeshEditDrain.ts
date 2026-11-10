@@ -48,6 +48,9 @@ export interface MeshEditDrainParams {
   lastGeometryLengthRef: MutableRefObject<number>;
   lastGeometryRef: MutableRefObject<MeshData[] | null>;
   processedMeshIdsRef: MutableRefObject<Set<string>>;
+  /** The store's queued edit and update tick as the same snapshot as `geometry` (#154); the live store values when left out. */
+  pendingMeshEdits?: ReturnType<typeof useViewerStore.getState>['pendingMeshEdits'];
+  geometryUpdateTick?: number;
 }
 
 export function useMeshEditDrain(params: MeshEditDrainParams): void {
@@ -56,9 +59,11 @@ export function useMeshEditDrain(params: MeshEditDrainParams): void {
     pendingMeshRemovals, clearPendingMeshRemovals, pruneGeometryMeshes,
     lastGeometryLengthRef, lastGeometryRef, processedMeshIdsRef,
   } = params;
-  const pendingMeshEdits = useViewerStore((s) => s.pendingMeshEdits);
+  const liveEdits = useViewerStore((s) => s.pendingMeshEdits);
+  const liveTick = useViewerStore((s) => s.geometryUpdateTick);
+  const pendingMeshEdits = 'pendingMeshEdits' in params ? params.pendingMeshEdits ?? null : liveEdits;
+  const geometryUpdateTick = params.geometryUpdateTick ?? liveTick;
   const clearPendingMeshEdits = useViewerStore((s) => s.clearPendingMeshEdits);
-  const geometryUpdateTick = useViewerStore((s) => s.geometryUpdateTick);
   /** The tick of the last committed render; see the effect at the bottom. */
   const renderedTickRef = useRef(geometryUpdateTick);
 

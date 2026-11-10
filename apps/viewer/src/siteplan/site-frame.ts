@@ -21,11 +21,11 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
 import { totalYupOffset } from '@/lib/geo/coordinate-frame';
 import type { SectionAxisName, Vec3 } from '@/drafting/frame';
 import type { Pt } from '@/drafting/types';
-import { sheetNumber, type SheetLocale } from '@bimvoice/ifcsheet/names';
+import type { SheetLocale } from '@bimvoice/ifcsheet/names';
 import { useTranslation } from '@/i18n';
-import { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from './true-north';
-import { drawingPointToLocal, drawingPointToMap, type MapAnchor } from './map-coordinates';
-import type { LiveSymbolContext } from './live-symbols';
+import { siteNorth as engineSiteNorth } from '@bimvoice/ifcsheet/true-north';
+import { liveSymbolContext as engineLiveSymbolContext, trueNorthOf, type CoordinateLabeller, type LiveSymbolContext, type PlanDirection } from '@bimvoice/ifcsheet';
+import { drawingPointToMap, type MapAnchor } from './map-coordinates';
 import { useSheetLocale } from '@/project/units-and-numbers';
 
 export interface SiteFrame {
@@ -41,9 +41,9 @@ const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 
 /** The model's TrueNorth, else grid north of its map conversion, else none (project north). */
 export function siteNorth(trueNorth: PlanDirection | null, anchor: Pick<MapAnchor, 'eff'> | null | undefined): Pick<SiteFrame, 'north' | 'northSource'> {
-  if (trueNorth) return { north: trueNorth, northSource: 'trueNorth' };
-  const grid = anchor ? gridNorthOf(anchor.eff.mapConversion.xAxisAbscissa, anchor.eff.mapConversion.xAxisOrdinate) : null;
-  return grid ? { north: grid, northSource: 'gridNorth' } : { north: null, northSource: null };
+  // The engine's rule, fed the anchor's effective (possibly edited) map conversion.
+  const { xAxisAbscissa, xAxisOrdinate } = anchor?.eff.mapConversion ?? {};
+  return engineSiteNorth(trueNorth, anchor ? { abscissa: xAxisAbscissa, ordinate: xAxisOrdinate } : null);
 }
 
 /** The frame of the anchor (or first) model. Recomputed on load and georeference edits only. */
@@ -67,35 +67,22 @@ export function useSiteFrame(): SiteFrame {
 }
 
 /** Builds the coordinate label lines, given how to translate them. */
-export type CoordinateLabeller = (kind: 'map' | 'local', a: string, b: string) => string[];
+export type { CoordinateLabeller };
 
 /**
- * The live-symbol context of one drawing: shown at `scale`, on `plane`.
- * `null` plane (no drawing yet): only the scale is known.
+ * The live-symbol context of one drawing: shown at `scale`, on `plane`. `null` plane (no drawing yet): only the scale is known.
+ * Built by the engine's one function (`site-frame.ts` of `@bimvoice/ifcsheet`), which the PDF of `ifcsheet build` calls too; this adds the
+ * anchor's map coordinates.
  */
 export function liveSymbolContext(
   frame: SiteFrame, plane: SectionPlaneConfig | null | undefined, axis: SectionAxisName, scale: number,
   locale: SheetLocale, label: CoordinateLabeller,
 ): LiveSymbolContext {
-  /** Map coordinates are printed to the centimetre, ungrouped. */
-  const fmt = (v: number) => sheetNumber(locale, v, 2, { group: false });
-  const coordinates = plane
-    ? (p: Pt): string[] => {
-        if (frame.anchor) {
-          const m = drawingPointToMap(plane, p, frame.anchor);
-          return label('map', fmt(m.e), fmt(m.n));
-        }
-        const l = drawingPointToLocal(plane, p, frame.frameOffset);
-        return label('local', fmt(l.x), fmt(l.y));
-      }
-    : null;
-  return {
-    scale,
-    // No north stated: project north (+Y) is the model's only claim.
-    north: plane ? northArrowRotation(plane, axis, frame.north ?? { x: 0, y: 1 }) : null,
-    coordinates,
-    format: (v) => sheetNumber(locale, v, 2, { trim: true }),
-  };
+  const { anchor } = frame;
+  return engineLiveSymbolContext({
+    north: frame.north, frameOffset: frame.frameOffset,
+    ...(anchor ? { mapPoint: (p: SectionPlaneConfig, q: Pt) => { const m = drawingPointToMap(p, q, anchor); return { e: m.e, n: m.n }; } } : {}),
+  }, plane, axis, scale, locale, label);
 }
 
 /** `liveSymbolContext` with the active locale and the coordinate labels translated. */

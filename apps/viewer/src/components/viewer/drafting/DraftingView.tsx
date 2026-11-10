@@ -19,12 +19,8 @@ import { viewPlaneConfig, viewWorkPlane } from '@/project/view-plane-config';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 
 import { FileDown, Layers, Maximize2, Redo2, Undo2 } from 'lucide-react';
-
 import { openStandards } from '@/project/standards-dialog-store';
-
 import { useTranslation } from '@/i18n';
-
-import { cn } from '@/lib/utils';
 
 import { viewportState } from '@/project/viewport-state';
 import { ViewportState } from '../wall/ViewportState';
@@ -34,6 +30,8 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Drawing2DCanvas } from '@/components/viewer/Drawing2DCanvas';
 
 import { useFocusOnFinding } from './useFocusOnFinding';
+import { targetFitTransform, type DraftingTarget } from './drafting-target';
+export type { DraftingTarget };
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 
 import { useViewControls } from '@/hooks/useViewControls';
@@ -46,7 +44,7 @@ import { EMPTY_VIEW_DRAWING, useViewDrawings } from '@/project/view-drawings';
 
 import type { ProjectView } from '@/project/types';
 
-import { referenceSet, referencesIn } from '@/drafting/references';
+import { referencesIn } from '@/drafting/references';
 import { draftsOfView } from '@/drafting/draft-store';
 
 import { redoEarliest, undoLatest } from '@/project/unified-undo';
@@ -54,22 +52,25 @@ import { redoEarliest, undoLatest } from '@/project/unified-undo';
 import {
   attachDraftingView,
   currentLayerId,
+  baseDraftSettings,
+  patchDraftSettings,
   pressEscape,
   runningCommand,
   setCurrentLayer,
-  toggleOrtho,
-  toggleSnap,
   useDraftingSession,
   pickEntity,
   setDraftSelection,
 } from '@/drafting/session';
 import { DraftOverlay } from './DraftOverlay';
+import { SelectionStyleCard } from './SelectionStyleCard';
+import { SnapToggles } from './SnapToggles';
+import { Toggle } from './Toggle';
 
 import { modelHighlight } from './drafting-shapes';
 
 import { useDraftingProviders } from './useDraftingProviders';
 
-import { CommandLine } from './CommandLine';
+import { DraftingPrompt } from './ToolPrompt';
 
 import { gripCursor, useDraftingPointer } from './useDraftingPointer';
 
@@ -79,7 +80,8 @@ import { submitTypedLine } from './typed-line';
 import { DraftPropertiesPanel } from './DraftPropertiesPanel';
 
 import { SelectionBar } from './SelectionBar';
-
+import { ModifyBar } from './ModifyBar';
+import { TurnHandle } from './TurnHandle';
 import { gripsOf } from '@/drafting/grips';
 
 import { grippable } from '@/drafting/section-link';
@@ -93,14 +95,15 @@ import { screenToDrawing } from '@/drafting/frame';
 import { useModelCommandBridge } from './ModelCommandLayer';
 
 import { OpeningSymbolsLayer } from './OpeningSymbolsLayer';
-
 import { CutHatchLayer } from './CutHatchLayer';
-
 import { MembraneLayer } from './MembraneLayer';
+import { OnDrawingText } from './OnDrawingText';
 
 import { RoofPlanLayer } from '../roof/RoofPlanLayer';
 import { GridLayer } from './GridLayer';
-import { UnderlayLayer } from './UnderlayLayer';
+import { ContourLabelsLayer, useContourOverlays, useViewDrawing } from './useViewDrawing';
+import { UnderlayLayer, useSnapReferences } from './UnderlayLayer';
+import { RegionSelectHint } from './RegionSelectHint';
 import { UnderlayPanel } from './UnderlayPanel';
 
 import { roofAtPoint } from '@/project/roof-plan';
@@ -119,16 +122,15 @@ import { graphicStandardOf } from '@/drafting/graphic-standard';
 import { viewMaterials } from '@/project/material-resolver';
 
 import { membraneOverlays } from '@/project/membrane-overlays';
-
 import { partHostType } from '@/project/part-host';
 
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
-import { atDetailLevel, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
 import { cutHatches, hiddenClasses, styledDrawing } from '@/project/view-graphics';
 import { materialOf } from '@/project/view-styler';
 import { useViewCanvasStyler } from './useViewCanvasStyler';
 import { renderIdGlobalId } from '@/project/element-guid';
-import { withoutHiddenElementMeshes, withoutHiddenElements } from '@/project/view-element-filter';
+import { withoutHiddenElementMeshes } from '@/project/view-element-filter';
 import { useHiddenElementsUi } from './useHiddenElementsUi';
 import { ElementGraphicsBar } from './ElementGraphicsBar';
 import { HiddenGhostLayer } from './HiddenGhostLayer';
@@ -140,14 +142,13 @@ import { useCommandRuntime } from '@/lib/commands/modeling/runtime';
 import { useLiveSymbolContext } from '@/siteplan/site-frame';
 import { DEFAULT_VIEW_SCALE } from '@/project/viewport-annotation';
 
-
 const NO_SHEET_TRANSFORM = { current: null };
 
 /**
  * `bare`: the drawing alone, as IfcSheet shows it inside a sheet: no toolbar,
  * no property grid; only the prompt line stays, it carries the tools' choices.
  */
-export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean }) {
+export function DraftingView({ view, bare = false, target }: { view: Exclude<ProjectView, { kind: '3d' }>; bare?: boolean; target?: DraftingTarget }) {
   const { t } = useTranslation();
   const entry = useViewDrawings((s) => s.byView[view.id]) ?? EMPTY_VIEW_DRAWING;
   const { drawing, status } = entry;
@@ -158,10 +159,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const selection = useDraftingSession((s) => s.selection);
   const ortho = useDraftingSession((s) => s.ortho || s.orthoHeld);
   const orthoToggled = useDraftingSession((s) => s.ortho);
-  const snap = useDraftingSession((s) => s.snap);
   useDraftingSession((s) => s.revision);
+  const dimAlign = baseDraftSettings().dimAlign;
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
 
   const levels = useProjectStore((s) => s.levels);
@@ -171,7 +172,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   const modelBounds = useMemo(() => mergedSectionBounds(models, legacyGeometry), [models, legacyGeometry]);
   const fallbackPlane = useMemo(() => viewPlaneConfig(view, levels, mergedSectionBounds(models, legacyGeometry)), [view, levels, models, legacyGeometry]);
   const plane = drawing?.config.plane ?? fallbackPlane ?? undefined;
-  const axis: SectionAxisName = plane ? AXIS_NAME[plane.axis] : 'down';
+  const axis: SectionAxisName = target?.axis ?? (plane ? AXIS_NAME[plane.axis] : 'down');
   const liveSymbols = useLiveSymbolContext(plane, axis, view.scale ?? DEFAULT_VIEW_SCALE);
   const sectionPlane = useMemo(() => ({ axis, position: plane?.position ?? 0, flipped: plane?.flipped ?? false }), [axis, plane]);
   // Pinned: a regenerated drawing (an element added, edited) keeps the user's framing. No
@@ -192,18 +193,23 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
   useEffect(() => {
     if (drawing || !containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
+    if (target) {
+      setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? targetFitTransform(target, width, height) : t));
+      return;
+    }
     setViewTransform((t) => (t.scale === 1 && t.x === 0 && t.y === 0 ? { scale: 40, x: width / 2, y: height / 2 } : t));
-  }, [drawing, setViewTransform]);
+  }, [drawing, setViewTransform, target]);
 
-  const entities = useMemo(() => draftsOfView(view.id, allDrafts), [allDrafts, view.id]);
+  const entities = useMemo(() => draftsOfView(view.id, allDrafts, layers), [allDrafts, layers, view.id]);
   const entityShapes = useMemo(() => entities.flatMap((e) => (isGeometry(e.shape) ? [e.shape] : [])), [entities]);
   // The view's graphics (its template's, then its own preset and category overrides over them, #44), applied to its drawing.
   const viewTemplates = useProjectStore((st) => st.viewTemplates);
   const graphics = useMemo(() => resolveViewGraphics(view, viewTemplates), [view, viewTemplates]);
   // The detail level (#444): the view's own, its template's, else the one its scale gives; the sheets resolve it the same way (at the viewport's scale).
   const detail = useMemo(() => resolveDetailLevel(graphics, view.scale), [graphics, view.scale]);
-  const viewDrawing = useMemo(() => (drawing ? atDetailLevel(withoutHiddenElements(drawing, graphics, renderIdGlobalId), detail) : null), [drawing, graphics, models, detail]);
-  const references = useMemo(() => (viewDrawing ? referenceSet(viewDrawing, false) : null), [viewDrawing]);
+  const runtimeGeometry = useDrawingRuntime().geometryResult;
+  const viewDrawing = useViewDrawing(drawing, view, models, runtimeGeometry, graphics, detail); const contourLabels = useContourOverlays(viewDrawing, view);
+  const references = useSnapReferences(viewDrawing, view.id);
   const materialsTable = useProjectStore((st) => st.materials);
   const mutationVersionForMaterials = useViewerStore((st) => st.mutationVersion);
   const phaseSource = useProjectStore((st) => st.phaseSource);
@@ -213,7 +219,6 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
     return phaseViewOf(graphics, phaseSource);
   }, [graphics, phaseSource, mutationVersionForMaterials]);
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
-  const runtimeGeometry = useDrawingRuntime().geometryResult;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
     return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
@@ -282,19 +287,19 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
 
   const exportDxf = () => exportViewDxf({
     view, drawing: shown, axis, drafts: entities, layers, extraPatterns, symbols: liveSymbols,
-    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...membraneOverlays(shown)],
+    overlays: [...(plane ? planOverlays(view, plane, withoutHiddenElementMeshes(phaseMeshes(runtimeGeometry?.meshes, phases), graphics, renderIdGlobalId), useProjectStore.getState().symbolFlips, hidden, shown, undefined, graphicStandardOf(useProjectStore.getState().graphicStandard).pens, detail) : []), ...contourLabels, ...membraneOverlays(shown)],
   });
 
   const command = runningCommand();
-  const preview = command && state.cursor && command.preview ? command.preview(state.cursor) : [];
+  const preview = state.selectionDrag?.preview ?? (command && state.cursor && command.preview ? command.preview(state.cursor) : []);
 
   return (
     <div className="flex h-full w-full flex-col">
       {bare ? null : <div className="flex shrink-0 items-center gap-1 h-9 px-2 border-b border-zinc-200 dark:border-zinc-800 text-xs">
         <span className="font-semibold truncate">{view.name}</span>
         <span className="flex-1" />
-        <Toggle active={snap} label={t('drafting.snap')} onClick={toggleSnap} />
-        <Toggle active={ortho} label={t('drafting.ortho')} onClick={toggleOrtho} />
+        <SnapToggles />
+        <Toggle active={dimAlign} label={t('drafting.dimAlign')} onClick={() => patchDraftSettings({ dimAlign: !dimAlign })} />
         <select
           aria-label={t('drafting.layer')}
           className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"
@@ -334,6 +339,7 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
       >
         {/* A detail shows only its area of the drawing and of the symbols derived from the model. */}
         <div className="absolute inset-0" style={view.detail ? { clipPath: cropClipPath({ min: view.detail.min, max: view.detail.max }, viewTransform, axis) } : undefined}>
+        {target?.underlay(viewTransform)}
         {shown ? (
           <Drawing2DCanvas
             drawing={shown}
@@ -344,13 +350,14 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           />
         ) : null}
         <UnderlayLayer viewId={view.id} transform={viewTransform} axis={axis} />
-        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} />
+        <CutHatchLayer hatches={hatches} extraPatterns={extraPatterns} transform={viewTransform} axis={axis} schemeUnit={(view.scale ?? 100) / 1000} />
         <MembraneLayer shapes={shown?.membranes} transform={viewTransform} axis={axis} />
         {ghosts ? <HiddenGhostLayer ghosts={ghosts} transform={viewTransform} axis={axis} onShowElement={showElement} onShowLine={showLineEntry} /> : null}
         <ViewportState state={viewportState(entry, view.kind)} />
-        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} detail={detail} transform={viewTransform} axis={axis} />
+        <OpeningSymbolsLayer plane={view.kind === 'plan' || view.kind === 'elevation' || view.kind === 'section' ? plane ?? null : null} drawing={view.kind === 'plan' ? null : shown} hidden={hidden} phases={phases} graphics={graphics} detail={detail} level={view.kind === 'plan' ? view.level : undefined} transform={viewTransform} axis={axis} />
         <RoofPlanLayer view={view} plane={view.kind === 'plan' ? plane ?? null : null} transform={viewTransform} axis={axis} />
         <GridLayer view={view} plane={plane ?? null} drawing={shown} transform={viewTransform} axis={axis} />
+        <ContourLabelsLayer overlays={contourLabels} view={view} transform={viewTransform} axis={axis} />
         </div>
         <DraftOverlay
           entities={entities}
@@ -359,9 +366,10 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           hoverId={state.hoverId}
           preview={preview}
           snap={state.snap}
+          tracking={state.tracking}
           cursor={state.cursor}
           orthoLabel={command?.basePoint() ? t(orthoToggled ? 'drafting.orthoCursor.on' : ortho ? 'drafting.orthoCursor.held' : 'drafting.orthoCursor.off') : null}
-          window={state.window}
+          window={state.window} lasso={state.lasso}
           highlight={highlight}
           extraPatterns={extraPatterns}
           transform={viewTransform}
@@ -374,26 +382,19 @@ export function DraftingView({ view, bare = false }: { view: Exclude<ProjectView
           crop={view.detail}
           symbols={liveSymbols}
         />
-        <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />
-        {selected.length === 1 && !state.gripDrag ? (
+        <RegionSelectHint hidden={!!command} />
+        <OnDrawingText transform={viewTransform} axis={axis} />
+        {target ? null : <ElementGraphicsBar viewId={view.id} graphics={graphics} extraPatterns={extraPatterns} showHidden={showHidden} onShowHidden={setShowHidden} pickingLine={pickingLine} onPickLine={setPickingLine} />}
+        {selected.length === 1 && !state.gripDrag && !state.selectionDrag ? (
           <SelectionBar entity={selected[0]} transform={viewTransform} axis={axis} editing={editingText} onEditingChange={setEditingText} areaWidth={containerRef.current?.clientWidth ?? 800} />
         ) : null}
-        {bare ? null : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
+        {/* IfcSheet shows the drawing bare, with no toolbar, so the underlay panel (#457) sits on the canvas here. */}
+        {bare ? <div className="absolute right-2 top-2 z-20 cursor-default text-zinc-900" onPointerDown={(e) => e.stopPropagation()}><UnderlayPanel viewId={view.id} /></div> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag?.drag && !command ? <TurnHandle viewId={view.id} selection={selection} transform={viewTransform} axis={axis} turn={state.selectionDrag?.turn ?? null} cursor={state.cursor} /> : null}
+        {selected.length > 0 && !state.gripDrag && !state.selectionDrag ? <ModifyBar entities={selected} transform={viewTransform} axis={axis} areaWidth={containerRef.current?.clientWidth ?? 800} /> : null}
+        {bare ? (selected.length > 0 ? <SelectionStyleCard entities={selected} layers={layers} /> : null) : <DraftPropertiesPanel entities={entities.filter((e) => selection.has(e.id))} layers={layers} extraPatterns={extraPatterns} />}
       </div>
-      <CommandLine ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
+      <DraftingPrompt ref={inputRef} value={text} onChange={setText} onSubmit={submit} onEscape={() => { setText(''); pressEscape(); }} />
     </div>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn('h-6 rounded-sm px-2 font-medium', active ? 'bg-primary/15 text-primary' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900')}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }

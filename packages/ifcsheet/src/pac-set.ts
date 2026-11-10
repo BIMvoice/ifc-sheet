@@ -107,14 +107,18 @@ export interface PacSheetNames {
  */
 export function pacSetTemplate(names: PacSheetNames): SetTemplate {
   const layout = { paper: SET_PAPER, orientation: 'landscape' as const };
+  // Marks: CONVENTION, not required by Anexa 2 / Anexa 3 / Ordinul 975/2026 (the research file `ro-permit-requirements.md`
+  // found no north arrow and no scale bar in any of them). The convention: a north arrow on plans, a scale bar on every scaled view.
+  const plan = { northArrow: true, scaleBar: true };
+  const scaled = { scaleBar: true };
   return {
     name: names.name,
     schedules: [],
     annotations: {},
     sheets: [
-      { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'allPlans' } }] },
-      { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction } })) },
-      { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 } }, { view: { kind: 'section', place: 1 } }] },
+      { name: names.plans, series: 'plans', layout, slots: [{ view: { kind: 'allPlans' }, ...plan }] },
+      { name: names.facades, series: 'elevations', layout, slots: (['north', 'east', 'south', 'west'] as const).map((direction) => ({ view: { kind: 'elevation', direction }, ...scaled })) },
+      { name: names.sections, series: 'sections', layout, slots: [{ view: { kind: 'section', place: 0 }, ...scaled }, { view: { kind: 'section', place: 1 }, ...scaled }] },
     ],
   };
 }

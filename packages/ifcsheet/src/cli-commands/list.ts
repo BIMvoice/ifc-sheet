@@ -6,6 +6,7 @@
 
 import { basename } from 'node:path';
 import { list } from '../cli-list.js';
+import { localeProblem } from '../cli-language.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
 export const listCommand: CliCommand = {
@@ -17,12 +18,17 @@ export const listCommand: CliCommand = {
           class, storey and property, its columns, grouped and summed, with the total. The rows and totals are the Lists panel's, the CSV
           is the app's file. --schedule names which one (its id or name; the only one when the project has one). Text, CSV or JSON.`,
   async run(rest, values, io) {
+    const badLocale = localeProblem(values.locale);
+    if (badLocale) {
+      io.stderr(badLocale);
+      return EXIT.usage;
+    }
     if (rest.length !== 1 || !values.project || values.out || values.dxf || values.name || values.handover || values.pattern || values.template !== undefined || values.detail || values.system !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet list takes one model, --project, --schedule, --csv or --json and --locale: ifcsheet list <model.ifc> --project <file> [--schedule <id>] [--csv | --json] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
     try {
-      return await list({ model: rest[0], project: values.project, ...(values.schedule !== undefined ? { schedule: values.schedule } : {}), csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en' }, io);
+      return await list({ model: rest[0], project: values.project, ...(values.schedule !== undefined ? { schedule: values.schedule } : {}), csv: values.csv === true, json: values.json === true, ...(values.locale !== undefined ? { locale: values.locale } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: list of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

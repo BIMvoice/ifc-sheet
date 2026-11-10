@@ -1,0 +1,12 @@
+profileSection.fieldAria
+profileSection.inspector.dimsNote
+profileSection.inspector.edit
+profileSection.inspector.outerSize
+profileSection.inspector.title
+profileSection.inspector.unavailable
+profileSection.invalid
+profileSection.kindAria
+profileSection.picker.button
+profileSection.picker.label
+profileSection.picker.title
+profileSection.previewAria

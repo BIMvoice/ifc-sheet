@@ -1,0 +1,3 @@
+peerPresenceLayer.cursorsAriaLabel
+peerPresenceLayer.guestName
+peerPresenceLayer.nameWithTool

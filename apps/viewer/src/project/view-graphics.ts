@@ -16,9 +16,10 @@ import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2
 import type { Pt } from '@/drafting/types';
 import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } from './types';
-import type { MaterialDrawing, MaterialHatch } from './material-drawing';
-import type { SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
+import { materialFaces, type MaterialDrawing, type MaterialHatch } from '@bimvoice/ifcsheet/material-drawing';
+import { shownRooms, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
 import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
+import type { SurfaceFill } from '@bimvoice/ifcsheet/surface-fills';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
 
@@ -32,7 +33,9 @@ export type StyledDrawing = Omit<Drawing2D, 'lines' | 'cutPolygons'> & {
    */
   cutPolygons: (DrawingPolygon & { phase?: PhaseId; schemeColour?: string; elementStyle?: ElementStyle; materialFill?: string | null })[];
   /** The rooms a colour scheme fills (#92), drawn under everything else. */
-  schemeFills?: (DrawingPolygon & { schemeColour: string })[];
+  schemeFills?: (DrawingPolygon & { schemeColour: string; /** The pattern drawn over the room's colour (#493). */ schemeHatch?: string })[];
+  /** The coloured style of an elevation or section (#499): the visible surfaces in the colours of the materials, painted far to near under everything else (`view-surface-fills.ts`). */
+  surfaceFills?: SurfaceFill[];
   materialHatches?: (MaterialHatch & HatchSource)[];
   membranes?: DraftShape[];
 };
@@ -117,7 +120,7 @@ export function styledDrawing(
   /** The GlobalId of a drawing item's element (the drawing carries renderer ids): how the view's hidden elements, lines and per-element graphics (#32, #33) find theirs. */
   globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
-  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), scheme);
+  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), shownRooms(scheme, graphics, globalIdOf));
 }
 
 function styledByGraphics(
@@ -133,17 +136,9 @@ function styledByGraphics(
   globalIdOf?: (entityId: number) => string | null | undefined,
 ): StyledDrawing {
   if (materials) {
-    const hatchOf = new Map<unknown, HatchSource>(drawing.cutPolygons.map((p) => [p.polygon.outer, { ifcType: p.ifcType, entityId: p.entityId, ...(p.materialId !== undefined ? { materialId: p.materialId } : {}) }]));
-    drawing = {
-      ...drawing,
-      cutPolygons: drawing.cutPolygons.filter((p) => !materials.hidePolygons.has(p)).map((p) => {
-        const fill = materials.fills.get(p);
-        return fill === undefined ? p : { ...p, materialFill: fill, color: fill === null ? [1, 1, 1, 1] as [number, number, number, number] : rgba(fill) ?? p.color };
-      }),
-      lines: materials.dropLines.size ? drawing.lines.filter((l) => !materials.dropLines.has(l)) : drawing.lines,
-      materialHatches: materials.hatches.map((h) => ({ ...h, ...(hatchOf.get(h.loops[0]) ?? { ifcType: undefined }) })),
-      membranes: materials.membranes,
-    } as StyledDrawing;
+    // The engine's one application of a cut's materials, which the headless sheets draw through too (#645).
+    const { cutPolygons, lines, hatches, membranes } = materialFaces(drawing, materials);
+    drawing = { ...drawing, cutPolygons, lines, materialHatches: hatches, membranes } as StyledDrawing;
   }
   if (replaced) {
     drawing = {
@@ -201,6 +196,8 @@ export interface CutHatch {
   width?: number;
   /** The element it was cut from. */
   source?: HatchSource;
+  /** A colour scheme's hatch over a room (#493), not a cut face's: the sheet and the DXF write it on its own. */
+  scheme?: true;
 }
 
 /**
@@ -225,6 +222,10 @@ export function cutHatches(
     const r = mapping ? ruled(ifcType, entityId, materialId) : null;
     return !!g?.cutHatch || g?.visible === false || !!elementStyle?.cutHatch || !!r?.materialStyle.cutHatch || !!r?.classStyle.cutHatch;
   };
+  // A colour scheme's hatch over its rooms (#493): the room is a polygon of its own, under everything, and its pattern is a hairline.
+  for (const f of drawing.schemeFills ?? []) {
+    if (f.schemeHatch) out.push({ loops: [f.polygon.outer, ...f.polygon.holes], pattern: f.schemeHatch, scale: 1, color: '#000000', width: hatchPens.hairline, scheme: true, source: { ifcType: 'IfcSpace', entityId: f.entityId } });
+  }
   for (const h of drawing.materialHatches ?? []) {
     if (overridden(h.ifcType, h.elementStyle, h.entityId, h.materialId)) continue;
     out.push({ loops: h.loops, pattern: h.pattern, scale: h.scale, color: '#000000', width: hatchPens[h.pen], source: { ifcType: h.ifcType, entityId: h.entityId, materialId: h.materialId } });

@@ -1,0 +1,13 @@
+relocate.cancel
+relocate.cmd.moveToStorey
+relocate.failed
+relocate.keep.storey
+relocate.keep.world
+relocate.move
+relocate.moved
+relocate.nothing
+relocate.selection
+relocate.storey
+relocate.storeyOption
+relocate.title
+relocate.twoModels

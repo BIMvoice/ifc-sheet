@@ -59,7 +59,7 @@ describe('the PAC set draws a plan of every storey (1.4.3 a)', () => {
   it('keeps the rule through the .bvset file', () => {
     const template = pacSetTemplate(NAMES);
     expect(parseSetTemplate(serializeSetTemplate(template))).toEqual(template);
-    expect(template.sheets[0].slots).toEqual([{ view: { kind: 'allPlans' } }]);
+    expect(template.sheets[0].slots).toEqual([{ view: { kind: 'allPlans' }, northArrow: true, scaleBar: true }]);
   });
 
   it('draws one plan for a model with a single storey and says nothing about the storeys it does not have', () => {

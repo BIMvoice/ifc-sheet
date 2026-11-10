@@ -11,7 +11,6 @@
  */
 
 import type { AnnotationShape, LevelRef, Pt } from './types';
-import { COINCIDENT, dist } from './vec';
 
 export type LevelShape = Extract<AnnotationShape, { type: 'level' }>;
 export type { LevelRef };
@@ -81,8 +80,5 @@ export function alignLevelMarks(marks: readonly LevelShape[], x: number): LevelS
   return marks.map((m) => placeSymbol(m, { x, y: m.p.y }));
 }
 
-/** The thin line from the reference to the symbol, while they are apart. */
-export function witnessLine(shape: LevelShape): { a: Pt; b: Pt } | null {
-  if (!shape.ref || dist(shape.ref.at, shape.p) < COINCIDENT) return null;
-  return { a: shape.ref.at, b: shape.p };
-}
+// The thin line from the reference to the symbol is the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` draws the same one (#479).
+export { levelWitness as witnessLine } from '@bimvoice/ifcsheet';

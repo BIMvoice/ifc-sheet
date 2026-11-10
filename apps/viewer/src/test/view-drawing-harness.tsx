@@ -17,13 +17,15 @@ import { access, readFile } from 'node:fs/promises';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import type { SpatialHierarchy } from '@ifc-lite/data';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { GeometryProcessor, type GeometryResult } from '@ifc-lite/geometry';
 import { useDrawingGeneration } from '@/hooks/useDrawingGeneration';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { getDefaultDrawing2DState } from '@/store/slices/drawing2DSlice';
 import type { TypeVisibilityGate } from '@/store/typeVisibilityFilter';
 import { TYPE_VISIBILITY_SEMANTIC_DEFAULTS } from '@/store/constants';
-import { sectionPlaneForView } from '@/project/view-plane';
+import { sectionPlaneForView, type ViewSectionPlane } from '@/project/view-plane';
 import { viewDisplayOverrides } from '@/project/view-drawings';
 import { drawingShownBy } from '@/project/view-shown';
 import type { ProjectView } from '@/project/types';
@@ -55,20 +57,21 @@ export function boundsOf(geometry: GeometryResult) {
   return mergedSectionBounds(new Map(), geometry);
 }
 
-/** The drawing `view` shows (before any sheet), made the way an open view makes it. */
-export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, geometry: GeometryResult): Promise<Drawing2D | null> {
-  const plane = sectionPlaneForView(view, boundsOf(geometry), []);
-  assert.ok(plane, `view ${view.name} has no plane`);
+/** The drawing `view` shows (before any sheet), made the way an open view makes it (`planeOverride`: a plane the view cannot say, a flipped plan); with the model's `spatialHierarchy` (or its whole `dataStore`, which also tells a terrain from a tree) a plan is scoped to its storey, as in the app. */
+export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, geometry: GeometryResult, spatialHierarchy?: SpatialHierarchy, typeVisibility: TypeVisibilityGate = VIEWER_START, planeOverride: Partial<ViewSectionPlane> = {}, dataStore?: IfcDataStore): Promise<Drawing2D | null> {
+  const resolved = sectionPlaneForView(view, boundsOf(geometry), []);
+  assert.ok(resolved, `view ${view.name} has no plane`);
+  const plane = { ...resolved, ...planeOverride };
   const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);
   const displayOptions = { ...getDefaultDrawing2DState().drawing2DDisplayOptions, useSymbolicRepresentations: false, showConstructionProjection, constructionProjectionDepth };
   let drawing: Drawing2D | null = null;
   let run: (() => Promise<void>) | null = null;
   function Harness(): null {
     const { generateDrawing } = useDrawingGeneration({
-      activeTool: 'select', geometryResult: geometry, ifcDataStore: null, sectionPlane: plane!, displayOptions,
-      typeVisibility: VIEWER_START, combinedHiddenIds: new Set<number>(), combinedIsolatedIds: null, computedIsolatedIds: null,
+      activeTool: 'select', geometryResult: geometry, ifcDataStore: dataStore ?? (spatialHierarchy ? { source: undefined as never, spatialHierarchy } : null), sectionPlane: plane!, displayOptions,
+      typeVisibility, combinedHiddenIds: new Set<number>(), combinedIsolatedIds: null, computedIsolatedIds: null,
       models: new Map([['m0', { id: 'm0', visible: true }]]), panelVisible: false, drawing: null,
-      setDrawing: (d) => { drawing = d; }, setDrawingStatus: () => {}, setDrawingProgress: () => {}, setDrawingError: () => {}, primary: false,
+      setDrawing: (d) => { drawing = d; }, setDrawingStatus: () => {}, setDrawingProgress: () => {}, setDrawingError: () => {}, primary: false, terrainApart: true,
     });
     run = generateDrawing;
     return null;

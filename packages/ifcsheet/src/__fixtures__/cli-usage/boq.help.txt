@@ -1,0 +1,3 @@
+  boq     The bill of quantities (antemasuratoare): the articles of the project file, each with its total
+          in its own unit, from the quantities the model declares (never zero for a missing one: the elements
+          that lack it are named). Text, CSV with --csv, JSON with --json; --detail adds a row per type.

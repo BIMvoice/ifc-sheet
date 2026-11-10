@@ -96,15 +96,28 @@ export interface DrawTool {
  * Plain drawing, on the sheet's paper (or on the drawing in front): lines,
  * polylines, circles, text, a hatched zone and a revision cloud inside a closed polyline.
  */
-export const DRAW_TOOLS: readonly DrawTool[] = [
+export const PLAIN_DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'line', labelKey: 'wall.draw.line', bodyKey: 'wall.draw.line.body' },
   { command: 'polyline', labelKey: 'wall.draw.polyline', bodyKey: 'wall.draw.polyline.body' },
+  { command: 'rectangle', labelKey: 'wall.draw.rectangle', bodyKey: 'wall.draw.rectangle.body' },
   { command: 'circle', labelKey: 'wall.draw.circle', bodyKey: 'wall.draw.circle.body' },
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
   { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
   { command: 'ptext', labelKey: 'wall.draw.ptext', bodyKey: 'wall.draw.ptext.body' },
 ];
+
+/** The edit tools, in their own section of the rail: they work on a drafted line or a line of the generated drawing (#189). */
+export const EDIT_TOOLS: readonly DrawTool[] = [
+  { command: 'trim', labelKey: 'wall.draw.trim', bodyKey: 'wall.draw.trim.body' },
+  { command: 'extend', labelKey: 'wall.draw.extend', bodyKey: 'wall.draw.extend.body' },
+  { command: 'fillet', labelKey: 'wall.draw.fillet', bodyKey: 'wall.draw.fillet.body' },
+  { command: 'offset', labelKey: 'wall.draw.offset', bodyKey: 'wall.draw.offset.body' },
+  { command: 'chamfer', labelKey: 'wall.draw.chamfer', bodyKey: 'wall.draw.chamfer.body' },
+];
+
+/** Every tool that draws or edits on the drawing in front. */
+export const DRAW_TOOLS: readonly DrawTool[] = [...PLAIN_DRAW_TOOLS, ...EDIT_TOOLS];
 
 /**
  * A tool's one-action twin, offered under it: the whole plan dimensioned, every
@@ -119,7 +132,7 @@ export interface WallAll {
 
 export const WALL_ALL: Readonly<Record<string, WallAll>> = {
   dimaligned: { command: 'dimall', labelKey: 'wall.tool.dimension.all', kinds: ['plan'] },
-  tag: { command: 'tagall', labelKey: 'wall.tool.tag.all', kinds: ['plan'] },
+  tag: { command: 'tagall', labelKey: 'wall.tool.tag.all', kinds: ['plan', 'section', 'elevation'] },
   level: { command: 'levelall', labelKey: 'wall.tool.level.all', kinds: ['section', 'elevation'] },
 };
 

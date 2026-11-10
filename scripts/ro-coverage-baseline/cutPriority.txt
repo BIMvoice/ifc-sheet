@@ -1,0 +1,7 @@
+cutPriority.applied
+cutPriority.command
+cutPriority.hint
+cutPriority.label
+cutPriority.none
+cutPriority.reset
+cutPriority.title

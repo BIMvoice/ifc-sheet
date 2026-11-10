@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import { DEFAULT_GRAPHIC_STANDARD, graphicStandardOf, stylesInUse, stylesUnder, type GraphicStandard } from '@/drafting/graphic-standard';
 import { setCurrentStyles } from '@/drafting/session';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
+import { conventionOfDirection } from '@/joinery/opening-convention';
 import { commitStandards } from './drafting-standards';
 import { useProjectStore } from './project-store';
 
@@ -28,7 +29,8 @@ export function setGraphicStandard(id: string): void {
   const standard = graphicStandardOf(id);
   const s = useProjectStore.getState();
   const styles = stylesUnder(standard, s.textStyles?.length ? s.textStyles : [DEFAULT_TEXT_STYLE], s.dimStyles?.length ? s.dimStyles : [DEFAULT_DIM_STYLE], stylesInUse(s.drafts));
-  commitStandards({ ...styles, graphicStandard: standard === DEFAULT_GRAPHIC_STANDARD ? undefined : standard.id });
+  // The standard carries the direction of the opening lines in elevation (a national convention); the project's setting follows it, and can be changed after.
+  commitStandards({ ...styles, graphicStandard: standard === DEFAULT_GRAPHIC_STANDARD ? undefined : standard.id, openingLines: conventionOfDirection(standard.openingLines) });
   const text = styles.textStyles.find((t) => t.id === standard.current.textStyle);
   setCurrentStyles({ ...standard.current, ...(text ? { textHeightMm: text.height } : {}) });
 }

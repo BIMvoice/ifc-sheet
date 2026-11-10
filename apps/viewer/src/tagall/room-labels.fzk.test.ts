@@ -13,18 +13,19 @@ import { startDrawingSet } from '@/project/drawing-set-actions';
 import { modelLevels } from '@/project/model-levels';
 import { planOverlays } from '@/project/plan-overlays';
 import { resetProject, syncProjectWithModels, useProjectStore } from '@/project/project-store';
-import { elevationMarkPlan } from '@/drafting/cross-ref-marks';
+import { elevationMarkPlan } from '@bimvoice/ifcsheet';
 import { textBox } from '@/drafting/annotation';
 import { clearDraftHistory } from '@/drafting/draft-store';
 import { tagAll } from '@/drafting/commands/tagall';
 import type { DraftEntity, DraftShape, Pt } from '@/drafting/types';
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { viewElements } from '@/labels/view-elements';
+import { viewElements } from '@bimvoice/ifcsheet';
 import { planSymbolObstacles } from '@/rcp/ceiling-tag-obstacles';
-import { roomsOfPlan } from '@/tagall/rooms';
+import { roomsOfPlan } from '@bimvoice/ifcsheet';
+import { renderIdGlobalId } from '@/project/element-guid';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { registerLocale, setLocale } from '@/i18n';
-import { TAGALL_TYPES } from '@/tagall/types';
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 
 /**
@@ -101,7 +102,7 @@ describe('room labels on the ground plan of AC20-FZK-Haus (#42)', { skip: planMo
       viewId: ground.id, layerId: '0', settings: { textHeight: 0.25, currentTextStyle: 'Standard', currentDimStyle: 'Standard' },
       viewKind: () => 'plan', view: () => ground, say: () => {}, entities: () => existing,
       viewElements: () => viewElements(drawing),
-      rooms: () => roomsOfPlan(ground, levels, { meshes } as never),
+      rooms: () => roomsOfPlan(ground, levels, { meshes } as never, renderIdGlobalId),
       planObstacles: () => planSymbolObstacles(ground, levels, meshes, undefined),
     }) as unknown as Parameters<typeof tagAll>[0];
   });

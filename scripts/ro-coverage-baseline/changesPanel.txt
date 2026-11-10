@@ -1,0 +1,13 @@
+changesPanel.close
+changesPanel.empty
+changesPanel.entity
+changesPanel.georeference
+changesPanel.jump
+changesPanel.modelMetadata
+changesPanel.revert
+changesPanel.revertPermission
+changesPanel.revertSharedRoom
+changesPanel.revertStale
+changesPanel.revertUnavailable
+changesPanel.revertUnsupported
+changesPanel.rowCount

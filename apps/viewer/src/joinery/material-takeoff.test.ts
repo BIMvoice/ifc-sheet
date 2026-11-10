@@ -11,9 +11,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { MaterialInfo } from '@ifc-lite/parser';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import { elementQuantities, materialShares, takeoffRows } from './material-takeoff.js';
-import { layoutMaterialTakeoff, takeoffTable } from './material-takeoff-layout.js';
 import { csvLines, tableCsv } from './export-test-util.js';
+import { elementQuantities, materialShares, takeoffRows, layoutMaterialTakeoff, takeoffTable } from '@bimvoice/ifcsheet';
 
 const near = (a: number | null, b: number) => assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${a} ≉ ${b}`);
 const LABELS = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume m³', area: 'Area m²', usedIn: 'Used in', total: 'Total' };

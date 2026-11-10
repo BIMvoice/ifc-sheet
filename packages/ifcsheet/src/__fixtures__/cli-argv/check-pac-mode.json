@@ -1,0 +1,11 @@
+{
+ "argv": [
+  "check",
+  "m.ifc",
+  "--pac-mode",
+  "rural"
+ ],
+ "code": 1,
+ "stdout": "",
+ "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+}

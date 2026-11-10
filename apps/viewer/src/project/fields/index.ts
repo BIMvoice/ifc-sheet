@@ -8,14 +8,15 @@
  * needs more than a line); a field added to `ProjectDocument` and not listed here, or listed without a reader, does
  * not compile (`MissingField` below, `read` in `./define.ts`).
  *
- * A NEW FIELD is three files and one pair of lines, in `./registered.ts` (#144; the list below is frozen, nothing is appended to it):
+ * A NEW FIELD is two new files and no edited line (#144; the list below is frozen, nothing is appended to it):
  *   - `fields/<key>.ts`: the field (`listField`, `optionalField`, ...), its reader, and its type, declared with
- *     `declare module '../types' { interface ProjectFieldTypes { <key>?: ... } }` (see `./site-area.ts`);
+ *     `declare module '../types' { interface ProjectFieldTypes { <key>?: ... } }`; it registers itself with
+ *     `export const registeredFields = [...]` and `declare module './registered' { interface RegisteredFieldKeys { <key>: true } }`
+ *     (see `./germany-permit.ts`, and `./registered.ts`, which finds it);
  *   - `fields/<key>.sample.ts`: `export const sample = { <key>: <a value that is not the default> }`, which
- *     `project-roundtrip.test.ts` puts in its full project (see `./site-area.sample.ts`);
- *   - its import and its entry in `./registered.ts`, sorted, not appended here. The fields not yet moved to a file of
- *     their own keep their type in `../types.ts` and their sample in `project-roundtrip.test.ts`; move one when you
- *     next touch it.
+ *     `project-roundtrip.test.ts` puts in its full project (see `./site-area.sample.ts`).
+ *   The fields not yet moved to a file of their own keep their type in `../types.ts` and their sample in
+ *   `project-roundtrip.test.ts`; move one when you next touch it.
  *
  * ORDER IS THE FILE'S KEY ORDER: `serializeProject` writes the document's keys in this order, so the list below does not
  * change and a registered field comes after it (by key, `./registered.ts`) (`fields.test.ts` pins the order of the ones
@@ -23,14 +24,14 @@
  */
 import { readLibraryDetail } from '@/catalogue/detail-reader';
 import { readAnnotationType, readLegend, readList, readSymbol } from '@/catalogue/readers';
-import { readDraft, readDraftLayer } from '@/drafting/draft-file';
+import { readDraft, readDraftLayer } from '@bimvoice/ifcsheet';
 import { DEFAULT_DIM_STYLE, DEFAULT_TEXT_STYLE } from '@/drafting/styles';
 import { readCurrentTypes, readElementTypeList } from '@/element-types/spec';
 import { resolve } from '@/i18n/registry';
-import { readIssues } from './issues-read';
+import { readIssues } from '@bimvoice/ifcsheet';
 import { readJoineryList } from '@/joinery/spec-file';
 import { DEFAULT_JOINERY_MAPPING, readJoineryMapping } from '@/joinery/symbol-mapping';
-import { upgradeTagAllTypes } from '@/tagall/types';
+import { upgradeTagAllTypes } from '@bimvoice/ifcsheet';
 import { readTagFields } from '@/tagfields/tag-fields-file';
 import { readSnapshot } from '@/whatchanged/snapshot-file';
 import { readSchedule } from '@bimvoice/ifcsheet';
@@ -38,17 +39,20 @@ import { readStructureProfileList } from '@ifc-lite/create';
 import { readCadLayerRule } from '../cad-layers-file';
 import { readNumberingScheme } from '../numbering';
 import { readMaterial } from '@bimvoice/ifcsheet/materials';
-import { isString, listAt, readCivilDrawing, readCurrentJoinery, readFlips, readModel, readSheet, readTypicalSection, readView, type Json } from '../project-read';
+import { readCivilDrawing, readCurrentJoinery, readFlips, readModel, readTypicalSection } from '../project-read';
+import { isString, listAt, readSheet, readView, type Json } from '@bimvoice/ifcsheet';
 import { readSavedSectionCuts } from '../saved-cuts-file';
-import { readTitleBlock } from '../sheet-file';
+import { readTitleBlock } from '@bimvoice/ifcsheet';
 import { readSeriesTemplates, readTemplate } from '../sheet-templates';
-import { readDimStyles, readGraphicStandard, readLayerGroups, readTextStyles } from '../standards-file';
+import { readDimStyles, readGraphicStandard, readLayerGroups, readTextStyles } from '@bimvoice/ifcsheet';
 import { readTitleBlockParams, readTitleBlockTemplate } from '../title-block-file';
 import { readTitleSources } from '../title-block-sources';
 import type { ProjectDocument } from '../types';
-import { readPhaseSource } from '../view-graphics-file';
-import { readViewTemplates } from '../view-templates-file';
+import { readPhaseSource } from '@bimvoice/ifcsheet';
+import { readViewTemplates } from '@bimvoice/ifcsheet';
+import { annotationPresetsField } from './annotation-presets';
 import { boqArticlesField } from './boq-articles';
+import { byggesaksbimField } from './byggesaksbim';
 import { installedStandardField } from './installed-standard';
 import { classificationMappingsField } from './classification-mappings';
 import { commentsField } from './comments';
@@ -65,7 +69,7 @@ import { unitsAndNumbersField } from './units-and-numbers';
 import { urbanSettingsField } from './urban-settings';
 import { defineField, listField, optionalField, recordField, whenPresent, whenUsable, type DocumentField, type FieldKey } from './define';
 import { READ_ORDER } from './read-order';
-import { assembleFields, REGISTERED_FIELD_DEFS } from './registered';
+import { assembleFields, REGISTERED_FIELD_DEFS, type RegisteredFieldKeys } from './registered';
 
 export const DEFAULT_DRAFT_LAYER = { id: '0', name: '0', color: '#18181b', visible: true, locked: false } as const;
 
@@ -81,7 +85,7 @@ const DOCUMENT_FIELD_DEFS = [
   // Absent in a file saved before the title block was the project's (`liftSheetTitleBlocks` fills it on load).
   defineField({ key: 'titleBlock', empty: () => ({}), fallback: () => ({}), read: whenPresent('titleBlock', (v) => readTitleBlock(v) ?? {}) }),
   defineField({ key: 'drafts', empty: () => [], read: (raw) => ({ drafts: at(raw, 'drafts', readDraft) }) }),
-  defineField({ key: 'draftLayers', empty: () => [{ ...DEFAULT_DRAFT_LAYER }], read: (raw) => ({ draftLayers: at(raw, 'draftLayers', readDraftLayer) }) }),
+  defineField({ key: 'draftLayers', empty: () => [{ ...DEFAULT_DRAFT_LAYER }], read: (raw) => ({ draftLayers: at(raw, 'draftLayers', readDraftLayer) }), heldByUndo: true }),
   defineField({ key: 'hatchPatterns', empty: () => '', fallback: () => '', read: (raw) => ({ hatchPatterns: isString(raw.hatchPatterns) ? raw.hatchPatterns : '' }) }),
   recordField('symbolFlips', (raw) => readFlips(raw.symbolFlips)),
   defineField({ key: 'openingLines', fallback: () => 'handle' as const, load: (v) => v ?? 'handle', read: (raw) => (raw.openingLines === 'hinge' || raw.openingLines === 'handle' ? { openingLines: raw.openingLines } : {}) }),
@@ -134,6 +138,8 @@ const DOCUMENT_FIELD_DEFS = [
   classificationMappingsField,
   // The standards pack installed in the project and the values it replaced (#365); absent: none.
   installedStandardField,
+  // The project opts in to the ByggesaksBIM (Norway) readiness check (#372); absent: off.
+  byggesaksbimField,
   // The language the generated names were made in (set when the starting set is made); absent: not recorded.
   languageField,
   // The works the permit project is for (#364); absent: a new building.
@@ -144,10 +150,12 @@ const DOCUMENT_FIELD_DEFS = [
   pacModeField,
   // PDF pages and images under views, to trace over (#457); absent: none.
   underlaysField,
+  // The office's annotation presets (#497); absent: none.
+  annotationPresetsField,
 ] as const satisfies readonly DocumentField<FieldKey>[];
 
-type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | (typeof REGISTERED_FIELD_DEFS)[number]['key'];
-/** A `ProjectDocument` field with no entry above; must stay `never`. */
+type ListedField = (typeof DOCUMENT_FIELD_DEFS)[number]['key'] | keyof RegisteredFieldKeys;
+/** A `ProjectDocument` field with no entry above and no registered file (`RegisteredFieldKeys`); must stay `never`. */
 type MissingField = Exclude<FieldKey, ListedField>;
 const complete: [MissingField] extends [never] ? true : MissingField = true;
 void complete;

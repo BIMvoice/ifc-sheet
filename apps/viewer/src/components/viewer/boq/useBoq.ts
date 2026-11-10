@@ -16,7 +16,7 @@ import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
 import type { ProjectSchedule, ProjectSheet } from '@/project/types';
 import { collectBoqElements } from '@/boq/boq-models';
-import { layoutBoq } from '@/joinery/boq-layout';
+import { layoutBoq } from '@bimvoice/ifcsheet';
 import type { ScheduleLayout } from '@/joinery/schedule-layout';
 import { layoutTableOnSheet, syncSchedulePages } from '@/project/schedule-fit';
 

@@ -10,18 +10,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { layoutMaterialTakeoff, type TakeoffLabels } from './material-takeoff-layout';
-import { layoutRoomFinishes, type RoomFinishLabels } from './room-finishes-layout';
-import { layoutTypeQuantities, type TypeQuantityLabels } from './type-quantities-layout';
+import { layoutRoomFinishes, type RoomFinishLabels, type RoomFinishes, layoutMaterialTakeoff, type TakeoffLabels, type TakeoffRow } from '@bimvoice/ifcsheet';
+import { layoutTypeQuantities, type TypeQuantityLabels } from '@bimvoice/ifcsheet';
 import { layoutUrban, type UrbanLabels } from '@/urban/urban-layout';
 import { ROOM_SCHEDULE_EN, ROOM_SCHEDULE_RO, roomSchedule, type RoomSchedule } from '@bimvoice/ifcsheet';
-import { layoutRoomSchedule, type RoomScheduleLabels } from './room-schedule-layout';
-import type { TakeoffRow } from './material-takeoff';
-import type { RoomFinishes } from './room-finishes';
-import type { Totals, TypeQuantities } from './type-quantities';
+import { layoutRoomSchedule, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
+import type { Totals, TypeQuantities } from '@bimvoice/ifcsheet';
 import type { UrbanIndicators } from '@/urban/indicators';
 import type { ScheduleLayout } from './schedule-layout';
-import { layoutPagedTable, PAD, textWidth } from './paged-table';
+import { layoutPagedTable, PAD, textWidth } from '@bimvoice/ifcsheet';
 
 export const TAKEOFF_LABELS: TakeoffLabels = { locale: 'en', title: 'Materials', material: 'Material', elements: 'Elements', volume: 'Volume', area: 'Area', usedIn: 'Used in', total: 'Total' };
 export const FINISH_LABELS: RoomFinishLabels = { locale: 'en', title: 'Room finishes', number: 'No.', room: 'Room', level: 'Level', floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling', area: 'Area m²', sharedNote: '* Shared by several rooms' };

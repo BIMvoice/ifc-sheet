@@ -1,0 +1,17 @@
+receiptValidation.after
+receiptValidation.before
+receiptValidation.delta
+receiptValidation.noDelta
+receiptValidation.notRecorded
+receiptValidation.refused.busy
+receiptValidation.refused.failed
+receiptValidation.refused.model-unavailable
+receiptValidation.refused.no-baseline
+receiptValidation.refused.no-report
+receiptValidation.refused.other-model
+receiptValidation.refused.rule-set-unavailable
+receiptValidation.refused.source-changed
+receiptValidation.rerun
+receiptValidation.running
+receiptValidation.stale
+receiptValidation.unknown

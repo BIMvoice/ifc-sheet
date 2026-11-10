@@ -6,6 +6,7 @@
 
 import { basename } from 'node:path';
 import { rooms } from '../cli-rooms.js';
+import { localeProblem } from '../cli-language.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
 export const roomsCommand: CliCommand = {
@@ -19,12 +20,17 @@ export const roomsCommand: CliCommand = {
           the last lines say which. Text, or CSV with --csv, or JSON with --json. With --project the text writes
           figures in the project's "Units and numbers" format (comma, decimals).`,
   async run(rest, values, io) {
+    const badLocale = localeProblem(values.locale);
+    if (badLocale) {
+      io.stderr(badLocale);
+      return EXIT.usage;
+    }
     if (rest.length !== 1 || values.out || values.dxf || values.name || values.handover || values.pattern || values.template !== undefined || values.detail || values.schedule !== undefined || values['include-far-elements'] || (values.csv && values.json)) {
       io.stderr('ifcsheet rooms takes one model and --csv or --json and --locale only: ifcsheet rooms <model.ifc> [--csv | --json] [--locale <ro|en>]\n');
       return EXIT.usage;
     }
     try {
-      return await rooms({ model: rest[0], csv: values.csv === true, json: values.json === true, locale: values.locale ?? 'en', ...(values.project ? { project: values.project } : {}) }, io);
+      return await rooms({ model: rest[0], csv: values.csv === true, json: values.json === true, ...(values.locale !== undefined ? { locale: values.locale } : {}), ...(values.project ? { project: values.project } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: rooms of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

@@ -70,15 +70,21 @@ export function useSearchIndex(): void {
       // Fire-and-forget — the build is cancellable via the controller, and
       // the completion handlers update the store without needing a ref.
       // The first build after a load is its `search.tier1` span (#6979).
+      // It starts one task after the model lands (#154): its first chunk (about 12 ms on a 56 MB model) otherwise joins the
+      // task that renders the model, and nothing waits on the index, which Tier-0 stands in for while it builds.
       const store = model.ifcDataStore;
-      void tracePhaseOnce(modelLoadTrace(modelId), 'search.tier1').span('search.tier1', () => buildTier1Index(modelId, store, {
-        signal: controller.signal,
-        onProgress: (done, total) => {
-          if (controller.signal.aborted) return;
-          const progress = total > 0 ? done / total : 1;
-          setSearchIndexRecord(modelId, { status: 'building', progress });
-        },
-      }))
+      const started = new Promise<void>((resolve) => { setTimeout(resolve, 0); }).then(() => {
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        return tracePhaseOnce(modelLoadTrace(modelId), 'search.tier1').span('search.tier1', () => buildTier1Index(modelId, store, {
+          signal: controller.signal,
+          onProgress: (done, total) => {
+            if (controller.signal.aborted) return;
+            const progress = total > 0 ? done / total : 1;
+            setSearchIndexRecord(modelId, { status: 'building', progress });
+          },
+        }));
+      });
+      void started
         .then((index) => {
           if (controller.signal.aborted || controllers.get(modelId) !== controller) return;
           controllers.delete(modelId);

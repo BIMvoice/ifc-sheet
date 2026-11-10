@@ -4,8 +4,11 @@
 
 /** The project's door / window opening-symbol convention (`symbols.ts`), saved in the project file. */
 
+import { conventionOfDirection } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import type { OpeningConvention } from './symbols';
+
+export { conventionOfDirection };
 
 export const openingConvention = (): OpeningConvention => useProjectStore.getState().openingLines ?? 'handle';
 

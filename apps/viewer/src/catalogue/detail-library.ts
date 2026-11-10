@@ -12,7 +12,7 @@
 
 import { detailLink } from '@/drafting/detail-mark';
 import { parsePat, serializePat } from '@/drafting/hatch/pattern';
-import { isBuiltInSymbol } from '@/drafting/symbols';
+import { isBuiltInSymbol } from '@bimvoice/ifcsheet';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectState } from '@/project/project-store';
 import { emptyCatalogue } from './catalogue-file';

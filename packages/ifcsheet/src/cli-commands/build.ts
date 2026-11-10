@@ -2,21 +2,26 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** `ifcsheet build`: the starting drawing set as PDF, DXF and handover ZIP (#164). The argument checks and the call, as `run` in `cli.ts` had them before the commands became a registry. */
+/** `ifcsheet build`: the starting drawing set, or a project's own (#479), as PDF, DXF and handover ZIP (#164). The argument checks and the call, as `run` in `cli.ts` had them before the commands became a registry. */
 
+import { DEFAULT_JOINERY_MAPPING } from '../joinery-mapping.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { describeTemplateNote, generateDefaultSet, parseSetTemplate, type SetTemplate, type TemplateNoteKey } from '../index.js';
 import { localeProblem, resolveLanguage } from '../cli-language.js';
 import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
-import { exportDxf, exportPdf, openModel, readProjectFile, sheetGraphics, type ProjectFacts } from '../headless.js';
+import { annotateSetHeadless, annotationsOf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, sheetGraphicToDxf, type ProjectFacts } from '../headless.js';
+import { readAnnotateSpec, readAnnotationPresets, type AnnotateSpec } from '../exports/annotate.js';
+import { withTypedProjectName } from '../title-block-fields.js';
+import { projectSetOf } from '../project-set.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
 import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from '../pac-set.js';
 import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
 import { underlayNotes } from '../cli-underlays.js';
+import { emptyPlanNote, sheetNumbersOf } from '../empty-plan-note.js';
 import { type CliIo } from '../cli-command.js';
 import { EXIT, type CliCommand } from '../cli-command.js';
 
@@ -40,6 +45,8 @@ interface BuildArgs {
   includeFarElements?: boolean;
   /** A drawing standard by id (`ro`): its pens and title block layout. */
   standard?: string;
+  /** What to annotate before writing (`--annotate=`): all, commands, or a preset of the project. */
+  annotate?: string;
 }
 
 async function build(args: BuildArgs, io: CliIo): Promise<number> {
@@ -61,18 +68,28 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   // The project is read first: its graphic standard and title block layout are what the sheets are drawn with.
   let project: ProjectFacts | undefined;
+  let presets: ReturnType<typeof readAnnotationPresets> = [];
   if (args.project !== undefined) {
     let projectText: string;
     try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
       io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
       return EXIT.failed;
     }
-    try { project = readProjectFile(projectText); } catch (error) {
+    try { project = readProjectFile(projectText); presets = readAnnotationPresets((JSON.parse(projectText) as { annotationPresets?: unknown }).annotationPresets); } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
   }
   // The one language of the run: the project's recorded language, else --locale, else Romanian for a PAC submission and English otherwise. It names the sheets and views, and with --pac the PAC words and the opis.
+  let annotate: AnnotateSpec | undefined;
+  if (args.annotate !== undefined) {
+    const spec = readAnnotateSpec(args.annotate, presets);
+    if ('error' in spec) {
+      io.stderr(`ifcsheet build --annotate: ${spec.error}\n`);
+      return EXIT.usage;
+    }
+    annotate = spec;
+  }
   const { language, notes } = resolveLanguage({ project, locale: args.locale, pac: args.pac });
   for (const note of notes) io.stderr(note);
   // The permit project: --pac-mode, else the project file's (the mode the app saved), else the full one.
@@ -88,8 +105,13 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   for (const note of standard.notes) io.stderr(`${note}\n`);
   const model = await openModel(bytes, { includeFarElements: args.includeFarElements });
+  // The project's own set (#479): its views, sheets, drafts and placed schedules, unless --template or --pac asks for a set of their rules.
+  const own = project && !setTemplate ? projectSetOf({ ...project, ...(args.name ? { name: args.name } : {}) }, model) : null;
+  if (project) io.stderr(own ? `ifcsheet: printing the drawing set of ${args.project}: ${own.document.sheets.length} sheet${own.document.sheets.length === 1 ? '' : 's'}, ${own.document.views.length} view${own.document.views.length === 1 ? '' : 's'}.\n`
+    : project.set.sheets.length > 0 ? `ifcsheet: ${args.pac ? '--pac' : '--template'} lays the sheets out by its rules; the ${project.set.sheets.length} sheets of ${args.project} are not printed.\n`
+    : `ifcsheet: ${args.project} holds no drawing set (no sheet); laying out a fresh one.\n`);
   // The notes a sheet prints (a paper stepped up) are in the language of the PAC words.
-  const generated = generateDefaultSet(model, { ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
+  const generated = own ?? generateDefaultSet(model, { ...(standard.sheetNumbering ? { scheme: standard.sheetNumbering } : {}), ...(args.name ? { name: args.name } : {}), ...(setTemplate ? { setTemplate } : {}), language, ...(args.pac ? { locale: language } : {}) });
   const set = generated && withTitleBlock(generated, standard);
   if (!set) {
     io.stderr(`ifcsheet: ${args.model} has no geometry to lay a drawing set out on.\n`);
@@ -97,10 +119,25 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   }
   // The project's underlays (#457) are printed on the sheets they name. The set built here has its own ids, so one that names a view or sheet this set does not have cannot print: say so.
   const underlays = project?.underlays ?? [];
-  const document = underlays.length > 0 ? { ...set.document, underlays } : set.document;
+  // --name is the project's name in the title blocks too (#614): typed, so it wins over the model's.
+  const typedTitleBlock = withTypedProjectName(set.document.titleBlock, args.name);
+  const named = typedTitleBlock ? { ...set.document, titleBlock: typedTitleBlock } : set.document;
+  const document = underlays.length > 0 ? { ...named, underlays } : named;
   const underlayWarnings = underlayNotes(document, { dxf: Boolean(args.dxf || args.handover) });
   for (const note of underlayWarnings) io.stderr(`${note}\n`);
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), language });
+  // What the project's sheets hold that the engine does not print yet is said, sheet by sheet.
+  const extras: Partial<Awaited<ReturnType<typeof projectSheetOptionsWithViews>>> = own && project ? await projectSheetOptionsWithViews(project, model, language, sheetFormat(language, standard.unitsAndNumbers), basename(args.model), (left) => io.stderr(`ifcsheet: ${left.sheet}: ${left.what} not printed yet.\n`)) : {};
+  // "Annotate the set" (#707): dimensions and tags on the plans, level marks on the elevations and sections, drafted over what the project already drew.
+  const format = sheetFormat(language, standard.unitsAndNumbers);
+  let annotations = extras.annotations;
+  if (annotate) {
+    const done = await annotateSetHeadless({ model, set: { document, levels: set.levels }, choices: annotate.choices, ...(annotate.tagParts ? { tagParts: annotate.tagParts } : {}), existing: annotations?.drafts ?? [], locale: format });
+    annotations = annotations ? { ...annotations, drafts: done.all } : annotationsOf(done.all, format);
+    for (const view of done.summary.views) io.stderr(`ifcsheet: annotated ${view.name}: ${view.skipped ? 'left out, the view has no drawing' : view.results.map((r) => `${r.command} ${r.outcome === 'added' ? `+${r.added}` : r.outcome === 'already' ? 'complete' : 'nothing to do'}`).join(', ')}\n`);
+  }
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, ...(annotations ? { annotations } : {}), onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
+  // The DXF is written through the project's CAD layer standard and line types, as the app's is (#619).
+  const dxfOptions = { ...(project?.set.cadLayers ? { cadLayers: project.set.cadLayers } : {}), lineTypes: project?.set.lineTypes ?? [] };
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
@@ -114,7 +151,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     const tokens = { project: set.document.name, date: new Date().toISOString().slice(0, 10) };
     const parts: HandoverPart[] = [
       { kind: 'pdf', extension: 'pdf', tokens: { ...tokens, sheet: set.document.name }, data: pdf },
-      ...sheets.map((sheet) => ({ kind: 'dxf' as const, extension: 'dxf', tokens: { ...tokens, number: sheet.number, sheet: sheet.name }, data: new TextEncoder().encode(exportDxf(sheet)) })),
+      ...sheets.map((sheet) => ({ kind: 'dxf' as const, extension: 'dxf', tokens: { ...tokens, number: sheet.number, sheet: sheet.name }, data: sheetGraphicToDxf(sheet, dxfOptions) })),
       { kind: 'ifc', extension: 'ifc', tokens: { ...tokens, sheet: basename(args.model).replace(/\.ifc$/i, '') }, data: bytes },
     ];
     const built = buildHandoverZip(args.pattern, parts);
@@ -128,7 +165,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     const used = new Set<string>();
     for (const sheet of sheets) {
       const file = join(args.dxf, dxfName(sheet.number, used));
-      await writeFile(file, exportDxf(sheet));
+      await writeFile(file, sheetGraphicToDxf(sheet, dxfOptions));
       io.stdout(`${file}\n`);
     }
   }
@@ -147,7 +184,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements] [--annotate[=<all|dimension,tag,level|preset>]]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
@@ -160,7 +197,12 @@ export const buildCommand: CliCommand = {
           The sheets and views (and with --pac the opis) are in the language the project records, else --locale
           (ro or en), else English (Romanian with --pac).
           A --project saved in the app's simplified mode (or --pac-mode rural) builds Anexa 3's sheets instead (1:50 on A3, a
-          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.`,
+          larger paper for a larger drawing, said on the sheet), without the opis, which is Anexa 2's.
+          With --project, the sheets are the project's own when it holds any (its views, its sheets with the
+          viewports where they were put, the dimensions and texts drawn on the views, the schedules placed: lists, rooms, bill of
+          quantities, drawing register);
+          a project with no sheet gets the starting set. Which one is printed is said on stderr.
+          With --annotate, the dimension strings, tags and level marks of "Annotate the set" are drafted on the views first (see Options).`,
   async run(rest, values, io) {
     if (values.csv || values.detail) {
       io.stderr('ifcsheet build has no --csv or --detail; they are options of boq and rooms.\n');
@@ -198,7 +240,7 @@ export const buildCommand: CliCommand = {
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, ...(values.annotate !== undefined ? { annotate: values.annotate } : {}), includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

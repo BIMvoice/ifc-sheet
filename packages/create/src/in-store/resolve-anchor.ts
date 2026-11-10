@@ -141,6 +141,37 @@ export class AnchorEntityReader {
       : null;
   }
 
+  /**
+   * False only when `entity(id)` cannot refer to any of `ids`: `id` is a source entity the view leaves as it is,
+   * and its STEP text has no digit run whose value is one of them (a `#n` reference, or a bare integer, is one).
+   * A whole-number real reads as its integer part (`14.` and `14.0` are 14). Anything the scan cannot rule out
+   * answers true, and the caller reads it with `entity`: a created or mutated entity, text with a `\` (an encoded
+   * string, whose digits are not its bytes) and a digit run followed by an exponent (`140E-1` is 14). It lets a walk
+   * over every relationship of a type skip parsing the ones that name none of the elements it is looking for (#154).
+   */
+  mayReferTo(id: number, ids: ReadonlySet<number>): boolean {
+    const view = this.view;
+    if (view && (view.getNewEntity(id) || view.getEntityTypeMutation(id) || view.getPositionalMutationsForEntity(id)
+      || view.getAttributeMutationsForEntity(id).length > 0)) return true;
+    // @raw-entity-enumeration-ok point lookup of one candidate's source span, to scan its bytes
+    const ref = this.store?.entityIndex.byId.get(id);
+    if (!ref || !this.extractor || !this.store) return true;
+    // The span `extractEntity` decodes, so the scan sees exactly the text the parse would.
+    const bytes = this.store.source.slice(ref.byteOffset, ref.byteOffset + ref.byteLength);
+    const end = bytes.length;
+    for (let i = 0; i < end; i++) {
+      const c = bytes[i];
+      if (c === 0x5c) return true;
+      if (c < 0x30 || c > 0x39) continue;
+      let n = 0;
+      let j = i;
+      for (; j < end && bytes[j] >= 0x30 && bytes[j] <= 0x39; j++) n = n * 10 + (bytes[j] - 0x30);
+      if (ids.has(n) || (j < end && (bytes[j] === 0x45 || bytes[j] === 0x65))) return true;
+      i = j - 1;
+    }
+    return false;
+  }
+
   entity(id: number): EffectiveEntityRecord | null {
     if (this.view?.isDeleted(id)) return null;
     const created = this.view?.getNewEntity(id);

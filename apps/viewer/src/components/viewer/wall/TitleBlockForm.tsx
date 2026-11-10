@@ -14,7 +14,10 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { clearTitleBlockField, setProjectTitleBlockField, setTitleBlockField } from '@/project/sheets';
 import { LOGO_FIELD, LOGO_MAX_BYTES, TITLE_BLOCK_FIELDS, titleBlockOf, type TitleBlockField } from '@/project/title-block';
-import { useEffectiveTitleBlock, useResolvedTitleBlock } from '@/project/title-block-model';
+import { lacksProjectData, useEffectiveTitleBlock, useResolvedTitleBlock } from '@/project/title-block-model';
+import { fieldsWithoutSource } from '@/project/title-block-sources';
+import { titleBlockFieldShown } from '@/project/title-block-visible';
+import { useViewerStore } from '@/store';
 import type { ProjectSheet } from '@/project/types';
 import { SourceBadge, SourcePicker } from './TitleBlockSource';
 import { ProjectParams, SheetParams } from './TitleBlockParams';
@@ -98,6 +101,13 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
   const projectName = useProjectStore((s) => s.name);
   const shown = sheet ? titleBlockOf(sheet, projectFields, projectName) : projectFields;
   const own = sheet?.titleBlock ?? {};
+  // A model with no IFC project fills only the project name (from its file) and the date: say which fields are left to type.
+  const models = useViewerStore((s) => s.models);
+  const template = useProjectStore((s) => s.titleBlockTemplate);
+  const installedStandardId = useProjectStore((s) => s.installedStandard?.id);
+  // The Romanian-only fields wait until the Romanian pack or layout asks for them, or one holds a value (#653).
+  const listed = TITLE_BLOCK_FIELDS.filter((key) => titleBlockFieldShown(key, { value: shown[key] ?? '', template, installedStandardId }) || key in own);
+  const missing = !sheet && models.size > 0 && lacksProjectData() ? fieldsWithoutSource(listed, resolved) : [];
 
   // A field takes a typed value only when it says something else than it shows now: leaving a field the model fills must not copy the model's value in as typed.
   const commit = (key: TitleBlockField, value: string): void => {
@@ -108,7 +118,8 @@ export function TitleBlockForm({ sheet }: { sheet?: ProjectSheet }) {
 
   return (
     <div>
-      {TITLE_BLOCK_FIELDS.map((key) => {
+      {missing.length > 0 ? <p role="note" className="m-0 text-xs text-amber-300">{t('wall.tb.missing', { fields: missing.map((k) => t(LABELS[k])).join(', ') })}</p> : null}
+      {listed.map((key) => {
         const value = shown[key] ?? '';
         const isOwn = key in own;
         return (

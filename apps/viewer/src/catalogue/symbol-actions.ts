@@ -9,7 +9,7 @@
  */
 
 import { commitDrafts, newDraft } from '@/drafting/draft-store';
-import { findSymbol, placeSymbol, symbolDrawingScale } from '@/drafting/symbols';
+import { findSymbol, placeSymbol, symbolDrawingScale } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from '@/drafting/types';
 import { commitStandards, paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';

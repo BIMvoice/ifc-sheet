@@ -10,33 +10,10 @@
  * and a wide `W` are no longer both counted as 0.62 of a height.
  */
 
+import { tableWidthEm, type TextFace } from '@bimvoice/ifcsheet';
 import type { FontKind } from './styles';
 
-/** The face a text is drawn in; absent fields mean the plain sans face. */
-export interface TextFace {
-  font?: FontKind;
-  bold?: boolean;
-  italic?: boolean;
-}
-
-/** Advance widths in 1/1000 of the text height, by the characters that share one. */
-const GROUPS: readonly (readonly [number, string])[] = [
-  [222, "ijl"], [260, '|'], [278, " !,./:;I[\\]ft"], [333, '()-`r'], [355, '"'], [191, "'"], [389, '{}'],
-  [500, 'ckvxyzJ*^'], [556, '0123456789abdeghnopqu$#_?L'], [584, '+<=>~'], [611, 'FTZ'], [667, 'ABEKPSVXY&'],
-  [722, 'CDHNRUw'], [778, 'GOQ'], [833, 'Mm'], [889, '%'], [944, 'W'], [1015, '@'],
-];
-const ADVANCE = new Map<string, number>(GROUPS.flatMap(([w, chars]) => [...chars].map((c): [string, number] => [c, w])));
-const UNKNOWN = 556;
-/** Serif faces run a little narrower than sans, bold a little wider; mono is fixed. */
-const SERIF = 0.93, BOLD = 1.06, MONO = 0.6;
-
-/** The width of `line` from the table. */
-export function tableWidthEm(line: string, face: TextFace = {}): number {
-  if (face.font === 'mono') return [...line].length * MONO;
-  let w = 0;
-  for (const c of line) w += ADVANCE.get(c) ?? UNKNOWN;
-  return (w / 1000) * (face.font === 'serif' ? SERIF : 1) * (face.bold ? BOLD : 1);
-}
+export { tableWidthEm, type TextFace };
 
 /** A measurer returns the width of `line` in text heights, or null to leave it to the table. */
 export type TextMeasurer = (line: string, face: TextFace) => number | null;

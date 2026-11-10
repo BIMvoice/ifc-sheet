@@ -14,11 +14,10 @@
  */
 
 import type { DrawnCurve, DrawnText, Pt2 } from '@bimvoice/ifcsheet/annotated-ifc';
-import { liveSymbol } from '@/siteplan/live-symbols';
+import { liveSymbol, flattenShape, placeSymbol } from '@bimvoice/ifcsheet';
 import { axisLayout, dimensionLayout, formatLevel, textBox, textLeader, withAnnotationScreenUp } from './annotation';
 import { leaderTextRight } from './leader-segments';
 import { witnessLine } from './level-mark';
-import { flattenShape, placeSymbol } from './symbols';
 import { formatDimension, type DimStyle, type TextStyle } from './styles';
 import { textBlock } from './text-block';
 import { isGeometry, type EntityShape, type Pt } from './types';

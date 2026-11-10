@@ -15,9 +15,16 @@ export { ModelRefusal, modelFormatOf, openModel, type FarElementInfo, type Opene
 export { generateViewDrawings, sectionConfigFor } from './view-drawings.js';
 export { sheetGraphic, type Polyline, type SheetGraphic, type SheetImage, type SheetPen, type SheetText, type SheetUnderlay } from './sheet-graphic.js';
 export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
-export { exportDxf, exportPdf } from './export.js';
+export { exportPdf } from './export.js';
+export { sheetGraphicToDxf, type SheetDxfOptions } from './sheet-dxf.js';
+export { exportSvg } from './svg-export.js';
+export { projectSheetOptions, projectSheetOptionsWithViews, type LeftOut, type ProjectSheetSource } from './project-sheets.js';
+export { SCHEDULE_CONTINUED } from './sheet-schedules.js';
+export { readPlanSymbols, withPlanSymbols, type PlanSymbol, type PlanSymbolRead } from './plan-symbols.js';
 export { IFC_GUID, isPhysicalElement, readModelFacts, readinessOfModel, type FactSource } from './readiness-read.js';
+export { byggesaksbimDocument, byggesaksbimReadiness, byggesaksbimReadinessOrError, byggesaksbimReport } from './byggesaksbim/run.js';
 export { areaScaleOf, readRooms, type RoomsRead } from './room-read.js';
 export * from './project.js';
 export { createHeadlessListProvider } from './list-provider.js';
 export { listScheduleCsv, listScheduleTableOn, listTableIsEmpty, runListScheduleOn, type HeadlessListOptions } from './list-headless.js';
+export { DEFAULT_DRAFT_LAYER, annotatableViews, annotateSetHeadless, annotationsOf, withDrafts, type HeadlessAnnotateInput, type HeadlessAnnotateResult } from './annotate/headless.js';

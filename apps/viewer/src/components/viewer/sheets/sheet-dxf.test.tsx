@@ -15,7 +15,7 @@ import { advance, cleanup, render, waitFor } from '@/test/render.js';
 import { Toaster } from '@/components/ui/toast';
 import { addProjectSheet, addProjectView, resetProject, useProjectStore } from '@/project/project-store';
 import { addViewport } from '@/project/sheets';
-import { exportSheetDxf } from './sheet-dxf.js';
+import { exportSheetDxf, sheetDxf } from './sheet-dxf.js';
 
 /** Toasts live in a module-level store: read only the ones shown after `seq`. */
 const rows = () => [...document.querySelectorAll<HTMLElement>('[data-toast-seq]')].map((r) => ({ seq: Number(r.dataset.toastSeq), text: r.textContent ?? '' }));
@@ -51,5 +51,19 @@ describe('a sheet exported as DXF', () => {
     exportSheetDxf(sheetWith('axonometric'), sheet());
     await advance(50);
     assert.doesNotMatch(shownSince(before), /DXF has no images/);
+  });
+
+  it('keeps a title block\'s Romanian text: ș ț ă come out as \\U+XXXX, not ? (#617)', () => {
+    addProjectSheet('Title block');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', '10');
+    t.setAttribute('y', '10');
+    t.textContent = 'Planșeu țiglă ă Î â';
+    svg.appendChild(t);
+    document.body.appendChild(svg);
+    const dxf = new TextDecoder('windows-1252').decode(sheetDxf(svg, sheet()));
+    assert.ok(dxf.includes('Plan\\U+0219eu \\U+021Bigl\\U+0103 \\U+0103 Î â'), 'the exact escapes, with Î and â as bytes');
+    assert.ok(!/Plan\?eu/.test(dxf));
   });
 });

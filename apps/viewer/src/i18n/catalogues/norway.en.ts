@@ -9,7 +9,6 @@ import type { TranslationValue } from '../types';
  */
 export const norwayEn = {
   'norway.title': 'Norway (byggesak)',
-  'norway.switch': 'Norge (byggesak)',
   'norway.intro': 'The drawings of a Norwegian building application, SAK10 § 5-4: "tegninger og målsatt situasjonsplan". Each item says where it comes from. Items marked unverified are not stated by the official pages read.',
   'norway.set.name': 'Norway (byggesak)',
   'norway.set.plans': 'Floor plans (plantegninger)',
@@ -17,7 +16,7 @@ export const norwayEn = {
   'norway.set.facades': 'Facades (fasadetegninger)',
   'norway.set.site': 'Site plan (situasjonsplan)',
   'norway.set.siteScale': 'Scale 1:500 is usual; the regulation sets none.',
-  'norway.set.siteToAdd': 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng), with a north arrow and a scale bar.',
+  'norway.set.siteToAdd': 'Plot, distances and terrain must be drawn in (tomt, avstander og terreng).',
   'norway.item.plans': 'Floor plans of all floors, at 1:100',
   'norway.item.roomUse': 'Room sizes and the intended use of each room on the plans',
   'norway.item.sections': 'Lengthwise and crosswise sections, at 1:100',

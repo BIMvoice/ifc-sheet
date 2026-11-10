@@ -15,7 +15,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { worldToDrawing } from '@/drafting/frame';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import type { ProjectView } from '@/project/types';
-import { COORDINATE_POINT_ID } from '@/siteplan/live-symbols';
+import { COORDINATE_POINT_ID } from '@bimvoice/ifcsheet';
 import { liveSymbolContext } from '@/siteplan/site-frame';
 import { registerLocale, setLocale } from '@/i18n';
 import ro from '@/i18n/locales/ro';

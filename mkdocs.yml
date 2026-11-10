@@ -164,6 +164,7 @@ nav:
     - MCP for AI Agents: guide/mcp.md
     - IfcSheet Command Line: guide/ifcsheet-cli.md
     - IfcSheet for AI Agents (MCP): guide/ifcsheet-mcp.md
+    - IfcSheet Acceptance Set: guide/acceptance-set.md
     - 3D Viewer & Analysis: guide/viewer-api.md
     - Server Guide: guide/server.md
     - Building for Desktop: guide/desktop.md

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { readLineType, type CustomLineType } from '@/drafting/line-types';
-import { listAt } from '../project-read';
+import { listAt } from '@bimvoice/ifcsheet';
 import { listField } from './define';
 
 declare module '../types' {
@@ -15,3 +15,11 @@ declare module '../types' {
 
 /** The project's own line types (#496); absent: only the built-in ones. */
 export const lineTypesField = listField('lineTypes', (raw) => listAt(raw, 'lineTypes').map((v, i) => readLineType(v, `/lineTypes/${i}`)), { presentOnly: true });
+
+/** Registered by this file (`./registered.ts`): found there, not listed. */
+export const registeredFields = [lineTypesField] as const;
+declare module './registered' {
+  interface RegisteredFieldKeys {
+    lineTypes: true;
+  }
+}

@@ -28,7 +28,7 @@ import { areaSummary } from '@/urban/area-summary';
 import { registerLocale, setLocale, captureTranslation } from '@/i18n/registry';
 import ro from '@/i18n/locales/ro';
 import { roomScheduleLabelsOf, type RoomScheduleData } from '@/components/viewer/joinery/room-schedule-hooks';
-import { layoutRoomSchedule } from './room-schedule-layout';
+import { layoutRoomSchedule } from '@bimvoice/ifcsheet';
 import { exportCsv, exportXlsx } from './schedule-export';
 import { roomScheduleExport } from './room-schedule-export';
 import { readScheduleExport, type ExportLabelSet } from '@/components/viewer/wall/schedule-export-read';

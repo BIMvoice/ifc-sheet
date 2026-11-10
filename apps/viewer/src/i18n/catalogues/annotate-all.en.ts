@@ -11,6 +11,19 @@ export const annotateAllEn = {
   'drafting.msg.dimAllNone': 'Nothing to dimension: no walls cut in this plan, or no facade with an opening or a cross wall.',
   'drafting.msg.dimAllHave': 'This plan has all its dimension strings already.',
   'drafting.msg.dimAllDone': 'Added {count} dimensions in {strings} strings. Facades with nothing to dimension: {skipped}.',
+  'drafting.msg.dimAllDropped': {
+    one: '{count} string left out: on a notch or courtyard facade it would run through the building, its wall stands at an angle to the plan and it could not be measured exactly, or, inside a room, there is no place clear of walls, labels, tags and symbols. Dimension it by hand.',
+    other: '{count} strings left out: on a notch or courtyard facade they would run through the building, their walls stand at an angle to the plan and they could not be measured exactly, or, inside rooms, there is no place clear of walls, labels, tags and symbols. Dimension them by hand.',
+  },
+  'drafting.msg.dimAllTagsMoved': {
+    one: '{count} tag moved along its facade to clear the extension lines; it still points at the same element.',
+    other: '{count} tags moved along their facades to clear the extension lines; they still point at the same elements.',
+  },
+  'drafting.msg.dimAllNoRooms': 'This plan has no rooms in the model (no IfcSpace), so no room sizes were drawn: DIMALL does not guess rooms from the walls. Dimension the rooms by hand.',
+  'drafting.msg.dimAllOpenings': {
+    one: '{count} door or window left out of the strings: the plan does not show exactly where its edges are. Dimension it by hand.',
+    other: '{count} doors or windows left out of the strings: the plan does not show exactly where their edges are. Dimension them by hand.',
+  },
   'drafting.msg.dimAllHeads': '{count} strings run through the arrow or letter of a section mark; their figures keep clear of it, but you may want to move the mark.',
   'drafting.cmd.tagAll': 'TAGALL',
   'drafting.cmd.ceilTag': 'CEILTAG',
@@ -20,7 +33,7 @@ export const annotateAllEn = {
   'drafting.msg.ceilTagStacked': 'Ceilings that share another one\'s tag, lying exactly under it (same spot, same height): {stacked}. Tags in all: {tags}.',
   'drafting.msg.ceilTagNone': 'Every ceiling of this plan has its height already ({already}), or the plan has none.',
   'drafting.tool.tagAll': 'Tag doors, windows and rooms',
-  'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan.',
+  'drafting.msg.tagAllPlanOnly': 'TAGALL works on a plan, a section or an elevation.',
   'drafting.msg.tagAllNeedsTypes': 'TAGALL needs the label types "Door and window mark" and "Room name and area"; restore them in the Standards dialog.',
   'drafting.msg.tagAllDone': 'Tagged {marks} doors and windows and {rooms} rooms. Already tagged: {already}.',
   'drafting.msg.tagAllHave': 'Every door, window and room of this plan has its label already ({already}).',

@@ -12,22 +12,24 @@ import '@/test/setup-dom.js';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanup, press, render } from '@/test/render.js';
+import { cleanup, click, press, render } from '@/test/render.js';
 import { setPlatform } from '@/test/platform.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
-import { cancelCommand, useDraftingSession } from '@/drafting/session';
+import { cancelCommand, startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { setAutocadMode } from '@/lib/commands/autocad-mode';
 import type { ProjectView } from '@/project/types';
 import { DraftingView } from './DraftingView.js';
 
 const plan = { id: 'p', kind: 'plan', name: 'Ground', createdAt: 0, level: { name: 'Ground', elevation: 0, storeyGlobalIds: [] }, cutHeight: 1.2 } satisfies ProjectView;
 
-function mount(): HTMLInputElement {
+function mount(): HTMLTextAreaElement {
   const ui = render(<DraftingView view={plan} />);
-  return ui.querySelector('input[aria-label="Command line"]') as HTMLInputElement;
+  return ui.querySelector('textarea[aria-label="Command line"]') as HTMLTextAreaElement;
 }
 
-function enter(line: HTMLInputElement, text: string): void {
+const commandLine = () => document.querySelector('textarea[aria-label="Command line"]');
+
+function enter(line: HTMLTextAreaElement, text: string): void {
   for (const ch of text) press(document.body, ch);
   press(line, 'Enter');
 }
@@ -72,13 +74,45 @@ describe('DraftingView with AutoCAD mode on', () => {
   });
 });
 
-describe('DraftingView with AutoCAD mode off', () => {
-  it('ORTHO is not a command, and Enter repeats nothing', () => {
-    const line = mount();
-    enter(line, 'ortho');
-    assert.equal(useDraftingSession.getState().ortho, false);
-    act(() => line.blur());
+describe('DraftingView with AutoCAD mode off (#168)', () => {
+  it('shows no command line, idle or while a tool runs', () => {
+    render(<DraftingView view={plan} />);
+    assert.ok(commandLine() === null, 'no command line');
+    act(() => startDraftCommand('line'));
+    assert.ok(commandLine() === null, 'no command line');
+    assert.equal(document.body.textContent?.includes('Command:'), false);
+  });
+
+  it('a typed letter does not start a command', () => {
+    render(<DraftingView view={plan} />);
+    press(document.body, 'l');
+    press(document.body, 'i');
     press(document.body, 'Enter');
-    assert.equal(useDraftingSession.getState().ortho, false);
+    assert.equal(useDraftingSession.getState().commandId, null);
+  });
+
+  it('a running tool says its next step and Done ends it', () => {
+    render(<DraftingView view={plan} />);
+    assert.ok(document.querySelector('[data-tool-prompt]') === null, 'no tool prompt');
+    act(() => startDraftCommand('line'));
+    const bar = document.querySelector('[data-tool-prompt]');
+    assert.ok(bar);
+    assert.ok((bar.querySelector('output')?.textContent ?? '').length > 0);
+    click(Array.from(bar.querySelectorAll('button')).find((b) => b.textContent === 'Done') as HTMLButtonElement);
+    assert.equal(useDraftingSession.getState().commandId, null);
+    assert.ok(document.querySelector('[data-tool-prompt]') === null, 'no tool prompt');
+  });
+});
+
+describe('DraftingView command line with AutoCAD mode on (#168)', () => {
+  beforeEach(() => setAutocadMode(true));
+
+  it('is shown, and a typed command runs', () => {
+    const line = mount();
+    assert.ok(line);
+    for (const ch of 'line') press(document.body, ch);
+    press(line, 'Enter');
+    assert.equal(useDraftingSession.getState().commandId, 'line');
+    assert.ok(document.querySelector('[data-tool-prompt]') === null, 'no tool prompt');
   });
 });

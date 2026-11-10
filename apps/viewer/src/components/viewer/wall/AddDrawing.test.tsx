@@ -47,14 +47,14 @@ const button = (ui: HTMLElement, text: RegExp) => {
 describe('AddDrawing', () => {
   it('makes the plan of a storey that has none, and reuses one that has', () => {
     const made: string[] = [];
-    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Plan of a storey/));
     click(button(ui, /^First Floor$/));
     const plan = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.level.name === 'First Floor');
     assert.ok(plan, 'a plan was made for the first floor');
     assert.deepEqual(made, [plan.id]);
     cleanup();
-    const again = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const again = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(again, /Plan of a storey/));
     click(button(again, /^First Floor$/));
     assert.equal(made[1], plan.id, 'the same plan, not a second one');
@@ -63,7 +63,7 @@ describe('AddDrawing', () => {
   it('is one undo step with the sheet placement that follows it (#51): the new view and its viewport go together', () => {
     useProjectStore.setState({ sheets: [{ id: 's', number: 'A-101', name: 'Plans', createdAt: 0 }] });
     clearDraftHistory();
-    const ui = render(<AddDrawing onView={(id) => { addViewport('s', id, { x: 10, y: 10 }); }} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => { addViewport('s', id, { x: 10, y: 10 }); }} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Plan of a storey/));
     click(button(ui, /^First Floor$/));
     const s = () => useProjectStore.getState();
@@ -77,7 +77,7 @@ describe('AddDrawing', () => {
 
   it('reuses the elevation of the side picked', () => {
     const made: string[] = [];
-    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /^Elevation/));
     click(button(ui, /^East Elevation$/));
     const east = useProjectStore.getState().views.find((v) => v.kind === 'elevation' && v.direction === 'east');
@@ -87,7 +87,7 @@ describe('AddDrawing', () => {
   it('starts a section line, and starts a detail', () => {
     let section = 0;
     let detail = 0;
-    const ui = render(<AddDrawing onView={() => {}} onSection={() => { section++; }} onDetail={() => { detail++; }} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={() => {}} onSection={() => { section++; }} onDetail={() => { detail++; }} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /^Section/));
     assert.equal(section, 1);
     assert.equal(button(ui, /Detail of an area/).disabled, false);
@@ -100,7 +100,7 @@ describe('AddDrawing', () => {
   const sides = (locale: string, elevationChoice: RegExp) => {
     useProjectStore.setState({ views: useProjectStore.getState().views.filter((v) => v.kind !== 'elevation') });
     act(() => setLocale(locale));
-    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={() => {}} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, elevationChoice));
     const labels = [...ui.querySelectorAll('section > :not(:first-child) button')].map((b) => b.textContent ?? '');
     click(button(ui, new RegExp(`^${labels[0]}$`)));
@@ -119,7 +119,7 @@ describe('AddDrawing', () => {
 
   it('makes a foundation plan on the lowest storey and a roof plan on the highest, each once', () => {
     const made: string[] = [];
-    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Structure, foundations, roof/));
     click(button(ui, /^Foundation plan$/));
     const foundation = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.discipline === 'foundation');
@@ -128,12 +128,12 @@ describe('AddDrawing', () => {
     assert.equal(foundation.graphics?.presetId, 'preset-monochrome');
     assert.deepEqual(made, [foundation.id]);
     cleanup();
-    const again = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const again = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(again, /Structure, foundations, roof/));
     click(button(again, /^Foundation plan$/));
     assert.equal(made[1], foundation.id, 'the same plan, not a second one');
     cleanup();
-    const roofUi = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const roofUi = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(roofUi, /Structure, foundations, roof/));
     click(button(roofUi, /^Roof plan$/));
     const roof = useProjectStore.getState().views.find((v) => v.kind === 'plan' && v.discipline === 'roof');
@@ -143,7 +143,7 @@ describe('AddDrawing', () => {
 
   it('asks for the storey of a structural plan, and keeps it apart from the plan of that storey', () => {
     const made: string[] = [];
-    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Structure, foundations, roof/));
     click(button(ui, /^Structural plan$/));
     click(button(ui, /^Ground Floor$/));
@@ -153,7 +153,7 @@ describe('AddDrawing', () => {
     assert.deepEqual(made, [structural.id]);
     // "Plan of a storey" on the same storey is the storey's own plan, not the structural one.
     cleanup();
-    const plain = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const plain = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(plain, /Plan of a storey/));
     click(button(plain, /^Ground Floor$/));
     const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');
@@ -165,7 +165,7 @@ describe('AddDrawing', () => {
     const structural = { ...disciplineViewFor('structural', LEVELS[1], views), id: 'structural-ground' };
     useProjectStore.setState({ views: [structural as (typeof views)[number], ...views] });
     const made: string[] = [];
-    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onClose={() => {}} />);
+    const ui = render(<AddDrawing onView={(id) => made.push(id)} onSection={() => {}} onDetail={() => {}} onSheet={() => {}} onClose={() => {}} />);
     click(button(ui, /Plan of a storey/));
     click(button(ui, /^Ground Floor$/));
     const own = useProjectStore.getState().views.find((v) => v.kind === 'plan' && !v.discipline && v.level.name === 'Ground Floor');

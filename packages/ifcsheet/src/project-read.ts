@@ -8,10 +8,12 @@
  * `ifcsheet check --project` and `ifcsheet_check_readiness` build the same findings from it as the app does.
  *
  * Reads only what the checks and the build use. The graphic standard and the title block layout are read for `ifcsheet build`
- * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters); the sheets are read only as far as the title block's fit needs (`project-title-block-fit.ts`); no other readiness finding
- * depends on them yet (the set-side checks of the app's Check panel do, and are not in the engine). Everything read
- * is read as the app reads it (`readSchedule`, `readJoinerySpec`, `readJoineryMapping` are the app's own readers),
- * and what is malformed is dropped, so an old file, or one with a damaged section, loads with that section empty.
+ * (`graphicStandard`, `titleBlockTemplate`, and the title block's typed values, mapping and parameters), and so is the drawing set
+ * (`set`: the views, sheets, drafts and their styles, #479), which the build prints; the sheets are also read as far as the title block's
+ * fit needs (`project-title-block-fit.ts`). Everything read is read as the app reads it
+ * (`readSchedule`, `readJoinerySpec`, `readJoineryMapping`, and the set's readers in `project-set.ts` are the app's own readers).
+ * What the checks read is dropped when malformed, so an old file, or one with a damaged section, loads with that section empty; the
+ * set is read as strictly as the app reads it, so a view or sheet the app would refuse the file for refuses it here too.
  * A file that is not a project file, or that a newer build wrote, is refused with the app's wording.
  */
 
@@ -20,6 +22,8 @@ import { DEFAULT_JOINERY_MAPPING, readJoineryMapping, type JoineryMapping } from
 import { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from './project-version.js';
 import { readSchedule, scheduleFilterProperties, type ProjectSchedule } from './sub-reports.js';
 import type { JoinerySpec } from '@ifc-lite/create';
+import { readJoineryOverrides, type JoineryCellOverride } from './joinery-overrides.js';
+import { scheduleModelsOf } from './schedule-models.js';
 import { joineryScheduleData, type JoineryProject, type ScheduleModel } from './joinery-schedule.js';
 import { subReportChecksOf, type SubReportCheck } from './sub-report-check.js';
 import { readBoqArticles, boqPropertyNames, type BoqArticle } from './boq.js';
@@ -41,10 +45,15 @@ import { projectTitleBlockMisfits, readProjectSheets, type ProjectSheets } from 
 import { PAC_MODES, type PacMode } from './pac-set.js';
 import { readUrbanSettings } from './urban-settings-read.js';
 import type { UrbanSettings } from './urban-indicators.js';
+import { readSiteArea } from './site-area.js';
 import type { StoreyInput } from './view-defaults.js';
+import { readMaterials, type ProjectMaterial } from './materials.js';
 import { readUnderlays } from './underlay-read.js';
+import { readDxfUnderlays } from './dxf-underlay-read.js';
 import type { ViewUnderlay } from './underlay.js';
+import type { ViewDxfUnderlay } from './dxf-underlay.js';
 import { ruralScopeOfModel, type RuralScopeModel } from './rural-scope-read.js';
+import { readProjectSet, type ProjectSet } from './project-set.js';
 
 /** What the checks read of a project file. */
 export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
@@ -57,8 +66,14 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   joineryMapping: JoineryMapping;
   /** The project's setting "include far-away elements in framing" (`framing.ts`); false when the file does not say so. */
   includeFarElements: boolean;
+  /** The cells of the joinery schedules typed over the model's (#446), by type and row; absent when the file has none. `scheduleOf` prints them. */
+  joineryOverrides?: JoineryCellOverride[];
+  /** The project opts in to the ByggesaksBIM (Norway) readiness check (#372); false when the file does not say so. */
+  byggesaksbim: boolean;
   /** The bill of quantities' articles (#75); empty when the file has none. */
   boqArticles: BoqArticle[];
+  /** The site area in m² typed in the app (`siteArea`); absent: the plot drawn on the site plan, else the model's IfcSite. */
+  siteArea?: number;
   /** The office's classification mappings (#89); empty when the file has none. */
   classificationMappings: ClassificationMapping[];
   /** The project's "Units and numbers" setting (#88), as the app reads it; absent when the file sets none. Hand it to `sheetFormat` for every figure the command line or an export writes. */
@@ -83,13 +98,24 @@ export interface ProjectFacts extends JoineryProject, Partial<ProjectSheets> {
   pacMode?: PacMode;
   /** The urban indicators' terrain level, ±0.00 and storeys left out of Ad for CUT; absent: the defaults. */
   urbanSettings?: UrbanSettings;
+  /** The project's own drawing set (#479): what `ifcsheet build --project` prints; its lists are empty when the file holds none. */
+  set: ProjectSet;
   /** The pictures laid under views (#457); absent when the file has none. A build prints each on the sheets it names, when the generated set has that view and sheet. */
   underlays?: ViewUnderlay[];
+  /** The DXF drawings laid under plan views (#547); absent when the file has none. */
+  dxfUnderlays?: ViewDxfUnderlay[];
+  /** The project's building materials table (#90); absent when the file has none. A build paints elevations and sections by its fills (#633). */
+  materials?: ProjectMaterial[];
 }
 
 type Json = Record<string, unknown>;
 const isStorey = (s: unknown): s is StoreyInput => isObject(s) && typeof s.name === 'string' && typeof s.elevation === 'number';
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** The flips a project keeps per element GlobalId (1 to 3), the entries that are not one dropped. */
+export function readSymbolFlips(value: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(Object.entries(value).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3));
+}
 
 /** A project file's text, read. Throws an Error with the app's wording when it is not a project file or is newer than this build reads. */
 export function readProjectFile(text: string): ProjectFacts {
@@ -110,7 +136,11 @@ export function readProjectFile(text: string): ProjectFacts {
   const titleBlockSources = readTitleSources(parsed.titleBlockSources);
   const titleBlockParams = readTitleBlockParams(parsed.titleBlockParams);
   const urbanSettings = readUrbanSettings(parsed.urbanSettings);
+  // Before the lenient fields: a view, sheet or draft the app refuses the file for refuses it here first, as in the app.
+  const set = readProjectSet(parsed);
   const underlays = readUnderlays(parsed);
+  const dxfUnderlays = readDxfUnderlays(parsed);
+  const materials = readMaterials(parsed.materials);
   const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
   const sheets = readProjectSheets(parsed);
   return {
@@ -120,7 +150,10 @@ export function readProjectFile(text: string): ProjectFacts {
     joineryTypes: readJoineryList(parsed.joineryTypes),
     joineryMapping: parsed.joineryMapping !== undefined ? readJoineryMapping(parsed.joineryMapping) : { ...DEFAULT_JOINERY_MAPPING },
     includeFarElements: parsed.includeFarElements === true,
+    ...(readJoineryOverrides(parsed.joineryOverrides) ? { joineryOverrides: readJoineryOverrides(parsed.joineryOverrides) } : {}),
+    byggesaksbim: parsed.byggesaksbim === true,
     boqArticles: readBoqArticles(parsed.boqArticles),
+    ...(readSiteArea(parsed.siteArea) !== undefined ? { siteArea: readSiteArea(parsed.siteArea) } : {}),
     classificationMappings: readClassificationMappings(parsed.classificationMappings),
     ...(readUnitsAndNumbers(parsed.unitsAndNumbers) ? { unitsAndNumbers: readUnitsAndNumbers(parsed.unitsAndNumbers) } : {}),
     ...(standard.id !== undefined ? { graphicStandard: graphicStandardOf(standard.id) } : {}),
@@ -135,8 +168,12 @@ export function readProjectFile(text: string): ProjectFacts {
     ...(sheets.sheets.length > 0 ? sheets : {}),
     ...(PAC_MODES.find((m) => m === parsed.pacMode) ? { pacMode: PAC_MODES.find((m) => m === parsed.pacMode) } : {}),
     ...(urbanSettings ? { urbanSettings } : {}),
+    set,
     ...(underlays.length > 0 ? { underlays } : {}),
-    ...(isObject(parsed.symbolFlips) ? { symbolFlips: Object.fromEntries(Object.entries(parsed.symbolFlips).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 3)) } : {}),
+    ...(dxfUnderlays.length > 0 ? { dxfUnderlays } : {}),
+    ...(materials.length > 0 ? { materials } : {}),
+    ...(parsed.openingLines === 'hinge' || parsed.openingLines === 'handle' ? { openingLines: parsed.openingLines } : {}),
+    ...(isObject(parsed.symbolFlips) ? { symbolFlips: readSymbolFlips(parsed.symbolFlips) } : {}),
   };
 }
 
@@ -152,8 +189,8 @@ export function projectSubReportChecks(project: ProjectFacts, models: readonly S
  * The readiness findings of an opened model with a project: the model's own, then a pair for each split schedule
  * whose parts overlap or leave elements out. Without a project, `readinessOfModel` alone.
  */
-export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
-  const checks = project ? projectSubReportChecks(project, [{ modelId, dataStore: model.dataStore, view: null }]) : [];
+export function readinessWithProject(model: Omit<RuralScopeModel, 'storeys'> & { storeys: readonly unknown[]; extent?: unknown; geometryRead?: boolean; farElements?: readonly FarElementFact[]; meshes?: readonly MeshData[] }, project: ProjectFacts | undefined, modelId = 'model'): ReadinessFinding[] {
+  const checks = project ? projectSubReportChecks(project, scheduleModelsOf(model, '', modelId)) : [];
   // What the project's articles take and the model does not state (#75); nothing when the project has no articles.
   const articles = project?.boqArticles ?? [];
   const boq = articles.length > 0 ? boqMissing(computeBoq(readBoqElements(storeSource(modelId, model.dataStore), new Set(boqPropertyNames(articles))), articles)) : undefined;

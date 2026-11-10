@@ -6,14 +6,14 @@
 
 import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
-import type { TagKind } from './tag-fields';
+import type { TagKind } from '@bimvoice/ifcsheet/tag-fields';
 
 const CLASSES: Record<TagKind, readonly string[]> = {
   door: ['IFCDOOR', 'IFCDOORSTANDARDCASE'],
   window: ['IFCWINDOW', 'IFCWINDOWSTANDARDCASE'],
   room: ['IFCSPACE'],
   wall: ['IFCWALL', 'IFCWALLSTANDARDCASE'],
-  other: ['IFCSLAB', 'IFCCOLUMN', 'IFCBEAM', 'IFCSTAIR', 'IFCCOVERING', 'IFCFURNISHINGELEMENT'],
+  other: ['IFCSLAB', 'IFCCOLUMN', 'IFCBEAM', 'IFCSTAIR', 'IFCCOVERING', 'IFCFURNISHINGELEMENT', 'IFCSIGN', 'IFCSIGNAL', 'IFCBUILDINGELEMENTPROXY', 'IFCRAILING', 'IFCROOF', 'IFCMEMBER', 'IFCPLATE', 'IFCFLOWTERMINAL'],
 };
 
 export interface PreviewElement {

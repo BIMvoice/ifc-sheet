@@ -9,12 +9,15 @@ import assert from 'node:assert/strict';
 import { resetProject } from '@/project/project-store';
 import { wall } from '@/labels/label-fixture.js';
 import { textBox } from '@/drafting/annotation';
-import type { LabelElement } from '@/labels/label-resolve.js';
+import type { LabelElement } from '@bimvoice/ifcsheet';
 import type { DraftEntity, Pt } from '@/drafting/types';
-import type { ViewElement } from '@/labels/view-elements.js';
-import type { LabelTarget } from '@/labels/label-place.js';
-import { planTagAll } from './plan.js';
-import { TAGALL_TYPES } from './types.js';
+import type { ViewElement } from '@bimvoice/ifcsheet';
+import type { LabelTarget } from '@bimvoice/ifcsheet';
+import { planTagAllInApp } from './plan.js';
+
+/** The engine's result, its labels also as `drafts`. */
+const planTagAll = (input: Parameters<typeof planTagAllInApp>[0]) => { const r = planTagAllInApp(input); return { ...r, drafts: r.add }; };
+import { TAGALL_TYPES } from '@bimvoice/ifcsheet';
 
 const box = (x0: number, y0: number, x1: number, y1: number): Pt[] => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 const [mark, room] = TAGALL_TYPES;

@@ -1,0 +1,11 @@
+loadReportPanel.affectedEntitiesLabel
+loadReportPanel.closeTitle
+loadReportPanel.entitySummary
+loadReportPanel.exportJsonTitle
+loadReportPanel.fastModeSuffix
+loadReportPanel.noModelsLoaded
+loadReportPanel.selectAndFrameTitle
+loadReportPanel.status.clean
+loadReportPanel.status.issuesFound
+loadReportPanel.status.unavailable
+loadReportPanel.tierSuffix

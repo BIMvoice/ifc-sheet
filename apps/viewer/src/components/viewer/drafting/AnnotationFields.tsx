@@ -12,7 +12,7 @@ import { useTranslation } from '@/i18n';
 import { editDrafts } from '@/drafting/draft-store';
 import { setSymbolPlacement } from '@/catalogue/symbol-actions';
 import { builtInPatterns } from '@/drafting/hatch/library';
-import { allSymbols } from '@/drafting/symbols';
+import { allSymbols } from '@bimvoice/ifcsheet';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { followReference, isManualLevel, setLevelValue } from '@/drafting/level-mark';
 import { levelRefAt, resolveLevelRef } from '@/drafting/session';

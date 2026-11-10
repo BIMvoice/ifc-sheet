@@ -22,13 +22,16 @@
  * same change, or the slack it just earned silently absorbs the next 50.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { availableParallelism } from 'node:os';
+import { promisify } from 'node:util';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 import { writeTestProgram, GENERATED_CONFIG } from './typecheck-tests.mjs';
-import { classifyTscOutput, untrustworthyExitReason } from './lib/unused-locals-classify.mjs';
+import { classifyTscOutput, syncExitShape, untrustworthyExitReason } from './lib/unused-locals-classify.mjs';
 
+const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath = join(repoRoot, 'scripts', 'unused-locals-baseline.json');
 const update = process.argv.includes('--update');
@@ -87,10 +90,10 @@ function projectFor(dir) {
 }
 
 /** Count "declared but never read" diagnostics in one package. */
-function countViolations(dir) {
+async function countViolations(dir) {
   const project = projectFor(dir);
   try {
-    execFileSync('pnpm', ['exec', 'tsc', '--noEmit', '--noUnusedLocals', '--pretty', 'false', '-p', project], {
+    await execFileAsync('pnpm', ['exec', 'tsc', '--noEmit', '--noUnusedLocals', '--pretty', 'false', '-p', project], {
       cwd: join(repoRoot, dir), encoding: 'utf8', stdio: 'pipe', maxBuffer: 32 * 1024 * 1024,
       // `--pretty false` is the primary defense: it is tsc's own supported flag
       // for stable, colour-free, machine-readable diagnostics, verified against
@@ -102,7 +105,10 @@ function countViolations(dir) {
       env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
     });
     return { count: 0, unmeasurable: false };
-  } catch (err) {
+  } catch (rejection) {
+    // The async rejection carries the exit status in `code`; syncExitShape
+    // puts it back where untrustworthyExitReason looks for it.
+    const err = syncExitShape(rejection);
     // Third layer: strip any ANSI that made it through anyway (e.g. a tool
     // upstream of tsc in this spawn chain that ignores both of the above)
     // before matching, rather than trusting the two defenses above blindly.
@@ -166,14 +172,28 @@ function countViolations(dir) {
   }
 }
 
+// One tsc per package, a few at a time: run one after another they took about
+// 6.5 of the Lint job's 10 minutes in CI. Every package is still measured, and
+// the results are folded in `dirs` order so the baseline file keeps its order.
+const JOBS = Math.max(1, Math.min(4, availableParallelism()));
 const dirs = packageDirs();
+const results = new Array(dirs.length);
+let next = 0;
+async function worker() {
+  while (next < dirs.length) {
+    const i = next++;
+    results[i] = await countViolations(dirs[i]);
+  }
+}
+await Promise.all(Array.from({ length: Math.min(JOBS, dirs.length) }, worker));
+
 const counts = {};
 const unmeasurable = [];
-for (const dir of dirs) {
-  const { count, unmeasurable: broken } = countViolations(dir);
+dirs.forEach((dir, i) => {
+  const { count, unmeasurable: broken } = results[i];
   if (broken) unmeasurable.push(dir);
   else counts[dir] = count;
-}
+});
 
 if (unmeasurable.length > 0 && update) {
   // Refuse to bake a baseline that silently omits packages. Writing one here is

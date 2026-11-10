@@ -9,12 +9,12 @@
  * elements. The session reads them back through the getters here.
  */
 
-import type { ViewElement } from '@/labels/view-elements';
-import type { PlanPart } from '@/dimall/types';
-import type { RoomOfPlan } from '@/tagall/footprint';
+import type { ObstacleBox as Box, ViewElement } from '@bimvoice/ifcsheet';
+import type { PlanPart } from '@bimvoice/ifcsheet';
+import type { RoomOfPlan } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { ProjectView } from '@/project/types';
-import type { Box } from './cross-ref-marks';
+import type { ModelLinePick } from './commands/types';
 import type { ElementBox } from './dimension-anchor';
 import type { LevelResolver } from './level-mark';
 import type { ViewInputs } from './view-inputs';
@@ -82,6 +82,13 @@ export function setModelPicker(picker: typeof modelPicker): void {
 export const hasModelPicker = (): boolean => modelPicker !== null;
 export const pickModel = (p: Pt, tolerance: number, additive: boolean): void => modelPicker?.(p, tolerance, additive);
 
+/** The line of the model's drawing under a point (the view installs it): what TRIM and EXTEND take when no drafted line is picked. */
+let modelLinePicker: (p: Pt, tolerance: number) => ModelLinePick | null = () => null;
+export function setModelLinePicker(picker: ((p: Pt, tolerance: number) => ModelLinePick | null) | null): void {
+  modelLinePicker = picker ?? (() => null);
+}
+export const modelLineAt = (p: Pt, tolerance: number): ModelLinePick | null => modelLinePicker(p, tolerance);
+
 export function setElementPicker(picker: ((p: Pt) => number | null) | null): void {
   elementPicker = picker ?? (() => null);
 }
@@ -122,12 +129,20 @@ export function setPlanObstaclesProvider(provider: (() => Box[]) | null): void {
 }
 export const planObstaclesOf = (): Box[] => planObstaclesProvider();
 
+/** The lines the plan in front's drawing carries, for the room dimensions of DIMALL. */
+let planLinesProvider: () => { a: Pt; b: Pt }[] = () => [];
+export function setPlanLinesProvider(provider: (() => { a: Pt; b: Pt }[]) | null): void {
+  planLinesProvider = provider ?? (() => []);
+}
+export const planLinesOf = (): { a: Pt; b: Pt }[] => planLinesProvider();
+
 /** The view in front gives the session all it reads from the view and its drawing (`view-inputs.ts`). */
 export function installViewInputs(inputs: ViewInputs): void {
   setViewElementsProvider(inputs.viewElements);
   setPlanPartsProvider(inputs.planParts);
   setPlanObstaclesProvider(inputs.planObstacles);
   setRoomsProvider(inputs.rooms);
+  setPlanLinesProvider(inputs.planLines ?? null);
   setAnnotationProviders(inputs.closedLoops, inputs.levelAt);
   setLevelReferenceProviders(inputs.levelRefAt, inputs.resolveLevel);
   planeProvider = inputs.plane;
@@ -141,6 +156,27 @@ export function clearViewInputs(): void {
   setPlanPartsProvider(null);
   setPlanObstaclesProvider(null);
   setRoomsProvider(null);
+  setPlanLinesProvider(null);
+}
+
+/** The shapes the view in front offers to snap to, as a function (for `parkViewProviders`' caller: `referenceShapesIn` always asks the current one). */
+export const referenceProviderOf = (): ((min: Pt, max: Pt) => DraftShape[]) => referenceProvider;
+
+/**
+ * Everything the view in front installed, kept; the returned function puts it back. A drafting view shown over another for a while (the
+ * plan symbol editor, #448) installs its own and clears them on leaving, so the one in front has to be given back.
+ */
+export function parkViewProviders(): () => void {
+  const kept = {
+    referenceProvider, modelPicker, loopProvider, levelProvider, levelRefProvider, levelResolver, planeProvider, viewKindProvider, viewProvider,
+    elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider, planLinesProvider,
+  };
+  return () => {
+    ({
+      referenceProvider, modelPicker, loopProvider, levelProvider, levelRefProvider, levelResolver, planeProvider, viewKindProvider, viewProvider,
+      elementPicker, elementBoxProvider, viewElementsProvider, planPartsProvider, roomsProvider, planObstaclesProvider, planLinesProvider,
+    } = kept);
+  };
 }
 
 /** What the commands read from the view in front, as the session holds it. */
@@ -148,6 +184,6 @@ export function installedViewInputs(): ViewInputs {
   return {
     closedLoops: closedLoopsOfView, levelAt: levelAtPoint, levelRefAt, resolveLevel: resolveLevelRef,
     plane: () => activeWorkPlane().plane, viewKind: viewKindOf, view: () => activeWorkPlane().view,
-    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf,
+    viewElements: viewElementsOf, planParts: planPartsOf, planObstacles: planObstaclesOf, rooms: roomsOf, planLines: planLinesOf,
   };
 }

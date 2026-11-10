@@ -41,6 +41,7 @@ export const checkEn = {
   'check.what.dimension': { one: 'Dimension', other: 'Dimensions' },
   'check.danglingAnnotation': '{what} "{text}" in {view} on {sheet}: its element ({element}) is no longer in the model.',
   'check.orphanedOverride': { one: '{schedule} on {sheet}: {count} typed value for {element}, which is no longer in the model.', other: '{schedule} on {sheet}: {count} typed values for {element}, which is no longer in the model.' },
+  'check.orphanedJoineryOverride': { one: '{count} typed value for the type {type} on {sheet}, which is no longer in the model.', other: '{count} typed values for the type {type} on {sheet}, which is no longer in the model.' },
   'check.remedy.dropHint': 'Drop the values typed for this element from the table',
   'check.remedy.delete': 'Delete',
   'check.remedy.reattach': 'Re-attach',

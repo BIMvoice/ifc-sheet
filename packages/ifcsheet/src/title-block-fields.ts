@@ -30,3 +30,12 @@ export function titleBlockOf(sheet: Pick<ProjectSheet, 'titleBlock'>, project: R
   if (!fields.project) fields.project = projectName;
   return fields;
 }
+
+/**
+ * `typed` with `name` as its project field: a name the person gave (`ifcsheet build --name`) is typed, so it wins over
+ * the model's own (`resolveField` reads the typed value first). Empty or absent `name`: `typed` as it is, and the
+ * model's project name fills the field.
+ */
+export function withTypedProjectName(typed: Record<string, string> | undefined, name: string | undefined): Record<string, string> | undefined {
+  return name ? { ...typed, project: name } : typed;
+}

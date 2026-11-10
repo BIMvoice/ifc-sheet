@@ -955,6 +955,7 @@ END-ISO-10303-21;`;
 // ---------------------------------------------------------------------------
 
 const DUPLEX = resolve(__dirname, '../../../tests/models/ara3d/duplex.ifc');
+if (!existsSync(DUPLEX)) console.warn('duplex IFC2X3 test skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 describe('IFC2X3 style classes are type objects (#2012)', () => {
   // Fetched on demand via `pnpm fixtures`; skip cleanly when absent.

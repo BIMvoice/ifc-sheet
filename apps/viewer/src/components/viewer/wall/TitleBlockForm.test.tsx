@@ -11,6 +11,9 @@ import { defaultViews } from '@/project/view-defaults';
 import { startDrawingSet } from '@/project/drawing-set-actions';
 import type { ModelExtent } from '@/project/drawing-set';
 import type { ProjectLevel, ProjectSheet } from '@/project/types';
+import { setProjectTitleBlockField } from '@/project/sheets';
+import { applyRomanianTitleBlock } from '@/project/title-block-template-actions';
+import { romanianTitleBlock } from '@/project/title-block-ro';
 import { SheetPaper } from '../sheets/SheetPaper';
 import { ProjectDrawer } from './ProjectDrawer.js';
 import { TitleBlockCard } from './TitleBlockForm.js';
@@ -87,5 +90,34 @@ describe('Title block on the Wall', () => {
     const card = render(<TitleBlockCard sheet={a} onClose={() => {}} />);
     blur(input(card, 'Date'));
     assert.equal(useProjectStore.getState().sheets[0].titleBlock, undefined);
+  });
+});
+
+describe('the Romanian-only fields (#653)', () => {
+  const RO_ONLY = ['Registration / authorisation no.', 'Capacity of the authors', 'Requirement', 'Report / expertise no.'];
+  const listed = (ui: HTMLElement): string[] => RO_ONLY.filter((label) => [...ui.querySelectorAll('label')].some((l) => l.firstElementChild?.textContent?.startsWith(label)));
+
+  it('are not listed in a project drawn to no Romanian standard, and the other fields still are', () => {
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    assert.deepEqual(listed(ui), []);
+    input(ui, 'Client');
+    input(ui, 'Project manager');
+  });
+
+  it('are listed once the Romanian layout is the project\'s', () => {
+    applyRomanianTitleBlock(romanianTitleBlock((k: string) => k as never));
+    assert.deepEqual(listed(render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />)), RO_ONLY);
+  });
+
+  it('are listed once the Romanian standards pack is installed', () => {
+    useProjectStore.setState({ installedStandard: { id: 'ro-stas', version: 1, previous: {} } });
+    assert.deepEqual(listed(render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />)), RO_ONLY);
+  });
+
+  it('are listed for a field that already holds a value, and only that one', () => {
+    setProjectTitleBlockField('reportNumber', 'R-12');
+    const ui = render(<ProjectDrawer extent={HOUSE} onClose={() => {}} />);
+    assert.deepEqual(listed(ui), ['Report / expertise no.']);
+    assert.equal(input(ui, 'Report / expertise no.').value, 'R-12');
   });
 });

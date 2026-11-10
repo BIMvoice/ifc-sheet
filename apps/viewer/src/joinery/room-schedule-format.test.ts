@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { roomSchedule, ROOM_SCHEDULE_EN, type RoomRecord } from '@bimvoice/ifcsheet';
 import { sheetFormat } from '@bimvoice/ifcsheet/names';
-import { roomScheduleCells, type RoomScheduleLabels } from './room-schedule-layout';
+import { roomScheduleCells, type RoomScheduleLabels } from '@bimvoice/ifcsheet';
 
 const ROOM: RoomRecord = { id: 'a', number: '1', name: 'Flur', level: 0, area: 1234.5678, source: 'quantity', perimeter: 14.16 };
 const SCHEDULE = roomSchedule([{ name: 'EG', elevation: 0 }], [ROOM]);

@@ -12,17 +12,19 @@ import { RotateCcw } from 'lucide-react';
 import type { CategoryLineWeight } from '@bimvoice/ifcsheet';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
+import { IFC_FILL } from '@bimvoice/ifcsheet/materials';
 import { resetMaterial, setMaterial, type MaterialGraphics } from '@/project/materials';
+import { AddHatchPatternButton } from './AddHatchPatternButton';
 import { ColourInput } from './ColourSchemeCard';
 import { MaterialSwatchGraphic } from './MaterialSwatchGraphic';
 import { WALL_FIELD } from './wall-type';
 
 const field = WALL_FIELD;
 const PENS: readonly CategoryLineWeight[] = ['hairline', 'light', 'medium', 'heavy'];
-type FillMode = 'ifc' | 'none' | 'own';
+type FillMode = 'default' | 'ifc' | 'none' | 'own';
 const OWN_FILL = '#e8d9b0';
 
-const fillModeOf = (fill: string | null | undefined): FillMode => (fill === undefined ? 'ifc' : fill === null ? 'none' : 'own');
+const fillModeOf = (fill: string | null | undefined): FillMode => (fill === undefined ? 'default' : fill === IFC_FILL ? 'ifc' : fill === null ? 'none' : 'own');
 
 /** A number that is committed when the hand leaves the field or presses Enter, so typing "1.5" is one undo step, not three. */
 function ScaleInput({ value, label, onCommit }: { value: number; label: string; onCommit: (v: number) => void }) {
@@ -69,6 +71,7 @@ export function MaterialRow({ material, patterns, hatchNames }: { material: Mate
             {names.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
+        <AddHatchPatternButton className="col-span-2 justify-self-start" onAdded={(n) => setMaterial(name, { hatch: n })} />
         <label>
           {t('materials.col.scale')}
           <ScaleInput value={material.hatchScale ?? 1} label={t('materials.scaleOf', { name })} onCommit={(v) => setMaterial(name, { hatchScale: v })} />
@@ -80,9 +83,10 @@ export function MaterialRow({ material, patterns, hatchNames }: { material: Mate
               aria-label={t('materials.fillModeOf', { name })} className={field} value={mode}
               onChange={(e) => {
                 const next = e.target.value as FillMode;
-                setMaterial(name, { fill: next === 'ifc' ? undefined : next === 'none' ? null : typeof material.fill === 'string' ? material.fill : OWN_FILL });
+                setMaterial(name, { fill: next === 'default' ? undefined : next === 'ifc' ? IFC_FILL : next === 'none' ? null : typeof material.fill === 'string' && material.fill !== IFC_FILL ? material.fill : OWN_FILL });
               }}
             >
+              <option value="default">{t('materials.fill.default')}</option>
               <option value="ifc">{t('materials.fill.ifc')}</option>
               <option value="none">{t('materials.fill.none')}</option>
               <option value="own">{t('materials.fill.own')}</option>

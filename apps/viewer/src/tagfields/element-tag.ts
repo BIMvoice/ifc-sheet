@@ -12,10 +12,10 @@
  */
 
 import { labelElementByGlobalId } from '@/labels/label-element';
-import { readStored } from '@/labels/label-resolve';
+import { readStored } from '@bimvoice/ifcsheet';
 import { TAG_FIELDS as TAG_FIELD_NAMES, type TagFieldName } from '@/catalogue/types';
 import { elementClassLabel } from '@/project/element-label';
-import { firstValue, tagKindOf, tagToolSourcesOf, type TagFieldId } from './tag-fields';
+import { firstValue, tagKindOf, tagToolSourcesOf, type TagFieldId } from '@bimvoice/ifcsheet/tag-fields';
 
 /** The fields the TAG tool can show: the one list (`catalogue/types.ts`), so an annotation type and the tool offer the same. */
 export type TagField = TagFieldName;
@@ -29,9 +29,15 @@ export function elementLabel(globalId: string, field: TagField): string | null {
   if (!el) return null;
   // The classification (#89) is the engine's one answer (`classificationOf`), read through the label element like the {Classification} placeholder.
   if (field === 'classification' || field === 'classificationTitle') return el.classification?.()?.[field === 'classification' ? 'code' : 'title'] || '?';
+  // The Name of the type the element is defined by (IfcRelDefinesByType): where a model names the element only by its class (#676).
+  if (field === 'typeName') return el.typeName() || '?';
   const kind = tagKindOf(el.className());
   const read = (f: TagFieldId): string => String(firstValue(tagToolSourcesOf(el.tagFields, kind, f), (ref) => readStored(ref, el)).value ?? '');
+  // The office's own choice of attribute or property (#788): any element, a door and an IfcSign alike.
+  if (field === 'custom') return read('custom') || '?';
   const name = read('name');
   if (field === 'name') return name || '?';
+  // A door or window never reads its Name or a class word: its mark is what the office's sources give, else the one mark the schedule shares (`joinery/opening-marks.ts`).
+  if (kind === 'door' || kind === 'window') return (el.tagFields?.[kind]?.mark ? read('mark') : '') || el.attribute('Mark') || '?';
   return read('mark') || name || '?';
 }

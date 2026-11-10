@@ -144,6 +144,11 @@ export interface SceneContents {
     shard: DecodedInstancedShard,
     modelIndex?: number,
   ): void;
+  /** The CPU half of `addInstancedShard`: what data readers see, no GPU (#154). */
+  registerInstancedShard(shard: DecodedInstancedShard, modelIndex?: number): void;
+  hasDeferredInstancedUploads(): boolean;
+  /** The GPU half: buffers for every registered template, in registration order. */
+  uploadDeferredInstanced(device: GPUDevice): void;
   getAllInstancedMeshData(): MeshData[];
   getInstancedMeshDataPieces(expressId: number): MeshData[] | undefined;
   /**

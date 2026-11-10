@@ -17,8 +17,9 @@ import type { ModelExtent } from './drawing-set.js';
 import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
 import { farElementLabel, frameEntities } from './framing.js';
+import { buildingElementIds } from './building-ids.js';
 import { storeyFloorY } from './storey-origin.js';
-import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals.js';
+import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
 
 export interface OpenModelOptions {
@@ -49,10 +50,12 @@ export interface OpenedModel {
   storeys: StoreyInput[];
   /** The meshes, in the viewer frame (metres, Y up); empty without geometry. */
   meshes: MeshData[];
-  /** The meshes of what the storeys contain (the building the set is measured on, without the site around it): what the sheets' drawings are cut from. */
+  /** The meshes of the building (`storeyElementIds`: what the storeys contain and the parts aggregated under it, without the site around it): what the sheets' drawings are cut from. */
   buildingMeshes: MeshData[];
-  /** The box of the building (what the storeys contain, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
+  /** The box of the building (the elements of `buildingMeshes`, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
+  /** Whether the geometry was read (`geometry` was not `false`): without it `extent` is `null` because nothing was measured, which says nothing about whether the model can be drawn. */
+  geometryRead: boolean;
   /** The elements the extent leaves out, farthest first; they are still in `meshes`, `buildingMeshes` and the schedules. Empty with `includeFarElements`. */
   farElements: FarElementInfo[];
   /** Whether the model was opened with `includeFarElements`. */
@@ -61,6 +64,8 @@ export interface OpenedModel {
   proposalInput(level: ProjectLevel): ProposalInput | null;
   /** The parsed model, for reads the engine does not make itself. */
   dataStore: IfcDataStore;
+  /** The render frame the meshes were made in (the offsets the geometry pass subtracted); absent without geometry or for IFCX. */
+  coordinateInfo?: GeometryResult['coordinateInfo'];
 }
 
 const footprint = (b: BoundingBox3D): Footprint => ({ min: { x: b.min.x, z: b.min.z }, max: { x: b.max.x, z: b.max.z } });
@@ -110,16 +115,9 @@ function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | u
   });
 }
 
-/** The elements the storeys contain: the building without the site around it (`buildingExtent` in `project/model-rooms.ts` reads the same, and frames it through `frameEntities` too). */
+/** The building's elements on `storeys` (`buildingElementIds`, the one reading the app's `buildingFraming` shares). */
 function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
-  const hierarchy = ds.spatialHierarchy;
-  if (!hierarchy) return [];
-  const wanted = new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : [])));
-  const ids: number[] = [];
-  for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(ds.entities.getGlobalId(id) ?? ''))) {
-    for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) ids.push(id);
-  }
-  return ids;
+  return buildingElementIds(ds, new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : []))));
 }
 
 /** The rooms and stairs of `level` and the building's footprint (`project/model-rooms.ts` reads the same from the app's stores). */
@@ -144,7 +142,14 @@ function proposalInputOf(ds: IfcDataStore, meshes: MeshData[], extent: ModelExte
     const b = boundsOf(expressId);
     if (b) stairs.push(footprint(b));
   }
-  return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs };
+  const walls: Footprint[] = [];
+  for (const { expressId } of iterateEffectiveEntities(ds, null, PROPOSAL_WALL_TYPES)) {
+    const storey = hierarchy.elementToStorey.get(expressId) ?? null;
+    if (storey === null || !storeyIds.has(storey)) continue;
+    const b = boundsOf(expressId);
+    if (b) walls.push(footprint(b));
+  }
+  return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs, walls };
 }
 
 /** A file the engine will not read, with the one sentence that says why. The commands print `message` as it is. */
@@ -232,9 +237,11 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     meshes,
     buildingMeshes: meshes.filter((m) => inBuilding.has(m.expressId)),
     extent,
+    geometryRead: options.geometry !== false,
     farElements,
     includeFarElements,
     proposalInput: (level) => proposalInputOf(ds, meshes, extent, level),
     dataStore: ds,
+    ...(frame ? { coordinateInfo: frame } : {}),
   };
 }

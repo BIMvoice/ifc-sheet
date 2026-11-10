@@ -161,6 +161,8 @@ declare namespace BimCreate {
      * where the path wall always runs through.
      */
     priority?: 'a' | 'b';
+    /** How an `L` corner is cut. Default `butt`. Ignored for a `T` and a collinear join. */
+    style?: WallJoinStyle;
   }
 
   export interface ColumnInStoreParams {
@@ -243,6 +245,9 @@ declare namespace BimCreate {
   export interface ProfiledMemberInStoreParams extends Omit<MemberInStoreParams, 'Width' | 'Height'> {
     Profile: ProfileSection;
   }
+
+  /** How an `L` corner is cut: one wall through and the other to its face, or both on the diagonal. */
+  export type WallJoinStyle = 'butt' | 'mitre';
 
   /** A parameterised cross-section for a beam, column or member. Metres. */
   export type ProfileSection =

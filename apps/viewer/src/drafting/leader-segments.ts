@@ -34,14 +34,5 @@ export function orthoGuides(elbow: Pt, cursor: Pt, min: number): { a: Pt; b: Pt 
   ];
 }
 
-/**
- * Whether a leader's text reads to the right of its end on screen: it sits
- * beyond the end of the last segment, so a segment running leftward puts it
- * on the left and the line never runs through the words. `screenRight` is
- * +1 when drawing x grows rightward on screen, -1 when the view is mirrored.
- */
-export function leaderTextRight(pts: readonly Pt[], screenRight: 1 | -1 = 1): boolean {
-  if (pts.length < 2) return true;
-  const dx = (pts[pts.length - 1].x - pts[pts.length - 2].x) * screenRight;
-  return dx >= -COINCIDENT;
-}
+// Which side of its end a leader's text reads on is the engine's (`dimension-layout.ts`), so the PDF of `ifcsheet build` agrees (#479).
+export { leaderTextRight } from '@bimvoice/ifcsheet';

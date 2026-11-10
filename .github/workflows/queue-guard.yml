@@ -1,0 +1,66 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Enforces the queue rules of AGENTS.md "Keep the queue small" (#561): at most
+# 5 open PRs, and one per area. A PR that is the 6th, or the second in its
+# area, is converted to a draft with a comment naming the PR that holds the
+# slot. The decision is scripts/queue-guard.mjs (decideQueue), tested in
+# scripts/queue-guard.test.mjs; areas come from .github/queue-areas.json.
+#
+# Exempt: the `queue-exempt` label and Dependabot. Nothing else. Maintainers
+# are NOT exempt: every agent PR here comes from the maintainer's account.
+#
+# Why pull_request_target: a fork PR gets a read-only token under
+# `pull_request`, and converting to draft needs write access. This is safe
+# for the same reasons as label-automerge.yml: the only checkout is the BASE
+# branch (the default ref of pull_request_target; there is no `ref:` and no
+# PR head is fetched), so no code from the pull request ever runs. The script
+# reads the PR's number from the event through an env var, never
+# interpolated into the script, and asks the API for everything else.
+name: Queue guard
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+# convertPullRequestToDraft refuses a token with only pull-requests: write
+# ("Resource not accessible by integration", first run, #754). GitHub's docs
+# do not name the permission; user reports (delta-io/delta-rs#4748,
+# sw2m/bencher#21, agentmemoir/clio#298) suggest contents: write, and say a
+# PAT or App token is sometimes refused too. contents: write is granted here
+# without risk of running PR code: the only checkout is the base branch.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: queue-guard
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Queue guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The base branch (or the default branch on a schedule), never the PR.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Enforce the queue limits
+        env:
+          # QUEUE_GUARD_TOKEN: a token secret a maintainer may add if github.token is still refused.
+          GH_TOKEN: ${{ secrets.QUEUE_GUARD_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: node scripts/queue-guard.mjs

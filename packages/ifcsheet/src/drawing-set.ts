@@ -4,7 +4,7 @@
 
 /**
  * The drawing set a model starts with: its views put on sheets, grouped by
- * kind, each sheet at the largest scale its views fit at. Plans two to a
+ * kind, each group at the one scale all its sheets fit at. Plans two to a
  * sheet (A-101…), elevations south and north then east and west (A-201,
  * A-202), sections two to a sheet (A-301…). The person starts by taking away
  * what they do not need, not by building it.
@@ -15,7 +15,7 @@
  */
 
 import { nameOf, type EngineNameKey } from './names.js';
-import { paperLabel, paperMm } from './paper.js';
+import { paperMm } from './paper.js';
 import { drawingAreaIn, frameOf, type Rect } from './sheet-frame.js';
 import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
@@ -252,22 +252,27 @@ export function groupsThatDoNotFit(views: readonly ProjectView[], extent: ModelE
 
 /**
  * The sheets of the starting set. Each group is made on the smallest paper
- * that gives its drawings 1:100 or better, each sheet at the most detailed
- * scale its drawings fit at on it. A group with nothing to show makes no
- * sheet. Each sheet records the group it belongs to (`series`) and is
- * numbered by the project's scheme.
+ * that gives its drawings 1:100 or better. All sheets of a group share one
+ * scale, the most detailed at which every one of its sheets fits, so the
+ * worst case decides (a building's elevations print at one scale). A group
+ * with nothing to show makes no sheet. Each sheet records the group it
+ * belongs to (`series`) and is numbered by the project's scheme.
  */
 export function buildDrawingSet({ views, extent, now = Date.now(), templates = {}, scheme = DEFAULT_SCHEME }: SetInput): ProjectSheet[] {
   const rows = setRows(views);
   const papers = papersOf(rows, extent);
-  const sheets = rows.map(({ group, name, members }) => {
-    const start = startOf(templates[group], papers.get(group)?.paper ?? SET_PAPER);
-    const sizes = members.map((v) => viewExtent(v, extent));
-    return {
-      id: freshProjectId('sheet'), number: '', series: group, name, createdAt: now, ...start,
-      viewports: placeViewports(members, sizes, scaleOn(sizes, start), start, extent),
-    };
+  const laid = rows.map((row) => {
+    const start = startOf(templates[row.group], papers.get(row.group)?.paper ?? SET_PAPER);
+    const sizes = row.members.map((v) => viewExtent(v, extent));
+    return { ...row, start, sizes, own: scaleOn(sizes, start) };
   });
+  // SET_SCALES counts up as the scale gets coarser, so the largest number is the worst case.
+  const shared = new Map<SetGroup, number>();
+  for (const { group, own } of laid) shared.set(group, Math.max(shared.get(group) ?? 0, own));
+  const sheets = laid.map(({ group, name, members, start, sizes }) => ({
+    id: freshProjectId('sheet'), number: '', series: group, name, createdAt: now, ...start,
+    viewports: placeViewports(members, sizes, shared.get(group) ?? scaleOn(sizes, start), start, extent),
+  }));
   const numbers = numberSheets(sheets, scheme);
   return sheets.map((s) => ({ ...s, number: numbers.get(s.id) ?? s.number }));
 }
@@ -366,35 +371,4 @@ function withDetailHung(sheets: readonly ProjectSheet[], view: ProjectView, exte
     viewports: placeViewports([view], sizes, scaleOn(sizes, start, view.scale), start, extent),
   };
   return { sheets: [...sheets, sheet], sheetId: sheet.id };
-}
-
-/** A sentence kept as data: a catalogue key and its parameters, translated where it is shown. */
-export interface Reason {
-  key: 'wall.reason.noFit' | 'wall.reason.fits' | 'wall.reason.chosen';
-  params: Record<string, string | number>;
-}
-
-/**
- * Why a sheet is at its scale, in one line (concept B's reason, #20): the
- * most detailed scale its drawings fit at on its paper, one somebody chose,
- * or the smallest scale there is when the drawings are still larger than
- * the paper. The Wall and the DRAFTSET command both say this one line.
- * `null` for a sheet whose drawings do not share one scale.
- */
-export function sheetScaleReason(sheet: ProjectSheet, views: readonly ProjectView[], extent: ModelExtent): { scale: number; fits: boolean; reason: Reason } | null {
-  const vps = sheet.viewports ?? [];
-  const scales = new Set(vps.map((v) => v.scale));
-  if (scales.size !== 1) return null;
-  const [scale] = scales;
-  const members = vps.flatMap((vp) => views.find((v) => v.id === vp.viewId) ?? []);
-  // A schedule or legend sets its own size: there is no scale to explain.
-  if (members.length !== vps.length) return null;
-  const paper = paperLabel(sheet.paper ?? SET_PAPER);
-  const sizes = members.map((v) => viewExtent(v, extent));
-  const area = drawingArea(sheet);
-  const fits = fittingScale(sizes, area) === scale;
-  const reason: Reason = !fitsScale(sizes, area, scale) && scale === SET_SCALES[SET_SCALES.length - 1]
-    ? { key: 'wall.reason.noFit', params: { scale, paper } }
-    : fits ? { key: 'wall.reason.fits', params: { scale, paper } } : { key: 'wall.reason.chosen', params: { scale } };
-  return { scale, fits, reason };
 }

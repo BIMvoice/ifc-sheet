@@ -1,0 +1,15 @@
+resultStatus.applied
+resultStatus.applying
+resultStatus.blocked
+resultStatus.cancelled
+resultStatus.complete
+resultStatus.draft
+resultStatus.failed
+resultStatus.interrupted
+resultStatus.partial
+resultStatus.queued
+resultStatus.ready
+resultStatus.running
+resultStatus.stale
+resultStatus.uncertain
+resultStatus.unsupported

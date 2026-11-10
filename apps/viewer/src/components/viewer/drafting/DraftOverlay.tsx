@@ -9,6 +9,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
+import { arcPoints, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { entityPen, layerShows, lookOf, type LayerGroup } from '@/drafting/styles';
 import { moveGrip, type Grip } from '@/drafting/grips';
 import type { SectionCut } from '@/drafting/section-depth';
@@ -25,19 +26,8 @@ import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { useTranslation } from '@/i18n';
 import { tagOverrideOf } from '@/drafting/tag-override';
 import { AnnotationGraphics } from './AnnotationGraphics';
-import type { LiveSymbolContext } from '@/siteplan/live-symbols';
-
-const ARC_STEP = Math.PI / 48;
-
-function arcPoints(c: Pt, r: number, start: number, end: number): Pt[] {
-  let sweep = end - start;
-  while (sweep <= 0) sweep += Math.PI * 2;
-  const steps = Math.max(2, Math.ceil(sweep / ARC_STEP));
-  return Array.from({ length: steps + 1 }, (_, i) => {
-    const a = start + (sweep * i) / steps;
-    return { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
-  });
-}
+import type { TrackingView } from './useDraftingPointer';
+import { TrackingMarks } from './TrackingMarks';
 
 /** The shape as an SVG path in screen coordinates. */
 export function shapePath(shape: DraftShape, t: ViewTransform, axis: SectionAxisName): string {
@@ -64,10 +54,14 @@ interface DraftOverlayProps {
   hoverId: string | null;
   preview: readonly DraftShape[];
   snap: SnapHit | null;
+  /** The acquired points and the tracking lines near the cursor (#667); absent shows none. */
+  tracking?: TrackingView;
   cursor: Pt | null;
   /** The ortho lock beside the cursor while a point is being drawn from a base point (#454): null shows nothing. */
   orthoLabel?: string | null;
   window: { a: Pt; b: Pt } | null;
+  /** The freehand loop being drawn (#666). */
+  lasso?: readonly Pt[] | null;
   /** Outlines of the selected model elements. */
   highlight: readonly DraftShape[];
   /** User-imported hatch patterns (built-ins are always available). */
@@ -136,7 +130,7 @@ function GripPreview({ gripDrag, entities, t, axis, look, paperUnit, extraPatter
 }
 
 export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps) {
-  const { orthoLabel = null, entities, layers, selection, hoverId, preview, snap, cursor, window, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
+  const { tracking, orthoLabel = null, entities, layers, selection, hoverId, preview, snap, cursor, window, lasso, highlight, extraPatterns, transform: t, axis, paperUnit = 0.1, hiddenLayers, grips = NO_GRIPS, gripDrag = null, sectionBand = null, crop, symbols } = props;
   const clipId = useId().replace(/:/g, '');
   const clipPoints = crop ? [crop.min, { x: crop.max.x, y: crop.min.y }, crop.max, { x: crop.min.x, y: crop.max.y }].map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : null;
   const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -165,7 +159,7 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
             <g key={e.id}>
               <AnnotationGraphics shape={e.shape} color={color} selected={isSelected} transform={t} axis={axis} extraPatterns={extraPatterns} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={symbols} />
               {/* Editor only: this overlay is never part of the sheet or the PDF. */}
-              {e.shape.type === 'leader' && tagOverrideOf(e) !== null ? <TagOverrideMark shape={e.shape} t={t} axis={axis} /> : null}
+              {(e.shape.type === 'leader' || e.shape.type === 'text') && tagOverrideOf(e) !== null ? <TagOverrideMark at={e.shape.type === 'leader' ? e.shape.pts[e.shape.pts.length - 1] : e.shape.p} t={t} axis={axis} /> : null}
               {isHover || isSelected ? (
                 <path d={entitySkeleton(e.shape).map((s) => shapePath(s, t, axis)).join('')} fill="none" stroke={isSelected ? '#2563eb' : '#60a5fa'} strokeWidth={1} strokeDasharray="4 3" />
               ) : null}
@@ -199,6 +193,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
         <path key={`p${i}`} d={shapePath(shape, t, axis)} fill="none" stroke="#2563eb" strokeWidth={1.25} strokeDasharray="4 3" />
       ))}
       {window ? <SelectionWindow window={window} t={t} axis={axis} /> : null}
+      {lasso && lasso.length > 1 ? <LassoLoop path={lasso} t={t} axis={axis} /> : null}
+      {tracking ? <TrackingMarks tracking={tracking} t={t} axis={axis} /> : null}
       {snap ? <SnapMarker snap={snap} t={t} axis={axis} /> : null}
       {cursor ? <Crosshair p={drawingToScreen(cursor, t, axis)} /> : null}
       {cursor && orthoLabel ? <text data-testid="ortho-cursor-label" x={drawingToScreen(cursor, t, axis).x + 18} y={drawingToScreen(cursor, t, axis).y - 10} fontSize={11} fill="#52525b" stroke="#fff" strokeWidth={3} paintOrder="stroke">{orthoLabel}</text> : null}
@@ -207,8 +203,8 @@ export const DraftOverlay = memo(function DraftOverlay(props: DraftOverlayProps)
 });
 
 /** A small amber ring on the text end of a tag whose text is written over the model's (#445); not printed. */
-function TagOverrideMark({ shape, t, axis }: { shape: Extract<DraftEntity['shape'], { type: 'leader' }>; t: ViewTransform; axis: SectionAxisName }) {
-  const p = drawingToScreen(shape.pts[shape.pts.length - 1], t, axis);
+function TagOverrideMark({ at, t, axis }: { at: Pt; t: ViewTransform; axis: SectionAxisName }) {
+  const p = drawingToScreen(at, t, axis);
   const { t: tr } = useTranslation();
   return <circle data-tag-override="true" cx={p.x} cy={p.y} r={4} fill="none" stroke="#f59e0b" strokeWidth={2}><title>{tr('standards.el.tagOverridden')}</title></circle>;
 }
@@ -229,6 +225,12 @@ function SelectionWindow({ window, t, axis }: { window: { a: Pt; b: Pt }; t: Vie
       strokeDasharray={crossing ? '5 3' : undefined}
     />
   );
+}
+
+/** The loop being dragged (#666): dashed, closed back to where it began, as it will select. */
+function LassoLoop({ path, t, axis }: { path: readonly Pt[]; t: ViewTransform; axis: SectionAxisName }) {
+  const pts = path.map((p) => drawingToScreen(p, t, axis)).map((p) => `${p.x},${p.y}`).join(' ');
+  return <polygon points={pts} fill="rgba(37,99,235,0.08)" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="6 3" />;
 }
 
 function Crosshair({ p }: { p: Pt }) {

@@ -17,14 +17,24 @@
  * Its own entry, `@bimvoice/ifcsheet/project`: it loads the modelling library.
  */
 
-import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, readRelatedLists, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
+import { getModelLengthUnitScale, joineryTypesInStore, occurrencesOfTypeInStore, readJoineryFlips, readJoineryType, type JoinerySpec, type JoineryTypeRead } from '@ifc-lite/create';
 import { iterateEffectiveEntityIds, type MutablePropertyView } from '@ifc-lite/mutations';
-import { extractPropertiesOnDemand, getAttributeNamesForSchema, type IfcDataStore } from '@ifc-lite/parser';
-import { filterPropertyNames, predefinedTypeText, propertyValueText, type PropertyFact } from './schedule-filter.js';
+import type { IfcDataStore } from '@ifc-lite/parser';
+import { filterPropertyNames, predefinedTypeText, type PropertyFact } from './schedule-filter.js';
 import { applyContent, occurrenceMarkOf, type ScheduleContent } from './schedule-content.js';
+import type { ModelRow } from './joinery-model-rows.js';
+import { fillTypedValues, markMeasuredTypes, noteMeasured } from './joinery-typed-rows.js';
+import { createHeadlessListProvider } from './list-provider.js';
+import { readModelRowCells } from './joinery-model-values.js';
+import type { ListDataProvider } from '@ifc-lite/lists';
 import type { ScheduleTextRow } from './schedule-text.js';
 import { doorOperationOf } from './door-operation.js';
-import { fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
+import type { JoineryCellOverride } from './joinery-overrides.js';
+import { statedOrMeasuredSize } from './element-size.js';
+import type { MeshData } from '@ifc-lite/geometry';
+import type { ClassificationModel } from './classification.js';
+import { TYPE_ENTRY_PREFIX, fitToElement, resolveMapping, type ElementFacts, type JoineryMapping, type MappingSource } from './joinery-mapping.js';
+import { attributes, readPropertyFacts, storedName, typeIndex } from './joinery-live-reads.js';
 
 export type ScheduleKind = 'door' | 'window' | 'all';
 
@@ -43,10 +53,21 @@ export interface ScheduleOccurrence {
   predefinedType?: string | null;
   /** The properties the schedule was asked to read (`IsExternal`, and those the project's filters name), for the property filter. */
   properties?: PropertyFact[];
+  /** The text of the model rows the schedules chose (`ModelRow`), by row id: the element's property or quantity, else its type's. A row the element and its type say nothing for has no entry. */
+  modelValues?: Record<string, string>;
+  /** The rows of `modelValues` whose value is a number, as the number (`modelRowNumber`): the text is what the sheet prints, the number what a spreadsheet keeps. */
+  modelNumbers?: Record<string, number>;
+  /** The element's size was measured from its geometry: the IFC states none (#485). */
+  measured?: boolean;
+  /** Which of the two was measured: only the side the IFC does not state is (#485). */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
 }
 
 export interface ScheduleEntry {
   key: string;
+  /** The GlobalId of the model's IfcTypeObject this type is, when it has one (a configured type); the first model's when several carry it. A typed cell is kept under it (`typeIdentityOf`). */
+  typeGlobalId?: string;
   kind: 'door' | 'window';
   /** The configured type; null for elements without one. */
   spec: JoinerySpec | null;
@@ -55,6 +76,11 @@ export interface ScheduleEntry {
   /** Metres. */
   width: number;
   height: number;
+  /** Width and height were measured from the elements' geometry in their own frame, not stated by the IFC (#485): every element of this group lacked OverallWidth / OverallHeight. */
+  measured?: boolean;
+  /** The width / the height alone was measured: every element of the group lacked that side's Overall value. `measured` is true when either is. */
+  measuredWidth?: boolean;
+  measuredHeight?: boolean;
   /** Count per level name. */
   counts: Record<string, number>;
   total: number;
@@ -71,6 +97,10 @@ export interface ScheduleData {
   textRows?: ScheduleTextRow[];
   /** The schedule's content choice, for the layout's row choice (#186): not read from the model, attached by `scheduleOf`. */
   content?: ScheduleContent;
+  /** The cells typed over the model's text (#446), by type and row: the project's, attached by `scheduleOf` so every reader prints the same text. */
+  overrides?: JoineryCellOverride[];
+  /** Every group of the schedule's kind, before a sub-report's cut, attached by `scheduleOf` with `overrides`: a saved cell belongs to the nearest of them (#485, `joineryOverrideOf`). */
+  groups?: readonly ScheduleEntry[];
 }
 
 /** An occurrence's mark: its type's mark and its number (`W1.3`); the type's name and the number for an untyped element. */
@@ -81,8 +111,16 @@ export interface Live { dataStore: IfcDataStore; view: MutablePropertyView | nul
 
 export interface ScheduleModel extends Live {
   modelId: string;
+  /** The model's name, as the list provider labels it ("used in"). Default: none. */
+  name?: string;
   /** An entity's Name. Default: the one the store holds (`storedName`); the app passes its overlay-aware read. */
   nameOf?: (id: number) => string;
+  /** The Lists engine's provider over the model, for the model rows. Default: the headless one over the store; the app passes its own, which sees the edit overlay. */
+  listProvider?: () => ListDataProvider;
+  /** An element's meshes (viewer frame, metres), for measuring the size of a door or window whose IFC states none (#485); without it such an element has no size. */
+  meshesOf?: (expressId: number) => readonly MeshData[] | undefined;
+  /** The model's own classification references (#89), for the quantities by type; default: `modelClassification`, the references of the store. Both hosts fill it that way. */
+  classification?: () => ClassificationModel;
 }
 
 /** What the project contributes to a joinery schedule. */
@@ -92,61 +130,16 @@ export interface JoineryProject {
   joineryMapping: JoineryMapping;
   /** Flips per element GlobalId, for the app's drawings; absent in a headless read. */
   symbolFlips?: Record<string, number>;
+  /** The project's opening-line convention in elevation (`handle`: apex at the handle; `hinge`: at the hinges); absent: `handle`. */
+  openingLines?: 'handle' | 'hinge';
 }
 
-/** The entity's attributes with the overlay's positional edits applied; null for a deleted or unknown entity. */
-export function attributes({ dataStore, view }: Live, id: number): unknown[] | null {
-  if (view?.isDeleted(id)) return null;
-  const entity = view?.getNewEntity(id) ?? dataStore.getEntity(id);
-  if (!entity) return null;
-  const attrs = [...entity.attributes] as unknown[];
-  for (const [index, value] of view?.getPositionalMutationsForEntity(id) ?? []) attrs[index] = value;
-  return attrs;
-}
-
-/** The Name the store holds: the entity table's (IfcRoot entities), else the Name slot of the source record. */
-export function storedName(dataStore: IfcDataStore, expressId: number): string {
-  const indexed = dataStore.entities.getName(expressId);
-  if (indexed) return indexed;
-  const entity = dataStore.getEntity(expressId);
-  const slot = entity ? getAttributeNamesForSchema(entity.type, dataStore.schemaVersion).indexOf('Name') : -1;
-  const value = slot < 0 ? undefined : entity?.attributes[slot];
-  return typeof value === 'string' ? value : '';
-}
+export { attributes, propertySetsOf, readPropertyFacts, storedName, typeIndex } from './joinery-live-reads.js';
 
 const real = (v: unknown): number => (typeof v === 'number' ? v : v && typeof v === 'object' && 'real' in v ? Number((v as { real: number }).real) : NaN);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
 const CLASS_NAMES: Record<string, string> = { IFCDOOR: 'IfcDoor', IFCDOORSTANDARDCASE: 'IfcDoorStandardCase', IFCWINDOW: 'IfcWindow', IFCWINDOWSTANDARDCASE: 'IfcWindowStandardCase' };
-
-/** The element's property sets: the edit overlay's when there is one, else the store's table, else read from the source on demand (a headless open keeps no table). */
-export function propertySetsOf({ dataStore, view }: Live, id: number): { name: string; properties: { name: string; value: unknown }[] }[] {
-  try {
-    if (view) return view.getForEntity(id);
-    const table = dataStore.properties?.getForEntity(id) ?? [];
-    return table.length > 0 || !(dataStore.source?.length > 0) ? table : extractPropertiesOnDemand(dataStore, id);
-  } catch {
-    return [];
-  }
-}
-
-/** The properties of an element whose name is in `names` (lower case), as text; empty and unreadable values are kept as empty text. */
-export function readPropertyFacts(live: Live, id: number, names: ReadonlySet<string>): PropertyFact[] {
-  const out: PropertyFact[] = [];
-  for (const pset of propertySetsOf(live, id)) {
-    for (const p of pset.properties) if (names.has(p.name.toLowerCase())) out.push({ pset: pset.name, name: p.name, value: propertyValueText(p.value) ?? '' });
-  }
-  return out;
-}
-
-/** Every typed occurrence's type, by one read of the model's IfcRelDefinesByType. Where an element is in more than one, the first wins. */
-export function typeIndex({ dataStore, view }: Live): Map<number, number | null> {
-  const index = new Map<number, number | null>();
-  for (const rel of readRelatedLists(dataStore, 'IfcRelDefinesByType', view)) {
-    for (const id of rel.relatedIds) if (!index.has(id)) index.set(id, rel.relatingId ?? null);
-  }
-  return index;
-}
 
 /** A configured element: its type, and how it is turned in its opening. */
 export interface JoineryElement extends JoineryTypeRead {
@@ -235,15 +228,17 @@ function markUntyped(entries: ScheduleEntry[]): void {
  * The rows of the joinery schedule of `kind` over `models`, the project's catalogue and mapping applied; with `content`, sorted and numbered
  * as that choice says (`applyContent`, the one rule), which a schedule saved with a choice prints and a project without one does not.
  */
-export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent, propertyNames: readonly string[] = []): ScheduleData {
+export function joineryScheduleData(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind = 'all', content?: ScheduleContent, propertyNames: readonly string[] = [], modelRows: readonly ModelRow[] = []): ScheduleData {
   // The properties read are the ones a filter names (the project's, given by the caller, and this content's own) and IsExternal.
   const names = new Set(filterPropertyNames([content?.filter]).concat(propertyNames.map((n) => n.toLowerCase())));
-  return applyContent(modelRows(models, project, kind, names), content);
+  // The model rows read are those the caller names (all the project's schedules') and this content's own.
+  const rows = [...new Map([...modelRows, ...(content?.properties ?? [])].map((r) => [r.id, r] as const)).values()];
+  return applyContent(readRows(models, project, kind, names, rows), content);
 }
 
 /** The model's rows, in the order and with the marks the models give them. */
-function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>): ScheduleData {
-  const byKey = new Map<string, ScheduleEntry>();
+function readRows(models: Iterable<ScheduleModel>, project: JoineryProject, kind: ScheduleKind, propertyNames: ReadonlySet<string>, modelRows: readonly ModelRow[]): ScheduleData {
+  const byKey = new Map<string, ScheduleEntry>(), measuredOf = new Map<string, { width: number; height: number }>();
   const levelElevation = new Map<string, number>();
   const wanted = (k: 'door' | 'window') => kind === 'all' || kind === k;
   const fromCatalogue = new Map(project.joineryTypes.map((spec) => [spec.id, spec]));
@@ -283,6 +278,7 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       const spec = (type.spec.id && fromCatalogue.get(type.spec.id)) || type.spec;
       const key = spec.id ?? `${modelId}:${type.typeId}`;
       const entry = byKey.get(key) ?? { key, kind: spec.kind, spec, mark: spec.mark, name: spec.name, width: spec.width, height: spec.height, counts: {}, total: 0, occurrences: [] };
+      if (!entry.typeGlobalId && type.globalId) entry.typeGlobalId = type.globalId;
       byKey.set(key, entry);
       for (const id of occurrencesOfTypeInStore(dataStore, type.typeId, view)) {
         if (view?.isDeleted(id)) continue;
@@ -307,9 +303,11 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
         const entry = byKey.get(mappedSpec.id) ?? { key: mappedSpec.id, kind: mappedSpec.kind, spec: mappedSpec, mark: mappedSpec.mark, name: mappedSpec.name, width: mappedSpec.width, height: mappedSpec.height, counts: {}, total: 0, occurrences: [] };
         byKey.set(mappedSpec.id, entry);
         count(entry, id);
+        if (mappedSpec.id.startsWith(TYPE_ENTRY_PREFIX)) noteMeasured(entry, measuredOf, statedOrMeasuredSize(real(attrs[9]) * unit, real(attrs[8]) * unit, () => model.meshesOf?.(id)));
         continue;
       }
-      const height = real(attrs[8]) * unit, width = real(attrs[9]) * unit;
+      // No OverallWidth / OverallHeight (a non-parametric window): the side the IFC does not state is measured from its body, in its own frame (#485).
+      const { width, height, measuredWidth, measuredHeight } = statedOrMeasuredSize(real(attrs[9]) * unit, real(attrs[8]) * unit, () => model.meshesOf?.(id));
       const size = Number.isFinite(width) && Number.isFinite(height) ? `${Math.round(width * 1000)}×${Math.round(height * 1000)}` : '?';
       const stated = k === 'door' ? doorOperationOf(live, id, (types ??= typeIndex(live)).get(id) ?? null) : null;
       const operation = stated?.hinge ? (`${stated.doubleActing ? 'double-acting' : 'swing'}-${stated.hinge}` as NonNullable<ScheduleEntry['operations']>[number]) : undefined;
@@ -321,8 +319,21 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
       byKey.set(key, entry);
       if (operation && !entry.operations?.includes(operation)) (entry.operations ??= []).push(operation);
       count(entry, id);
+      if (measuredWidth || measuredHeight) Object.assign(entry.occurrences[entry.occurrences.length - 1], { measured: true, measuredWidth, measuredHeight });
+    }
+    // The model rows the schedules chose, read for this model's occurrences in one pass.
+    if (modelRows.length > 0) {
+      const mine = [...byKey.values()].flatMap((e) => e.occurrences.filter((o) => o.modelId === modelId));
+      const values = readModelRowCells({ modelId, dataStore, provider: model.listProvider ?? (() => createHeadlessListProvider(dataStore)) }, mine.map((o) => o.expressId), modelRows);
+      for (const o of mine) {
+        const v = values.get(o.expressId);
+        if (!v) continue;
+        o.modelValues = v.texts;
+        if (Object.keys(v.numbers).length > 0) o.modelNumbers = v.numbers;
+      }
     }
   }
+  fillTypedValues(byKey.values(), modelRows);
   // Catalogue types not placed yet still belong in the schedule (with no count).
   for (const spec of fromCatalogue.values()) {
     if (!spec.id || byKey.has(spec.id) || !wanted(spec.kind)) continue;
@@ -332,7 +343,12 @@ function modelRows(models: Iterable<ScheduleModel>, project: JoineryProject, kin
     .filter((e) => e.total > 0 || e.spec)
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'window' ? -1 : 1) || (a.spec ? 0 : 1) - (b.spec ? 0 : 1)
       || a.mark.localeCompare(b.mark, undefined, { numeric: true }) || a.width - b.width);
-  markUntyped(entries);
+  markUntyped(entries); markMeasuredTypes(entries, measuredOf);
+  for (const e of entries) if (!e.spec && e.occurrences.length > 0 && e.occurrences.every((o) => o.measured)) {
+    e.measuredWidth = e.occurrences.every((o) => o.measuredWidth);
+    e.measuredHeight = e.occurrences.every((o) => o.measuredHeight);
+    e.measured = e.measuredWidth || e.measuredHeight;
+  }
   const levels = [...levelElevation.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
   if (entries.some((e) => e.counts['—'])) levels.push('—');
   // Number each type's occurrences: lowest level first, then by model and id, so the numbering is stable.

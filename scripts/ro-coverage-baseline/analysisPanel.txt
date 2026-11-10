@@ -1,0 +1,10 @@
+analysisPanel.cancel
+analysisPanel.clearResults
+analysisPanel.close
+analysisPanel.demo.failed
+analysisPanel.demo.loading
+analysisPanel.demo.try
+analysisPanel.dismissError
+analysisPanel.export.chooseFormat
+analysisPanel.export.default
+analysisPanel.rerun

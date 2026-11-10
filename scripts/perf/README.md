@@ -3545,3 +3545,122 @@ code: it times native parse and geometry and never calls into
 repetitions, on the code before the welding change, with the string welding and
 with this one. The lesson: an adjacency key that is per index and a string is
 paid on every mesh of every regeneration; weld by number, and per vertex.
+
+## Skip property relationships by their bytes before parsing them (IfcSheet #154)
+
+A floor plan's roofs read every roof's spec in one pass over the model's
+`IfcRelDefinesByProperties` (`readRoofSystems`). On the 56 MB Skolebygg sample
+that pass parsed all 44,477 relationships to find the few that name one of its
+39 roofs, about 78 ms in one task while the Wall draws its first plan.
+`AnchorEntityReader.mayReferTo` now scans a source relationship's STEP bytes for
+a digit run equal to a wanted id and parses only those that may name one;
+created or edited entities, encoded strings and exponents are always parsed.
+82% of the relationships are skipped and the pass takes about 32 ms. Lessons:
+
+- When a walk over every relationship of a type looks for a few elements, the
+  parse is the cost, not the walk; a byte scan that can only answer "maybe"
+  keeps the result exact.
+- Mutation-test each "answer maybe" rule: two first-draft rules (a `.` and a
+  long digit run) were redundant, since a whole-number real reads as its
+  integer part, and only the encoded string and the exponent needed one.
+
+## Door and window footprints without the vertices inside them (IfcSheet #154)
+
+A plan's door and window symbols (`apps/viewer/src/drafting/opening-symbols.ts`)
+take each opening's minimum-area rectangle from the convex hull of every
+projected vertex of its meshes. On the 56 MB Skolebygg sample a storey's plan
+projects about 250,000 vertices for 208 doors and windows (about 1,200 each),
+allocated one object per vertex and sorted per element: 33 to 49 ms of a 110 ms
+styling task. Every plan also re-read the height range of all 3,608 door and
+window meshes of the model (543,000 vertices) to find the ones its cut passes.
+Now the ranges are indexed once per mesh list, and the footprint is projected
+into a typed array and filtered to the points outside the octagon of its eight
+extreme points (Akl-Toussaint) before the unchanged hull runs. The symbols are
+identical (sheets byte-identical); the plan's symbols take 13 to 15 ms and the
+largest styling tasks drop to about 75 ms. Lessons:
+
+- A hull over a mesh's vertices is mostly spent on vertices inside it: an
+  interior-point filter in front of the existing hull keeps the result exact,
+  since the hull drops those points anyway. Keep a margin scaled to the
+  coordinates so rounding never decides which point is dropped.
+- Work keyed on the cut height (which elements a plan passes) is per plan;
+  anything that does not read the plane (each element's height range) is per
+  model, and a `WeakMap` on the mesh array with a length stamp holds it.
+
+## The app-start task: no top-level-await wrapper on the app build (IfcSheet #154)
+
+On a production build the app-start task (module evaluation, before the model
+is read) was 248 to 268 ms, longer than on the dev server (183 to 187 ms),
+because only the build ran `vite-plugin-top-level-await`. The plugin wraps
+every chunk that has a dynamic `import()` (221 of 347) in one `async` arrow
+function. Chrome compiles a module's top level while the script streams in,
+off the main thread, but a nested function only when it first runs, on the
+main thread, so each wrapped chunk was parsed whole inside the task: the
+5 MB entry chunk about 100 ms, `sandbox`, `store` and a `run` chunk 18 to 25 ms
+each (V8 `--log-function-events`, `parse-function`). The build target is
+`esnext`, so the app build now emits native top-level await; the worker build
+keeps the plugin. `@ifc-lite/flow-nodes`' `xlsx-io.ts` also imported `exceljs`
+statically through the package barrel, which ran all of `exceljs` (923
+functions) at start; it is now loaded on first use.
+
+Lessons:
+- Measure start-up on a production build: the dev server skips build-only
+  plugins, so it under-reported this task and over-reported opening the Wall
+  (103 to 118 ms on dev, 57 to 61 ms in production).
+- A CPU profile shows lazy compilation as `(program)` with no script; the
+  trace's `V8.ParseFunction` has no URL either. `--js-flags=--log-function-events`
+  gives each `parse-function` with script id, offsets and duration.
+- Tried and not kept: parenthesising the wrapper (no change: no eager
+  compile for an async arrow) and the `//# allFunctionsCalledOnLoad` hint on
+  the four largest wrapped chunks (task 117 ms, against 84 to 86 ms without
+  the wrapper, and it compiles every function of those files).
+  `"sideEffects": false` on `@ifc-lite/charts` kept ECharts off the start path
+  but gained little once `exceljs` was gone, and was left out.
+- `scripts/check-tla-chunk-await.mjs` now fails if a chunk the page evaluates
+  at start (`index.html`'s module scripts and their static imports) is wrapped.
+
+## Outline depth along a line: same faces, coarse grid, nearest first (IfcSheet #557, ISSUE_068)
+
+#779 gives every mesh outline line the depth of its own element's surface
+(`packages/drawing-2d/src/outline-depth.ts`, `refineOutlineDepths`; the faces
+and their grid are in `face-grid.ts`). Each line clips every face of its
+element within one raster pixel (about 10 cm on a 100 m drawing), nearly all
+of a door's or a wall's faces: on the 56 MB Skolebygg sample an elevation
+refines 139,000 lines against some 120 faces each, and one views pass went from
+89 s before #779 to about 300 s. Three changes, all with the same drawing:
+
+- Nothing is allocated per face or per line: the clips write into one scratch
+  buffer, the spans and breakpoints are reused typed arrays and sort natively,
+  and each face's edge normals and directions are worked out once, not per clip.
+- The fine grid stays as the definition of which faces a line meets (below),
+  but the lookup is a coarse grid with cells no finer than `reach`, filed by the
+  box of what a clip can take of each face. Each face also keeps the range of
+  fine cells it was filed in, and a query keeps the candidates whose range meets
+  the line's. The fine grid filed a small element's face in some 25 cells and a
+  query walked it in each.
+- Faces come nearest first (sorted once per element by nearest vertex). Once
+  the faces taken put the whole line at or in front of the next face's nearest
+  vertex, the rest cannot bring any of it nearer: they still add their
+  breakpoints, but no depth is read off them.
+
+Measured interleaved, 3 runs, medians of the views pass (`generateViewDrawings`
+of the default set, built packages, efficiency cores under load from four other
+agents), base `ee16b1445`: Skolebygg 317.6 s to 147.5 s, ISSUE_159 82.4 s to
+31.8 s, FZK-Haus 12.0 s to 5.8 s, bloc-p4 17.0 s to 15.7 s. Every view's lines
+and cut faces hash the same as main on all four models in all runs. Lessons:
+
+- Which faces a line meets depends on the fine grid's cell layout: `clipToFace`
+  grows a triangle by moving each edge out by `reach`, whose corner reaches
+  `reach / sin(half the angle)` past a sliver's tip, outside the box the grid
+  files it under. A coarse grid alone changed 0.9% of Skolebygg's North
+  Elevation lines. Keeping the fine cell ranges as a filter kept the output and
+  still gave the coarse grid's speed. Clipping the grown triangle to its grown
+  box makes the result independent of the cells, but it moved 23 of FZK's 160
+  North Elevation lines (the rafter tails end 18 mm higher) and 117 of
+  ISSUE_159's 1,366 South Elevation lines, and re-records goldens: a drawing
+  decision, not a perf change, left out here.
+- Skipping the faces after the cut-off outright moved line ends by up to 6 cm
+  on ISSUE_159: `simplify` is greedy, so a breakpoint on a stretch the envelope
+  does not bend still changes where it splits the line, and the classifier then
+  samples the pieces differently. Keep every face's breakpoints.
+- The hash of every view per run caught that 6 cm draft; timing alone did not.

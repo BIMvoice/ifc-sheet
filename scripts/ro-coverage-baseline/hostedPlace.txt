@@ -1,0 +1,10 @@
+hostedPlace.field.offset
+hostedPlace.field.sill
+hostedPlace.hint.door
+hostedPlace.hint.opening
+hostedPlace.hint.window
+hostedPlace.noHost
+hostedPlace.outsideHost
+hostedPlace.tool.door
+hostedPlace.tool.opening
+hostedPlace.tool.window

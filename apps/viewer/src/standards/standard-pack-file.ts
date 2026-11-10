@@ -19,6 +19,7 @@ import { knownGraphicStandard } from '@/drafting/graphic-standard';
 import { readNumberingScheme } from '@/project/numbering';
 import { readTitleBlockTemplate } from '@/project/title-block-file';
 import { readUnitsAndNumbers } from '@bimvoice/ifcsheet';
+import { readMaterials } from '@bimvoice/ifcsheet/materials';
 import { PACK_NOT_SET, partsOf, type PackNotSet, type StandardPack } from './standard-pack';
 
 export const STANDARD_PACK_KEY = 'standardPack';
@@ -32,6 +33,7 @@ export function serializeStandardPack(pack: StandardPack, now = new Date()): str
     ...(pack.titleBlockTemplate ? { titleBlockTemplate: pack.titleBlockTemplate } : {}),
     ...(pack.unitsAndNumbers ? { unitsAndNumbers: pack.unitsAndNumbers } : {}),
     ...(pack.sheetNumbering ? { sheetNumbering: pack.sheetNumbering } : {}),
+    ...(pack.materials ? { materials: pack.materials } : {}),
   };
   return JSON.stringify(file, null, 2);
 }
@@ -55,6 +57,8 @@ export function parseStandardPack(text: string): StandardPack {
   const titleBlockTemplate = m.titleBlockTemplate === undefined ? undefined : readTitleBlockTemplate(m.titleBlockTemplate) ?? refuse('the title block layout is not readable');
   const unitsAndNumbers = m.unitsAndNumbers === undefined ? undefined : readUnitsAndNumbers(m.unitsAndNumbers) ?? refuse('the units and number format are not readable');
   const sheetNumbering = m.sheetNumbering === undefined ? undefined : readNumberingScheme(m.sheetNumbering) ?? refuse('the numbering scheme is not readable');
+  const materials = m.materials === undefined ? undefined : Array.isArray(m.materials) ? readMaterials(m.materials) : refuse('the material hatch rows are not readable');
+  if (Array.isArray(m.materials) && materials && materials.length !== m.materials.length) refuse('a material hatch row is not readable');
   const notSet = Array.isArray(m.notSet) ? m.notSet.filter((v): v is PackNotSet => (PACK_NOT_SET as readonly unknown[]).includes(v)) : [];
   return {
     id: m.id, name, version: m.version, description: typeof m.description === 'string' ? m.description : '', notSet,
@@ -62,5 +66,6 @@ export function parseStandardPack(text: string): StandardPack {
     ...(titleBlockTemplate ? { titleBlockTemplate } : {}),
     ...(unitsAndNumbers ? { unitsAndNumbers } : {}),
     ...(sheetNumbering ? { sheetNumbering } : {}),
+    ...(materials ? { materials } : {}),
   };
 }

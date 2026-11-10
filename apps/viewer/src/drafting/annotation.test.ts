@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { axisLayout, dimensionLayout, entityBounds, entitySkeleton, formatLevel, mirrorEntity, nearestOnEntity, nextAxisLabel, rotateEntity, translateEntity } from './annotation.js';
 import { gripsOf, moveGrip } from './grips.js';
-import { readDraft } from './draft-file.js';
+import { readDraft } from '@bimvoice/ifcsheet';
 import type { AnnotationShape, AxisShape } from './types.js';
 
 const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);

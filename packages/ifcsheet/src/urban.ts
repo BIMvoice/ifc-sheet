@@ -12,5 +12,7 @@ export * from './urban-indicators.js';
 export * from './urban-footprint.js';
 export * from './urban-area-summary.js';
 export * from './urban-measure.js';
+export * from './urban-read.js';
+export * from './sheet-urban.js';
 export { ruralScopeOf } from './rural-scope.js';
 export * from './urban-ring-offset.js';

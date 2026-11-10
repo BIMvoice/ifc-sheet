@@ -1,0 +1,106 @@
+ANNOTATION_COMMANDS: value
+AnnotationCommand: type (type-only)
+Annotations: type (type-only)
+CaptureInput: type (type-only)
+DefaultSet: type (type-only)
+DefaultSetOptions: type (type-only)
+GERMANY_DRAWING_SCALE: value
+GERMANY_LANDS: value
+GERMANY_SITE_SCALE: value
+GERMANY_STEP_UP: value
+GermanyCoverageRow: type (type-only)
+GermanyDrawnBy: type (type-only)
+GermanyItem: type (type-only)
+GermanyLand: type (type-only)
+GermanySheetNames: type (type-only)
+GermanyState: type (type-only)
+GermanyStatus: type (type-only)
+NORWAY_DRAWING_SCALE: value
+NORWAY_ITEMS: value
+NORWAY_SITE_SCALE: value
+NORWAY_STEP_UP: value
+NorwayCoverageRow: type (type-only)
+NorwayDrawnBy: type (type-only)
+NorwayItem: type (type-only)
+NorwaySheetNames: type (type-only)
+NorwayState: type (type-only)
+NorwayStatus: type (type-only)
+PAC_DEFAULT_INTERVENTION: value
+PAC_DEFAULT_MODE: value
+PAC_INTERVENTIONS: value
+PAC_ITEMS: value
+PAC_MODES: value
+PAC_OPIS_ORDER: value
+PAC_OPIS_PAPER: value
+PAC_RURAL_ITEMS: value
+PAC_RURAL_PAPER: value
+PAC_RURAL_SCALE: value
+PAC_RURAL_STEP_UP: value
+PAC_WORDS_EN: value
+PAC_WORDS_RO: value
+PacCoverageContext: type (type-only)
+PacCoverageRow: type (type-only)
+PacCoverageSheet: type (type-only)
+PacIntervention: type (type-only)
+PacItem: type (type-only)
+PacKind: type (type-only)
+PacMode: type (type-only)
+PacOpis: type (type-only)
+PacOpisRow: type (type-only)
+PacProject: type (type-only)
+PacSheetNames: type (type-only)
+PacSheetRef: type (type-only)
+PacState: type (type-only)
+PacWordKey: type (type-only)
+RULED_SERIES: value
+RuledSeries: type (type-only)
+SET_SECTIONS: value
+SET_TEMPLATE_EN: value
+SET_TEMPLATE_FILE_FORMAT: value
+SET_TEMPLATE_FILE_SUFFIX: value
+SET_TEMPLATE_FILE_VERSION: value
+SET_TEMPLATE_RO: value
+ScheduleRule: type (type-only)
+SetModel: type (type-only)
+SetNote: type (type-only)
+SetTemplate: type (type-only)
+SheetLayoutRule: type (type-only)
+SheetRule: type (type-only)
+SlotRule: type (type-only)
+TemplateNote: type (type-only)
+TemplateNoteKey: type (type-only)
+TemplateSet: type (type-only)
+TemplateSetInput: type (type-only)
+ViewRule: type (type-only)
+allPlans: value
+applySetTemplate: value
+captureSetTemplate: value
+describeTemplateNote: value
+findAllByRule: value
+findByRule: value
+generateDefaultSet: value
+germanyCoverage: value
+germanyItems: value
+germanySetTemplate: value
+layoutOf: value
+norwayCoverage: value
+norwaySetTemplate: value
+pacApplies: value
+pacCoverage: value
+pacOpis: value
+pacOpisOf: value
+pacOpisSheet: value
+pacOpisTexts: value
+pacPages: value
+pacProjectName: value
+pacRuralSetTemplate: value
+pacScaleAllowed: value
+pacSetTemplate: value
+pacSubmissionSheets: value
+pacTemplateFor: value
+pacWordsFor: value
+parseSetTemplate: value
+planStoreys: value
+ruleOf: value
+ruledViews: value
+serializeSetTemplate: value

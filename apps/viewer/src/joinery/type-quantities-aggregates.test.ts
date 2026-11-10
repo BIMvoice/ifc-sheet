@@ -14,7 +14,7 @@ import { RelationshipType } from '@ifc-lite/data';
 import { extractQuantitiesOnDemand } from '@ifc-lite/parser';
 import { parseStep } from '@/test/properties-panel-harness.js';
 import { useViewerStore } from '@/store';
-import { typeQuantities } from './type-quantities';
+import { typeQuantities } from '@bimvoice/ifcsheet';
 import { collectTypeElements } from './type-quantities-models';
 
 function seed(store: Awaited<ReturnType<typeof parseStep>>): void {

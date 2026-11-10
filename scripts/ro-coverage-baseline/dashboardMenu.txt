@@ -1,0 +1,8 @@
+dashboardMenu.actionsAriaLabel
+dashboardMenu.actionsTitle
+dashboardMenu.deleteItem
+dashboardMenu.duplicateItem
+dashboardMenu.exportFileItem
+dashboardMenu.importFileItem
+dashboardMenu.namePrompt
+dashboardMenu.renameItem

@@ -1,0 +1,3 @@
+exportChangesButton.buttonLabel
+exportChangesButton.tooltipMulti
+exportChangesButton.tooltipSingle

@@ -10,6 +10,8 @@
  *
  *  1. its own manual choice (by element GlobalId);
  *  2. its IFC type's manual choice (by type GlobalId);
+ *     An element whose type is mapped always uses that mapping; the rules below are for elements whose type is not mapped, and they
+ *     never pick an entry that belongs to a type (`TYPE_ENTRY_PREFIX`), so a type's configuration does not pull in another type of the same name or size.
  *  3. by name: its type's Name, its ObjectType or its Name equals an entry's
  *     name, mark or one of the entry's aliases (case, spaces and punctuation
  *     ignored);
@@ -25,6 +27,9 @@
  */
 
 import type { JoineryKind, JoinerySpec } from '@ifc-lite/create';
+
+/** The id prefix of a catalogue entry that belongs to one IFC type (#448): configured from it, and drawn only for it. */
+export const TYPE_ENTRY_PREFIX = 'type-';
 
 export interface JoineryMapping {
   /** Automatic matching by type / element name. */
@@ -81,7 +86,7 @@ export function resolveMapping(mapping: JoineryMapping, list: readonly JoinerySp
   const byType = manual(facts.typeGlobalId ? mapping.types[facts.typeGlobalId] : undefined, list, facts.kind);
   if (byType === null) return null;
   if (byType) return { entry: byType, source: 'type' };
-  const candidates = list.filter((e) => e.kind === facts.kind && e.id);
+  const candidates = list.filter((e) => e.kind === facts.kind && e.id && !e.id.startsWith(TYPE_ENTRY_PREFIX));
   if (mapping.byName) {
     const names = new Set(facts.names.map(normaliseName).filter(Boolean));
     const named = candidates.find((e) => [e.name, e.mark, ...(mapping.aliases[e.id ?? ''] ?? [])].some((n) => names.has(normaliseName(n))));

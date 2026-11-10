@@ -52,6 +52,19 @@ describe('the handover in the issue form', () => {
   });
 });
 
+describe('the handover note does not point at an internal issue number (#653)', () => {
+  it('says DWG export is not available yet, in English and in Romanian', () => {
+    const en = render(<IssueForm skin={WALL_SKIN} />);
+    assert.ok(en.textContent?.includes('DWG export is not available yet.'), en.textContent ?? '');
+    assert.ok(!/#\d+/.test(en.textContent ?? ''), 'no #number in the panel');
+    cleanup();
+    setLocale('ro');
+    const roPanel = render(<IssueForm skin={WALL_SKIN} />);
+    assert.ok(roPanel.textContent?.includes('Exportul DWG nu este încă disponibil.'), roPanel.textContent ?? '');
+    assert.ok(!/#\d+/.test(roPanel.textContent ?? ''), 'no #number in the Romanian panel');
+  });
+});
+
 const vp = (viewId: string) => ({ id: `vp-${viewId}`, viewId, x: 0, y: 0, scale: 50, width: 0, height: 0, center: null });
 const sheet = (id: string, number: string, view: string): ProjectSheet => ({ id, number, name: `Sheet ${number}`, createdAt: 1, viewports: [vp(view)] });
 const dimension = (viewId: string) => ({ id: `d-${viewId}`, viewId, layerId: '0', shape: { type: 'line', a: { x: 0, y: 0 }, b: { x: 3, y: 0 } }, params: {} }) as never;

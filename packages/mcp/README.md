@@ -121,7 +121,7 @@ The same `npx` command works as a stdio server in any MCP-aware client.
 | bSDD | `bsdd_search`, `bsdd_class`, `bsdd_property_sets`, `bsdd_match` |
 | Diff | `model_diff` (`by_content` for content-keyed matching), `quantity_diff` |
 | Export | `export_ifc`, `export_csv`, `export_json`, `export_glb`, `export_obj`, `export_ifcx`, `export_pdf_report` |
-| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
+| Drawing sets | `ifcsheet_open_model`, `ifcsheet_generate_set`, `ifcsheet_apply_template`, `ifcsheet_list_sheets`, `ifcsheet_add_view`, `ifcsheet_annotate`, `ifcsheet_place_view`, `ifcsheet_set_title_block`, `ifcsheet_renumber`, `ifcsheet_add_schedule`, `ifcsheet_export_pdf`, `ifcsheet_export_dxf`, `ifcsheet_issue_set`, `ifcsheet_save_project`, `ifcsheet_load_project`, `ifcsheet_check_readiness` |
 | Quantity takeoff | `ifcsheet_rooms`, `ifcsheet_materials`, `ifcsheet_boq`, `ifcsheet_list`, `ifcsheet_classify` |
 | Viewer | `viewer_ask`, `viewer_open`, `viewer_close`, `viewer_status`, `viewer_colorize`, `viewer_isolate`, `viewer_hide`, `viewer_show`, `viewer_reset`, `viewer_fly_to`, `viewer_set_section`, `viewer_clear_section`, `viewer_color_by_storey`, `viewer_color_by_property`, `viewer_get_selection`, `viewer_wait_for_selection`, `viewer_describe_selection` |
 
@@ -220,6 +220,7 @@ file when `annotated_ifc` is true.
 | `ifcsheet_apply_template` | `model_id`, `template_path` or `template_json` (a `.bvset`), optional `name`, `dry_run` | a new `document_id`, the sheets and the notes of what the rules met; as `ifcsheet build --template` |
 | `ifcsheet_list_sheets` | `document_id` | per sheet: id, number, name, paper, the views on it (slot, kind, scale); the views not placed; the title block fields |
 | `ifcsheet_add_view` | `document_id`, `kind` (`plan` with `level`, `elevation` with `direction`, `section` by `axis` and `offset_m` or by a line `from`/`to`, `axonometric` with `preset`, optionally cut away by `cut_level` and `cut_height_m` or a box), optional `dry_run` | the new view; it is not on a sheet yet |
+| `ifcsheet_annotate` | `document_id`, optional `commands` (`dimension`, `tag`, `level`) or `preset`, `tag_parts`, `views`, `dry_run` | per view what was added (dimensions, tags, level marks) and what was left out and why, as message keys; the annotation is kept in the set and printed by the exports; one undo step |
 | `ifcsheet_place_view` | `document_id`, `view`, optional `sheet`, `scale`, `slot`, `dry_run` | the sheet it is on; without `sheet` the engine's rule picks or makes one; errors when the views do not fit at the scale |
 | `ifcsheet_set_title_block` | `document_id`, `fields` (client, drawnBy, project, date, phase, projectNumber...), optional `sheet`, `dry_run` | the fields in force and the ones that changed; project-wide, or one sheet's own |
 | `ifcsheet_renumber` | `document_id`, optional `preset` (`default`, `sequential`), `discipline`, `overrides`, `dry_run` | the old to new numbers |
@@ -230,7 +231,7 @@ file when `annotated_ifc` is true.
 | `ifcsheet_undo` | `document_id` | the set as it was before its last edit (add_view, place_view, set_title_block, add_schedule, renumber); `changed`, `undo_steps`, `redo_steps` |
 | `ifcsheet_redo` | `document_id` | re-applies the edit just undone; `changed: false` when there is none |
 | `ifcsheet_load_project` | `model_id`, `project_path` or `project_json` | a new `document_id` from a saved project |
-| `ifcsheet_check_readiness` | `model_id` | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check` |
+| `ifcsheet_check_readiness` | `model_id`; optional `project_path` or `project_json`, `ids` (`byggesaksbim`) | `ready` and the findings (kind, what is missing, what is weaker, counts): what the model lacks that the drawings read; the report of `ifcsheet check`; with `ids: "byggesaksbim"` or a project that opted in, also the ByggesaksBIM (Norway) findings. The opt-in of an earlier `ifcsheet_load_project` is not remembered: pass `project_path`/`project_json` or `ids` on this call. A model that is not IFC4 gets one `byggesaksbimSchema` finding; a check that cannot run is a tool error |
 | `ifcsheet_rooms` | `model_id` or `document_id`, optional `project_path`/`project_json`, `locale` | the room and area schedule of `ifcsheet rooms`: levels, rooms (number, name, `area` m² or null, `perimeter`, `source`), totals, plus `text` and `csv`; the project's "Units and numbers" formats `text` only |
 | `ifcsheet_materials` | `model_id` or `document_id`, optional `project_path`/`project_json` | the materials and how each draws, as `ifcsheet materials --json`, plus `text` |
 | `ifcsheet_boq` | `model_id` or `document_id`, `project_path` or `project_json`, optional `detail`, `locale` | the bill of quantities of `ifcsheet boq`: per article `total` (null when no element has the quantity, never 0), `matched`, `counted`, the `missing` elements, `refused`, `byType`; plus `text` and `csv` |
@@ -311,6 +312,8 @@ ifcsheet_open_model      {"file_path": "/work/AC20-FZK-Haus.ifc"}
                          -> model_id "sheetmodel-1", storeys Erdgeschoss (0) and Dachgeschoss (2.7)
 ifcsheet_check_readiness {"model_id": "sheetmodel-1"}
                          -> ready false; noMaterials: 4 of 82 elements have no material
+ifcsheet_check_readiness {"model_id": "sheetmodel-1", "ids": "byggesaksbim"}
+                         -> also byggesaksbimH1, H4 and H5 (Norway; a project that opted in needs no ids)
 ifcsheet_generate_set    {"model_id": "sheetmodel-1"}
                          -> document_id "sheetset-1": A-101, A-201, A-202, A-301; 9 views
 ifcsheet_set_title_block {"document_id": "sheetset-1", "fields": {"phase": "DTAC", "projectNumber": "42/2026"}, "dry_run": true}

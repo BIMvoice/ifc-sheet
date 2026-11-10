@@ -82,11 +82,11 @@ test('invalid numeric/date facts become explicit omissions rather than null valu
 test('IDS evidence preserves the native failure verdict on AC20-FZK-Haus', async context => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
-  const path = resolve(process.cwd(), '../../tests/models/ara3d/AC20-FZK-Haus.ifc');
+  const path = resolve(process.cwd(), 'src/test/__fixtures__/AC20-FZK-Haus.ifc');
   let bytes: Buffer;
   try { bytes = await readFile(path); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('Run pnpm fixtures to fetch AC20-FZK-Haus.ifc'); return; }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') { context.skip('the committed FZK fixture is missing'); return; }
     throw error;
   }
   assert.match(bytes.subarray(0, 4000).toString(), /ARCHICAD/);

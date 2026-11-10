@@ -24,8 +24,9 @@ export function withScheme<T extends StyledDrawing>(drawing: T, scheme: SchemeRe
       return schemeColour ? { ...p, schemeColour } : p;
     }),
     ...(scheme.fills.length > 0 ? {
-      schemeFills: orderedFills(scheme.fills).map((f): DrawingPolygon & { schemeColour: string } => ({
+      schemeFills: orderedFills(scheme.fills).map((f): DrawingPolygon & { schemeColour: string; schemeHatch?: string } => ({
         polygon: { outer: f.outer, holes: f.holes }, entityId: f.entityId, ifcType: 'IfcSpace', modelIndex: 0, isCut: false, schemeColour: f.colour,
+        ...(f.hatch ? { schemeHatch: f.hatch } : {}),
       })),
     } : {}),
   };

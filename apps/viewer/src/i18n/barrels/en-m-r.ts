@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { polylineCardEn } from '../catalogues/polyline-card.en';
+import { repeatToolEn } from '../catalogues/repeat-tool.en';
 import { manualValidationEn } from '../catalogues/manual-validation.en';
 import { materialsEn } from '../catalogues/materials.en';
 import { norwayEn } from '../catalogues/norway.en';
@@ -52,12 +54,15 @@ import { roofEn } from '../catalogues/roof.en';
 import { roomFinishesEn } from '../catalogues/room-finishes.en';
 import { roomLayoutEn } from '../catalogues/room-layout.en';
 import { roomScheduleEn } from '../catalogues/room-schedule.en';
+import { regionSelectEn } from '../catalogues/region-select.en';
 import { roomSummaryEn } from '../catalogues/room-summary.en';
 import { roomToolEn } from '../catalogues/room-tool.en';
+import { plainHintsEn } from '../catalogues/plain-hints.en';
 
 /** The catalogues whose file starts with `m` to `r` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
 export const enMR = {
   ...manualValidationEn,
+  ...plainHintsEn,
   ...materialsEn,
   ...mcpPlaygroundEn,
   ...mcpEn,
@@ -102,6 +107,8 @@ export const enMR = {
   ...reviewEn,
   ...revisionsEn,
   ...ribbonToolbarEn,
+  ...regionSelectEn,
+  ...repeatToolEn,
   ...roofBlockEn,
   ...roofEn,
   ...roomFinishesEn,
@@ -109,4 +116,5 @@ export const enMR = {
   ...roomScheduleEn,
   ...roomSummaryEn,
   ...roomToolEn,
+  ...polylineCardEn,
 } as const;

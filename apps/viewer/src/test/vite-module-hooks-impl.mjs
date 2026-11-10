@@ -9,6 +9,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { transformImportMetaGlob } from './import-meta-glob.mjs';
 
 const ICON_PREFIX = '~icons/';
 
@@ -95,9 +96,13 @@ export async function load(url, context, nextLoad) {
 
   // Narrow on purpose: touching every module would make this harness
   // load-bearing for code that does not need it, and hide the next real break.
-  if (!text.includes('import.meta.env')) return loaded;
+  // `import.meta.glob` (a registry finding its one-file-per-entry modules) is
+  // rewritten as Vite would, for the subset `import-meta-glob.mjs` supports.
+  const globbed = text.includes('import.meta.glob') ? transformImportMetaGlob(text, url) : null;
+  const body = globbed ?? text;
+  if (!body.includes('import.meta.env')) return globbed === null ? loaded : { ...loaded, source: body, format: 'module', shortCircuit: true };
 
-  return { ...loaded, source: ENV_PRELUDE + text, format: 'module', shortCircuit: true };
+  return { ...loaded, source: ENV_PRELUDE + body, format: 'module', shortCircuit: true };
 }
 
 export { ICON_PREFIX, ICON_STUB, pathToFileURL };

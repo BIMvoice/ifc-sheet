@@ -10,11 +10,14 @@
  */
 
 import { applyAnnotationType } from '@/catalogue/annotation-type-actions';
-import { allSymbols } from '@/drafting/symbols';
+import { allSymbols } from '@bimvoice/ifcsheet';
 import { baseDraftSettings, patchDraftSettings, useDraftingSession } from '@/drafting/session';
 import { useTranslation } from '@/i18n';
 import { useProjectStore } from '@/project/project-store';
 import { WALL_FIELD } from './wall-type';
+import { SymbolToolFields } from './SymbolToolFields';
+import { TagShows } from './TagShows';
+import { EditToolField, isEditTool } from './EditToolField';
 
 const field = WALL_FIELD;
 
@@ -25,21 +28,25 @@ export function ToolTypes({ tool }: { tool: string }) {
   const symbols = useProjectStore((s) => s.symbols);
   const settings = baseDraftSettings();
 
+  if (isEditTool(tool)) return <EditToolField tool={tool} />;
   if (tool === 'symbol') {
     const all = allSymbols(symbols ?? []);
     return (
-      <label className="mt-4 block text-xs text-sky-200">
-        {t('wall.type.symbol')}
-        <select className={field} value={settings.symbolId ?? all[0]?.id ?? ''} onChange={(e) => patchDraftSettings({ symbolId: e.target.value })}>
-          {all.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </label>
+      <>
+        <label className="mt-4 block text-xs text-sky-200">
+          {t('wall.type.symbol')}
+          <select className={field} value={settings.symbolId ?? all[0]?.id ?? ''} onChange={(e) => patchDraftSettings({ symbolId: e.target.value })}>
+            {all.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        <SymbolToolFields />
+      </>
     );
   }
   const mine = (types ?? []).filter((x) => x.tool === tool);
-  if (mine.length === 0) return null;
+  if (mine.length === 0) return tool === 'tag' ? <TagShows /> : null;
   const current = settings.annotationType?.tool === tool ? settings.annotationType.id : '';
-  return (
+  const typeChoice = (
     <label className="mt-4 block text-xs text-sky-200">
       {t('wall.type.label')}
       <select
@@ -55,4 +62,5 @@ export function ToolTypes({ tool }: { tool: string }) {
       </select>
     </label>
   );
+  return tool === 'tag' ? <>{typeChoice}<TagShows /></> : typeChoice;
 }

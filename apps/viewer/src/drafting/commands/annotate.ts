@@ -9,6 +9,7 @@
  * and undo work on them unchanged.
  */
 
+import { autocadModeOn } from '@/lib/commands/autocad-mode';
 import { editDrafts, newDraft } from '../draft-store';
 import { styledParams } from '@/project/drafting-standards';
 import { entitySkeleton, nextAxisLabel } from '../annotation';
@@ -49,7 +50,7 @@ export const textCommand: DraftCommandDef = {
   create(ctx) {
     let at: Pt | null = null;
     return {
-      prompt: () => ({ key: at ? 'drafting.prompt.enterText' : 'drafting.prompt.textPoint', params: { height: ctx.settings.textHeight } }),
+      prompt: () => ({ key: at ? (autocadModeOn() ? 'textLines.prompt' : 'textOnDrawing.prompt') : 'drafting.prompt.textPoint', params: { height: ctx.settings.textHeight } }),
       input: () => 'point',
       basePoint: () => null,
       onPoint(p) {
@@ -62,6 +63,7 @@ export const textCommand: DraftCommandDef = {
         return 'continue';
       },
       wantsText: () => at !== null,
+      textAt: () => at,
       onText(text): StepResult {
         if (at && text) add(ctx, { type: 'text', p: at, text, height: ctx.settings.textHeight, rotation: 0 });
         return 'done';
@@ -74,8 +76,15 @@ export const textCommand: DraftCommandDef = {
 /**
  * LEADER: the arrow point, a bend at any angle, then the end of the second
  * segment (which squares itself near horizontal / vertical, with guides for
- * both), then the text. Enter after the bend makes a one-segment leader.
+ * both), then the text. Enter after the bend, "No bend" or a second click on
+ * the bend makes a one-segment leader. Done keeps what is drawn (#168).
  */
+/** The leader's prompts by points placed; AutoCAD mode keeps the typed line's (#168). */
+const LEADER_PROMPTS = ['drafting.prompt.leaderTip', 'textOnDrawing.leaderBend', 'textOnDrawing.leaderEnd'] as const;
+const LEADER_PROMPTS_TYPED = ['drafting.prompt.leaderTip', 'drafting.prompt.leaderBend', 'drafting.prompt.leaderEnd'] as const;
+/** A click this close to the bend (in text heights) is a click on the bend again. */
+const SAME_SPOT = 0.5;
+
 export const leaderCommand: DraftCommandDef = {
   id: 'leader',
   aliases: ['LEADER', 'LE', 'MLEADER'],
@@ -86,11 +95,20 @@ export const leaderCommand: DraftCommandDef = {
     /** The end of the second segment for a cursor: the one place preview and click agree on. */
     const end = (p: Pt): Pt => snapLeaderEnd(pts[1], p);
     return {
-      prompt: () => ({ key: asking ? 'drafting.prompt.enterText' : (['drafting.prompt.leaderTip', 'drafting.prompt.leaderBend', 'drafting.prompt.leaderEnd'] as const)[Math.min(pts.length, 2)] }),
+      prompt: () => {
+        if (asking) return { key: autocadModeOn() ? 'textLines.prompt' : 'textOnDrawing.prompt' };
+        const keys = autocadModeOn() ? LEADER_PROMPTS_TYPED : LEADER_PROMPTS;
+        return { key: keys[Math.min(pts.length, 2)] };
+      },
       input: () => 'point',
       basePoint: () => pts.at(-1) ?? null,
       onPoint(p) {
         if (asking) return 'continue';
+        // A second click on the bend: no second segment, the text goes there.
+        if (pts.length === 2 && Math.hypot(p.x - pts[1].x, p.y - pts[1].y) < SAME_SPOT * ctx.settings.textHeight) {
+          asking = true;
+          return 'continue';
+        }
         pts.push(pts.length === 2 ? end(p) : p);
         if (pts.length === 3) asking = true;
         return 'continue';
@@ -100,13 +118,22 @@ export const leaderCommand: DraftCommandDef = {
         asking = true;
         return 'continue';
       },
+      onDone() {
+        if (pts.length >= 2) add(ctx, { type: 'leader', pts: [...pts], text: '', height: ctx.settings.textHeight });
+        return 'done';
+      },
       wantsText: () => asking,
+      textAt: () => (asking ? pts.at(-1) ?? null : null),
+      textFrom: () => (asking && pts.length >= 2 ? pts[pts.length - 2] : null),
+      shortcut: () => (!asking && pts.length === 2 ? { key: 'textOnDrawing.noBend', at: pts[1] } : null),
       onText(text) {
         if (pts.length >= 2) add(ctx, { type: 'leader', pts: [...pts], text, height: ctx.settings.textHeight });
         return 'done';
       },
       preview(cursor) {
-        if (asking || pts.length === 0) return [];
+        // While the words are asked for, the leader placed stays drawn so the note's target is in view (#168).
+        if (asking) return pts.length >= 2 ? [{ type: 'polyline', pts: [...pts], closed: false }] : [];
+        if (pts.length === 0) return [];
         if (pts.length === 1) return [{ type: 'polyline', pts: [pts[0], cursor], closed: false }];
         return [{ type: 'polyline', pts: [pts[0], pts[1], end(cursor)], closed: false }, ...orthoGuides(pts[1], cursor, 4 * ctx.settings.textHeight).map((g) => ({ type: 'line' as const, a: g.a, b: g.b }))];
       },

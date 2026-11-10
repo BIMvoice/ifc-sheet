@@ -42,6 +42,27 @@ export const STANDARD_CAPTIONS_EN = {
 } as const;
 export type StandardCaption = keyof typeof STANDARD_CAPTIONS_EN;
 
+/** The same captions in Romanian (the app's `sheets.tb.*` catalogue, terms per its glossary); a parity test holds the two equal. */
+export const STANDARD_CAPTIONS_RO: Record<StandardCaption, string> = {
+  'sheets.tb.project': 'Proiect',
+  'sheets.tb.address': 'Adresă',
+  'sheets.tb.client': 'Beneficiar',
+  'sheets.tb.organisation': 'Organizație',
+  'sheets.tb.title': 'Titlu planșă',
+  'sheets.tb.drawnBy': 'Desenat',
+  'sheets.tb.checkedBy': 'Verificat',
+  'sheets.tb.date': 'Data',
+  'sheets.tb.revision': 'Revizie',
+  'sheets.tb.number': 'Nr. planșă',
+  'sheets.tb.scale': 'Scara',
+};
+
+/** The standard layout's captions in `language` (`ro`, else English): what a project without a layout of its own prints. */
+export function standardCaptionsFor(language: string | undefined): (key: StandardCaption) => string {
+  const words = language === 'ro' ? STANDARD_CAPTIONS_RO : STANDARD_CAPTIONS_EN;
+  return (key) => words[key];
+}
+
 /**
  * The standard layout: project and address, client and organisation in halves,
  * the sheet title across, drawn and checked by, date and revision in halves; at

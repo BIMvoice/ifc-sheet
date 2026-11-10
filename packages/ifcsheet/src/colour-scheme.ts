@@ -48,6 +48,10 @@ export interface ColourScheme {
   colours?: Record<string, string>;
   /** Absent: {@link DEFAULT_PALETTE}. */
   palette?: PaletteId;
+  /** A hatch pattern per value (#493): value key (`valueKey`) to a pattern's name (a built-in or one of the project's), drawn over the value's colour in rooms. */
+  hatches?: Record<string, string>;
+  /** `true`: the scheme is kept (property, colours, hatches) but paints nothing and has no legend: the view's switch (#493). Absent: on. */
+  off?: true;
   /** The legend's heading when the user wrote one; absent: the property's readable name (`schemeTitle`, or the app's translated label). */
   title?: string;
 }
@@ -72,6 +76,12 @@ export function readColourScheme(raw: unknown): ColourScheme | undefined {
   }
   const palette = PALETTE_IDS.find((p) => p === r.palette);
   if (palette && palette !== DEFAULT_PALETTE) out.palette = palette;
+  if (typeof r.hatches === 'object' && r.hatches !== null && !Array.isArray(r.hatches)) {
+    const hatches: Record<string, string> = {};
+    for (const [key, value] of Object.entries(r.hatches)) if (typeof value === 'string' && value.trim() !== '' && value.length <= 64) hatches[key] = value.trim();
+    if (Object.keys(hatches).length > 0) out.hatches = hatches;
+  }
+  if (r.off === true) out.off = true;
   if (typeof r.title === 'string' && r.title.trim() !== '' && r.title.length <= 200) out.title = r.title.trim();
   return out;
 }
@@ -170,6 +180,8 @@ export interface SchemeEntry {
   /** The value as written (the first spelling in sort order when two differ only in case). */
   label: string;
   colour: string;
+  /** The pattern drawn over the colour (a name), when the scheme gave this value one. */
+  hatch?: string;
   /** How many rooms or elements of the view carry it. */
   count: number;
 }
@@ -178,11 +190,12 @@ export interface SchemeEntry {
  * The entries of the values `found` (value text → element ids carrying it) with their colours, in the settled order. Only values in
  * `found` are listed: the scheme's stored colours for values the view does not show are not.
  */
-export function schemeEntries(found: ReadonlyMap<string, { label: string; ids: ReadonlySet<number> }>, scheme: Pick<ColourScheme, 'colours' | 'palette'>): SchemeEntry[] {
+export function schemeEntries(found: ReadonlyMap<string, { label: string; ids: ReadonlySet<number> }>, scheme: Pick<ColourScheme, 'colours' | 'palette' | 'hatches'>): SchemeEntry[] {
   const colours = assignColours(found.keys(), scheme);
   return [...found.keys()].sort(compareKeys).map((key) => {
     const at = found.get(key)!;
-    return { key, label: at.label, colour: colours.get(key)!, count: at.ids.size };
+    const hatch = scheme.hatches?.[key];
+    return { key, label: at.label, colour: colours.get(key)!, ...(hatch ? { hatch } : {}), count: at.ids.size };
   });
 }
 

@@ -20,6 +20,7 @@ import ro from './ro';
  * outside the Wall (`IfcSheetShell` covers the engine's interface, and keeps these): the command palette, the Settings
  * dialog, the feedback dialog, a drawing's annotation bar and the export dialogs the palette opens (including the anonymized subset, the modified-IFC review and the Cesium ion upload), and the toasts of the exports the palette starts and of opening a file.
  */
+// FROZEN, with `IN_SCOPE_KEYS`: nothing is added to either; a feature widening the scope adds a file to `../ro-scope/`.
 // `ready.` is the model-readiness list (#403): its keys are built at render, so the face check below cannot see them.
 const IN_SCOPE = ['wall.', 'sheets.', 'check.', 'issue.', 'whatchanged.', 'library.', 'takeoff.', 'schedule.row.', 'schedule.export.', 'joinery.op.', 'draftSet.', 'names.', 'tbparams.', 'tblayout.', 'ready.', 'settings.privacy.toast', 'viewerShell.toast.dismiss',
   // The palette (Ctrl/Cmd+K) the face keeps, the Settings dialog its privacy notice opens, and the feedback dialog of its top bar.
@@ -44,7 +45,14 @@ const IN_SCOPE_KEYS = new Set<string>([
   'projectPackage.open', 'projectPackage.save', 'projectPackage.saveAs', 'projectPackage.link', 'projectVersions.save', 'projectVersions.update', 'projectVersions.history',
   'exportCommands.ifc.menuLabel', 'exportCommands.anonymized.menuLabel', 'exportCommands.modifiedIfc.menuLabel', 'exportCommands.glb.menuLabel', 'exportCommands.kmz.menuLabel', 'exportCommands.ion.menuLabel', 'exportCommands.usd.menuLabel', 'exportCommands.energy.menuLabel', 'exportCommands.json.menuLabel', 'exportCommands.screenshot.menuLabel', 'exportCommands.pdf.menuLabel',
 ]);
-const keys = (Object.keys(en) as TranslationKey[]).filter((k) => IN_SCOPE_KEYS.has(k) || IN_SCOPE.some((p) => k.startsWith(p)));
+/**
+ * The scope added since the lists above were frozen: one file per feature in `../ro-scope/`, exporting `prefixes` (keys
+ * that start with one) and/or `keys` (exact keys), so two PRs widening the scope never edit the same line.
+ */
+const SCOPE_FILES = import.meta.glob<{ prefixes?: readonly string[]; keys?: readonly string[] }>('../ro-scope/*.ts', { eager: true });
+const scopePrefixes = [...IN_SCOPE, ...Object.values(SCOPE_FILES).flatMap((m) => m.prefixes ?? [])];
+const scopeKeys = new Set<string>([...IN_SCOPE_KEYS, ...Object.values(SCOPE_FILES).flatMap((m) => m.keys ?? [])]);
+const keys = (Object.keys(en) as TranslationKey[]).filter((k) => scopeKeys.has(k) || scopePrefixes.some((p) => k.startsWith(p)));
 const catalogue = ro as Readonly<Record<string, TranslationValue>>;
 
 const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
@@ -75,6 +83,16 @@ function cedillaProblems(cat: Readonly<Record<string, TranslationValue>>): strin
 }
 
 describe('Romanian catalogue (#53)', () => {
+  it('finds the scope files, and each names at least one English key', () => {
+    const files = Object.entries(SCOPE_FILES);
+    assert.ok(files.length > 0, 'no file found in ../ro-scope/');
+    const english = Object.keys(en);
+    for (const [file, m] of files) {
+      const named = english.filter((k) => (m.keys ?? []).includes(k) || (m.prefixes ?? []).some((p) => k.startsWith(p)));
+      assert.ok(named.length > 0, `${file} names no English key`);
+    }
+  });
+
   it('has an entry for every in-scope English key, and none for a key that does not exist', () => {
     assert.ok(keys.length > 300, `the scope found ${keys.length} English keys`);
     assert.deepEqual(keys.filter((k) => !Object.hasOwn(catalogue, k)), []);
@@ -94,11 +112,13 @@ describe('Romanian catalogue (#53)', () => {
 
   // #258: the site balance and the urban indicators printed English under Română because their folders were not in the face list.
   it('the face check reaches the site plan, the urban indicators and the schedules a sheet prints (#258)', () => {
-    const { 'site.balance.title': _a, 'urban.ac': _b, 'finishes.room': _c, ...without } = catalogue;
+    const { 'site.balance.title': _a, 'urban.ac': _b, 'finishes.room': _c, 'takeoff.material': _d, 'typeQty.type': _e, ...without } = catalogue;
     assert.deepEqual(untranslatedFaceKeys(without), [
-      'finishes.room (components/viewer/joinery/ScheduleGraphic.tsx)',
+      'finishes.room (packages/ifcsheet/src/finishes-words.ts)',
       'site.balance.title (components/viewer/siteplan/SiteBalance.tsx)',
-      'urban.ac (components/viewer/urban/useUrban.ts)',
+      'takeoff.material (packages/ifcsheet/src/takeoff-words.ts)',
+      'typeQty.type (packages/ifcsheet/src/type-quantities-words.ts)',
+      'urban.ac (packages/ifcsheet/src/urban-words.ts)',
     ]);
   });
 
@@ -116,7 +136,7 @@ describe('Romanian catalogue (#53)', () => {
     const { 'drafting.prompt.firstPoint': _a, 'drafting.msg.tagAllDone': _b, 'keyboardShortcuts.header.title': _c, 'drafting.commandLine': _d, 'commands.wall.nextSheet': _e, ...without } = catalogue;
     assert.deepEqual(untranslatedFaceKeys(without).sort(), [
       'drafting.commandLine (components/viewer/drafting/CommandLine.tsx)',
-      'drafting.msg.tagAllDone (drafting/commands/tagall.ts)',
+      'drafting.msg.tagAllDone (packages/ifcsheet/src/tagall/tagall.ts)',
       'drafting.prompt.firstPoint (drafting/commands/draw.ts)',
       'keyboardShortcuts.header.title (components/viewer/KeyboardShortcutsDialog.tsx)',
       'commands.wall.nextSheet (lib/commands/keyboard-commands.ts)',
@@ -178,6 +198,7 @@ describe('Romanian catalogue (#53)', () => {
     const misread = keys.filter((k) => /pattern|reshaped/i.test(Object.values(forms(en[k])).join(' ')) && /model/i.test(Object.values(forms(catalogue[k])).join(' ')));
     assert.deepEqual(misread, []);
     assert.equal(catalogue['wall.hatch.pattern'], 'Tipar');
+    assert.equal(catalogue['drafting.props.pattern'], 'Tipar');
     assert.match(String(catalogue['whatchanged.usage']), /^WHATCHANGED nu primește argumente, sau primește CLEAR ori ACCEPT; „\{arg\}”/);
   });
 

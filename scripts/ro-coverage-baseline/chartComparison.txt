@@ -1,0 +1,6 @@
+chartComparison.choose
+chartComparison.label
+chartComparison.legacy
+chartComparison.none
+chartComparison.pending
+chartComparison.unavailable

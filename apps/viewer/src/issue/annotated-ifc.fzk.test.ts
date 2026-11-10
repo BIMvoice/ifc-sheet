@@ -133,4 +133,32 @@ describe('the annotated copy of AC20-FZK-Haus from a project\'s drafts', { skip:
     assert.equal(literal('3.00'), 'IFCDIRECTION((0.,1.))', 'a vertical figure runs up the sheet');
     assert.equal(literal('5.00'), 'IFCDIRECTION((0.,1.))', 'on the left of a line too');
   });
+
+  it('lists an elevation and a section as drawings with the view\'s own crop and no annotations (#548)', async () => {
+    const levels = [{ name: 'Ground', elevation: 0, storeyGlobalIds: [GROUND] }, { name: 'Roof', elevation: 2.7, storeyGlobalIds: [ROOF] }];
+    const elevation: ProjectView = { id: 'e1', name: 'South', kind: 'elevation', createdAt: 0, scale: 50, direction: 'south' };
+    const crops: AnnotationSource = {
+      ...project,
+      levels,
+      views: [plan('p0', 'Ground floor', GROUND, 0), plan('p9', 'Empty plan', GROUND, 0), project.views[2], elevation],
+      // Viewer frame, Y up: the model spans x 0..12, y 0..6 and IFC y 0..10 (viewer z is IFC -y).
+      bounds: { min: { x: 0, y: 0, z: -10 }, max: { x: 12, y: 6, z: 0 } },
+      // A viewport 200 x 100 mm at 1:50 shows 10 x 5 m of the elevation around the drawing point (6, 3).
+      sheets: [{ name: 'S', viewports: [{ id: 'vp', viewId: 'e1', x: 0, y: 0, scale: 50, width: 200, height: 100, center: { x: 6, y: 3 } }] }],
+    };
+    const c = collectAnnotations(crops, { x: 0, y: 0 }, 'en');
+    const by = (name: string) => c.views.find((v) => v.name === name)!;
+    assert.deepEqual(c.views.map((v) => [v.name, v.targetView ?? 'PLAN_VIEW']), [['Ground floor', 'PLAN_VIEW'], ['Empty plan', 'PLAN_VIEW'], ['Section A', 'SECTION_VIEW'], ['South', 'ELEVATION_VIEW']]);
+    assert.deepEqual(by('Empty plan').curves, [], 'a plan with nothing drawn on it is still a drawing');
+    // The plan's camera is the model's box, not the annotations'.
+    assert.deepEqual(by('Ground floor').extent, { min: { x: 0, y: 0 }, max: { x: 12, y: 10 } });
+    // The section cuts at IFC y = -1 looking north: the crop is the model's box on the plane, as deep as the model behind it.
+    assert.deepEqual(by('Section A').vertical, { look: { x: 0, y: 1 }, centre: { x: 6, y: -1, z: 3 }, width: 12, height: 6, depth: 11 });
+    const south = by('South').vertical!;
+    assert.deepEqual([south.look, south.centre.x, south.centre.z, south.width, south.height], [{ x: 0, y: 1 }, 6, 3, 10, 5]);
+    assert.deepEqual(c.leftOut, [{ viewId: 's1', name: 'Section A', kind: 'section' }], 'the section\'s own text is still named as left out');
+
+    const r = await buildAnnotatedIfc({ source: new Uint8Array(readFileSync(FZK)), views: c.views });
+    assert.deepEqual(r.drawings.map((d) => d.targetView), ['PLAN_VIEW', 'PLAN_VIEW', 'SECTION_VIEW', 'ELEVATION_VIEW']);
+  });
 });

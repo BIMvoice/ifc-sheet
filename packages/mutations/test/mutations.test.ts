@@ -39,7 +39,7 @@ function hasMaterializedIfcContent(filePath: string): boolean {
 // Find test IFC file
 const monorepoRoot = path.resolve(__dirname, '../../..');
 const testFiles = [
-  path.join(monorepoRoot, 'tests', 'models', 'ara3d', 'AC20-FZK-Haus.ifc'),
+  path.join(monorepoRoot, 'apps', 'viewer', 'src', 'test', '__fixtures__', 'AC20-FZK-Haus.ifc'),
   path.join(monorepoRoot, 'tests', 'models', 'ara3d', 'IfcOpenHouse_IFC4.ifc'),
   path.join(monorepoRoot, 'tests', 'models', '01_BIMcollab_Example_ARC.ifc'),
   path.join(monorepoRoot, 'tests', 'models', 'test.ifc'),
@@ -52,6 +52,8 @@ for (const file of testFiles) {
     break;
   }
 }
+
+if (!testFile) console.warn('IFC Mutations integration skipped: tests/models fixtures missing, run `pnpm fixtures`');
 
 // Parsed store - shared across tests
 let store: Awaited<ReturnType<ColumnarParser['parseLite']>>;

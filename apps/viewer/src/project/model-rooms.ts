@@ -16,10 +16,10 @@ import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUtils';
-import { farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
+import { buildingElementIds, farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
 import type { FarElementFact } from '@bimvoice/ifcsheet/readiness';
 import type { AxisBounds } from '@/lib/section/section-distance';
-import type { Footprint, ProposalInput, RoomFootprint } from './section-proposals';
+import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals';
 import type { ProjectLevel } from './types';
 
 const footprint = (b: BoundingBox3D): Footprint => ({ min: { x: b.min.x, z: b.min.z }, max: { x: b.max.x, z: b.max.z } });
@@ -51,6 +51,7 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
   const wanted = new Set(level.storeyGlobalIds);
   const rooms: RoomFootprint[] = [];
   const stairs: Footprint[] = [];
+  const walls: Footprint[] = [];
   for (const [modelId, model] of s.models) {
     const store = model.ifcDataStore;
     const hierarchy = store?.spatialHierarchy;
@@ -71,8 +72,14 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
       const b = boundsOf(expressId + offset);
       if (b) stairs.push(footprint(b));
     }
+    for (const { expressId } of iterateEffectiveEntityIds(store, mv, PROPOSAL_WALL_TYPES)) {
+      const storey = storeyOfElement(modelId, expressId);
+      if (storey === null || !storeyIds.has(storey)) continue;
+      const b = boundsOf(expressId + offset);
+      if (b) walls.push(footprint(b));
+    }
   }
-  return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs };
+  return { building: { min: { x: bounds.min.x, z: bounds.min.z }, max: { x: bounds.max.x, z: bounds.max.z } }, rooms, stairs, walls };
 }
 
 /** The building's frame and the small elements it leaves out for lying far from it, named for a message. */
@@ -82,8 +89,9 @@ export interface BuildingFraming {
 }
 
 /**
- * The extent of the building itself: what the storeys of `levels` contain,
- * without the site, terrain or anything else around it, and without the small
+ * The extent of the building itself: what the storeys of `levels` contain and
+ * the parts aggregated under it (`buildingElementIds`, the elements the engine
+ * frames and cuts too), without the site, terrain or anything else around it, and without the small
  * stray elements far from it (a survey point, an origin cube: `frameEntities`
  * in `@bimvoice/ifcsheet`, the rule the command line frames by too). The set's
  * scales and the sections' cuts are measured on it; `extent` is `null` when no
@@ -100,11 +108,10 @@ export function buildingFraming(levels: readonly ProjectLevel[], meshes: MeshDat
     const hierarchy = store?.spatialHierarchy;
     if (!store || !hierarchy || model.visible === false) continue;
     const offset = model.idOffset ?? 0;
-    for (const storey of findStoreys(hierarchy.project, (id) => wanted.has(store.entities.getGlobalId(id) ?? ''))) {
-      for (const id of hierarchy.byStorey.get(storey.expressId) ?? []) {
-        ids.push(id + offset);
-        owner.set(id + offset, { store, expressId: id });
-      }
+    // `wanted` is empty until the project has read its levels from the model: then every storey counts, as the levels will (#618).
+    for (const id of buildingElementIds(store, wanted.size > 0 ? wanted : undefined)) {
+      ids.push(id + offset);
+      owner.set(id + offset, { store, expressId: id });
     }
   }
   if (ids.length === 0) return { extent: null, far: [] };

@@ -16,6 +16,7 @@ import { startDraftCommand, useDraftingSession } from '@/drafting/session';
 import { activateDocumentTab } from '@/project/open-view';
 import { useViewDrawings } from '@/project/view-drawings';
 import { dropListOverridesOf } from '@/joinery/list-schedule-actions';
+import { dropJoineryOverridesOf } from '@/joinery/joinery-override-actions';
 import { requestFocus } from './focus';
 import type { Finding } from './types';
 
@@ -83,6 +84,8 @@ export function goToFinding(f: Finding, nav: FindingNav): boolean {
 export function removeFindingAnnotation(f: Finding): boolean {
   // The typed cell values of an element that is gone (#446): the schedule drops them, as one undo step.
   if (f.kind === 'orphanedOverride' && f.scheduleId && f.guids?.length) { dropListOverridesOf(f.scheduleId, f.guids); return true; }
+  // The typed cells of a door and window type that is gone: the project drops them, as one undo step.
+  if (f.kind === 'orphanedJoineryOverride' && f.typeKeys?.length) { dropJoineryOverridesOf(f.typeKeys); return true; }
   const { draftId } = f;
   if (!draftId || !f.remedies?.includes('delete')) return false;
   editDrafts({ remove: new Set([draftId]) });

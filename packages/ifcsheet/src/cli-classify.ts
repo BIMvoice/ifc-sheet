@@ -16,6 +16,9 @@ import { readBoqElements, storeSource } from './boq-read.js';
 import { openModel, type OpenedModel } from './model.js';
 import { readProjectFile } from './project-read.js';
 import type { CliIo } from './cli.js';
+import type { NameLanguage } from './names.js';
+import { commandLanguage } from './cli-language.js';
+import { cliSayFor } from './cli-words.js';
 
 export interface ClassifyArgs {
   model: string;
@@ -24,6 +27,8 @@ export interface ClassifyArgs {
   system?: string;
   csv: boolean;
   json: boolean;
+  /** `--locale` as given; the project's language, when it records one, comes first. */
+  locale?: string;
 }
 
 const cannotRead = (file: string, error: unknown): string =>
@@ -55,7 +60,7 @@ export interface ClassifyOutput {
 }
 
 /** The classification of an opened model's types by the mapping `system` names (the first when none is named), or the sentence saying why there is none. */
-export function classifyOutput(file: string, projectName: string, model: Pick<OpenedModel, 'dataStore'>, mappings: readonly ClassificationMapping[], system: string | undefined): ClassifyOutput | { error: string } {
+export function classifyOutput(file: string, projectName: string, model: Pick<OpenedModel, 'dataStore'>, mappings: readonly ClassificationMapping[], system: string | undefined, language: NameLanguage = 'en'): ClassifyOutput | { error: string } {
   const mapping = chosenMapping(mappings, system);
   if (!mapping) {
     return { error: system
@@ -63,10 +68,11 @@ export function classifyOutput(file: string, projectName: string, model: Pick<Op
       : `${projectName} holds no classification mapping; add one in the app (Classification codes) and save the project.` };
   }
   const rows = classifiedTypes(readBoqElements(storeSource('model', model.dataStore), new Set()), [mapping], storeClassifications(new Map([['model', model.dataStore]])));
+  const say = cliSayFor(language);
   let text = `${file}: ${systemLabel(mapping.system)}\n\n`;
-  for (const r of rows) text += `${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : ' (no type)'}  x${r.count}${r.source === 'model' ? '  [model]' : ''}\n`;
+  for (const r of rows) text += `${(r.code || '-').padEnd(18)} ${plain(r.className)}${r.typeName ? `: ${r.typeName}` : say('classify.noType')}  x${r.count}${r.source === 'model' ? `  ${say('classify.fromModel')}` : ''}\n`;
   const missing = rows.filter((r) => r.source === 'none').reduce((n, r) => n + r.count, 0);
-  if (missing > 0) text += `\n${missing} elements have no code.\n`;
+  if (missing > 0) text += `\n${say('classify.noCode', { count: missing })}\n`;
   return {
     rows, system: systemLabel(mapping.system), text, csv: classifyCsv(rows),
     json: { file, project: projectName, system: systemLabel(mapping.system), types: rows.map((r) => ({ class: r.className, type: r.typeName, code: r.code || null, title: r.title || null, source: r.source, count: r.count })) },
@@ -81,8 +87,9 @@ export async function classify(args: ClassifyArgs, io: CliIo): Promise<number> {
   try { projectText = await readFile(args.project, 'utf8'); } catch (error) { io.stderr(cannotRead(args.project, error)); return 1; }
   let project;
   try { project = readProjectFile(projectText); } catch (error) { io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`); return 1; }
+  const language = commandLanguage({ project, ...(args.locale !== undefined ? { locale: args.locale } : {}) }, io);
   const model = await openModel(bytes, { geometry: false });
-  const out = classifyOutput(args.model, args.project, model, project.classificationMappings, args.system);
+  const out = classifyOutput(args.model, args.project, model, project.classificationMappings, args.system, language);
   if ('error' in out) {
     io.stderr(`ifcsheet: ${out.error}\n`);
     return 1;

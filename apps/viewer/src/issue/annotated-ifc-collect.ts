@@ -11,14 +11,18 @@
  * annotations are named, not written: their drawing is a vertical plane and each would need a 3D placement of its own.
  */
 
-import type { AnnotatedView, DrawnCurve, DrawnText, ElementMark, LeftOutView } from '@bimvoice/ifcsheet/annotated-ifc';
-import { drawingToWorld } from '@/drafting/frame';
+import type { AnnotatedSheet, AnnotatedView, DrawnCurve, DrawnText, ElementMark, LeftOutView } from '@bimvoice/ifcsheet/annotated-ifc';
+import { drawingToWorld, viewNormal } from '@/drafting/frame';
 import { ifcShapesOf } from '@/drafting/ifc-shapes';
 import { lookOf, layerShows, type DimStyle, type LayerGroup, type TextStyle } from '@/drafting/styles';
 import type { DraftEntity, DraftLayer } from '@/drafting/types';
 import { viewPlaneConfig } from '@/project/view-plane-config';
-import { resolvePlanLevel } from '@/project/view-defaults';
+import { levelFloorY, resolvePlanLevel } from '@/project/view-defaults';
+import type { AxisBounds } from '@/lib/section/section-distance';
+import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { boundsCorners, viewCrop } from './annotated-ifc-crop';
 import type { ProjectLevel, ProjectView } from '@/project/types';
+import type { ProjectSheet } from '@/project/types';
 import { tagOverrideOf } from '@/drafting/tag-override';
 import { viewerToIfcAxes } from '@ifc-lite/geometry/world-frame';
 
@@ -30,12 +34,17 @@ export interface AnnotationSource {
   layerGroups?: readonly LayerGroup[];
   textStyles?: readonly TextStyle[];
   dimStyles?: readonly DimStyle[];
+  /** The sheets and the views on them, written as Bonsai sheets. */
+  sheets?: readonly Pick<ProjectSheet, 'name' | 'viewports'>[];
+  /** The loaded models' box in the render frame: the crop of a view that has none, and the depth of an elevation or section. */
+  bounds?: AxisBounds | null;
 }
 
 export interface CollectedAnnotations {
   views: AnnotatedView[];
   marks: ElementMark[];
   leftOut: LeftOutView[];
+  sheets: AnnotatedSheet[];
   /** Drafts that have no line to write (hatches). */
   hatches: number;
 }
@@ -47,14 +56,18 @@ export interface CollectedAnnotations {
 export function collectAnnotations(src: AnnotationSource, offset: { x: number; y: number }, locale: string): CollectedAnnotations {
   const layers = new Map(src.draftLayers.map((l) => [l.id, l]));
   const book = { textStyles: [...(src.textStyles ?? [])], dimStyles: [...(src.dimStyles ?? [])] };
-  const out: CollectedAnnotations = { views: [], marks: [], leftOut: [], hatches: 0 };
+  const out: CollectedAnnotations = { views: [], marks: [], leftOut: [], sheets: [], hatches: 0 };
   const marks = new Map<string, { mark: string; views: Set<string> }>();
 
   for (const view of src.views) {
     const mine = src.drafts.filter((d) => d.viewId === view.id && shows(d, layers, src.layerGroups ?? [], view));
-    if (mine.length === 0) continue;
+    const vertical = view.kind === 'section' || view.kind === 'elevation';
+    if (mine.length === 0 && view.kind !== 'plan' && !vertical) continue;
     if (view.kind !== 'plan') {
-      out.leftOut.push({ viewId: view.id, name: view.name, kind: view.kind === 'section' || view.kind === 'elevation' ? view.kind : 'other' });
+      // The annotations of a vertical view are named, not written; the view itself is a Bonsai drawing (its camera, no annotations).
+      if (mine.length > 0) out.leftOut.push({ viewId: view.id, name: view.name, kind: vertical ? view.kind : 'other' });
+      const drawing = vertical ? verticalDrawing(view, src, offset) : null;
+      if (drawing) out.views.push(drawing);
       continue;
     }
     const level = resolvePlanLevel(view, src.levels) ?? view.level;
@@ -79,10 +92,13 @@ export function collectAnnotations(src: AnnotationSource, offset: { x: number; y
         marks.set(guid, seen);
       }
     }
-    if (curves.length > 0 || texts.length > 0) {
-      out.views.push({ viewId: view.id, name: view.name, scale: view.scale ?? 100, storeyGlobalIds: level.storeyGlobalIds, curves, texts });
-    }
+    // The camera covers the view's crop (viewport, detail or the model's box), as world plan metres.
+    const crop = viewCrop(view, config, src.sheets ?? [], src.bounds ?? null);
+    const corners = crop ? [crop.min, crop.max, { x: crop.min.x, y: crop.max.y }, { x: crop.max.x, y: crop.min.y }].map(toWorld) : [];
+    const extent = corners.length > 0 ? { min: { x: Math.min(...corners.map((c) => c.x)), y: Math.min(...corners.map((c) => c.y)) }, max: { x: Math.max(...corners.map((c) => c.x)), y: Math.max(...corners.map((c) => c.y)) } } : undefined;
+    out.views.push({ viewId: view.id, name: view.name, scale: view.scale ?? 100, storeyGlobalIds: level.storeyGlobalIds, cutHeight: view.cutHeight, viewDepth: view.viewDepth ?? undefined, extent, curves, texts });
   }
+  out.sheets = (src.sheets ?? []).map((s) => ({ name: s.name, viewIds: [...new Set((s.viewports ?? []).map((vp) => vp.viewId))] }));
   out.marks = [...marks].map(([globalId, m]) => ({ globalId, mark: m.mark, views: [...m.views] }));
   return out;
 }
@@ -90,4 +106,45 @@ export function collectAnnotations(src: AnnotationSource, offset: { x: number; y
 function shows(d: DraftEntity, layers: ReadonlyMap<string, DraftLayer>, groups: readonly LayerGroup[], view: ProjectView): boolean {
   const layer = layers.get(d.layerId);
   return !layer || layerShows(layer, groups, { view: view.hiddenLayers });
+}
+
+/**
+ * An elevation or section as a drawing without annotations: the camera looks along the view's normal (out of the drawing toward the
+ * viewer, reversed), at the middle of its crop on the cut plane, as deep as the view sees (or the model's box behind the plane).
+ * Z is measured from the floor of the lowest level, whose storey the camera is placed on. Null when the view cannot be placed.
+ */
+function verticalDrawing(view: ProjectView, src: AnnotationSource, offset: { x: number; y: number }): AnnotatedView | null {
+  const base = [...src.levels].sort((a, b) => a.elevation - b.elevation)[0];
+  const config: SectionPlaneConfig | null = base ? viewPlaneConfig(view, src.levels, src.bounds ?? null) : null;
+  if (!base || !config) return null;
+  const crop = viewCrop(view, config, src.sheets ?? [], src.bounds ?? null);
+  if (!crop) return null;
+  const n = viewNormal(config);
+  const look = viewerToIfcAxes({ x: -n.x, y: -n.y, z: -n.z });
+  const flat = Math.hypot(look.x, look.y);
+  if (flat < 1e-6) return null;
+  const middle = drawingToWorld(config, { x: (crop.min.x + crop.max.x) / 2, y: (crop.min.y + crop.max.y) / 2 });
+  const centre = viewerToIfcAxes(middle);
+  const dir = { x: look.x / flat || 0, y: look.y / flat || 0 }; // `|| 0`: no negative zero
+  // The far side of the model along the look direction, from the plane (the view's own depth when it has one).
+  const behind = Math.max(0, ...(src.bounds ? boundsCorners(src.bounds) : []).map((c) => {
+    const p = viewerToIfcAxes(c);
+    return (p.x - centre.x) * dir.x + (p.y - centre.y) * dir.y;
+  }));
+  return {
+    viewId: view.id,
+    name: view.name,
+    scale: view.scale ?? 100,
+    storeyGlobalIds: base.storeyGlobalIds,
+    targetView: view.kind === 'elevation' ? 'ELEVATION_VIEW' : 'SECTION_VIEW',
+    vertical: {
+      look: dir,
+      centre: { x: centre.x + offset.x, y: centre.y + offset.y, z: middle.y - levelFloorY(base) },
+      width: crop.max.x - crop.min.x,
+      height: crop.max.y - crop.min.y,
+      depth: view.viewDepth ?? (behind > 0 ? behind : 10),
+    },
+    curves: [],
+    texts: [],
+  };
 }

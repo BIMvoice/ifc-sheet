@@ -83,7 +83,8 @@ export function ScaleChips({ group, extent, labelFromWide = false }: { group: Se
 const SheetOnWall = memo(function SheetOnWall({ sheet, extent, width, onStep, onZoom }: { sheet: ProjectSheet; extent: ModelExtent | null; width: number; onStep: (id: string) => void; onZoom: (id: string) => void }) {
   const { t } = useTranslation();
   const views = useProjectStore((s) => s.views);
-  const reason = extent ? sheetScaleReason(sheet, views, extent) : null;
+  const sheets = useProjectStore((s) => s.sheets);
+  const reason = extent ? sheetScaleReason(sheet, views, extent, sheets) : null;
   const name = `${sheet.number} ${sheet.name}`;
   // Near, wide enough and let in by the Wall's promotion (`wall-promote`): a few drawings at a time, not all at once.
   const near = useWallView((s) => s.drawn.includes(sheet.id));

@@ -17,7 +17,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { DraftShape, Pt } from '@/drafting/types';
 import { PEN } from '@/components/viewer/sheets/viewport-pens';
 import type { GraphicStandard } from '@/drafting/graphic-standard';
-import type { DetailLevel } from '@bimvoice/ifcsheet';
+import type { DetailLevel, ProjectLevel } from '@bimvoice/ifcsheet';
 import type { ProjectView } from './types';
 import { planRoofs } from './roof-plan';
 import { viewElevationSymbols, viewOpeningSymbols, visibleEntities } from './view-symbols';
@@ -35,8 +35,8 @@ export interface PlanOverlay {
   /** A line type of its own (the grid's dash-dot); wins over `dashed`. */
   lineType?: LineType;
   shapes: DraftShape[];
-  /** Labels, drawing coordinates, drawn horizontally in a small paper size. */
-  texts?: { at: Pt; text: string }[];
+  /** Labels, drawing coordinates, drawn in a small paper size: level, or turned `angle` degrees clockwise on the screen (a contour's height). */
+  texts?: { at: Pt; text: string; angle?: number }[];
 }
 
 type Pens = GraphicStandard['pens'];
@@ -81,10 +81,10 @@ export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidde
 
 /** The door and window symbols of a plan (or, given its drawing, an elevation / section) as overlays, by weight. */
 export function symbolOverlays(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine',
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
 ): PlanOverlay[] {
   const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
-  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, detail);
+  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail, level) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail);
   for (const s of symbols) {
     thin.push(...s.shapes);
     if (s.heavy) heavy.push(...s.heavy);
@@ -109,5 +109,5 @@ export function planOverlays(
 ): PlanOverlay[] {
   if (view.kind === 'elevation' || view.kind === 'section') return [...(meshes && drawing ? symbolOverlays(meshes, plane, flips, hidden, drawing, pens, detail) : []), ...gridOverlays(view, plane, drawing, scale)];
   if (view.kind !== 'plan') return [];
-  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden, undefined, pens, detail) : []), ...roofOverlays(view, plane, hidden, pens), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
+  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden, undefined, pens, detail, view.level) : []), ...roofOverlays(view, plane, hidden, pens), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
 }

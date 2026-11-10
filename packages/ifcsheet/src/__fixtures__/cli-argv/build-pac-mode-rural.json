@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "build",
+  "m.ifc",
+  "--pac",
+  "--pac-mode",
+  "rural",
+  "--out",
+  "a.pdf"
+ ],
+ "code": 1,
+ "stdout": "",
+ "stderr": "ifcsheet: cannot read m.ifc: no such file\n"
+}

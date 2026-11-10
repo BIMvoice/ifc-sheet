@@ -1,0 +1,5 @@
+tours.panelTourButton.startAriaLabel
+tours.panelTourButton.tooltip
+tours.tourInvite.dismissAriaLabel
+tours.tourInvite.prompt
+tours.tourInvite.start
