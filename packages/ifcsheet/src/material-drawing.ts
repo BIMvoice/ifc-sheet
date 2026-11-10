@@ -40,6 +40,8 @@ export interface MaterialResolver {
   layers(entityId: number, modelIndex: number): LayerRef[] | null;
   /** Whether a layer is drawn as a membrane. */
   membrane(layer: LayerRef): boolean;
+  /** The IfcMaterial a cut face is made of (its layer's, or an element of one material's), table or not: what like cut faces are joined by (`cut-join-drawing.ts`). */
+  nameOf?(polygon: DrawingPolygon): string | null;
 }
 
 export interface MaterialHatch {
@@ -212,6 +214,7 @@ export function materialResolver(source: MaterialSource, table: readonly Project
     },
     layers: source.layers,
     membrane: (layer) => layer.thickness < MEMBRANE_THICKNESS_M || (!!layer.name && !!materialGraphics(layer.name, table).membrane),
+    nameOf: (p) => source.nameOf(p, true),
   };
 }
 

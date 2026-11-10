@@ -128,8 +128,10 @@ hiddenLineEntry: value
 inDrawOrder: value
 isTerrainMesh: value
 itemRules: value
+joinLikeCuts: value
 layerOrder: value
 layoutContourLabels: value
+likeCutKey: value
 lineHidden: value
 lineKey: value
 lineOverride: value
