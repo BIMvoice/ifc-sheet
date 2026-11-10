@@ -21,6 +21,7 @@ import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
 import { freshProjectId } from './ids.js';
 import { viewCentre } from './view-centre.js';
+import { groundedViewExtent, type GroundReach } from './ground-frame.js';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering.js';
 import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
 
@@ -41,6 +42,8 @@ const TITLE_ROOM_MM = 12;
 export interface ModelExtent {
   min: { x: number; y: number; z: number };
   max: { x: number; y: number; z: number };
+  /** The terrain the building stands on (`groundReachOf`), set when the model has one: a facade elevation and a section frame it too (#557). */
+  ground?: GroundReach;
 }
 
 /** `interiors`: a room's interior elevations (A-4xx), kept apart from the facade elevations so each group is scaled on its own. */
@@ -64,6 +67,9 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
   // A detail shows its rectangle only, an interior elevation its wall.
   const crop = view.detail ?? (view.kind === 'elevation' ? view.interior?.crop : undefined);
   if (crop) return { w: crop.max.x - crop.min.x, h: crop.max.y - crop.min.y };
+  // The ground an elevation or a section draws lies outside the building: the frame holds it (#557).
+  const grounded = groundedViewExtent(view, extent);
+  if (grounded) return grounded;
   const dx = extent.max.x - extent.min.x;
   const dy = extent.max.y - extent.min.y;
   const dz = extent.max.z - extent.min.z;
