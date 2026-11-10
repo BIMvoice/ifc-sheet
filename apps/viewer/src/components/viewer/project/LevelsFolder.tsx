@@ -40,6 +40,7 @@ function openLevelPlan(level: Row): void {
     name: level.name,
     level: { name: level.name, elevation: level.elevation, storeyGlobalIds: level.globalId ? [level.globalId] : [] },
     cutHeight: defaultPlanCutHeight(projectLevel ?? level, levels),
+    orientation: 'building',
   });
   openProjectView(id);
 }

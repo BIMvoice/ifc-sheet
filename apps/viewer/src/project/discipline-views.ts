@@ -210,6 +210,8 @@ export function disciplineViewFor(discipline: DisciplineId, level: ProjectLevel,
     cutHeight: preset.cutHeight,
     viewDepth: preset.viewDepth,
     discipline,
+    // A new plan is drawn square to the building (`plan-orientation.ts` in the engine).
+    orientation: 'building',
     graphics: { presetId: preset.presetId, categories: structuredClone(preset.categories) },
     auto: false,
   };

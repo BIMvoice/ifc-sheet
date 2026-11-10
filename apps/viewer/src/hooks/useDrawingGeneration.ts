@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { planProjectionBands, storeyFloorsOf, viewCutOptions } from '@bimvoice/ifcsheet';
+import { planProjectionBands, storeyFloorsOf, turnDrawing, turnedPlane, viewCutOptions } from '@bimvoice/ifcsheet';
 import { automaticViewDepth, SECTION_VIEW_DEPTH_FRACTION } from '@/lib/section/automatic-depth';
 
 /**
@@ -386,6 +386,8 @@ export function useDrawingGeneration({
       // Override the flipped setting
       config.plane.flipped = sectionPlane.flipped;
       if (sectionPlane.reflected) config.plane.reflected = true;
+      // A plan square to the building: cut on the world's axes, its drawing turned at the end (`turnDrawing`), as the engine's.
+      if (sectionPlane.turn) config.plane = turnedPlane(config.plane, sectionPlane.turn);
 
       // Face-pick custom plane (issue #243): hand the cutter the explicit
       // basis so its 2D output sits in the same coordinate system the cap
@@ -779,6 +781,7 @@ export function useDrawingGeneration({
 
         completedDrawing = hybridDrawing;
       }
+      completedDrawing = turnDrawing(completedDrawing, config.plane);
       setDrawing(completedDrawing); if (primary) markActiveDrawingGenerationCompleted(completedDrawing);
 
       // Remember the SectionConfig that produced this view so the markup

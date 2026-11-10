@@ -20,6 +20,7 @@
 import type { Drawing2D, DrawingLine, DrawingPolygon, Polygon2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ProjectView } from './document.js';
+import type { ModelExtent } from './drawing-set.js';
 import { drawingProjector, turnOf, turnedPoint, type DrawingPlane } from './drawing-frame.js';
 import type { Pt } from './draft-types.js';
 
@@ -55,6 +56,11 @@ export function drawsSquare(view: Pick<ProjectView, 'kind'> & { orientation?: un
   return view.kind === 'plan' && view.orientation === 'building' && view.site !== true;
 }
 
+/** The turn `view` is drawn at for a site rotated `rotation` radians (`coordinateInfo.buildingRotation`): `squareTurn` of it on a plan drawn square, else 0. The app reads it off its geometry; the engine off `ModelExtent.square`, made from the same rotation. */
+export function planTurn(view: Pick<ProjectView, 'kind'> & { orientation?: unknown; site?: unknown }, rotation: number | null | undefined): number {
+  return drawsSquare(view) ? squareTurn(rotation) : 0;
+}
+
 /** The turn `view` is drawn at, given the building's square frame (`ModelExtent.square`); 0 when it is drawn on the world's axes. */
 export function viewTurn(view: Pick<ProjectView, 'kind'> & { orientation?: unknown; site?: unknown }, square: SquareFrame | null | undefined): number {
   return square && drawsSquare(view) ? square.turn : 0;
@@ -82,6 +88,13 @@ export function squareFrameOf(meshes: readonly MeshData[], turn: number): Square
     }
   }
   return minX <= maxX ? { turn, min: { x: minX, y: minY }, max: { x: maxX, y: maxY } } : null;
+}
+
+/** `extent` with the building's square frame (`ModelExtent.square`) when the site turns it (`squareTurn` of `rotation`): the footprint of `meshes` (the building's) in the turned plan frame. */
+export function withSquareFrame(extent: ModelExtent, meshes: readonly MeshData[], rotation: number | null | undefined): ModelExtent {
+  const turn = squareTurn(rotation);
+  const square = turn ? squareFrameOf(meshes, turn) : null;
+  return square ? { ...extent, square } : extent;
 }
 
 /** A plane turned by `turn` (`DrawingPlane`); the plane itself when there is none. */

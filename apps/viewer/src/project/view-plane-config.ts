@@ -21,6 +21,13 @@ import { percentToWorld, sectionAxisRange, type AxisBounds } from '@/lib/section
 import { levelFloorY, resolvePlanLevel } from './view-defaults';
 import { sectionPlaneForView } from './view-plane';
 import type { ProjectLevel, ProjectView, SectionProjectPlane } from './types';
+import { planTurn, turnedPlane } from '@bimvoice/ifcsheet';
+import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+
+/** The turn `view` is drawn at (`planTurn`) on the geometry the drawings are cut from: a plan square to the building turns by its site's rotation. */
+export function currentPlanTurn(view: ProjectView): number {
+  return planTurn(view, currentDrawingRuntime().geometryResult?.coordinateInfo?.buildingRotation);
+}
 
 const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 
@@ -33,14 +40,14 @@ const AXIS = { down: 'y', front: 'z', side: 'x' } as const;
 export function viewWorkPlane(view: ProjectView, drawingPlane: SectionPlaneConfig | null, levels: readonly ProjectLevel[]): SectionPlaneConfig | null {
   if (view.kind !== 'plan') return drawingPlane;
   const level = resolvePlanLevel(view, levels) ?? view.level;
-  return { axis: 'y', position: levelFloorY(level), flipped: false };
+  return turnedPlane({ axis: 'y', position: levelFloorY(level), flipped: false }, currentPlanTurn(view));
 }
 
 export function viewPlaneConfig(view: ProjectView, levels: readonly ProjectLevel[], bounds: AxisBounds | null): SectionPlaneConfig | null {
   switch (view.kind) {
     case 'plan': {
       const level = resolvePlanLevel(view, levels) ?? view.level;
-      return { axis: 'y', position: levelFloorY(level) + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) };
+      return turnedPlane({ axis: 'y', position: levelFloorY(level) + view.cutHeight, flipped: false, ...(view.reflected ? { reflected: true } : {}) }, currentPlanTurn(view));
     }
     case 'section':
       return storedPlaneConfig(view.plane);

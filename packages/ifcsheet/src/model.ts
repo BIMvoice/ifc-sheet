@@ -21,7 +21,7 @@ import { buildingElementIds } from './building-ids.js';
 import { storeyFloorY } from './storey-origin.js';
 import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
-import { squareFrameOf, squareTurn } from './plan-orientation.js';
+import { withSquareFrame } from './plan-orientation.js';
 
 export interface OpenModelOptions {
   /**
@@ -153,17 +153,6 @@ function proposalInputOf(ds: IfcDataStore, meshes: MeshData[], extent: ModelExte
   return { building: { min: { x: extent.min.x, z: extent.min.z }, max: { x: extent.max.x, z: extent.max.z } }, rooms, stairs, walls };
 }
 
-/** `extent` with the building's square frame (`ModelExtent.square`) when the site turns it (`squareTurn` of `rotation`): its framed elements' footprint in the turned plan frame. */
-function withSquareFrame(
-  extent: ModelExtent, meshes: readonly MeshData[], inBuilding: ReadonlySet<number>, far: readonly FarElementInfo[], rotation: number | undefined,
-): ModelExtent {
-  const turn = squareTurn(rotation);
-  if (!turn) return extent;
-  const left = new Set(far.map((f) => f.expressId));
-  const square = squareFrameOf(meshes.filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId)), turn);
-  return square ? { ...extent, square } : extent;
-}
-
 /** A file the engine will not read, with the one sentence that says why. The commands print `message` as it is. */
 export class ModelRefusal extends Error {
   constructor(message: string) {
@@ -242,7 +231,9 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     distance: f.distance,
   }));
   const inBuilding = new Set(ids);
-  const extent = framed ? withSquareFrame(framed, meshes, inBuilding, farElements, frame?.buildingRotation) : null;
+  // The building's footprint in a plan square to it: the framed elements, without the far ones the extent leaves out.
+  const left = new Set(farElements.map((f) => f.expressId));
+  const extent = framed ? withSquareFrame(framed, meshes.filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId)), frame?.buildingRotation) : null;
   const project = ds.spatialHierarchy?.project;
   return {
     projectName: project?.longName || project?.name || '',

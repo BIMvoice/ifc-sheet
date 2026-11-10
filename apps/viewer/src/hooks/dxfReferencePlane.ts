@@ -1,7 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-import { applyDxfPlacement, projectTo2D, projectTo2DBasis, type Point2D, type SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { applyDxfPlacement, type Point2D, type SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { worldToDrawing } from '@bimvoice/ifcsheet';
 import type { ViewerState } from '@/store';
 import type { DxfUnderlayState } from '@/store/slices/drawing2DSlice';
 import { referenceRenderCorners } from '@/lib/appearance/reference-runtime/frame';
@@ -50,8 +51,8 @@ export function dxfReferenceStatus(entry: DxfUnderlayState, state: ViewerState, 
   return Math.abs((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)) > 1e-10 ? 'ready' : 'edge-on';
 }
 export function projectDxfReferencePoint(p: DxfPlanePoint, plane: SectionPlaneConfig): Point2D {
-  const point = {x:p[0],y:p[1],z:p[2]}, custom = plane.customPlane;
-  return custom ? projectTo2DBasis(point, custom.origin, custom.tangent, custom.bitangent) : projectTo2D(point, plane.axis, plane.flipped);
+  // The view's own frame (`worldToDrawing`): a plan square to the building turns the reference with its drawing.
+  return worldToDrawing(plane, {x:p[0],y:p[1],z:p[2]});
 }
 export function dxfReferencePointToRender(point: Point2D, entry: DxfUnderlayState, basis: NonNullable<ReturnType<typeof dxfReferenceRenderBasis>>): DxfPlanePoint {
   const p = applyDxfPlacement(point, entry.placement), [o,u,v] = basis;

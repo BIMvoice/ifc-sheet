@@ -59,7 +59,7 @@ export function boundsOf(geometry: GeometryResult) {
 
 /** The drawing `view` shows (before any sheet), made the way an open view makes it (`planeOverride`: a plane the view cannot say, a flipped plan); with the model's `spatialHierarchy` (or its whole `dataStore`, which also tells a terrain from a tree) a plan is scoped to its storey, as in the app. */
 export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, geometry: GeometryResult, spatialHierarchy?: SpatialHierarchy, typeVisibility: TypeVisibilityGate = VIEWER_START, planeOverride: Partial<ViewSectionPlane> = {}, dataStore?: IfcDataStore): Promise<Drawing2D | null> {
-  const resolved = sectionPlaneForView(view, boundsOf(geometry), []);
+  const resolved = sectionPlaneForView(view, boundsOf(geometry), [], geometry.coordinateInfo?.buildingRotation);
   assert.ok(resolved, `view ${view.name} has no plane`);
   const plane = { ...resolved, ...planeOverride };
   const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);

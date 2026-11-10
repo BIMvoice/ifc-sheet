@@ -63,5 +63,5 @@ export const viewDisplayOverrides = (view: ProjectView): ViewDisplayOverrides =>
 
 /** A stable key for a resolved plane, so an unchanged view never regenerates. */
 export function planeKey(plane: ViewSectionPlane | null): string {
-  return plane ? JSON.stringify([plane.axis, plane.position, plane.flipped, plane.reflected === true, plane.custom ?? null]) : '';
+  return plane ? JSON.stringify([plane.axis, plane.position, plane.flipped, plane.reflected === true, plane.custom ?? null, ...(plane.turn ? [plane.turn] : [])]) : '';
 }

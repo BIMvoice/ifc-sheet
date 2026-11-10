@@ -95,8 +95,7 @@ class Planner {
   readonly notes: SetNote[] = [];
 
   constructor(readonly levels: ProjectLevel[], readonly extent: ModelExtent, readonly now: number) {
-    // A plan the engine makes is drawn square to the building (`plan-orientation.ts`).
-    this.views = defaultViews(levels, now).map((v) => (v.kind === 'plan' ? { ...v, orientation: 'building' as const } : v));
+    this.views = defaultViews(levels, now);
   }
 
   /** A view as the store adds one (`addProjectView`): a fresh id, a name no other view has, stamped now. */
