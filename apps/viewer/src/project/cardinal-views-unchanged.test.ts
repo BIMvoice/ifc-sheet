@@ -38,6 +38,8 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
  *    handrails, rails, the stair's column and its helical stringer gain their long lines. plan 2139, 965, 229 became
  *    2332, 1097, 229; section 2616, 2307, 64 became 2863, 2554, 64; elevation 481, 451, 0 became 494, 464, 0. A curved
  *    line takes its depth from the faces it lies on only, so one behind its own element's front stays hidden.
+ *  - #812 (hidden-line.ts), the point where an edge stops being hidden is bisected instead of taken halfway between two samples:
+ *    plan 1969, 974, 229 became 1971, 971, 229; section 1290, 1064, 64 became 1290, 1070, 64; elevation 494, 464, 0 became 495, 465, 0.
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -48,9 +50,9 @@ const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 const ON_MAIN = {
   // plan and section re-recorded for #749 (were 2332/1097 and 2863/2554): a line behind the plane is left out where it lies inside
   // a cut face, so the pieces under cut walls, slabs and roofs are gone and a line that crosses a cut wall is split there. The cut faces are the same.
-  plan: { axis: 'y', position: 1.2, lines: 1969, hidden: 974, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 1290, hidden: 1064, polygons: 64 },
-  elevation: { axis: 'z', position: 20, lines: 494, hidden: 464, polygons: 0 },
+  plan: { axis: 'y', position: 1.2, lines: 1971, hidden: 971, polygons: 229 },
+  section: { axis: 'z', position: 0, lines: 1290, hidden: 1070, polygons: 64 },
+  elevation: { axis: 'z', position: 20, lines: 495, hidden: 465, polygons: 0 },
 } as const;
 
 describe('plans, sections and elevations of FZK-Haus draw what they drew on main', () => {
