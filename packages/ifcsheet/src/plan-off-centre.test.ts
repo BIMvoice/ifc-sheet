@@ -22,7 +22,10 @@ import { generateDefaultSet, type DefaultSet } from './default-set.js';
 import type { PlanProjectView, ProjectView } from './document.js';
 import { placeViewports, viewCentre, type ModelExtent } from './drawing-set.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
+import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
+import { withoutOpeningBodies } from './plan-openings.js';
 import { sheetGraphic } from './sheet-graphic.js';
+import { resolveViewGraphics } from './view-templates.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../apps/viewer/src/project/__fixtures__/plan-off-centre-wing.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -115,7 +118,7 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
 });
 
 /**
- * The Skolebygg sample (about 56 MB, not in CI): its Plan 01 has 3133 cut
+ * The Skolebygg sample (about 56 MB, not in CI): its Plan 01 has thousands of cut
  * rings, all of them inside the building's frame bar the survey marker's.
  * Needs an ifc-lite checkout: `IFC_LITE_MODELS=<its tests/models>`; skipped
  * without it.
@@ -128,11 +131,20 @@ describe.skipIf(skolebyggMissing !== null)('Skolebygg: the plans keep their outl
     const model = await openModel(new Uint8Array(readFileSync(SKOLEBYGG)));
     const set = generateDefaultSet(model)!;
     const sheets = await sheetGraphics(set, model);
-    const rings = async (name: string) => (await generateViewDrawings(set.document.views.filter((v) => v.name === name), model.buildingMeshes, set.levels, model.extent!)).values().next().value!.cutPolygons.length;
+    // The rings the sheet is GIVEN: `sheetGraphic` thins the drawing by its detail level (#461) and drops the opening bodies a plan draws as symbols (#591) before it clips
+    // to the box, so those are not lost to the box (what #279 guards). Same functions, same order as `sheetGraphic`.
+    const given = async (name: string, sheetNumber: string) => {
+      const view = set.document.views.find((v) => v.name === name)!;
+      const vp = set.document.sheets.find((s) => s.number === sheetNumber)!.viewports!.find((v) => v.viewId === view.id)!;
+      const drawing = (await generateViewDrawings([view], model.buildingMeshes, set.levels, model.extent!)).values().next().value!;
+      const detailed = atDetailLevel(drawing, resolveDetailLevel(resolveViewGraphics(view, set.document.viewTemplates), vp.scale));
+      return (view.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed).cutPolygons.length;
+    };
     const kept = (sheet: string) => sheets.find((s) => s.number === sheet)!.cut.length;
-    const ground = await rings('Plan 01') + await rings('Plan 00U');
+    const ground = await given('Plan 01', 'A-101') + await given('Plan 00U', 'A-101');
+    console.info(`[skolebygg] A-101 rings given to the sheet ${ground}, kept ${kept('A-101')}`);
     // The marker survey cube may fall outside the frame: a handful of rings, never a tenth.
     expect(kept('A-101')).toBeGreaterThan(ground * 0.95);
-    expect(kept('A-101')).toBeGreaterThan(3000);
+    expect(ground).toBeGreaterThan(1500);
   }, 600_000);
 });
