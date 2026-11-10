@@ -679,22 +679,6 @@
      "points": 1752,
      "hash": "1cb26dd3a70b6bac"
     },
-    "HIDDEN stroke=#000000 fill=- #1": {
-     "width": 0.18,
-     "dash": "1.5,1",
-     "paths": 4476,
-     "regions": 0,
-     "points": 8952,
-     "hash": "2fd7966121217c3a"
-    },
-    "HIDDEN stroke=#000000 fill=- #2": {
-     "width": 0.18,
-     "dash": "1.5,1",
-     "paths": 4194,
-     "regions": 0,
-     "points": 8388,
-     "hash": "8c1d801efbc00174"
-    },
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
