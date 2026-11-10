@@ -21,6 +21,9 @@ import { generateDefaultSet, type DefaultSet } from './default-set.js';
 import type { PlanProjectView } from './document.js';
 import { generateViewDrawings, openModel, sheetGraphics, type OpenedModel } from './headless.js';
 import { headlessMaterialSource } from './material-colour.js';
+import { materialResolver } from './material-drawing.js';
+import { sheetGraphic, type SheetGraphic } from './sheet-graphic.js';
+import { PEN_TABLE } from './view-style.js';
 
 const FIXTURE = fileURLToPath(new URL('./__fixtures__/wall-joins.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -38,6 +41,15 @@ function through(a: Point2D, b: Point2D, p: Point2D): boolean {
   return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y) < 1e-3;
 }
 const ringsThrough = (faces: readonly Face[], p: Pt2) => faces.some((f) => [f.outer, ...f.holes].some((r) => r.some((a, i) => through(a, r[(i + 1) % r.length], p))));
+
+const cutRuns = (g: SheetGraphic) => [...g.cut, ...g.pens.filter((p) => p.layer === 'CUT').flatMap((p) => p.runs)];
+/** Every wall edge of the fixture runs along x or y but the mitre's: a cut segment at 45 degrees is the corner's joint. */
+const hasDiagonal = (g: SheetGraphic) => cutRuns(g).some((r) => r.some((a, i) => {
+  const b = r[i + 1];
+  if (!b) return false;
+  const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+  return dx > 1e-3 && dy > 1e-3 && Math.abs(dx - dy) < 0.2 * Math.max(dx, dy);
+}));
 
 describe('unionFaces', () => {
   it('joins an L corner of two butting walls into one outline without the joint', () => {
@@ -131,15 +143,21 @@ describe.skipIf(missing !== null)('a plan of walls meeting at a corner and a T (
     const sheets = await sheetGraphics(set, model);
     const planSheet = sheets.find((s) => s.viewports.some((v) => set.document.views.find((w) => w.id === v.viewId)?.kind === 'plan'))!;
     expect(planSheet).toBeDefined();
-    const runs = [...planSheet.cut, ...planSheet.pens.filter((p) => p.layer === 'CUT').flatMap((p) => p.runs)];
-    expect(runs.length).toBeGreaterThan(0);
-    // Every wall edge runs along x or y but the mitre's: a cut segment at 45 degrees is the corner's joint.
-    const diagonal = runs.some((r) => r.some((a, i) => {
-      const b = r[i + 1];
-      if (!b) return false;
-      const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
-      return dx > 1e-3 && dy > 1e-3 && Math.abs(dx - dy) < 0.2 * Math.max(dx, dy);
-    }));
-    expect(diagonal).toBe(false);
+    expect(cutRuns(planSheet).length).toBeGreaterThan(0);
+    expect(hasDiagonal(planSheet)).toBe(false);
+  }, 120_000);
+
+  it('a colour scheme that paints A and B alike keeps them joined on the headless sheet, as the app\'s sheet joins them', async () => {
+    const plan = set.document.views.find((v) => v.kind === 'plan')!;
+    const sheet = set.document.sheets.find((s) => s.viewports?.some((v) => v.viewId === plan.id))!;
+    const drawing = (await generateViewDrawings([plan], model.buildingMeshes, set.levels, model.extent!)).get(plan.id)!;
+    // The two walls on the corner's diagonal, painted one colour: the app joins faces of one scheme colour (`schemeColour` in `likeCutKey`).
+    const corner = drawing.cutPolygons.filter((p) => ringsThrough([p.polygon], { x: 0.15, y: -0.15 })).map((p) => p.entityId);
+    expect(new Set(corner).size).toBe(2);
+    const scheme = { fills: [], elementColours: new Map(corner.map((id) => [id, '#cc3333'])), entries: [] };
+    const materials = materialResolver(headlessMaterialSource(model.dataStore!), []);
+    const graphic = sheetGraphic(sheet, set.document, new Map([[plan.id, drawing]]), model.extent, new Map([[plan.id, scheme]]), undefined, undefined, PEN_TABLE, undefined, undefined, undefined, undefined, undefined, undefined, undefined, materials);
+    expect(cutRuns(graphic).length).toBeGreaterThan(0);
+    expect(hasDiagonal(graphic)).toBe(false);
   }, 120_000);
 });
