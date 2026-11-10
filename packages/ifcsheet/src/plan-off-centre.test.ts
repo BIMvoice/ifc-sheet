@@ -29,6 +29,9 @@ import { resolveViewGraphics } from './view-templates.js';
 import { joinLikeCuts, likeCutKey } from './cut-join-drawing.js';
 import { headlessMaterialSource } from './material-colour.js';
 
+/** The rings the sheet strokes of a drawing: its cut faces as the sheet draws them, like ones joined (#349), with their holes. */
+const ringsOf = (d: Pick<Drawing2D, 'cutPolygons'>) => d.cutPolygons.reduce((n, p) => n + 1 + p.polygon.holes.length, 0);
+
 const FIXTURE = fileURLToPath(new URL('../../../apps/viewer/src/project/__fixtures__/plan-off-centre-wing.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
 const missing = !existsSync(FIXTURE) ? 'plan-off-centre-wing.ifc not found' : !existsSync(WASM) ? 'wasm bundle not built: run `pnpm build:wasm:fetch`' : null;
@@ -69,9 +72,6 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
     set = generateDefaultSet(model)!;
     drawings = await generateViewDrawings(set.document.views, model.buildingMeshes, set.levels, model.extent!);
   }, 120_000);
-
-  /** The rings the sheet strokes of a drawing: its cut faces as the sheet draws them, like ones joined (#349), with their holes. */
-  const ringsOf = (d: Pick<Drawing2D, 'cutPolygons'>) => d.cutPolygons.reduce((n, p) => n + 1 + p.polygon.holes.length, 0);
 
   /** The cut outlines of one plan on its sheet, alone, and the box its viewport reserved. */
   const onSheet = (name: string, layout: DefaultSet = set) => {
@@ -140,13 +140,15 @@ describe.skipIf(skolebyggMissing !== null)('Skolebygg: the plans keep their outl
     const set = generateDefaultSet(model)!;
     const sheets = await sheetGraphics(set, model);
     // The rings the sheet is GIVEN: `sheetGraphic` thins the drawing by its detail level (#461) and drops the opening bodies a plan draws as symbols (#591) before it clips
-    // to the box, so those are not lost to the box (what #279 guards). Same functions, same order as `sheetGraphic`.
+    // to the box, then joins like cut faces (#349), so those are not lost to the box (what #279 guards). Same functions, same order as `sheetGraphic`.
+    const names = headlessMaterialSource(model.dataStore!);
     const given = async (name: string, sheetNumber: string) => {
       const view = set.document.views.find((v) => v.name === name)!;
       const vp = set.document.sheets.find((s) => s.number === sheetNumber)!.viewports!.find((v) => v.viewId === view.id)!;
       const drawing = (await generateViewDrawings([view], model.buildingMeshes, set.levels, model.extent!)).values().next().value!;
       const detailed = atDetailLevel(drawing, resolveDetailLevel(resolveViewGraphics(view, set.document.viewTemplates), vp.scale));
-      return (view.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed).cutPolygons.length;
+      const plain = view.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
+      return ringsOf(joinLikeCuts(plain, (p) => likeCutKey(p, names.nameOf(p, true))));
     };
     const kept = (sheet: string) => sheets.find((s) => s.number === sheet)!.cut.length;
     const ground = await given('Plan 01', 'A-101') + await given('Plan 00U', 'A-101');
