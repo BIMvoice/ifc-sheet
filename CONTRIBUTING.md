@@ -5,8 +5,9 @@ IfcSheet makes drawings from IFC models. It exists because an architect needed a
 ## How work is chosen
 
 1. **It starts with a need from practice.** Lloyd Bussio directs what gets built, from what he needs to deliver as an architect. Needs from other people producing drawings are welcome: open an issue and describe the drawing you could not make.
-2. **It goes on the list before it gets built.** A maintainer turns a need into a task: what the user should be able to do, and how we will know it works. If something is not on the list, ask before you build it. A good idea that nobody asked for still costs a review.
-3. **One change, one purpose.** A pull request does one thing a user could name. Unrelated clean-up goes in its own pull request.
+2. **Planned work is not an issue.** The issue list is only for what users report: bugs and requests. What we plan lives in [ROADMAP.md](ROADMAP.md) (directions and parked ideas), and what is being built now lives on the project board and in open pull requests. If something is on none of these, ask before you build it. A good idea that nobody asked for still costs a review.
+3. **A user's issue comes first.** A reported bug is answered before new work starts, and the pull request that fixes it says `Fixes #n`, so GitHub closes the issue when it merges.
+4. **One change, one purpose.** A pull request does one thing a user could name, and describes what it does. It needs no issue. Unrelated clean-up goes in its own pull request.
 
 ## What "done" means
 
@@ -45,7 +46,7 @@ Setup, build and test commands are in [AGENTS.md](AGENTS.md).
 
 ## Pull requests
 
-- Branch from `main`. One pull request per task.
+- Branch from `main`. One pull request per task. Write `Fixes #n` only when the pull request fixes an issue a user opened.
 - The description says what a user can now do, how you checked it, what you did not check, and any choice you made that a maintainer should confirm.
 - A changeset (`pnpm changeset`) goes with a change to a published package under `packages/`, and only there. The app in `apps/viewer` is not published and takes none: say what a user would notice in the pull request description instead.
 - New source files carry the MPL-2.0 header (see `LICENSE_HEADER.md`).

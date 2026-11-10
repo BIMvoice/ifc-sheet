@@ -26,7 +26,7 @@ export function viewCutOptions(projectionOn: boolean, outlineAvailable: boolean)
   return { includeHiddenLines: projectionOn, includeProjection: projectionOn, includeEdges: projectionOn, mergeLines: true, outline: projectionOn && outlineAvailable };
 }
 
-/** Whether a view draws the lines the hidden-line pass found occluded (dashed). */
+/** Whether a view draws the lines the hidden-line pass found occluded (dashed). A plan (floor, ceiling, site, detail of a plan) does; a section, an elevation, an interior elevation and an axonometric do not unless the view sets `showHidden` (#557). */
 export function viewShowsHidden(view: Pick<ProjectView, 'kind' | 'showHidden'>): boolean {
-  return view.showHidden ?? (view.kind !== 'elevation' && view.kind !== '3d');
+  return view.showHidden ?? view.kind === 'plan';
 }

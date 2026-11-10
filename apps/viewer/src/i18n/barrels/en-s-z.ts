@@ -63,12 +63,14 @@ import { visibilityReasonsEn } from '../catalogues/visibility-reasons.en';
 import { wallArrangeEn } from '../catalogues/wall-arrange.en';
 import { wallExitsEn } from '../catalogues/wall-exits.en';
 import { wallFindEn } from '../catalogues/wall-find.en';
+import { wallAlignEn } from '../catalogues/wall-align.en';
 import { wallDropEn } from '../catalogues/wall-drop.en';
 import { wallZoomEn } from '../catalogues/wall-zoom.en';
 import { wallCompareEn } from '../catalogues/wall-compare.en';
 import { wallKeyPresetsEn } from '../catalogues/wall-key-presets.en';
 import { wallEditToolsEn } from '../catalogues/wall-edit-tools.en';
 import { wallChamferEn } from '../catalogues/wall-chamfer.en';
+import { wallHideLineEn } from '../catalogues/wall-hide-line.en';
 import { wallEditFieldsEn } from '../catalogues/wall-edit-fields.en';
 import { wallRectangleEn } from '../catalogues/wall-rectangle.en';
 import { wallKeysEn } from '../catalogues/wall-keys.en';
@@ -145,11 +147,13 @@ export const enSZ = {
   ...wallRelayoutEn,
   ...wallZoomEn,
   ...wallDropEn,
+  ...wallAlignEn,
   ...wallCompareEn,
   ...wallKeyPresetsEn,
   ...wallKeysEn,
   ...wallEditToolsEn,
   ...wallChamferEn,
+  ...wallHideLineEn,
   ...wallEditFieldsEn,
   ...wallRectangleEn,
   ...wallMaterialsEn,

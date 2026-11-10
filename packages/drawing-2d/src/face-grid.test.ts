@@ -3,11 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The face grid gives an outline line exactly the faces #779's grid gave it, so its own surface depth is the same
- * (Refs #557). That grid filed each face in fine cells and a query walked each face once per cell, a third of the
- * views' time on ISSUE_068; the grid that replaced it is coarse, and it must neither lose a face nor gain one. Gaining
- * one is the easy mistake: a sliver's grown corner reaches past the cells #779 filed it in, so a line there never met
- * it, and a coarse grid alone would let it.
+ * The face grid gives an outline line every face it can clip, whichever cell the line lies in (Refs #557), so its own
+ * surface depth does not depend on the grid's layout. A coarse grid filed by each face's box grown by `reach` must
+ * lose none: `clipToFace` and `clipToEdge` keep every clip inside that box (`outline-depth-grid.test.ts` has the
+ * sliver case itself, measured on a drawing).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -49,53 +48,25 @@ function mesh(n: number, rnd: () => number): MeshData {
   return { expressId: 1, ifcType: 'IfcMember', modelIndex: 0, positions, normals: new Float32Array(positions.length), indices: Uint32Array.from({ length: n * 3 }, (_, i) => i), color: [1, 1, 1, 1] };
 }
 
-/** The faces #779's grid returned for the line's box grown by `reach`: every face filed in one of its cells. */
-function shippedGrid(faces: Float64Array, reach: number): (minU: number, minV: number, maxU: number, maxV: number) => Set<number> {
-  const count = faces.length / STRIDE;
-  let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-  for (let o = 0; o < faces.length; o += STRIDE) {
-    for (let k = 0; k < 6; k += 2) {
-      minU = Math.min(minU, faces[o + k]); maxU = Math.max(maxU, faces[o + k]);
-      minV = Math.min(minV, faces[o + k + 1]); maxV = Math.max(maxV, faces[o + k + 1]);
-    }
-  }
-  const size = count > 64 ? Math.min(64, Math.ceil(Math.sqrt(count))) : 1;
-  const cu = Math.max((maxU - minU + 2 * reach) / size, 1e-12), cv = Math.max((maxV - minV + 2 * reach) / size, 1e-12);
-  const cell = (x: number, min: number, c: number) => Math.max(0, Math.min(size - 1, Math.floor((x - (min - reach)) / c)));
-  const ranges = Array.from({ length: count }, (_, f) => {
-    const o = f * STRIDE;
-    const us = [faces[o], faces[o + 2], faces[o + 4]], vs = [faces[o + 1], faces[o + 3], faces[o + 5]];
-    return [cell(Math.min(...us) - reach, minU, cu), cell(Math.min(...vs) - reach, minV, cv), cell(Math.max(...us) + reach, minU, cu), cell(Math.max(...vs) + reach, minV, cv)];
-  });
-  return (a, b, c, d) => {
-    const u0 = cell(a - reach, minU, cu), v0 = cell(b - reach, minV, cv), u1 = cell(c + reach, minU, cu), v1 = cell(d + reach, minV, cv);
-    return new Set(ranges.flatMap(([fu0, fv0, fu1, fv1], f) => (fu0 <= u1 && fu1 >= u0 && fv0 <= v1 && fv1 >= v0 ? [f] : [])));
-  };
-}
-
-describe('the face grid gives a line the faces the grid of #779 gave it (Refs #557)', () => {
-  it('neither loses nor gains a face a line can clip, slivers and edge-on faces included', () => {
+describe('the face grid finds every face a line can clip (Refs #557)', () => {
+  it('loses none, nearest first, slivers and edge-on faces included', () => {
     const rnd = random(557);
     const faces = projectMesh(mesh(600, rnd), plane);
     const grid = new FaceGrid(faces, REACH);
-    const shipped = shippedGrid(faces, REACH);
     const clips = (f: number, ax: number, ay: number, dx: number, dy: number) =>
       faces[f * STRIDE + 9] === EDGE ? clipToEdge(faces, f * STRIDE, ax, ay, dx, dy, REACH) : clipToFace(faces, f * STRIDE, ax, ay, dx, dy, REACH);
-    let compared = 0, slivered = 0;
+    let compared = 0;
     for (let k = 0; k < 400; k++) {
       const ax = rnd() * 10, ay = rnd() * 10;
       const dx = k % 3 === 0 ? 0 : (rnd() - 0.5) * 4, dy = k % 3 === 1 ? 0 : (rnd() - 0.5) * 4;
-      const box = [Math.min(ax, ax + dx), Math.min(ay, ay + dy), Math.max(ax, ax + dx), Math.max(ay, ay + dy)] as const;
-      const n = grid.query(...box);
+      const n = grid.query(Math.min(ax, ax + dx), Math.min(ay, ay + dy), Math.max(ax, ax + dx), Math.max(ay, ay + dy));
       const found = Array.from(grid.found.subarray(0, n));
       expect(found, 'nearest first').toEqual([...found].sort((p, q) => p - q));
-      const want = [...shipped(...box)].filter((f) => clips(f, ax, ay, dx, dy)).sort((p, q) => p - q);
+      const want: number[] = [];
+      for (let f = 0; f < faces.length / STRIDE; f++) if (clips(f, ax, ay, dx, dy)) want.push(f);
       expect(found.filter((f) => clips(f, ax, ay, dx, dy))).toEqual(want);
-      // How often a face the line clips was left out by #779's cells: the case a coarse grid alone would get wrong.
-      for (let f = 0; f < faces.length / STRIDE; f++) if (clips(f, ax, ay, dx, dy) && !want.includes(f)) slivered++;
       compared += want.length;
     }
     expect(compared).toBeGreaterThan(1000);
-    expect(slivered).toBeGreaterThan(0);
   });
 });

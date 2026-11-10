@@ -52,9 +52,9 @@ describe.skipIf(missing !== null)('a section and the openings of the wall it cut
   let model: OpenedModel;
   let levels: ProjectLevel[];
   /** The section across wall A at `x`, looking toward -x, on a plane drawn across the plan the way the SECTION command and the proposed sections make one. */
-  const sectionAt = async (x: number, meshes = model.buildingMeshes): Promise<Drawing2D> => {
+  const sectionAt = async (x: number, meshes = model.buildingMeshes, showHidden?: boolean): Promise<Drawing2D> => {
     const custom = sectionPlaneThrough({ x, y: 0, z: 1 }, { x, y: 0, z: -1 }, { x: x - 1, y: 0, z: 0 })!;
-    const view: SectionProjectView = { id: `s${x}`, name: 'S', kind: 'section', createdAt: 0, plane: { axis: 'front', offset: custom.distance, flipped: false, custom } };
+    const view: SectionProjectView = { id: `s${x}`, name: 'S', kind: 'section', createdAt: 0, plane: { axis: 'front', offset: custom.distance, flipped: false, custom }, ...(showHidden === undefined ? {} : { showHidden }) };
     return (await generateViewDrawings([view], meshes, levels, model.extent!)).get(view.id)!;
   };
 
@@ -64,6 +64,14 @@ describe.skipIf(missing !== null)('a section and the openings of the wall it cut
     if (!set || !model.extent) throw new Error('no set: the model has no extent');
     levels = set.levels;
   }, 120_000);
+
+  it('a section draws no hidden line unless the view says showHidden: true (#557)', async () => {
+    const isHidden = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';
+    const off = await sectionAt(2.5);
+    const on = await sectionAt(2.5, model.buildingMeshes, true);
+    expect(off.lines.filter(isHidden)).toHaveLength(0);
+    expect(on.lines.filter(isHidden).length).toBeGreaterThan(0);
+  });
 
   it('a section through the opening cuts the wall below the sill and above the head, and the window between', async () => {
     const drawing = await sectionAt(2.5);

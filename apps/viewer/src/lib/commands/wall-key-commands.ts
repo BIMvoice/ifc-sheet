@@ -48,6 +48,7 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.draw.fillet', labelKey: 'wall.draw.fillet', category: 'wall', when: 'wall', keys: [digit(9)] },
   { id: 'wall.draw.offset', labelKey: 'wall.draw.offset', category: 'wall', when: 'wall', keys: [digit(9, true)] },
   { id: 'wall.draw.chamfer', labelKey: 'wall.draw.chamfer', category: 'wall', when: 'wall', keys: [digit(0, true)] },
+  { id: 'wall.draw.hideline', labelKey: 'wall.draw.hideline', category: 'wall', when: 'wall', keys: [{ key: 'code:KeyH', alt: true }] },
   { id: 'wall.addDrawing', labelKey: 'wall.addDrawing', category: 'wall', when: 'wall', keys: [{ key: 'code:KeyA', alt: true }] },
   { id: 'wall.fit', labelKey: 'wall.fit', category: 'wall', when: 'wall', keys: [digit(0)] },
   { id: 'wall.print', labelKey: 'wall.export.pdf', category: 'wall', when: 'wall', keys: [{ key: 'p', mod: true }] },
@@ -62,6 +63,15 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.revisions', labelKey: 'wall.keys.action.revisions', category: 'wall', when: 'wall', keys: [] },
   { id: 'wall.printPreview', labelKey: 'wall.keys.action.printPreview', category: 'wall', when: 'wall', keys: [] },
   { id: 'wall.exportDxf', labelKey: 'wall.keys.action.exportDxf', category: 'wall', when: 'wall', keys: [] },
+  // Lining chosen drawings up (#168): on offer with two (distribute: three) or more chosen; no key until a person gives one.
+  { id: 'wall.align.left', labelKey: 'wall.align.left', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.right', labelKey: 'wall.align.right', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.top', labelKey: 'wall.align.top', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.bottom', labelKey: 'wall.align.bottom', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.centreH', labelKey: 'wall.align.centreH', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.centreV', labelKey: 'wall.align.centreV', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.distribute.across', labelKey: 'wall.distribute.across', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.distribute.down', labelKey: 'wall.distribute.down', category: 'wall', when: 'wall', keys: [] },
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type WallKeyId = (typeof WALL_KEY_COMMANDS)[number]['id'];
@@ -71,7 +81,7 @@ const TOOL_KEYS: Readonly<Record<string, WallKeyId>> = {
   dimaligned: 'wall.tool.dimaligned', tag: 'wall.tool.tag', leader: 'wall.tool.leader', level: 'wall.tool.level',
   sectionline: 'wall.tool.sectionline', symbol: 'wall.tool.symbol',
   line: 'wall.draw.line', polyline: 'wall.draw.polyline', rectangle: 'wall.draw.rectangle', circle: 'wall.draw.circle', text: 'wall.draw.text', hatch: 'wall.draw.hatch', revcloud: 'wall.draw.revcloud', ptext: 'wall.draw.ptext',
-  trim: 'wall.draw.trim', extend: 'wall.draw.extend', fillet: 'wall.draw.fillet', offset: 'wall.draw.offset', chamfer: 'wall.draw.chamfer',
+  trim: 'wall.draw.trim', extend: 'wall.draw.extend', fillet: 'wall.draw.fillet', offset: 'wall.draw.offset', chamfer: 'wall.draw.chamfer', hideline: 'wall.draw.hideline',
 };
 
 export function wallToolKey(command: string): WallKeyId | undefined {

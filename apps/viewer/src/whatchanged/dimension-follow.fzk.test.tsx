@@ -107,7 +107,8 @@ describe('dimensions follow a new version of the model (#459)', { skip: planMode
     const extent = setExtent(useProjectStore.getState().levels, meshes, mergedSectionBounds(models, geometryResult)).extent;
     assert.ok(extent && startDrawingSet(meshes, extent), 'the Wall lays out a set');
     view = elevationMarkPlan(useProjectStore.getState().views)!;
-    drawing = await model.planOf(view);
+    // What the drafting tools snap to: the generated drawing, each wall its own cut face.
+    drawing = await model.planOf(view, { references: true });
     set = referenceSet(drawing, false);
 
     longGuid = renderIdGlobalId(model.idsByName.get(LONG)!)!;

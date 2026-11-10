@@ -18,7 +18,7 @@ import { DEFAULT_GRAPHIC_STANDARD } from '@/drafting/graphic-standard';
 import type { CategoryLineWeight, PhaseId, ResolvedViewGraphics, ViewGraphics } from './types';
 import { materialFaces, type MaterialDrawing, type MaterialHatch } from '@bimvoice/ifcsheet/material-drawing';
 import { shownRooms, type SchemeResult } from '@bimvoice/ifcsheet/colour-fills';
-import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
+import { VIEW_CATEGORY_CLASSES, elementShown, itemRules, hasElementGraphics, hiddenClassesOf, joinLikeCuts, likeCutKey, lineHidden, resolveElementGraphics, type ElementStyle } from '@bimvoice/ifcsheet';
 import type { SurfaceFill } from '@bimvoice/ifcsheet/surface-fills';
 import { withScheme } from './view-scheme-style';
 import type { DraftShape } from '@/drafting/types';
@@ -119,8 +119,12 @@ export function styledDrawing(
   scheme?: SchemeResult | null,
   /** The GlobalId of a drawing item's element (the drawing carries renderer ids): how the view's hidden elements, lines and per-element graphics (#32, #33) find theirs. */
   globalIdOf?: (entityId: number) => string | null | undefined,
+  /** The IfcMaterial a cut face is made of (`cutMaterialName`): like cut faces join only within one material (#349). Absent: by their layer's material only. */
+  materialNameOf?: (p: DrawingPolygon) => string | null,
 ): StyledDrawing {
-  return withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), shownRooms(scheme, graphics, globalIdOf));
+  const styled = withScheme(styledByGraphics(drawing, graphics, hostTypeOf, replaced, materials, phases, globalIdOf), shownRooms(scheme, graphics, globalIdOf));
+  // Like cut faces joined where they meet (#349), the engine's one function, which the headless sheets call too.
+  return joinLikeCuts(styled, (p) => likeCutKey(p, materialNameOf?.(p)));
 }
 
 function styledByGraphics(

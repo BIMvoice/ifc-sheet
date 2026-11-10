@@ -9,7 +9,7 @@
  * name. Choosing a sheet steps into it.
  */
 
-import { ArrowLeft, Download, Eye, FileText, History, Maximize, MessageSquare, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceBetween, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceBetween, ArrowLeft, Download, Eye, FileText, History, Maximize, MessageSquare, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
 import { isDocsEdition } from '@/edition';
 import { resolveEnglish } from '@/i18n/registry';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
@@ -23,10 +23,12 @@ const ICONS: Record<WallKeyId, Command['icon']> = {
   'wall.tool.level': PencilRuler, 'wall.tool.sectionline': PencilRuler, 'wall.tool.symbol': PencilRuler,
   'wall.draw.line': PencilRuler, 'wall.draw.polyline': PencilRuler, 'wall.draw.rectangle': PencilRuler, 'wall.draw.circle': PencilRuler,
   'wall.draw.text': PencilRuler, 'wall.draw.hatch': PencilRuler, 'wall.draw.revcloud': PencilRuler, 'wall.draw.ptext': PencilRuler,
-  'wall.draw.trim': PencilRuler, 'wall.draw.extend': PencilRuler, 'wall.draw.fillet': PencilRuler, 'wall.draw.offset': PencilRuler, 'wall.draw.chamfer': PencilRuler,
+  'wall.draw.trim': PencilRuler, 'wall.draw.extend': PencilRuler, 'wall.draw.fillet': PencilRuler, 'wall.draw.offset': PencilRuler, 'wall.draw.chamfer': PencilRuler, 'wall.draw.hideline': PencilRuler,
   'wall.addDrawing': Plus, 'wall.fit': Maximize, 'wall.print': Printer, 'wall.prevSheet': StepBack, 'wall.nextSheet': StepForward,
   'wall.back': ArrowLeft, 'wall.leaveEdit': ArrowLeft, 'wall.comment': MessageSquare, 'wall.paper': FileText, 'wall.titleBlock': FileText,
   'wall.revisions': History, 'wall.printPreview': Eye, 'wall.exportDxf': Download,
+  'wall.align.left': AlignStartVertical, 'wall.align.right': AlignEndVertical, 'wall.align.top': AlignStartHorizontal, 'wall.align.bottom': AlignEndHorizontal,
+  'wall.align.centreH': AlignCenterHorizontal, 'wall.align.centreV': AlignCenterVertical, 'wall.distribute.across': AlignHorizontalSpaceBetween, 'wall.distribute.down': AlignVerticalSpaceBetween,
 };
 
 export function buildWallCommands(sheets: readonly ProjectSheet[], open: (sheetId: string) => void = stepInto): Command[] {

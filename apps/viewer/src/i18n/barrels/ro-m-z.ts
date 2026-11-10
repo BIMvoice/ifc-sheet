@@ -62,6 +62,7 @@ import { wallExitsRo } from '../catalogues/wall-exits.ro';
 import { wallKeyPresetsRo } from '../catalogues/wall-key-presets.ro';
 import { wallEditToolsRo } from '../catalogues/wall-edit-tools.ro';
 import { wallChamferRo } from '../catalogues/wall-chamfer.ro';
+import { wallHideLineRo } from '../catalogues/wall-hide-line.ro';
 import { wallEditFieldsRo } from '../catalogues/wall-edit-fields.ro';
 import { wallRectangleRo } from '../catalogues/wall-rectangle.ro';
 import { wallKeysRo } from '../catalogues/wall-keys.ro';
@@ -74,6 +75,7 @@ import { wallSectionsRo } from '../catalogues/wall-sections.ro';
 import { wallRelayoutRo } from '../catalogues/wall-relayout.ro';
 import { trackingRo } from '../catalogues/tracking.ro';
 import { underlayRo } from '../catalogues/underlay.ro';
+import { wallAlignRo } from '../catalogues/wall-align.ro';
 import { wallDropRo } from '../catalogues/wall-drop.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
@@ -145,6 +147,7 @@ export const roMZ = {
   ...wallKeysRo,
   ...wallEditToolsRo,
   ...wallChamferRo,
+  ...wallHideLineRo,
   ...wallEditFieldsRo,
   ...wallRectangleRo,
   ...wallMaterialsRo,
@@ -159,6 +162,7 @@ export const roMZ = {
   ...starRo,
   ...wallZoomRo,
   ...wallDropRo,
+  ...wallAlignRo,
   ...wallCompareRo,
   ...wallRo,
   ...whatChangedRo,

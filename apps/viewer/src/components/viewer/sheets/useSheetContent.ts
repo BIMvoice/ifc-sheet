@@ -39,7 +39,7 @@ import { withViewContours } from '@/project/view-contours';
 import { phaseMeshes, phaseViewOf } from '@/project/phase-view';
 import { partHostType } from '@/project/part-host';
 import { viewOmits } from '@/project/discipline-facts';
-import { viewMaterials } from '@/project/material-resolver';
+import { cutMaterialName, viewMaterials } from '@/project/material-resolver';
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { planOverlays, type PlanOverlay } from '@/project/plan-overlays';
 import { contourOverlays } from '@/project/contour-overlay';
@@ -126,7 +126,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         const detail = resolveDetailLevel(graphics, vp.scale);
         const kept = raw ? atDetailLevel(withViewPlanSymbols(withoutHiddenElements(withViewContours(raw, view, loadedModels, geometryResult, { scale: vp.scale, locale: sheetLocale }), graphics, renderIdGlobalId), view, graphics), detail) : null;
         const symbolMeshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult?.meshes, phases), graphics, renderIdGlobalId);
-        const styledKept = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId) : null;
+        const styledKept = kept ? styledDrawing(kept, graphics, partHostType, viewOmits(view), viewMaterials(kept), phases, schemeResultOf(view, kept, geometryResult?.meshes), renderIdGlobalId, cutMaterialName) : null;
         // The coloured style of an elevation or section (#499): the visible surfaces in the materials' colours, under the linework.
         const drawing = styledKept ? withSurfaceFills(styledKept, view, graphics, symbolMeshes, hiddenClasses(graphics), materialsTable ?? []) : null;
         const overlays = [...(view && kept ? planOverlays(view, kept.config.plane, symbolMeshes, flips, hiddenClasses(graphics), kept, vp.scale, standard.pens, detail) : []), ...(view?.kind === 'plan' ? contourOverlays(kept, vp.scale, sheetLocale) : []), ...membraneOverlays(drawing)];

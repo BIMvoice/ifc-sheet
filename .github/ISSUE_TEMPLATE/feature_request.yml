@@ -1,23 +1,23 @@
 name: Feature request
-description: Propose a capability or an improvement.
+description: Tell us about a drawing or a job you could not do with IfcSheet.
 labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: The problem
-      description: What are you trying to do that is hard or impossible today?
+      label: What you could not do
+      description: The drawing you needed to make, or the job you were trying to finish, and where IfcSheet stopped you.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
+      label: What would help (optional)
     validations:
-      required: true
+      required: false
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
+      label: What you do instead today (optional)
     validations:
       required: false
