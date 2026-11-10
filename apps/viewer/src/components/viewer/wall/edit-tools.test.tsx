@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { cleanup, click, render } from '@/test/render.js';
 import { resetProject } from '@/project/project-store';
 import { resolveEnglish as t } from '@/i18n/registry';
-import { steppedHandlers, type SteppedActions } from './stepped-keys.js';
+import { NO_ARRANGE, steppedHandlers, type SteppedActions } from './stepped-keys.js';
 import { ToolRail } from './ToolRail.js';
 
 /** #189: TRIM, EXTEND, FILLET, OFFSET and CHAMFER are buttons on the rail, each with its key, and start their command. */
@@ -55,7 +55,7 @@ describe('the edit tools on the rail (#189)', () => {
     const started: string[] = [];
     const actions: SteppedActions = {
       startTool: (c) => { started.push(c); }, toggleAdd: () => {}, fit: null, print: null, previous: null, next: null, back: () => {}, leaveEdit: null,
-      comment: null, paper: null, titleBlock: null, revisions: null, printPreview: null, exportDxf: null,
+      comment: null, paper: null, titleBlock: null, revisions: null, printPreview: null, exportDxf: null, arrange: NO_ARRANGE,
     };
     const handlers = steppedHandlers(actions);
     for (const [, , id] of TOOLS) handlers[id]?.();

@@ -28,7 +28,7 @@ import { SteppedSheet } from './SteppedSheet.js';
 import { ToolRail } from './ToolRail.js';
 import { toolHelpKey } from './tool-help.js';
 import { DRAW_TOOLS, WALL_TOOLS } from './wall-actions.js';
-import { steppedHandlers } from './stepped-keys.js';
+import { NO_ARRANGE, steppedHandlers } from './stepped-keys.js';
 import { buildWallCommands } from '../commandPaletteCommandsWall.js';
 import { availableWallCommands, useWallKeys, type WallHandlers } from './wall-key-bus.js';
 
@@ -350,15 +350,15 @@ describe('a sheet stepped into', () => {
   it('offers the whole keymap through the bus, and nothing once the sheet is left', () => {
     const sheets = useProjectStore.getState().sheets;
     render(<SteppedSheet sheet={sheets[0]} extent={HOUSE} proposals={[]} onBack={() => {}} onStep={() => {}} />);
-    // The first sheet has no previous one, and with no drawing in front there is no edit mode to leave: those rows are not on offer.
-    assert.deepEqual(availableWallCommands(), WALL_KEY_COMMANDS.map((c) => c.id).filter((id) => id !== 'wall.prevSheet' && id !== 'wall.leaveEdit'));
+    // The first sheet has no previous one, with no drawing in front there is no edit mode to leave, and with no drawing chosen there is nothing to line up (#168): those rows are not on offer.
+    assert.deepEqual(availableWallCommands(), WALL_KEY_COMMANDS.map((c) => c.id).filter((id) => id !== 'wall.prevSheet' && id !== 'wall.leaveEdit' && !id.startsWith('wall.align.') && !id.startsWith('wall.distribute.')));
     cleanup();
     assert.deepEqual(availableWallCommands(), []);
   });
 
   it('has a handler for every row (a row without one does not compile; this is the runtime twin)', () => {
     const f = () => {};
-    const handlers = steppedHandlers({ startTool: f, toggleAdd: f, fit: f, print: f, previous: f, next: f, back: f, leaveEdit: f, comment: f, paper: f, titleBlock: f, revisions: f, printPreview: f, exportDxf: f });
+    const handlers = steppedHandlers({ startTool: f, toggleAdd: f, fit: f, print: f, previous: f, next: f, back: f, leaveEdit: f, comment: f, paper: f, titleBlock: f, revisions: f, printPreview: f, exportDxf: f, arrange: { ...NO_ARRANGE, ...Object.fromEntries(Object.keys(NO_ARRANGE).map((id) => [id, f])) } });
     assert.deepEqual(Object.keys(handlers).sort(), WALL_KEY_COMMANDS.map((c) => c.id).sort());
     for (const handler of Object.values(handlers)) assert.equal(typeof handler, 'function');
   });

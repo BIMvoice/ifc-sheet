@@ -45,6 +45,9 @@ import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, WALL_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { registerRailStart } from './repeat-tool';
 import { steppedHandlers } from './stepped-keys';
+import { MIN_TO_ALIGN } from '@/project/viewport-align';
+import { arrangeActions, useSheetPicks } from './sheet-arrange';
+import { AlignCard } from './AlignCard';
 import { useWallKeys } from './wall-key-bus';
 import { keyProps } from './wall-key-title';
 import { ariaKeyShortcuts } from '@/lib/commands/shortcut-label';
@@ -78,7 +81,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const paperRef = useRef<SVGSVGElement>(null);
   const [fitKey, setFitKey] = useState(0);
   const viewports = useMemo(() => sheet.viewports ?? [], [sheet.viewports]);
-  const [chosen, setChosen] = useState<string | null>(null);
+  // The drawings chosen (Shift+click adds one); the first is the one whose card shows and the anchor of a line-up (#168).
+  const { picked, chosen, choose: setChosen, toggle: togglePicked } = useSheetPicks(viewports);
   const [tool, setTool] = useState<string | null>(null);
   const [lastTool, setLastTool] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(initialFocus);
@@ -94,6 +98,9 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   const slot = viewports.find((v) => v.id === chosen) ?? null;
   const view = views.find((v) => v.id === slot?.viewId) ?? null;
   const focus = views.find((v) => v.id === focusId);
+  const schedules = useProjectStore((s) => s.schedules ?? []);
+  const legends = useProjectStore((s) => s.legends ?? []);
+  const viewName = (vp: SheetViewport | undefined): string => [...views, ...schedules, ...legends].find((v) => v.id === vp?.viewId)?.name ?? '';
   // A joinery type's view drawn on from the schedule's card (#656) is the drawing in front, as a view of its own kind of id.
   const [joineryDraft, setJoineryDraft] = useState<JoineryDraft | null>(null);
   const joineryView = useMemo<Exclude<ProjectView, { kind: '3d' }> | null>(() => (joineryDraft ? { kind: 'drafting', id: joineryDraftViewId(joineryDraft.typeId, joineryDraft.view), name: joineryDraft.name, createdAt: 0 } : null), [joineryDraft]);
@@ -240,7 +247,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
       setRevising(false);
       setPapering(false);
     }
-  }, []);
+  }, [setChosen]);
+  const pick = useCallback((viewportId: string): void => { togglePicked(viewportId); setTitling(false); setRevising(false); setPapering(false); }, [togglePicked]);
   const open = useCallback((vp: SheetViewport): void => {
     const v = useProjectStore.getState().views.find((x) => x.id === vp.viewId);
     if (v && v.kind !== '3d') setFocusId(v.id);
@@ -264,6 +272,8 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     else if (v?.kind === 'section' || v?.kind === 'elevation') nudgeViewDepth(v.id, steps);
   }, []);
 
+  // Lining up and spacing the drawings chosen: offered with two chosen (spacing: three), the first chosen being the anchor (#168).
+  const arrange = focusView ? arrangeActions(sheet.id, [], viewports, sheetContent.boxOf) : arrangeActions(sheet.id, picked, viewports, sheetContent.boxOf);
   // The sheet's own controls, which the keys share with the buttons; they show with no drawing in front.
   const fit = useCallback(() => setFitKey((k) => k + 1), []);
   const print = useCallback(() => { if (paperRef.current) printSheet(paperRef.current, sheet); }, [sheet]);
@@ -296,6 +306,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
     revisions: onSheet(toggleRevisions),
     printPreview: onSheet(preview),
     exportDxf: onSheet(exportDxf),
+    arrange,
   }));
   useKeyBindingsRevision(); // a rebinding or preset switch redraws the keys the buttons name
 
@@ -331,7 +342,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
             </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden rounded-md">
-              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
+              <SheetCanvas ref={paperRef} sheet={sheet} sheetContent={sheetContent} chosenId={slot?.id ?? null} onChoose={choose} onPick={pick} pickedIds={picked} onOpen={open} onNudge={nudge} fitKey={fitKey} dropView={views.find((v) => v.id === dragViewId) ?? null} extent={extent} />
             </div>
           )}
           <div ref={cardHost} data-wall-card-host className={WALL_CARD_HOST}>
@@ -341,6 +352,7 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
                 : papering ? <PaperCard sheet={sheet} extent={extent} boxOf={sheetContent.boxOf} onClose={() => setPapering(false)} />
                 : titling ? <TitleBlockCard sheet={sheet} onClose={() => setTitling(false)} />
                   : revising ? <RevisionsCard sheet={sheet} onClose={() => setRevising(false)} />
+                  : picked.length >= MIN_TO_ALIGN ? <AlignCard count={picked.length} anchorName={viewName(viewports.find((v) => v.id === picked[0]))} arrange={arrange} />
                   : <ViewportCard sheet={sheet} slot={slot} onOpen={open} onChoose={setChosen} onDrawIn={setJoineryDraft} drawingBounds={slot ? sheetContent.content(slot).drawing?.bounds ?? null : null} extent={extent} onDragView={setDragViewId} />}
           </div>
           {focusView || tool ? null : <ScheduleFitOffer sheet={sheet} read={scheduleRows} />}
