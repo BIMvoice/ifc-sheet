@@ -80,8 +80,11 @@ describe('building materials in a cut', () => {
     assert.equal(styled.lines.length, drawing.lines.length - 4);
     assert.equal(styled.membranes?.length, 2);
     assert.equal(cutHatches(styled, undefined).length, 4);
-    assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).filter((h) => h.pattern === 'CROSS').length, 4);
-    assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).length, 4);
+    // A category's own hatch goes over each cut face as the view draws it: the two walls meet end to end, concrete with concrete and wool with
+    // wool, so their bands are two joined faces (#349).
+    assert.equal(styled.cutPolygons.length, 2);
+    assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).filter((h) => h.pattern === 'CROSS').length, 2);
+    assert.equal(cutHatches(styled, { categories: { walls: { cutHatch: 'CROSS' } } }).length, 2);
   });
 
   it('never joins two federated models: the walls\' shared face stays when the second wall is another model\'s (#96)', () => {

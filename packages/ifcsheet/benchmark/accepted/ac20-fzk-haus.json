@@ -38,14 +38,14 @@
     "hash": "9c68313187596d03"
    },
    "cut": {
-    "paths": 75,
-    "points": 837,
-    "hash": "5fa96eec7981b27b"
+    "paths": 63,
+    "points": 730,
+    "hash": "7afebe630fbba71b"
    },
    "lines": {
-    "paths": 866,
-    "points": 1732,
-    "hash": "95e2cde8becb0365"
+    "paths": 857,
+    "points": 1714,
+    "hash": "7b9e02d10fee60b9"
    },
    "marks": {
     "paths": 0,
@@ -56,10 +56,10 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 206,
+     "paths": 196,
      "regions": 0,
-     "points": 412,
-     "hash": "248d901425da1742"
+     "points": 392,
+     "hash": "ac42e736c8e98cb6"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
@@ -73,9 +73,9 @@
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 27,
-     "points": 359,
-     "hash": "1da01123d29fe821"
+     "regions": 15,
+     "points": 252,
+     "hash": "639989045abe8389"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
@@ -88,10 +88,10 @@
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,
      "dash": "1.5,1",
-     "paths": 211,
+     "paths": 214,
      "regions": 0,
-     "points": 422,
-     "hash": "5c3c7ab1c66af908"
+     "points": 428,
+     "hash": "7a683813ac7f0867"
     },
     "HIDDEN stroke=#000000 fill=- #2": {
      "width": 0.18,
@@ -104,10 +104,10 @@
     "SEEN stroke=#000000 fill=- #1": {
      "width": 0.25,
      "dash": "",
-     "paths": 214,
+     "paths": 215,
      "regions": 0,
-     "points": 428,
-     "hash": "7b22ac1c99a83314"
+     "points": 430,
+     "hash": "581a9dc4fb35b444"
     },
     "SEEN stroke=#000000 fill=- #2": {
      "width": 0.25,
@@ -380,14 +380,14 @@
     "hash": "9c68313187596d03"
    },
    "cut": {
-    "paths": 62,
-    "points": 1753,
-    "hash": "716b6128a3b750d7"
+    "paths": 57,
+    "points": 1638,
+    "hash": "2a5882fb00682a83"
    },
    "lines": {
-    "paths": 2249,
-    "points": 4498,
-    "hash": "bb7f949e10f127d3"
+    "paths": 2247,
+    "points": 4494,
+    "hash": "edc687ae57fdc088"
    },
    "marks": {
     "paths": 0,
@@ -398,10 +398,10 @@
     "CUT stroke=#000000 fill=- #1": {
      "width": 0.5,
      "dash": "",
-     "paths": 132,
+     "paths": 130,
      "regions": 0,
-     "points": 264,
-     "hash": "deff3848123308b3"
+     "points": 260,
+     "hash": "f88f2ba2d13f8428"
     },
     "CUT stroke=#000000 fill=- #2": {
      "width": 0.5,
@@ -409,23 +409,23 @@
      "paths": 691,
      "regions": 0,
      "points": 1382,
-     "hash": "1f56c949ab3299c1"
+     "hash": "3af8748be226d4ef"
     },
     "FILL stroke=- fill=#d4d4d8 #1": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 18,
-     "points": 248,
-     "hash": "5630c62d67442997"
+     "regions": 15,
+     "points": 193,
+     "hash": "8956c83190e2faa7"
     },
     "FILL stroke=- fill=#d4d4d8 #2": {
      "width": 0,
      "dash": "",
      "paths": 0,
-     "regions": 43,
-     "points": 1505,
-     "hash": "82a333afea7f92f9"
+     "regions": 41,
+     "points": 1445,
+     "hash": "00f70c665e56bb1b"
     },
     "HIDDEN stroke=#000000 fill=- #1": {
      "width": 0.18,

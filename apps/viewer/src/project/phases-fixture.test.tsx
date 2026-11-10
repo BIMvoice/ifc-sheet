@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { cleanup, render } from '@/test/render.js';
 import { loadPhaseModel, phaseModelMissing, WALL, type PhaseModel } from '@/test/phase-fixture.js';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import { joinLikeCuts } from '@bimvoice/ifcsheet';
 import { SheetPaper } from '@/components/viewer/sheets/SheetPaper.js';
 import { sheetSvgText } from '@/components/viewer/sheets/sheet-export.js';
 import { viewportPens, type Pen } from '@/components/viewer/sheets/viewport-pens.js';
@@ -151,9 +152,10 @@ describe('views without phases', { skip }, () => {
     for (const kind of ['plan', 'section', 'elevation'] as const) {
       const d = kind === 'plan' ? plan : await model.draw(kind);
       const same = styled(d, undefined);
-      assert.equal(same, d, `${kind}: returned untouched`);
+      // Untouched but for the join of like cut faces (#349), which every view makes.
+      assert.deepEqual(same, joinLikeCuts(d), `${kind}: returned untouched`);
       assert.ok(d.lines.length > 0 && d.cutPolygons.length > 0, `${kind} draws something`);
-      assert.equal(pens(same, undefined).length, pens(d, undefined).length);
+      assert.equal(pens(same, undefined).length, pens(joinLikeCuts(d), undefined).length);
       assert.ok(same.lines.every((l) => !('phase' in l)) && same.cutPolygons.every((p) => !('phase' in p)));
     }
   });
@@ -163,8 +165,11 @@ describe('views without phases', { skip }, () => {
       const d = await model.draw(kind);
       const all: ViewGraphics = { phases: { show: ['existing', 'demolish', 'new', 'temporary'] } };
       const shown = styled(d, all);
-      assert.equal(shown.lines.length, d.lines.length, `${kind}: every line kept`);
-      assert.equal(shown.cutPolygons.length, d.cutPolygons.length, `${kind}: every cut face kept`);
+      // Nothing left out beyond what the plain view leaves out (like cut faces joined, #349); walls of two phases do not join, so the phase view may keep more.
+      const base = styled(d, undefined);
+      assert.ok(shown.lines.length >= base.lines.length, `${kind}: every line kept`);
+      assert.ok(shown.cutPolygons.length >= base.cutPolygons.length, `${kind}: every cut face kept`);
+      assert.deepEqual(new Set(shown.lines.map((l) => l.entityId)), new Set(d.lines.map((l) => l.entityId)), `${kind}: every element's lines kept`);
     }
   });
 });

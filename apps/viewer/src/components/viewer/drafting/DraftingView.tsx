@@ -119,7 +119,7 @@ import { viewOmits } from '@/project/discipline-facts';
 import { planOverlays } from '@/project/plan-overlays';
 import { graphicStandardOf } from '@/drafting/graphic-standard';
 
-import { viewMaterials } from '@/project/material-resolver';
+import { cutMaterialName, viewMaterials } from '@/project/material-resolver';
 
 import { membraneOverlays } from '@/project/membrane-overlays';
 import { partHostType } from '@/project/part-host';
@@ -221,7 +221,7 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const discipline = view.kind === 'plan' ? view.discipline : undefined;
   const shown = useMemo(() => {
     void materialsTable; void mutationVersionForMaterials;
-    return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId) : null;
+    return viewDrawing ? styledDrawing(viewDrawing, graphics, partHostType, viewOmits(view), viewMaterials(viewDrawing), phases, schemeResultOf(view, viewDrawing, runtimeGeometry?.meshes), renderIdGlobalId, cutMaterialName) : null;
   }, [viewDrawing, graphics, detail, view.kind, discipline, materialsTable, mutationVersionForMaterials, phases, runtimeGeometry]);
   // Each face's and line's style: the view's one styler, its sheets' too (#34).
   const canvasStyler = useViewCanvasStyler(graphics, shown);

@@ -53,4 +53,26 @@ describe('view graphics', () => {
     assert.equal(hatches.length, 1);
     assert.deepEqual([hatches[0].pattern, hatches[0].scale, hatches[0].color], ['ANSI31', 2, '#123456']);
   });
+
+  it('joins like walls at a mitred corner, with no cut line on the diagonal; another material keeps its joint (#349)', () => {
+    // Wall A along x and wall B along y, 0.3 m thick, both ending on the diagonal (0,0)-(0.3,0.3); wall C of another material butts into A.
+    const wallA = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 0.3 }, { x: 0.3, y: 0.3 }];
+    const wallB = [{ x: 0, y: 0 }, { x: 0, y: 4 }, { x: 0.3, y: 4 }, { x: 0.3, y: 0.3 }];
+    const wallC = [{ x: 3, y: 0.3 }, { x: 3.2, y: 0.3 }, { x: 3.2, y: 4 }, { x: 3, y: 4 }];
+    const ring = (id: number, pts: { x: number; y: number }[]) => pts.map((a, i) => ({ entityId: id, ifcType: 'IfcWall', category: 'cut', line: { start: a, end: pts[(i + 1) % pts.length] } }));
+    const walls = {
+      cutPolygons: [[1, wallA], [2, wallB], [3, wallC]].map(([id, outer]) => ({ entityId: id, ifcType: 'IfcWall', modelIndex: 0, polygon: { outer, holes: [] } })),
+      lines: [...ring(1, wallA), ...ring(2, wallB), ...ring(3, wallC)],
+    } as unknown as Drawing2D;
+    const shown = styledDrawing(walls, undefined, undefined, undefined, null, null, null, undefined, (p) => (p.entityId === 3 ? 'Concrete' : 'Brick'));
+    assert.equal(shown.cutPolygons.length, 2);
+    const onLine = (p: { x: number; y: number }) => shown.lines.some((l) => {
+      const { start: a, end: b } = l.line;
+      const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / ((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+      return t >= 0 && t <= 1 && Math.hypot(a.x + t * (b.x - a.x) - p.x, a.y + t * (b.y - a.y) - p.y) < 1e-6;
+    });
+    assert.equal(onLine({ x: 0.15, y: 0.15 }), false, 'no line on the mitre');
+    assert.equal(onLine({ x: 3.1, y: 0.3 }), true, 'concrete C against brick A keeps its joint');
+    assert.equal(onLine({ x: 0, y: 2 }), true);
+  });
 });
