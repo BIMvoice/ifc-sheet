@@ -54,6 +54,7 @@ describe.skipIf(missing !== null)('a plan of a model whose site sits above the o
   it('draws the walls on the plan of the lower level, cut at its own floor plus 1.2 m', () => {
     const plan = set.document.views.find((v) => v.kind === 'plan' && v.name === 'Nivel 1')!;
     const sheet = sheets.find((s) => s.viewports.some((vp) => vp.viewId === plan.id))!;
-    expect(sheet.cut.length).toBeGreaterThanOrEqual(4);
+    // The room's four walls, joined where they meet (#349): the outline round them and the room inside it.
+    expect(sheet.cut.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -46,6 +46,7 @@ import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './she
 import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
 import { materialDrawing, materialFaces, type MaterialResolver } from './material-drawing.js';
+import { joinLikeCuts, likeCutKey } from './cut-join-drawing.js';
 import { materialPens } from './sheet-material-pens.js';
 import type { Obstacle } from './free-spot.js';
 import { siteMarks, siteObstacles } from './site-marks.js';
@@ -288,7 +289,13 @@ export function sheetGraphic(
       // GlobalId (`globalIdOf`), never by the express id the drawing carries.
       const styler = viewStyler({ graphics, pens, globalIdOf, propertiesOf, materialOf });
       // The cut by its building materials (`material-drawing.ts`), through the one function the app's sheets call: the bands filled, the lines inside one material gone.
-      const faces = materials ? materialFaces(drawing, materialDrawing(drawing, materials)) : { cutPolygons: drawing.cutPolygons, lines: drawing.lines, hatches: [], membranes: [] };
+      // Then like cut faces joined where they meet (#349), as the app's `styledDrawing` joins them: alike by material and by how this view draws them.
+      const painted = scheme?.elementColours;
+      const faces = joinLikeCuts(materials ? materialFaces(drawing, materialDrawing(drawing, materials)) : { cutPolygons: drawing.cutPolygons, lines: drawing.lines, hatches: [], membranes: [] }, (p) => {
+        const k = painted?.has(p.entityId) ? null : likeCutKey(p, materials?.nameOf?.(p));
+        const s = k === null ? null : styler.face(p);
+        return s?.visible ? `${k}|${s.fill}|${s.stroke}|${s.weight}` : null;
+      });
       for (const polygon of faces.cutPolygons.filter((p) => styler.face(p).visible)) {
         for (const ring of [polygon.polygon.outer, ...polygon.polygon.holes]) out.cut.push(...clipPolyline(closeRing(ring.map(at)), box));
       }
@@ -297,7 +304,6 @@ export function sheetGraphic(
         out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
       }
       // A face a colour scheme paints is in `fills` already (`viewportFills`), under the linework.
-      const painted = scheme?.elementColours;
       for (const g of penGroups(faces.cutPolygons.filter((p) => !painted?.has(p.entityId)), faces.lines, styler)) {
         const regions = g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map((l) => clipPolygon(l.map(at), box)).filter((l) => l.length >= 3).map(closeRing)).filter((r) => r.length > 0);
         const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
