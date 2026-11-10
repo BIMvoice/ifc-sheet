@@ -138,6 +138,12 @@ export interface PlanProjectView extends ProjectViewBase {
    * draws what is above the cut: ceilings, soffits, lights, beams.
    */
   reflected?: boolean;
+  /**
+   * How far above the cut the plan draws what is overhead (beams, the slab edge above), dashed, metres (#490).
+   * Absent or `null`: up to the next storey's floor (the model's top on the top storey); 0: nothing overhead.
+   * Read through `viewOverheadHeight`.
+   */
+  overheadHeight?: number | null;
 }
 
 /** A section cut stored in world metres, independent of the model bounds. */

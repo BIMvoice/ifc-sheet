@@ -12,7 +12,7 @@
 
 import { create } from 'zustand';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { viewProjection } from '@bimvoice/ifcsheet';
+import { viewOverheadHeight, viewProjection } from '@bimvoice/ifcsheet';
 import type { ProjectView } from './types';
 import type { ViewSectionPlane } from './view-plane';
 
@@ -56,10 +56,12 @@ export const generatesFromModel = (view: Pick<ProjectView, 'kind'>): boolean => 
 export interface ViewDisplayOverrides {
   showConstructionProjection: boolean;
   constructionProjectionDepth: number | null;
+  /** How far above its cut a plan draws what is overhead (`viewOverheadHeight`): `null` up to the floor above, 0 none. */
+  overheadHeight: number | null;
 }
 
-/** Projection follows the view's depth (`viewProjection`, the rule the engine's sheets draw by too, #615). */
-export const viewDisplayOverrides = (view: ProjectView): ViewDisplayOverrides => viewProjection(view);
+/** Projection follows the view's depth and its overhead range (`viewProjection`, `viewOverheadHeight`: the rules the engine's sheets draw by too, #615, #490). */
+export const viewDisplayOverrides = (view: ProjectView): ViewDisplayOverrides => ({ ...viewProjection(view), overheadHeight: viewOverheadHeight(view) });
 
 /** A stable key for a resolved plane, so an unchanged view never regenerates. */
 export function planeKey(plane: ViewSectionPlane | null): string {

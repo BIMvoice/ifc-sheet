@@ -68,10 +68,10 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
     [geometryResult, phases?.show.join(), phaseSource, mutationVersion],
   );
 
-  const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);
+  const { showConstructionProjection, constructionProjectionDepth, overheadHeight } = viewDisplayOverrides(view);
   const displayOptions = useMemo(
-    () => ({ ...sharedOptions, showConstructionProjection, constructionProjectionDepth }),
-    [sharedOptions, showConstructionProjection, constructionProjectionDepth],
+    () => ({ ...sharedOptions, showConstructionProjection, constructionProjectionDepth, overheadHeight }),
+    [sharedOptions, showConstructionProjection, constructionProjectionDepth, overheadHeight],
   );
 
   // The generator's drawing is kept whole; the view stores it as it shows it (hidden lines, outline).

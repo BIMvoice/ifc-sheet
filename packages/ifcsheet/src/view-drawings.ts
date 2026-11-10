@@ -22,7 +22,7 @@ import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-provider.js';
 import { viewCutOptions, viewShowsHidden } from './view-cut-options.js';
-import { automaticDepthOfSpan, planProjectionBands, viewProjection } from './plan-projection.js';
+import { automaticDepthOfSpan, planProjectionBands, viewOverheadHeight, viewProjection } from './plan-projection.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 import { drawingWithGround } from './ground.js';
 import { isTerrainMesh } from './contours.js';
@@ -88,6 +88,7 @@ function planConfig(view: PlanProjectView, cut: number, extent: ModelExtent, flo
   const bands = planProjectionBands({
     depth: constructionProjectionDepth, projectionOn: showConstructionProjection, floors, position: cut,
     axisMin: extent.min.y, axisMax: extent.max.y, down: true, custom: false, flipped: false, reflected: view.reflected === true,
+    overhead: viewOverheadHeight(view),
   });
   const config = createSectionConfig('y', cut, { ...bands, includeHiddenLines: false });
   if (view.reflected) config.plane.reflected = true;

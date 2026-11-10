@@ -71,7 +71,7 @@ const view: Schema = {
   properties: {
     ...viewBase,
     kind: { enum: [...VIEW_KINDS] },
-    level, cutHeight: num, site: { const: true }, discipline: { enum: ['structural', 'foundation', 'roof'] }, reflected: bool, contourInterval: { type: 'number', minimum: 0 },
+    level, cutHeight: num, site: { const: true }, discipline: { enum: ['structural', 'foundation', 'roof'] }, reflected: bool, contourInterval: { type: 'number', minimum: 0 }, overheadHeight: nullable({ type: 'number', minimum: 0 }),
     plane: sectionPlane, through: str,
     direction: { enum: [...DIRECTIONS] }, planeOffset: num, interior: obj,
     viewpoint: nullable(obj), projection: { enum: ['axonometric', 'perspective'] }, preset: { enum: ['se', 'sw', 'ne', 'nw'] }, raster: nullable(obj), shaded: bool, cutaway: obj,
