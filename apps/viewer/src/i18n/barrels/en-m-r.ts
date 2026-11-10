@@ -29,6 +29,7 @@ import { newProjectEn } from '../catalogues/new-project.en';
 import { panelNoModelEn } from '../catalogues/panel-no-model.en';
 import { phasesEn } from '../catalogues/phases.en';
 import { placementPanelEn } from '../catalogues/placement-panel.en';
+import { planOrientationEn } from '../catalogues/plan-orientation.en';
 import { planHandlesEn } from '../catalogues/plan-handles.en';
 import { printPreviewEn } from '../catalogues/print-preview.en';
 import { profileSectionEn } from '../catalogues/profile-section.en';
@@ -88,6 +89,7 @@ export const enMR = {
   ...phasesEn,
   ...placementPanelEn,
   ...planHandlesEn,
+  ...planOrientationEn,
   ...printPreviewEn,
   ...profileSectionEn,
   ...profilesEn,

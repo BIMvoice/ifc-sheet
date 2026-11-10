@@ -54,6 +54,8 @@ export interface SectionPlane {
   parked?: boolean; // enabled, but hidden by the visibility toggle (`sceneState.section.visible === false`, #5893)
   flipped: boolean; // show the opposite side of the cut
   reflected?: boolean; // reflected ceiling plan: look up from the cut but keep the plan's x/y (not a mirror)
+  /** A plan square to the building: the turn its drawing is drawn at (`planTurn`, `DrawingPlane.turn`); absent on the world's axes. */
+  turn?: number;
   /** Whether to render the filled, hatched cap surface at the plane. Defaults to true. */
   showCap: boolean;
   /**

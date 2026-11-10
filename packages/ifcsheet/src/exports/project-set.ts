@@ -47,7 +47,7 @@ export { SCALE_BAR_TARGET_MM, scaleBarShapes, scaleBarStep, scaleBarTicks } from
 export { COORDINATE_POINT_ID, NORTH_ARROW_ID, SCALE_BAR_ID, liveSymbol, type LiveSymbolContext } from '../live-symbols.js';
 export { gridNorthOf, northArrowRotation, trueNorthOf, type PlanDirection } from '../true-north.js';
 export { COORDINATE_LABELS, drawingPointToLocal, liveSymbolContext, siteFrameOf, type CoordinateLabeller, type SiteFrame } from '../site-frame.js';
-export { AXIS_NAME, annotationFrameOf, drawingToWorld, screenSigns, turnOf, viewNormal, worldToDrawing, type DrawingPlane, type SectionAxisName, type Vec3 } from '../drawing-frame.js';
+export { AXIS_NAME, annotationFrameOf, drawingToWorld, screenSigns, turnOf, turnedPoint, unturnedPoint, viewNormal, worldToDrawing, type DrawingPlane, type SectionAxisName, type Vec3 } from '../drawing-frame.js';
 export { planTurn, turnDrawing, turnedPlane, withSquareFrame } from '../plan-orientation.js';
 export { EPS, TAU, normAngle, polar, rotatePt, sweepOf } from '../draft-vec.js';
 export { hasStandardGeoreferencing } from '../georef-gate.js';

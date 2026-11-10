@@ -52,7 +52,7 @@ export const SCAN_SECTION_AXIS_MAP: Record<'down' | 'front' | 'side', 'x' | 'y' 
 
 export interface UseScanSectionLayerParams {
   enabled: boolean;
-  sectionPlane: Pick<SectionPlane, 'axis' | 'position' | 'flipped' | 'custom'>;
+  sectionPlane: Pick<SectionPlane, 'axis' | 'position' | 'flipped' | 'turn' | 'custom'>;
   coordinateInfo: GeometryResult['coordinateInfo'] | undefined;
   /** Full slab thickness in metres. */
   thickness: number;
@@ -160,7 +160,7 @@ function toScanSectionPlane(
   // cut, or the band sits on a different plane than the drawn geometry.
   const position = resolveScanSectionPosition(sectionPlane.position, axis, coordinateInfo);
   if (!sectionPlane.custom) {
-    return { axis, position, flipped: sectionPlane.flipped };
+    return { axis, position, flipped: sectionPlane.flipped, ...(sectionPlane.turn ? { turn: sectionPlane.turn } : {}) };
   }
   const c = sectionPlane.custom;
   const origin = customPlaneCenter(c);
@@ -284,6 +284,7 @@ export function useScanSectionLayer(params: UseScanSectionLayerParams): UseScanS
     sectionPlane.axis,
     sectionPlane.position,
     sectionPlane.flipped,
+    sectionPlane.turn,
     customKey,
     coordinateInfo,
     thickness,

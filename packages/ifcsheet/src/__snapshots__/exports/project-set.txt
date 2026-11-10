@@ -198,8 +198,10 @@ trueNorthOf: value
 turnDrawing: value
 turnOf: value
 turnedPlane: value
+turnedPoint: value
 unitFactor: value
 unitVector: value
+unturnedPoint: value
 viewNormal: value
 viewportPaperUnit: value
 withSquareFrame: value

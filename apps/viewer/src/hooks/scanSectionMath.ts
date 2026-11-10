@@ -54,6 +54,7 @@ import {
 } from '@ifc-lite/drawing-2d';
 import type { CoordinateInfo } from '@ifc-lite/geometry';
 import { isPointCloudClassVisible } from '@/store/slices/pointCloudSlice';
+import { worldToDrawing } from '@bimvoice/ifcsheet/world-frame';
 import { totalYupOffset } from '@/lib/geo/coordinate-frame';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -92,6 +93,7 @@ export interface ScanSectionPlane {
   position: number;
   /** Mirrors the cutter's U-axis flip; irrelevant to band membership, only to projection. */
   flipped: boolean;
+  turn?: number; // A plan square to the building: its drawing's turn (`DrawingPlane.turn`)
   custom?: ScanCustomPlane;
 }
 
@@ -243,7 +245,7 @@ export function projectScanPoint(p: Vec3, plane: ScanSectionPlane): Point2D {
     const bitangent: Vec3 = { x: plane.custom.bitangent[0], y: plane.custom.bitangent[1], z: plane.custom.bitangent[2] };
     return projectTo2DBasis(p, origin, tangent, bitangent);
   }
-  return projectTo2D(p, plane.axis, plane.flipped);
+  return plane.turn && plane.axis === 'y' ? worldToDrawing({ axis: 'y', position: plane.position, flipped: plane.flipped, turn: plane.turn }, p) : projectTo2D(p, plane.axis, plane.flipped);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
