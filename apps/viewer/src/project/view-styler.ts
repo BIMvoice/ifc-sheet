@@ -24,6 +24,7 @@ import { phaseStyle } from './phases';
 import { modelOf } from './material-resolver';
 import { ifcMaterialName } from './materials';
 import { halftoneColor, type EntityStyleOf } from './model-styles';
+import { renderIdGlobalId } from './element-guid';
 import type { ResolvedViewGraphics } from './types';
 
 type Properties = ElementData['properties'];
@@ -62,11 +63,14 @@ export function appViewStyler(graphics: ResolvedViewGraphics | undefined, drawin
   const reads = rulesReadProperties(presetRules(graphics));
   // So do the material names a template's material rules match.
   const mapped = !!graphics?.styleRules?.some((r) => r.by === 'material');
+  // A line the view draws in its own pen (#189) is known by its element's GlobalId, which the styler asks for only then.
+  const restyled = Object.keys(graphics?.lineStyles ?? {}).length > 0;
   const s = useViewerStore.getState();
   const deps = [graphics, standard, styleOf, reads || mapped ? s.models : null, reads ? s.ifcDataStore : null, reads || mapped ? s.mutationVersion : null];
   return memoOn(stylers, drawing ?? NO_DRAWING, deps, () => viewStyler({
     graphics,
     pens: standard,
+    ...(restyled ? { globalIdOf: renderIdGlobalId } : {}),
     phaseStyle: (phase) => phaseStyle(graphics, phase),
     ...(styleOf ? { ink: (colour: string, entityId: number | undefined) => (entityId !== undefined && styleOf(entityId) === 'halftone' ? halftoneColor(colour) : colour) } : {}),
     ...(reads ? { propertiesOf: propertiesReader() } : {}),
