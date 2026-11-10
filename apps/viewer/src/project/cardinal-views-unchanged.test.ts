@@ -46,8 +46,10 @@ const FZK = join(dirname(fileURLToPath(import.meta.url)), '..', 'test', '__fixtu
 const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 
 const ON_MAIN = {
-  plan: { axis: 'y', position: 1.2, lines: 2332, hidden: 1097, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 2863, hidden: 2554, polygons: 64 },
+  // plan and section re-recorded for #749 (were 2332/1097 and 2863/2554): a line behind the plane is left out where it lies inside
+  // a cut face, so the pieces under cut walls, slabs and roofs are gone and a line that crosses a cut wall is split there. The cut faces are the same.
+  plan: { axis: 'y', position: 1.2, lines: 1969, hidden: 974, polygons: 229 },
+  section: { axis: 'z', position: 0, lines: 1290, hidden: 1064, polygons: 64 },
   elevation: { axis: 'z', position: 20, lines: 494, hidden: 464, polygons: 0 },
 } as const;
 

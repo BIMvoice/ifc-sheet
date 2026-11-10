@@ -48,6 +48,7 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.draw.fillet', labelKey: 'wall.draw.fillet', category: 'wall', when: 'wall', keys: [digit(9)] },
   { id: 'wall.draw.offset', labelKey: 'wall.draw.offset', category: 'wall', when: 'wall', keys: [digit(9, true)] },
   { id: 'wall.draw.chamfer', labelKey: 'wall.draw.chamfer', category: 'wall', when: 'wall', keys: [digit(0, true)] },
+  { id: 'wall.draw.hideline', labelKey: 'wall.draw.hideline', category: 'wall', when: 'wall', keys: [{ key: 'code:KeyH', alt: true }] },
   { id: 'wall.addDrawing', labelKey: 'wall.addDrawing', category: 'wall', when: 'wall', keys: [{ key: 'code:KeyA', alt: true }] },
   { id: 'wall.fit', labelKey: 'wall.fit', category: 'wall', when: 'wall', keys: [digit(0)] },
   { id: 'wall.print', labelKey: 'wall.export.pdf', category: 'wall', when: 'wall', keys: [{ key: 'p', mod: true }] },
@@ -71,7 +72,7 @@ const TOOL_KEYS: Readonly<Record<string, WallKeyId>> = {
   dimaligned: 'wall.tool.dimaligned', tag: 'wall.tool.tag', leader: 'wall.tool.leader', level: 'wall.tool.level',
   sectionline: 'wall.tool.sectionline', symbol: 'wall.tool.symbol',
   line: 'wall.draw.line', polyline: 'wall.draw.polyline', rectangle: 'wall.draw.rectangle', circle: 'wall.draw.circle', text: 'wall.draw.text', hatch: 'wall.draw.hatch', revcloud: 'wall.draw.revcloud', ptext: 'wall.draw.ptext',
-  trim: 'wall.draw.trim', extend: 'wall.draw.extend', fillet: 'wall.draw.fillet', offset: 'wall.draw.offset', chamfer: 'wall.draw.chamfer',
+  trim: 'wall.draw.trim', extend: 'wall.draw.extend', fillet: 'wall.draw.fillet', offset: 'wall.draw.offset', chamfer: 'wall.draw.chamfer', hideline: 'wall.draw.hideline',
 };
 
 export function wallToolKey(command: string): WallKeyId | undefined {
