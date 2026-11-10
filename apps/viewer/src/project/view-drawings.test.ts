@@ -20,15 +20,15 @@ beforeEach(() => useViewDrawings.setState({ byView: {} }));
 
 describe('viewDisplayOverrides', () => {
   it('sees a plan down to its floor (as deep as its cut), and projects a section / elevation automatically, by default', () => {
-    assert.deepEqual(viewDisplayOverrides(plan), { showConstructionProjection: true, constructionProjectionDepth: 1.2 });
-    assert.deepEqual(viewDisplayOverrides({ ...plan, cutHeight: 1.5 }), { showConstructionProjection: true, constructionProjectionDepth: 1.5 });
-    assert.deepEqual(viewDisplayOverrides({ ...plan, viewDepth: 0 }), { showConstructionProjection: false, constructionProjectionDepth: 0 });
-    assert.deepEqual(viewDisplayOverrides(elevation), { showConstructionProjection: true, constructionProjectionDepth: null });
+    assert.deepEqual(viewDisplayOverrides(plan), { showConstructionProjection: true, constructionProjectionDepth: 1.2, overheadHeight: null });
+    assert.deepEqual(viewDisplayOverrides({ ...plan, cutHeight: 1.5 }), { showConstructionProjection: true, constructionProjectionDepth: 1.5, overheadHeight: null });
+    assert.deepEqual(viewDisplayOverrides({ ...plan, viewDepth: 0 }), { showConstructionProjection: false, constructionProjectionDepth: 0, overheadHeight: null });
+    assert.deepEqual(viewDisplayOverrides(elevation), { showConstructionProjection: true, constructionProjectionDepth: null, overheadHeight: null });
   });
 
   it('projects exactly the view depth when one is set, and nothing at depth 0', () => {
-    assert.deepEqual(viewDisplayOverrides({ ...plan, viewDepth: 1.2 }), { showConstructionProjection: true, constructionProjectionDepth: 1.2 });
-    assert.deepEqual(viewDisplayOverrides({ ...elevation, viewDepth: 0 }), { showConstructionProjection: false, constructionProjectionDepth: 0 });
+    assert.deepEqual(viewDisplayOverrides({ ...plan, viewDepth: 1.2 }), { showConstructionProjection: true, constructionProjectionDepth: 1.2, overheadHeight: null });
+    assert.deepEqual(viewDisplayOverrides({ ...elevation, viewDepth: 0 }), { showConstructionProjection: false, constructionProjectionDepth: 0, overheadHeight: null });
   });
 });
 

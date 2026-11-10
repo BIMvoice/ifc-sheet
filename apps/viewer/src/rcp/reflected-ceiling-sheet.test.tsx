@@ -47,8 +47,8 @@ describe('reflected ceiling plan as a view', () => {
   });
 
   it('sees all that is above its cut, not down to the floor like a plan', () => {
-    assert.deepEqual(viewDisplayOverrides(rcp), { showConstructionProjection: true, constructionProjectionDepth: null });
-    assert.deepEqual(viewDisplayOverrides(plan), { showConstructionProjection: true, constructionProjectionDepth: 1.2 });
+    assert.deepEqual(viewDisplayOverrides(rcp), { showConstructionProjection: true, constructionProjectionDepth: null, overheadHeight: null });
+    assert.deepEqual(viewDisplayOverrides(plan), { showConstructionProjection: true, constructionProjectionDepth: 1.2, overheadHeight: null });
   });
 
   it('round-trips through the project file', () => {

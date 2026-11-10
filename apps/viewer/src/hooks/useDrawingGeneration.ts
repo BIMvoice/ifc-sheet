@@ -367,6 +367,7 @@ export function useDrawingGeneration({
         depth: boundedProjection ? manualDepth : null, projectionOn, floors, position, axisMin, axisMax,
         down: sectionPlane.axis === 'down', custom: !!sectionPlane.custom, flipped: sectionPlane.flipped, reflected: sectionPlane.reflected === true,
         automaticDepth: projectionOn && (sectionPlane.custom || sectionPlane.axis !== 'down') ? automaticViewDepth(sectionPlane, bounds) : null,
+        overhead: displayOptions.overheadHeight ?? null,
       });
 
       // Adjust progress to account for symbolic parsing phase (0-20%)
