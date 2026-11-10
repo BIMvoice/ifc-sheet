@@ -86,7 +86,8 @@ const WIDENED: Record<string, Case> = {
   '01_BIMcollab_Example_ARC': {
     name: '01_BIMcollab_Example_ARC (Bonsai, five storeys, terrain site)', file: models('various/01_BIMcollab_Example_ARC.ifc'),
     storeys: ['-01 Foundation', '00 Ground floor', '01 First floor', '02 Second floor', '03 Roof'], doors: 57, windows: 115, rooms: 51, sheets: SHEETS_3,
-    emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'], notDrawn: ['112KHbjkLLJf$JsfJJCoBc'],
+    emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'], // 'Skylight' is a window with no representation that aggregates 45 window parts (a curtain wall panel set): the parts are drawn, it has no geometry of its own.
+    notDrawn: ['112KHbjkLLJf$JsfJJCoBc'],
   },
   rvt01: {
     name: 'rvt01 (Revit 2024, six storeys)', file: models('various/rvt01.ifc'),
@@ -96,13 +97,14 @@ const WIDENED: Record<string, Case> = {
   schependomlaan: {
     name: 'schependomlaan (ArchiCAD 18, 49 MB, apartment block with terrain)', file: models('ara3d/schependomlaan.ifc'),
     storeys: ['-1 fundering', '00 begane grond', '01 eerste verdieping', '02 tweede verdieping', '03 derde verdieping', '04 dak'], doors: 205, windows: 259, rooms: 100, sheets: SHEETS_3,
-    emptyPlans: ['04 dak'], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'], doorsWithoutSymbol: 45,
-    notDrawn: ['0qOSzz4qrCIO8I0BFBBwg9', '11RySdoR58kP5miKc_WA6F', '15m0CeBGfECerYsUDbEOge', '3Wp4aZh5H6qPRVFtOem3_A'],
+    emptyPlans: ['04 dak'], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'], doorsWithoutSymbol: 45, notDrawn: [],
+    // The 45 doors are "stelkozijn" and "liftdeur" whose only geometry is a box 3 cm to 32 cm high (a sill or a head, 6 faces) that no plan cut reaches, with no host wall: the model's own.
   },
   ISSUE_034_HouseZ: {
     name: 'ISSUE_034 HouseZ (Rhino ASIFC export)', file: models('ara3d/ISSUE_034_HouseZ.ifc'),
     storeys: ['Roof', 'Ground Floor', 'First Floor'], doors: 15, windows: 22, rooms: 5, sheets: SHEETS_2,
     emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'],
+    // The five are contained in the IfcSite, not in a storey (the exporter's), so they are not part of the building and have no mesh in the set.
     notDrawn: ['0M9KrLWkn529SPpOcx$frM', '1K3nZJQ_r0BgmczZHJpALC', '1R1l_Ptm92jPIX_faq9iU4', '2lL91oE$j6mARYtSlbYVME', '0Vw_UM9Ib2z9oNgisD4Ilu'],
   },
 };

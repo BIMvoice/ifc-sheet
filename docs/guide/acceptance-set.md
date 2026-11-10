@@ -31,7 +31,7 @@ A figure an empty drawing would also give (zero windows in a model with none) is
 | C20-Institute-Var-2 | `tests/models/ara3d/` (`pnpm fixtures`) | KIT sample, no licence file; read from disk only | 77 / 206 / 82 | ArchiCAD 20 office, five storeys, terrain site |
 | 01_BIMcollab_Example_ARC | `tests/models/various/` (`pnpm fixtures`) | read from disk only | 57 / 115 / 51 | Bonsai export, five storeys, terrain site; one window no plan draws |
 | rvt01 | `tests/models/various/` (`pnpm fixtures`) | read from disk only | 37 / 12 / 53 | Revit 2024, six storeys; GA_GATE LEVEL shares the plan of RD_ROAD LEVEL (15 cm apart), the tank storey cuts nothing |
-| schependomlaan | `tests/models/ara3d/` (`pnpm fixtures`), 49 MB | read from disk only | 205 / 259 / 100 | ArchiCAD 18 apartment block, six storeys; four windows no plan draws, 45 doors drawn without a symbol |
+| schependomlaan | `tests/models/ara3d/` (`pnpm fixtures`), 49 MB | read from disk only | 205 / 259 / 100 | ArchiCAD 18 apartment block, six storeys; the four roof windows are contained in a space and are drawn since #557; 45 doors drawn without a symbol (their only geometry is a sill or head box no cut reaches) |
 | ISSUE_034 HouseZ | `tests/models/ara3d/` (`pnpm fixtures`) | read from disk only | 15 / 22 / 5 | Rhino (ASIFC) export, three storeys; four doors and one window no plan draws |
 
 On the school the plans draw every door and window (the roof storey's plan cuts nothing). The eight curtain wall doors (parts of an IfcCurtainWall,
