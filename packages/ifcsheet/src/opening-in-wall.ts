@@ -15,6 +15,7 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { OpeningRect } from './opening-symbols.js';
+import { drawingProjector } from './drawing-frame.js';
 
 /** How far beyond the opening's ends the wall's thickness is read, in metres: a wall's two faces run past the jambs. */
 const READ_BEYOND = 0.3;
@@ -43,12 +44,12 @@ function jambOf(ss: readonly number[]): number | null {
 /** `rect` fitted to the wall `host` (its meshes) the door stands in; `rect` itself when the wall does not show the opening. */
 export function fitToHostWall(rect: OpeningRect, host: readonly MeshData[], plane: SectionPlaneConfig, standsProud = false): OpeningRect {
   const at: { s: number; t: number }[] = [];
+  const project = drawingProjector(plane);
   for (const mesh of host) {
-    const [ox, , oz] = mesh.origin ?? [0, 0, 0];
+    const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
     const p = mesh.positions;
     for (let i = 0; i + 2 < p.length; i += 3) {
-      const x = plane.flipped ? -(ox + p[i]) : ox + p[i];
-      const y = oz + p[i + 2];
+      const { x, y } = project(ox + p[i], oy + p[i + 1], oz + p[i + 2]);
       at.push({ s: (x - rect.c.x) * rect.u.x + (y - rect.c.y) * rect.u.y, t: (x - rect.c.x) * rect.n.x + (y - rect.c.y) * rect.n.y });
     }
   }

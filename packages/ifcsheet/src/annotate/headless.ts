@@ -174,7 +174,7 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
   };
   const roomsOf = (c: ReadCall<HeadlessView, Drawing2D>) => {
     const plan = plans.get(c.view.id);
-    return plan && ds ? roomsOfPlan(plan, set.levels, { meshes: model.meshes }, guidOf) : [];
+    return plan && ds ? roomsOfPlan(plan, set.levels, { meshes: model.meshes }, guidOf, c.drawing.config.plane) : [];
   };
   // A section or an elevation tags the rooms its plane cuts, as the app's `viewInputs` reads them (#677).
   const tagRoomsOf = (c: ReadCall<HeadlessView, Drawing2D>) => (c.view.kind === 'plan' ? roomsOf(c) : roomsOfCut(c.drawing.config.plane, c.drawing, model.meshes, guidOf));

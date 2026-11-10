@@ -21,6 +21,7 @@ import { templateFields } from './sheet-templates.js';
 import { fitViewportBox, SHEET_SCALES } from './viewport-fit.js';
 import { freshProjectId } from './ids.js';
 import { viewCentre } from './view-centre.js';
+import { viewTurn, type SquareFrame } from './plan-orientation.js';
 import { DEFAULT_SCHEME, nextNumber, numberGroupOf, numberSheets } from './numbering.js';
 import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectSheet, ProjectView, SheetTemplate, SheetViewport, TemplateSeries } from './document.js';
 
@@ -41,6 +42,8 @@ const TITLE_ROOM_MM = 12;
 export interface ModelExtent {
   min: { x: number; y: number; z: number };
   max: { x: number; y: number; z: number };
+  /** The building squared on the sheet (`plan-orientation.ts`): the turn a plan square to it is drawn at and its footprint's box there; absent when the building is square to the world (or its rotation is not known), so every plan is drawn on the world's axes. */
+  square?: SquareFrame;
 }
 
 /** `interiors`: a room's interior elevations (A-4xx), kept apart from the facade elevations so each group is scaled on its own. */
@@ -68,8 +71,11 @@ export function viewExtent(view: ProjectView, extent: ModelExtent): { w: number;
   const dy = extent.max.y - extent.min.y;
   const dz = extent.max.z - extent.min.z;
   switch (view.kind) {
-    case 'plan':
-      return { w: dx, h: dz };
+    case 'plan': {
+      // A plan square to the building is as large as the building's footprint in its turned frame.
+      const square = viewTurn(view, extent.square) ? extent.square : undefined;
+      return square ? { w: square.max.x - square.min.x, h: square.max.y - square.min.y } : { w: dx, h: dz };
+    }
     case 'elevation':
       return view.direction === 'north' || view.direction === 'south' ? { w: dx, h: dy } : { w: dz, h: dy };
     case 'section': {

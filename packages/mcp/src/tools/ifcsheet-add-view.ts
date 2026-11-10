@@ -63,7 +63,8 @@ function newView(entry: SheetSetEntry, input: Record<string, unknown>): ProjectV
       const cut = optNumber(input, 'cut_height_m', 0.1, 50);
       const plan = planViewFor(level, views, now, entry.set.levels);
       const { auto: _auto, ...rest } = plan;
-      return { ...rest, ...(name ? { name: uniqueViewName(name, views) } : {}), ...(cut !== undefined ? { cutHeight: cut } : {}) };
+      // A new plan is drawn square to the building (`plan-orientation.ts` in the engine).
+      return { ...rest, orientation: 'building', ...(name ? { name: uniqueViewName(name, views) } : {}), ...(cut !== undefined ? { cutHeight: cut } : {}) };
     }
     case 'elevation': {
       const direction = optChoice(input, 'direction', DIRECTIONS);

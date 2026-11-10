@@ -95,7 +95,8 @@ class Planner {
   readonly notes: SetNote[] = [];
 
   constructor(readonly levels: ProjectLevel[], readonly extent: ModelExtent, readonly now: number) {
-    this.views = defaultViews(levels, now);
+    // A plan the engine makes is drawn square to the building (`plan-orientation.ts`).
+    this.views = defaultViews(levels, now).map((v) => (v.kind === 'plan' ? { ...v, orientation: 'building' as const } : v));
   }
 
   /** A view as the store adds one (`addProjectView`): a fresh id, a name no other view has, stamped now. */
@@ -110,7 +111,7 @@ class Planner {
     if (i >= 0) this.views[i] = { ...this.views[i], ...patch } as ProjectView;
   }
 
-  /** One plan per level that has none; a model with no storeys gets one cut at mid-height. */
+  /** One plan per level that has none; a model with no storeys gets one cut at mid-height. A new plan is drawn square to the building (`plan-orientation.ts`). */
   plans(): void {
     const levels: ProjectLevel[] = [];
     for (const level of [...this.levels].sort((a, b) => a.elevation - b.elevation)) {
@@ -120,12 +121,12 @@ class Planner {
       if (this.views.some((v) => v.kind === 'plan')) return;
       const height = Math.round(((this.extent.max.y - this.extent.min.y) / 2) * 10) / 10;
       this.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
-      this.add<PlanProjectView>({ kind: 'plan', name: nameOf('names.view.plan'), cutHeight: height, level: { name: nameOf('names.view.plan'), elevation: this.extent.min.y, storeyGlobalIds: [] } });
+      this.add<PlanProjectView>({ kind: 'plan', name: nameOf('names.view.plan'), cutHeight: height, level: { name: nameOf('names.view.plan'), elevation: this.extent.min.y, storeyGlobalIds: [] }, orientation: 'building' });
       return;
     }
     for (const level of levels) {
       if (this.views.some((v) => v.kind === 'plan' && sameElevation(v.level.elevation, level.elevation))) continue;
-      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, this.levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+      this.add<PlanProjectView>({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, this.levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] }, orientation: 'building' });
     }
   }
 

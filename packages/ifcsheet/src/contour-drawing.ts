@@ -10,7 +10,8 @@
  * ones the heavier pen and the DXF carries both.
  */
 
-import { projectPointForPlane, type Drawing2D, type DrawingLine } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, DrawingLine } from '@ifc-lite/drawing-2d';
+import { worldToDrawing } from './drawing-frame.js';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { ProjectView } from './document.js';
 import { CONTOUR_DEFAULT_INTERVAL, contourLines } from './contours.js';
@@ -46,7 +47,7 @@ export function withContours<T extends Drawing2D>(drawing: T, view: ProjectView 
   const ids = new Map(terrain.map((m) => [keyOf({ entityId: m.expressId, modelIndex: m.modelIndex }), m]));
   const first = terrain[0];
   for (const contour of contourLines(terrain, interval, datum)) {
-    const pts = contour.points.map((p) => projectPointForPlane({ x: p.x, y: contour.height - datum, z: p.z }, plane));
+    const pts = contour.points.map((p) => worldToDrawing(plane, { x: p.x, y: contour.height - datum, z: p.z }));
     const ring = contour.closed ? [...pts, pts[0]] : pts;
     if (contour.major) rings.push({ ring, height: contour.height });
     for (let i = 0; i + 1 < ring.length; i++) {

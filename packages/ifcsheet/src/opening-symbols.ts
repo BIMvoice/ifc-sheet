@@ -23,7 +23,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { JoinerySpec } from '@ifc-lite/create';
 import { doorSwingFlips, UNSTATED_DOOR_OPERATION, type DoorOperation } from './door-operation.js';
 import { typedPlanSymbol } from './joinery-plan-placement.js';
-import { worldToDrawing } from './drawing-frame.js';
+import { drawingProjector, worldToDrawing } from './drawing-frame.js';
 import { fitToHostWall } from './opening-in-wall.js';
 import { fitWindowToHostWall } from './window-in-wall.js';
 import type { DraftShape, Pt } from './draft-types.js';
@@ -337,14 +337,14 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
   for (const mesh of meshes) n += Math.floor(mesh.positions.length / 3);
   const xy = new Float64Array(2 * n);
   let k = 0;
+  const project = drawingProjector(plane);
   for (const mesh of meshes) {
-    const [ox, , oz] = mesh.origin ?? [0, 0, 0];
+    const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
     const p = mesh.positions;
-    // `worldToDrawing` for a plan: x (negated when flipped) and z.
     for (let i = 0; i + 2 < p.length; i += 3) {
-      const x = ox + p[i];
-      xy[k++] = plane.flipped ? -x : x;
-      xy[k++] = oz + p[i + 2];
+      const q = project(ox + p[i], oy + p[i + 1], oz + p[i + 2]);
+      xy[k++] = q.x;
+      xy[k++] = q.y;
     }
   }
   return rectOfHull(hull(hullCandidates(xy, n)));
