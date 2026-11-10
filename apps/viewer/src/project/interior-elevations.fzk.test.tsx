@@ -168,7 +168,8 @@ describe('facade elevations and sections are unchanged', () => {
     // '172/0/0/53495229', south '215/0/0/1673163390', east '377/0/0/353450951', west '513/0/0/338119489', north-deep '159/0/0/-10355214',
     // south-deep '219/0/0/1404858974', east-deep '387/0/0/-197624601', west-deep '523/0/0/-449604071', s1 '649/65/0/-1827319273',
     // s2 '1913/32/0/1672971738', s3 '2025/39/0/-2130442263'.
-    s1: '649/65/0/-2118007703', s2: '1898/32/0/1130178103', s3: '1997/39/0/-1968744355',
+    // s1 to s3 re-recorded for #557: a section draws no hidden line unless it says showHidden (lines 649, 1898, 1997 before; the cut faces, 65/32/39, are the same).
+    s1: '480/65/0/388912799', s2: '1032/32/0/440174499', s3: '663/39/0/-1471255360',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };

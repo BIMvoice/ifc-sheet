@@ -5,9 +5,9 @@
 /**
  * What a view shows of its generated drawing. An elevation shows what is
  * visible from outside, in solid lines, with the building's outline heavier:
- * nothing hidden unless the view asks for it (`showHidden`); so does an
- * axonometric (a 3D view), which is also seen from outside. Plans and sections
- * keep the hidden lines they always had. Pure; the view's host applies it to
+ * nothing hidden unless the view asks for it (`showHidden`); so does a
+ * section and an axonometric (a 3D view). Plans keep the hidden lines they
+ * always had. Pure; the view's host applies it to
  * every drawing it generates, so tabs, sheets and exports all see the same.
  */
 
