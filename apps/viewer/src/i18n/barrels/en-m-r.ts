@@ -31,6 +31,7 @@ import { phasesEn } from '../catalogues/phases.en';
 import { placementPanelEn } from '../catalogues/placement-panel.en';
 import { planOrientationEn } from '../catalogues/plan-orientation.en';
 import { planHandlesEn } from '../catalogues/plan-handles.en';
+import { planOverheadEn } from '../catalogues/plan-overhead.en';
 import { printPreviewEn } from '../catalogues/print-preview.en';
 import { profileSectionEn } from '../catalogues/profile-section.en';
 import { profilesEn } from '../catalogues/profiles.en';
@@ -90,6 +91,7 @@ export const enMR = {
   ...placementPanelEn,
   ...planHandlesEn,
   ...planOrientationEn,
+  ...planOverheadEn,
   ...printPreviewEn,
   ...profileSectionEn,
   ...profilesEn,

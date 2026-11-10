@@ -12,7 +12,7 @@ import { viewShowsHidden } from '@/project/view-appearance';
 import { useEffect, useState } from 'react';
 import { FlipHorizontal2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { CONTOUR_DEFAULT_INTERVAL } from '@bimvoice/ifcsheet';
+import { CONTOUR_DEFAULT_INTERVAL, viewOverheadHeight } from '@bimvoice/ifcsheet';
 import { IconButton } from '@/components/ui/icon-button';
 import { useProjectStore, updateProjectView } from '@/project/project-store';
 import { useDocumentTabs } from '@/project/document-tabs';
@@ -125,6 +125,7 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
           onChange={(e) => edit(view, { showHidden: e.target.checked })}
         />
       </Row>
+      {view.kind === 'plan' && !view.reflected ? <OverheadRows view={view} /> : null}
       </>}
       <Row label={t('projectNavigator.props.scale')}>
         <select
@@ -144,6 +145,29 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
       ) : <Button variant="outline" size="sm" className="w-full" onClick={() => setGraphicsOpen(true)}>{t('viewGraphics.open')}</Button>}
       <ViewGraphicsDialog view={view} open={graphicsOpen} onOpenChange={setGraphicsOpen} />
     </section>
+  );
+}
+
+/** A plan's overhead range (#490): on (to the floor above, or a height of its own above the cut) or off (0). */
+function OverheadRows({ view }: { view: Extract<ProjectView, { kind: 'plan' }> }) {
+  const { t } = useTranslation();
+  const height = viewOverheadHeight(view);
+  return (
+    <>
+      <Row label={t('planOverhead.show')}>
+        <input
+          type="checkbox"
+          aria-label={t('planOverhead.show')}
+          checked={height !== 0}
+          onChange={(e) => edit(view, { overheadHeight: e.target.checked ? null : 0 })}
+        />
+      </Row>
+      {height === 0 ? null : (
+        <Row label={t('planOverhead.height')}>
+          <MetresField value={height} placeholder={t('planOverhead.toFloorAbove')} label={t('planOverhead.height')} allowEmpty onCommit={(v) => edit(view, { overheadHeight: v === null ? null : Math.max(0, v) })} />
+        </Row>
+      )}
+    </>
   );
 }
 

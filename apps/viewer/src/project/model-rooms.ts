@@ -91,8 +91,9 @@ export interface BuildingFraming {
 
 /**
  * The extent of the building itself: what the storeys of `levels` contain and
- * the parts aggregated under it (`buildingElementIds`, the elements the engine
- * frames and cuts too), without the site, terrain or anything else around it, and without the small
+ * the parts aggregated under it, and what the site contains on its footprint
+ * (`buildingElementIds`, the elements the engine frames and cuts too), without
+ * the site, terrain or anything else around it, and without the small
  * stray elements far from it (a survey point, an origin cube: `frameEntities`
  * in `@bimvoice/ifcsheet`, the rule the command line frames by too). The set's
  * scales and the sections' cuts are measured on it; `extent` is `null` when no
@@ -110,7 +111,8 @@ export function buildingFraming(levels: readonly ProjectLevel[], meshes: MeshDat
     if (!store || !hierarchy || model.visible === false) continue;
     const offset = model.idOffset ?? 0;
     // `wanted` is empty until the project has read its levels from the model: then every storey counts, as the levels will (#618).
-    for (const id of buildingElementIds(store, wanted.size > 0 ? wanted : undefined)) {
+    // With the meshes, what the site contains on the building's footprint counts too, as the engine's does (#557).
+    for (const id of buildingElementIds(store, wanted.size > 0 ? wanted : undefined, { meshes, idOffset: offset })) {
       ids.push(id + offset);
       owner.set(id + offset, { store, expressId: id });
     }

@@ -54,7 +54,7 @@ export interface OpenedModel {
   storeys: StoreyInput[];
   /** The meshes, in the viewer frame (metres, Y up); empty without geometry. */
   meshes: MeshData[];
-  /** The meshes of the building (`storeyElementIds`: what the storeys contain and the parts aggregated under it, without the site around it): what the sheets' drawings are cut from. */
+  /** The meshes of the building (`storeyElementIds`: what the storeys contain and the parts aggregated under it, without the site around it, plus what the site or building contains on its footprint, `siteElementsInBuilding`): what the sheets' drawings are cut from. */
   buildingMeshes: MeshData[];
   /** The box of the building (the elements of `buildingMeshes`, without the small elements far from it, `farElements`) the set is measured on; `null` without geometry or when no storey holds any. */
   extent: ModelExtent | null;
@@ -119,9 +119,9 @@ function storeysOf(ds: IfcDataStore, frame: GeometryResult['coordinateInfo'] | u
   });
 }
 
-/** The building's elements on `storeys` (`buildingElementIds`, the one reading the app's `buildingFraming` shares). */
-function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[]): number[] {
-  return buildingElementIds(ds, new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : []))));
+/** The building's elements on `storeys` and on their footprint (`buildingElementIds`, the one reading the app's `buildingFraming` shares). */
+function buildingIds(ds: IfcDataStore, storeys: readonly StoreyInput[], meshes: MeshData[]): number[] {
+  return buildingElementIds(ds, new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : []))), { meshes });
 }
 
 /** The rooms and stairs of `level` and the building's footprint (`project/model-rooms.ts` reads the same from the app's stores). */
@@ -224,7 +224,7 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
     }
   }
   const storeys = storeysOf(ds, frame);
-  const ids = buildingIds(ds, storeys);
+  const ids = buildingIds(ds, storeys, meshes);
   const includeFarElements = options.includeFarElements === true;
   const framing = ids.length && meshes.length ? frameEntities(meshes, ids, { includeFar: includeFarElements }) : null;
   // The terrain the building stands on is outside its extent but inside the frame of an elevation and a section, which draw it (#557).

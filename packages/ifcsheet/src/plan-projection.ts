@@ -39,6 +39,17 @@ export function viewProjection(view: Pick<ProjectView, 'kind' | 'viewDepth'> & {
   return { showConstructionProjection: true, constructionProjectionDepth: null };
 }
 
+/**
+ * How far above its cut a plan draws what is overhead, dashed (#490): `null` for the automatic range, up to the next
+ * storey's floor (the model's top on the top storey, so a roof two storeys up stays off a ground plan), a height in
+ * metres, or 0 for nothing overhead. Only a plan that looks down has one; the app and the engine both read it here.
+ */
+export function viewOverheadHeight(view: Pick<ProjectView, 'kind'> & { overheadHeight?: number | null; reflected?: boolean }): number | null {
+  if (view.kind !== 'plan' || view.reflected) return null;
+  const height = view.overheadHeight;
+  return typeof height === 'number' && Number.isFinite(height) && height >= 0 ? height : null;
+}
+
 export interface BoundedBandsInput {
   /** The view's bounded depth (`ViewProjection.constructionProjectionDepth`), metres. */
   depth: number;
@@ -92,6 +103,8 @@ export interface PlanBandsInput {
   reflected: boolean;
   /** The automatic depth a section / elevation projects (the app reads it from its plane); read only off a plan. */
   automaticDepth?: number | null;
+  /** The plan's overhead range above its cut (`viewOverheadHeight`): `null` or absent for the automatic one, 0 for none. */
+  overhead?: number | null;
 }
 
 /** What `createSectionConfig` takes from the bands: spread it into the config. */
@@ -105,9 +118,9 @@ export interface PlanBandOptions {
 /**
  * The projection bands of a cut, the one computation the app's drawing hook and the engine's sheets share (#623):
  * the whole extent on both sides of the cut, scoped to the storey the cut sits in from two floors up (a roof two
- * levels up stays off the plan), then the view's own depth (`boundedProjectionBands`), then the one-sided band of a
- * reflected plan. `currentFloorBands` speaks geometric depths (`below` toward the floor) and the band classifier
- * speaks flip-adjusted ones, so a plane that looks up (flipped, reflected) swaps the two.
+ * levels up stays off the plan), then the view's own depth (`boundedProjectionBands`), then the plan's own overhead
+ * range (`viewOverheadHeight`), then the one-sided band of a reflected plan. `currentFloorBands` speaks geometric
+ * depths (`below` toward the floor) and the band classifier speaks flip-adjusted ones, so a plane that looks up (flipped, reflected) swaps the two.
  */
 export function planProjectionBands(i: PlanBandsInput): PlanBandOptions {
   const fullExtent = Math.max(i.axisMax - i.axisMin, 1e-3);
@@ -125,6 +138,9 @@ export function planProjectionBands(i: PlanBandsInput): PlanBandOptions {
   }
   const bounded = i.depth !== null && Number.isFinite(i.depth) && i.depth >= 0;
   if (bounded) ({ below, above } = boundedProjectionBands({ below, above }, { depth: i.depth as number, position: i.position, axisMax: i.axisMax, down: i.down, plainPlan: i.down && !i.custom && !i.flipped && !i.reflected }));
+  // A plan's own overhead range replaces the automatic one (up to the floor above), 0 drawing nothing overhead (#490).
+  const own = i.overhead;
+  if (typeof own === 'number' && Number.isFinite(own) && own >= 0 && i.projectionOn && i.down && !i.custom && !i.flipped && !i.reflected) above = own;
   if (i.reflected) above = 1e-3; // a reflected ceiling plan sees only above its cut
   return { projectionDepth: bounded ? below : (i.axisMax - i.axisMin) * 0.5, clipProjectionBands: bounded, projectionBelowDepth: below, projectionAboveDepth: above };
 }

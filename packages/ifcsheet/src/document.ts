@@ -145,6 +145,12 @@ export interface PlanProjectView extends ProjectViewBase {
    * plan and the drafts on it never move. A site plan is always drawn to true north (`plan-orientation.ts`).
    */
   orientation?: PlanOrientation;
+  /**
+   * How far above the cut the plan draws what is overhead (beams, the slab edge above), dashed, metres (#490).
+   * Absent or `null`: up to the next storey's floor (the model's top on the top storey); 0: nothing overhead.
+   * Read through `viewOverheadHeight`.
+   */
+  overheadHeight?: number | null;
 }
 
 /** Which way up a plan is drawn (`PlanProjectView.orientation`). */

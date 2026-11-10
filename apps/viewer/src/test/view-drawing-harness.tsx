@@ -62,8 +62,8 @@ export async function viewDrawing(view: Exclude<ProjectView, { kind: '3d' }>, ge
   const resolved = sectionPlaneForView(view, boundsOf(geometry), [], geometry.coordinateInfo?.buildingRotation);
   assert.ok(resolved, `view ${view.name} has no plane`);
   const plane = { ...resolved, ...planeOverride };
-  const { showConstructionProjection, constructionProjectionDepth } = viewDisplayOverrides(view);
-  const displayOptions = { ...getDefaultDrawing2DState().drawing2DDisplayOptions, useSymbolicRepresentations: false, showConstructionProjection, constructionProjectionDepth };
+  const { showConstructionProjection, constructionProjectionDepth, overheadHeight } = viewDisplayOverrides(view);
+  const displayOptions = { ...getDefaultDrawing2DState().drawing2DDisplayOptions, useSymbolicRepresentations: false, showConstructionProjection, constructionProjectionDepth, overheadHeight };
   let drawing: Drawing2D | null = null;
   let run: (() => Promise<void>) | null = null;
   function Harness(): null {

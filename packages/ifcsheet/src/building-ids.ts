@@ -17,6 +17,7 @@
 
 import { IfcTypeEnum, type SpatialNode } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { siteElementsInBuilding, type BuildingGeometry } from './site-in-building.js';
 import { storeyElementIds } from './storey-elements.js';
 import { predefinedTypeReader } from './terrain.js';
 
@@ -26,10 +27,16 @@ function storeysIn(node: SpatialNode, wanted: (id: number) => boolean, out: numb
   return out;
 }
 
-/** The express ids of the building's elements on the storeys of `only` (every storey when absent), as `storeyElementIds` reads them. */
-export function buildingElementIds(store: IfcDataStore, only?: ReadonlySet<string>): number[] {
+/**
+ * The express ids of the building's elements on the storeys of `only` (every storey when absent), as `storeyElementIds` reads them.
+ * With the model's `geometry`, also what its site or building contains on their footprint (`siteElementsInBuilding`, #557).
+ */
+export function buildingElementIds(store: IfcDataStore, only?: ReadonlySet<string>, geometry?: BuildingGeometry): number[] {
   const hierarchy = store.spatialHierarchy;
   if (!hierarchy) return [];
   const storeys = storeysIn(hierarchy.project, (id) => !only || only.has(store.entities.getGlobalId(id) ?? ''));
-  return storeyElementIds(hierarchy, storeys, (id) => store.entities.getTypeEnum(id), predefinedTypeReader(store));
+  const typeOf = (id: number) => store.entities.getTypeEnum(id);
+  const predefined = predefinedTypeReader(store);
+  const ids = storeyElementIds(hierarchy, storeys, typeOf, predefined);
+  return geometry ? [...ids, ...siteElementsInBuilding(hierarchy, ids, geometry, typeOf, predefined)] : ids;
 }
