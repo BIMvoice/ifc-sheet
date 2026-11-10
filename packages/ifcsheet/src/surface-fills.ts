@@ -20,7 +20,8 @@
  * The app (`project/view-surface-fills.ts`) and the headless sheets (`sheet-graphic.ts`) both draw from {@link surfaceFills}.
  */
 
-import { projectPointForPlane, signedDepth, type DrawingPolygon, type SectionConfig } from '@ifc-lite/drawing-2d';
+import { signedDepth, type DrawingPolygon, type SectionConfig } from '@ifc-lite/drawing-2d';
+import { worldToDrawing } from './drawing-frame.js';
 import type { MeshData } from '@ifc-lite/geometry';
 import { paintOrder, type PaintItem } from './paint-order.js';
 
@@ -109,7 +110,7 @@ export function paintedSurfaces(
       const piece = fromFar(beyondPlane(fromFar(beyondPlane(corners))));
       for (let k = 1; k + 1 < piece.length; k++) {
         const tri = [piece[0], piece[k], piece[k + 1]];
-        const [a, b, c] = tri.map((v) => projectPointForPlane(v.p, plane));
+        const [a, b, c] = tri.map((v) => worldToDrawing(plane, v.p));
         const area = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
         if (!(Math.abs(area) >= MIN_AREA)) continue;
         const corners: PaintItem['corners'] = area > 0 ? [a, b, c] : [a, c, b];

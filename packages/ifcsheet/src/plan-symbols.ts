@@ -31,7 +31,8 @@
 import { RelationshipType } from '@ifc-lite/data';
 import { getInheritanceChainAcrossSchemas, extractLengthUnitScale, type IfcDataStore } from '@ifc-lite/parser';
 import { ifcToViewerAxes, totalYupOffset, type RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
-import { projectTo2D, type Drawing2D, type DrawingLine, type DrawingPolygon } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
+import { worldToDrawing } from './drawing-frame.js';
 import { IDENTITY, compose, operatorFrame, planeAngleScale, placementFrame, axisFrame, ref, type P3, type Xf } from './plan-symbol-frame.js';
 import { readItem, type CurveContext } from './plan-symbol-curves.js';
 import { isPhysicalElement } from './readiness-read.js';
@@ -207,8 +208,8 @@ export function withPlanSymbols(drawing: Drawing2D, symbols: ReadonlyMap<number,
     const info = shown.get(entityId)!;
     for (const curve of symbol.curves) {
       for (let i = 0; i + 1 < curve.length; i++) {
-        const start = projectTo2D(curve[i], 'y', plane.flipped);
-        const end = projectTo2D(curve[i + 1], 'y', plane.flipped);
+        const start = worldToDrawing(plane, curve[i]);
+        const end = worldToDrawing(plane, curve[i + 1]);
         for (const p of [start, end]) {
           bounds.min.x = Math.min(bounds.min.x, p.x); bounds.min.y = Math.min(bounds.min.y, p.y);
           bounds.max.x = Math.max(bounds.max.x, p.x); bounds.max.y = Math.max(bounds.max.y, p.y);

@@ -21,6 +21,7 @@ import type { CustomSectionPlane } from '@/store/section-types';
 import { levelFloorY, resolvePlanLevel } from './view-defaults';
 import { ELEVATION_CLEARANCE_M } from './set-defaults';
 import type { ElevationDirection, ProjectLevel, ProjectView, SectionProjectPlane } from './types';
+import { planTurn } from '@bimvoice/ifcsheet';
 
 export interface ViewSectionPlane {
   axis: SectionPlaneAxis;
@@ -30,6 +31,8 @@ export interface ViewSectionPlane {
   /** Looks up from the plane but keeps the plan's x/y (a reflected ceiling plan); never with `flipped`. */
   reflected?: boolean;
   custom?: CustomSectionPlane;
+  /** A plan square to the building: the turn its drawing is drawn at (`planTurn`, the engine's `DrawingPlane.turn`). */
+  turn?: number;
 }
 
 const ELEVATION_PLANES: Record<ElevationDirection, { axis: SectionPlaneAxis; atMax: boolean; flipped: boolean }> = {
@@ -60,6 +63,8 @@ export function sectionPlaneForView(
   view: ProjectView,
   bounds: AxisBounds | null,
   levels: readonly ProjectLevel[],
+  /** The site's rotation (`coordinateInfo.buildingRotation`): a plan drawn square to the building turns by it (`planTurn`). */
+  buildingRotation?: number,
 ): ViewSectionPlane | null {
   switch (view.kind) {
     case 'elevation':
@@ -70,7 +75,9 @@ export function sectionPlaneForView(
       const level = resolvePlanLevel(view, levels) ?? (levels.length === 0 ? view.level : undefined);
       if (!range || !level) return null;
       const at = worldToPercent(levelFloorY(level) + view.cutHeight, range);
-      return view.reflected ? { axis: 'down', position: at, flipped: false, reflected: true } : { axis: 'down', position: at, flipped: false };
+      const turn = planTurn(view, buildingRotation);
+      const plane: ViewSectionPlane = view.reflected ? { axis: 'down', position: at, flipped: false, reflected: true } : { axis: 'down', position: at, flipped: false };
+      return turn ? { ...plane, turn } : plane;
     }
     case 'section':
       return storedPlane(view.plane, bounds);

@@ -24,6 +24,7 @@ import { predefinedTypeReader } from './terrain.js';
 import { storeyFloorY } from './storey-origin.js';
 import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
+import { withSquareFrame } from './plan-orientation.js';
 
 export interface OpenModelOptions {
   /**
@@ -229,14 +230,17 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
   // The terrain the building stands on is outside its extent but inside the frame of an elevation and a section, which draw it (#557).
   const typeOf = predefinedTypeReader(ds);
   const ground = framing ? groundReachOf(meshes.filter((m) => isTerrainMesh(m, typeOf))) : undefined;
-  const box = framing?.extent ?? null;
-  const extent = box && ground ? { ...box, ground } : box;
+  const framed = framing?.extent ?? null;
   const farElements = (framing?.farElements ?? []).map((f): FarElementInfo => ({
     expressId: f.key,
     label: farElementLabel({ name: ds.entities.getName(f.key), type: ds.entities.getTypeName(f.key), globalId: ds.entities.getGlobalId(f.key) }),
     distance: f.distance,
   }));
   const inBuilding = new Set(ids);
+  // The building's footprint in a plan square to it: the framed elements, without the far ones the extent leaves out.
+  const left = new Set(farElements.map((f) => f.expressId));
+  const squared = framed ? withSquareFrame(framed, meshes.filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId)), frame?.buildingRotation) : null;
+  const extent = squared && ground ? { ...squared, ground } : squared;
   const project = ds.spatialHierarchy?.project;
   return {
     projectName: project?.longName || project?.name || '',

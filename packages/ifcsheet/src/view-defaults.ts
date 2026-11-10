@@ -136,6 +136,8 @@ export function planViewFor(level: ProjectLevel, views: readonly ProjectView[], 
     // The frame-derived floor stays with the live level (`levelFloorY`), never in the saved view.
     level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] },
     cutHeight: defaultPlanCutHeight(level, levels),
+    // A new plan is drawn square to the building; one saved without the field stays on true north (`plan-orientation.ts`).
+    orientation: 'building',
     auto: true,
     createdAt: now,
   };

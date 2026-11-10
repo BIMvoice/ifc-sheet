@@ -15,7 +15,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics } from '@bimvoice/ifcsheet';
+import { atDetailLevel, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics, turnOf } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
@@ -171,7 +171,7 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const screenUp = viewScreenUp(vp.viewId);
       return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle,
+        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle, turn: raw ? turnOf(raw.config.plane) : 0,
       }));
     };
   }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle]);

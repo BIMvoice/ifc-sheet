@@ -60,6 +60,11 @@
       "import": "./dist/pac-words.js",
       "default": "./dist/pac-words.js"
     },
+    "./world-frame": {
+      "types": "./dist/world-frame.d.ts",
+      "import": "./dist/world-frame.js",
+      "default": "./dist/world-frame.js"
+    },
     "./plan-symbols": {
       "types": "./dist/plan-symbols.d.ts",
       "import": "./dist/plan-symbols.js",

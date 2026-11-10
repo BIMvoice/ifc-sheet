@@ -26,6 +26,7 @@ import { sheetNumber } from './sheet-number.js';
 import { textWidthEm } from './text-width.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import type { PlanDirection } from './true-north.js';
+import { worldToDrawing } from './drawing-frame.js';
 
 /** The shapes of the marks of one viewport. `solids` are closed rings to fill; `strokes` are open runs, a closed ring repeating its first point. */
 export interface ViewportMarkShapes {
@@ -58,6 +59,8 @@ const HALF_STEPS = [1, 2, 2.5, 5] as const;
 export interface MarkPlane {
   axis: 'x' | 'y' | 'z';
   flipped?: boolean;
+  /** A plan square to the building: the turn it is drawn at (`DrawingPlane.turn`), which the arrow turns with. */
+  turn?: number;
   customPlane?: unknown;
 }
 
@@ -68,13 +71,17 @@ export interface MarkPlane {
  * site plan's arrow reads it. `null` on anything but a cardinal plan.
  *
  * A plan draws world (x, y) with the paper's y running down, so IFC +Y is up;
- * a reflected plan (`flipped`) mirrors the first axis.
+ * a reflected plan (`flipped`) mirrors the first axis. The direction is taken
+ * through the plan's own frame (`worldToDrawing`), so the arrow of a plan
+ * square to the building turns by the building's rotation.
  */
 export function northDegrees(plane: MarkPlane, north: PlanDirection | null): number | null {
   if (plane.axis !== 'y' || plane.customPlane) return null;
   const n = north ?? { x: 0, y: 1 };
-  const right = plane.flipped ? -n.x : n.x;
-  const deg = (Math.atan2(-right, n.y) * 180) / Math.PI;
+  // Project XY -> viewer (x, ., -y) -> drawing, whose y runs down the paper.
+  const frame = { axis: 'y' as const, position: 0, flipped: plane.flipped === true, turn: plane.turn };
+  const d = worldToDrawing(frame, { x: n.x, y: 0, z: -n.y });
+  const deg = (Math.atan2(-d.x, -d.y) * 180) / Math.PI;
   return Object.is(deg, -0) ? 0 : deg;
 }
 

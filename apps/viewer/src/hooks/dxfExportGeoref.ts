@@ -90,6 +90,7 @@
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { GeometryResult } from '@ifc-lite/geometry';
 import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
+import { unturnedPoint } from '@bimvoice/ifcsheet/world-frame';
 import { dxfWorldShift } from './dxfUnderlayMath';
 import { getEffectiveAxisScales, resolveMapUnitToMetreScale } from '@/lib/geo/geo-scale';
 import { effectiveMapConversionForGeometry } from '@/lib/geo/map-absolute';
@@ -143,6 +144,8 @@ export interface DxfExportTransformParams {
   sectionAxis: 'down' | 'front' | 'side';
   isCustomPlane: boolean;
   flipped: boolean;
+  /** A plan square to the building: the turn its drawing is drawn at (`SectionPlane.turn`); the export takes the drawing back into the world's axes first. */
+  turn?: number;
   /** Present only when the model has a standard IfcMapConversion + IfcProjectedCRS. */
   georeference?: DxfExportGeoreference | null;
 }
@@ -154,16 +157,20 @@ export interface DxfExportTransformParams {
  * identity function.
  */
 export function buildDxfExportTransform(params: DxfExportTransformParams): (p: Point2D) => Point2D {
-  const { coordinateInfo, sectionAxis, isCustomPlane, flipped, georeference } = params;
+  const { coordinateInfo, sectionAxis, isCustomPlane, flipped, georeference, turn } = params;
   if (sectionAxis !== 'down' || isCustomPlane) {
     return (p) => p;
   }
 
   const shift = dxfWorldShift(coordinateInfo);
-  const toWorld = (p: Point2D): Point2D => ({
-    x: (flipped ? -p.x : p.x) + shift.x,
-    y: shift.y - p.y,
-  });
+  const plane = { axis: 'y', position: 0, flipped: false, turn } as const;
+  const toWorld = (drawn: Point2D): Point2D => {
+    const p = turn ? unturnedPoint(plane, drawn) : drawn;
+    return {
+      x: (flipped ? -p.x : p.x) + shift.x,
+      y: shift.y - p.y,
+    };
+  };
 
   if (!georeference) return toWorld;
 

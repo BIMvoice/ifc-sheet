@@ -14,6 +14,7 @@
  */
 
 import { useViewerStore } from '@/store';
+import { currentDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import type { SectionPlane } from '@/store/types';
 import { mergedSectionBounds } from '@/lib/section/section-distance';
 import { addProjectView, setActiveProjectItem, useProjectStore } from './project-store';
@@ -58,9 +59,9 @@ function restoreModelTab(): void {
  * panel's header, exports and BCF capture describe the drawing in front.
  * `false` when the view cannot resolve.
  */
-function applyDrawingView(view: Exclude<ProjectView, { kind: '3d' }>): boolean {
+export function applyDrawingView(view: Exclude<ProjectView, { kind: '3d' }>): boolean {
   const project = useProjectStore.getState();
-  const plane = sectionPlaneForView(view, liveBounds(), project.levels);
+  const plane = sectionPlaneForView(view, liveBounds(), project.levels, currentDrawingRuntime().geometryResult?.coordinateInfo?.buildingRotation);
   if (!plane) return false;
   const state = useViewerStore.getState();
   useViewerStore.setState({

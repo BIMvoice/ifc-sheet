@@ -18,6 +18,7 @@ DraftLayer: type (type-only)
 DraftParamValue: type (type-only)
 DraftShape: type (type-only)
 DraftSymbol: type (type-only)
+DrawingPlane: type (type-only)
 EPS: value
 EntityShape: type (type-only)
 FacadeString: type (type-only)
@@ -146,6 +147,7 @@ overrideKey: value
 pageTitle: value
 parsePat: value
 placeSymbol: value
+planTurn: value
 polar: value
 projectSetOf: value
 radialLayout: value
@@ -193,9 +195,15 @@ textLines: value
 textStyleOf: value
 textWidth: value
 trueNorthOf: value
+turnDrawing: value
+turnOf: value
+turnedPlane: value
+turnedPoint: value
 unitFactor: value
 unitVector: value
+unturnedPoint: value
 viewNormal: value
 viewportPaperUnit: value
+withSquareFrame: value
 worldToDrawing: value
 wrapNote: value

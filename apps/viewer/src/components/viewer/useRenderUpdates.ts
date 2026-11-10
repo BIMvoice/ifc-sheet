@@ -13,7 +13,8 @@
 import { useEffect, type MutableRefObject } from 'react';
 import type { Renderer, CutPolygon2D, DrawingLine2D, VisualEnhancementOptions } from '@ifc-lite/renderer';
 import type { CoordinateInfo } from '@ifc-lite/geometry';
-import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, Polygon2D } from '@ifc-lite/drawing-2d';
+import { turnOf, unturnedPoint, type DrawingPlane } from '@bimvoice/ifcsheet';
 import type { SectionPlane } from '@/store';
 import { customPlaneCenter } from '@/store';
 import { getThemeClearColor } from '../../utils/viewportUtils.js';
@@ -108,13 +109,19 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
       // layer colours below; where a layer's cap could not be reconstructed the
       // base keeps the cut solid instead of see-through (the "wall looks hollow in
       // section view" backstop). Colourless → uniform opaque cap fill.
+      // A plan square to the building is drawn turned; the renderer lifts drawing points on the world's axes, so the
+      // overlay takes the drawing back into them (`unturnedPoint`, the shared frame's inverse of the turn).
+      const plane: DrawingPlane = drawing2D.config.plane;
+      const unturn = turnOf(plane) !== 0;
+      const back = (p: { x: number; y: number }) => unturnedPoint(plane, p);
+      const polygon2D = (poly: Polygon2D): Polygon2D => (unturn ? { outer: poly.outer.map(back), holes: poly.holes.map((h) => h.map(back)) } : poly);
       const basePolygons: CutPolygon2D[] = (drawing2D.layerBaseCutPolygons ?? []).map((cp) => ({
-        polygon: cp.polygon,
+        polygon: polygon2D(cp.polygon),
         ifcType: cp.ifcType,
         expressId: cp.entityId,
       }));
       const layerPolygons: CutPolygon2D[] = drawing2D.cutPolygons.map((cp) => ({
-        polygon: cp.polygon,
+        polygon: polygon2D(cp.polygon),
         ifcType: cp.ifcType,
         expressId: cp.entityId,
         // Per-layer material colour (material-layer walls/slabs) so the 3D
@@ -127,7 +134,7 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
       const lines: DrawingLine2D[] = drawing2D.lines
         .filter((line) => showHiddenLines || line.visibility !== 'hidden')
         .map((line) => ({
-          line: line.line,
+          line: unturn ? { start: back(line.line.start), end: back(line.line.end) } : line.line,
           category: line.category,
         }));
 

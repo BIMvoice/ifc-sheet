@@ -143,7 +143,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
     if (state().views.some((v) => v.kind === 'plan')) return;
     const height = Math.round(((extent.max.y - extent.min.y) / 2) * 10) / 10;
     report.notes.push({ key: 'draftSet.note.noStoreys', params: { height } });
-    addProjectView({ kind: 'plan', name: resolveName('names.view.plan'), cutHeight: height, level: { name: resolveName('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] } });
+    addProjectView({ kind: 'plan', name: resolveName('names.view.plan'), cutHeight: height, level: { name: resolveName('names.view.plan'), elevation: extent.min.y, storeyGlobalIds: [] }, orientation: 'building' });
     report.viewsAdded++;
     return;
   }
@@ -152,7 +152,7 @@ function ensurePlans(extent: AxisBounds, report: EnsureReport): void {
       report.viewsExisting++;
       continue;
     }
-    addProjectView({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, state().levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] } });
+    addProjectView({ kind: 'plan', name: level.name, cutHeight: defaultPlanCutHeight(level, state().levels), level: { name: level.name, elevation: level.elevation, storeyGlobalIds: [...level.storeyGlobalIds] }, orientation: 'building' });
     report.viewsAdded++;
   }
 }

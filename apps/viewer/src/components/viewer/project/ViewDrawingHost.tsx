@@ -51,7 +51,8 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
   // Resolve the view's plane against the live bounds; keyed so an identical
   // plane keeps its object identity and the generator sees no change.
   const bounds = mergedSectionBounds(models, legacyGeometry);
-  const resolved = sectionPlaneForView(view, bounds, levels);
+  // A plan drawn square to the building turns by the site's rotation, as the engine's does.
+  const resolved = sectionPlaneForView(view, bounds, levels, geometryResult?.coordinateInfo?.buildingRotation);
   const key = planeKey(resolved);
   const planeRef = useRef<{ key: string; plane: typeof FALLBACK_PLANE | NonNullable<typeof resolved> }>({ key: '', plane: FALLBACK_PLANE });
   if (planeRef.current.key !== key) planeRef.current = { key, plane: resolved ?? FALLBACK_PLANE };

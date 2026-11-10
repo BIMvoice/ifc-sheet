@@ -4,6 +4,7 @@
 
 import type { ModelExtent } from './drawing-set.js';
 import type { ProjectView } from './document.js';
+import { viewTurn } from './plan-orientation.js';
 
 /**
  * The drawing point (metres) a view's viewport is centred on, so that its
@@ -15,8 +16,10 @@ import type { ProjectView } from './document.js';
  * plan centred on the extent also lies over the others. `null` for the views
  * that stay centred on their drawing: elevations, sections and details.
  */
-export function viewCentre(view: Pick<ProjectView, 'kind'> & { detail?: unknown }, extent: ModelExtent): { x: number; y: number } | null {
-  // A plan's drawing is (x, z) of the viewer frame (`getProjectionAxes('y')`).
+export function viewCentre(view: Pick<ProjectView, 'kind'> & { detail?: unknown; orientation?: unknown; site?: unknown }, extent: ModelExtent): { x: number; y: number } | null {
+  // A plan's drawing is (x, z) of the viewer frame (`getProjectionAxes('y')`); a plan square to the building, its turned footprint's.
   if (view.kind !== 'plan' || view.detail) return null;
+  const square = viewTurn(view, extent.square) ? extent.square : undefined;
+  if (square) return { x: (square.min.x + square.max.x) / 2, y: (square.min.y + square.max.y) / 2 };
   return { x: (extent.min.x + extent.max.x) / 2, y: (extent.min.z + extent.max.z) / 2 };
 }

@@ -139,12 +139,22 @@ export interface PlanProjectView extends ProjectViewBase {
    */
   reflected?: boolean;
   /**
+   * Which way up the plan is drawn: `'building'`, turned by the IfcSite's rotation so the building stands square on the
+   * sheet (Revit's project north; the north arrow still points to real north), or `'true-north'`, on the world's axes.
+   * A new plan is made `'building'`; absent (every plan saved before this field) reads as `'true-north'`, so a saved
+   * plan and the drafts on it never move. A site plan is always drawn to true north (`plan-orientation.ts`).
+   */
+  orientation?: PlanOrientation;
+  /**
    * How far above the cut the plan draws what is overhead (beams, the slab edge above), dashed, metres (#490).
    * Absent or `null`: up to the next storey's floor (the model's top on the top storey); 0: nothing overhead.
    * Read through `viewOverheadHeight`.
    */
   overheadHeight?: number | null;
 }
+
+/** Which way up a plan is drawn (`PlanProjectView.orientation`). */
+export type PlanOrientation = 'building' | 'true-north';
 
 /** A section cut stored in world metres, independent of the model bounds. */
 export interface SectionProjectPlane {

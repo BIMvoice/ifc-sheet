@@ -16,6 +16,7 @@ import { onboardingRo } from '../catalogues/onboarding.ro';
 import { pacRo } from '../catalogues/pac.ro';
 import { panelTitlesRo } from '../catalogues/panel-titles.ro';
 import { phasesRo } from '../catalogues/phases.ro';
+import { planOrientationRo } from '../catalogues/plan-orientation.ro';
 import { printPreviewRo } from '../catalogues/print-preview.ro';
 import { profileSectionRo } from '../catalogues/profile-section.ro';
 import { projectPackageRo } from '../catalogues/project-package.ro';
@@ -99,6 +100,7 @@ export const roMZ = {
   ...planOverheadRo,
   ...panelTitlesRo,
   ...phasesRo,
+  ...planOrientationRo,
   ...printPreviewRo,
   ...profileSectionRo,
   ...projectPackageRo,

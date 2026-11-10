@@ -37,6 +37,8 @@ export interface PlanCrossRefInput {
   screenUp: 1 | -1;
   /** How section and elevation marks are headed (the project's graphic standard, #447); absent: the arrow. */
   markStyle?: MarkStyle;
+  /** The turn the plan is drawn at (`turnOf` its drawing's plane): its elevation marks face their elevations through it, as the engine's. */
+  turn?: number;
 }
 
 /**

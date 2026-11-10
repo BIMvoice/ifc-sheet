@@ -29,6 +29,8 @@ export interface UseDrawingGenerationParams {
     flipped: boolean;
     /** Reflected ceiling plan: look up from the cut but keep the plan's x/y. */
     reflected?: boolean;
+    /** A plan square to the building: the turn its drawing is drawn at (`ViewSectionPlane.turn`). */
+    turn?: number;
     custom?: {
       normal:    [number, number, number];
       distance:  number;

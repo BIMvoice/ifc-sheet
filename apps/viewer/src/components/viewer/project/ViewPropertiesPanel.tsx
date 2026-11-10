@@ -17,6 +17,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { useProjectStore, updateProjectView } from '@/project/project-store';
 import { useDocumentTabs } from '@/project/document-tabs';
 import { activateDocumentTab } from '@/project/open-view';
+import { canSwitchPlanOrientation, orientationOf, setPlanOrientation } from '@/project/plan-orientation-switch';
 import { resolvePlanLevel } from '@/project/view-defaults';
 import type { ProjectView } from '@/project/types';
 import { SHEET_SCALES } from '@/project/sheets';
@@ -68,6 +69,23 @@ export function ViewPropertiesPanel({ view }: { view: ProjectView }) {
       {view.kind === 'plan' ? (
         <Row label={t('projectNavigator.props.cutHeight')}>
           <MetresField value={view.cutHeight} label={t('projectNavigator.props.cutHeight')} onCommit={(v) => v !== null && edit(view, { cutHeight: v })} />
+        </Row>
+      ) : null}
+      {view.kind === 'plan' && view.site !== true ? (
+        <Row label={t('planOrientation.label')}>
+          <select
+            aria-label={t('planOrientation.label')}
+            className="h-6 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1"
+            value={orientationOf(view)}
+            disabled={!canSwitchPlanOrientation(view)}
+            title={canSwitchPlanOrientation(view) ? undefined : t('planOrientation.noModel')}
+            onChange={(e) => {
+              if (setPlanOrientation(view.id, e.target.value === 'building' ? 'building' : 'true-north') && useDocumentTabs.getState().activeId === view.id) activateDocumentTab(view.id);
+            }}
+          >
+            <option value="building">{t('planOrientation.building')}</option>
+            <option value="true-north">{t('planOrientation.trueNorth')}</option>
+          </select>
         </Row>
       ) : null}
       {view.kind === 'section' ? (

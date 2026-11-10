@@ -28,6 +28,7 @@ import { drawingWithGround } from './ground.js';
 import { isTerrainMesh } from './contours.js';
 import { predefinedTypeReader } from './terrain.js';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { turnDrawing, turnedPlane, viewTurn } from './plan-orientation.js';
 
 /** Where an elevation stands and which way it looks (`ELEVATION_PLANES` in the app's `project/view-plane.ts`). */
 const ELEVATION_PLANES: Record<ElevationDirection, { axis: 'x' | 'z'; atMax: boolean; flipped: boolean }> = {
@@ -92,6 +93,9 @@ function planConfig(view: PlanProjectView, cut: number, extent: ModelExtent, flo
   });
   const config = createSectionConfig('y', cut, { ...bands, includeHiddenLines: false });
   if (view.reflected) config.plane.reflected = true;
+  // A plan square to the building is drawn in its turned frame (`plan-orientation.ts`); the generator still cuts on the world's
+  // axes (it reads no turn), and `generateViewDrawings` turns what it draws.
+  config.plane = turnedPlane(config.plane, viewTurn(view, extent.square));
   return config;
 }
 
@@ -172,7 +176,7 @@ export async function generateViewDrawings(
           includeHiddenLines: cut.includeHiddenLines, includeProjection: cut.includeProjection, includeEdges: cut.includeEdges, mergeLines: cut.mergeLines,
           outlineProvider: cut.outline && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
         });
-        const generated = grounded ? drawingWithGround(raw, view.kind as 'elevation' | 'section') : raw;
+        const generated = grounded ? drawingWithGround(raw, view.kind as 'elevation' | 'section') : turnDrawing(raw, config.plane);
         // The hidden lines it found are drawn unless the view leaves them out (`viewShowsHidden`, as the app).
         const drawing = viewShowsHidden(view) ? generated : { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') };
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);

@@ -16,7 +16,7 @@ import { iterateEffectiveEntityIds } from '@ifc-lite/mutations';
 import { useViewerStore } from '@/store';
 import { storeyOfElement } from '@/project/effective-storey';
 import { createEntityBoundsLookup, type BoundingBox3D } from '@/utils/viewportUtils';
-import { buildingElementIds, farElementLabel, frameEntities } from '@bimvoice/ifcsheet';
+import { buildingElementIds, farElementLabel, frameEntities, withSquareFrame, type ModelExtent } from '@bimvoice/ifcsheet';
 import type { FarElementFact } from '@bimvoice/ifcsheet/readiness';
 import type { AxisBounds } from '@/lib/section/section-distance';
 import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals';
@@ -84,7 +84,8 @@ export function proposalInputForLevel(level: ProjectLevel, meshes: MeshData[] | 
 
 /** The building's frame and the small elements it leaves out for lying far from it, named for a message. */
 export interface BuildingFraming {
-  extent: AxisBounds | null;
+  /** With the building's square frame (`withSquareFrame`), as the engine's `openModel` reads it, when its site turns it. */
+  extent: (AxisBounds & Pick<ModelExtent, 'square'>) | null;
   far: FarElementFact[];
 }
 
@@ -123,7 +124,12 @@ export function buildingFraming(levels: readonly ProjectLevel[], meshes: MeshDat
     const label = at ? farElementLabel({ name: at.store.entities.getName(at.expressId), type: at.store.entities.getTypeName(at.expressId), globalId: at.store.entities.getGlobalId(at.expressId) }) : `#${f.key}`;
     return { label, distance: f.distance };
   });
-  return { extent: framing.extent, far };
+  // A plan square to the building is as large as its framed elements' footprint in the turned frame, as the engine measures it.
+  const left = new Set(framing.farElements.map((f) => f.key));
+  const inBuilding = new Set(ids);
+  const framed = (meshes ?? []).filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId));
+  const extent = framing.extent ? withSquareFrame(framing.extent, framed, s.geometryResult?.coordinateInfo?.buildingRotation) : null;
+  return { extent, far };
 }
 
 /** {@link buildingFraming}'s extent. */

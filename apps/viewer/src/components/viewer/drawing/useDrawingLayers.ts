@@ -17,6 +17,7 @@ import { useSymbolicAnnotationsForDrawing, symbolicAnnotationsOverlayEnabled } f
 import { useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
 import { drawingModelCenter } from '@/hooks/dxfDrawingBounds';
 import { dxfPlaneDrawingMapper, dxfDrawingDeltaToPlacement } from '@/hooks/dxfReferencePlane';
+import { turnAnnotations } from '@/hooks/symbolic-turn';
 import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
 import { useDrawingExport } from '@/hooks/useDrawingExport';
 import type { DrawingViewModel } from './useDrawingViewModel';
@@ -39,7 +40,7 @@ export function useDrawingLayers(vm: DrawingViewModel) {
     geometryResult?.coordinateInfo, runtime.sourceCoordinateInfo, sectionPlane,
   ), [geometryResult, runtime.sourceCoordinateInfo, sectionPlane]);
 
-  const ifcAnnotationData = useSymbolicAnnotationsForDrawing({
+  const ifcAnnotationFrame = useSymbolicAnnotationsForDrawing({
     enabled: symbolicAnnotationsOverlayEnabled(displayOptions.showIfcAnnotations, status, typeVisibility.ifcAnnotations),
     axis: sectionPlane.axis,
     sectionPosWorld: ifcAnnotationsForDrawing.sectionPosWorld,
@@ -47,6 +48,9 @@ export function useDrawingLayers(vm: DrawingViewModel) {
     flipped: sectionPlane.flipped,
     fallbackY: ifcAnnotationsForDrawing.fallbackY,
   });
+
+  // A plan square to the building is drawn turned: the annotations are turned into it with the cut.
+  const ifcAnnotationData = useMemo(() => turnAnnotations(ifcAnnotationFrame, sectionPlane.turn ?? 0), [ifcAnnotationFrame, sectionPlane.turn]);
 
   const dxfUnderlayData = vm.dxfUnderlayData;
 

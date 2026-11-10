@@ -1,7 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-import { projectTo2D, projectTo2DBasis, type Drawing2D, type Point2D, type SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import type { Drawing2D, Point2D, SectionPlaneConfig } from '@ifc-lite/drawing-2d';
+import { worldToDrawing } from '@bimvoice/ifcsheet';
 import type { ViewerState } from '@/store';
 import { referenceRenderCorners } from '../reference-runtime/frame';
 import type { RegisteredAppearanceReference } from './types';
@@ -21,11 +22,8 @@ export function referenceDrawingCorners(record: RegisteredAppearanceReference, s
   if (!record.visible || record.opacity <= 0) return null;
   const corners = referenceRenderCorners(record, state);
   if (!corners) return null;
-  const project = (p: readonly [number, number, number]) => {
-    const point = { x: p[0], y: p[1], z: p[2] }, custom = plane.customPlane;
-    return custom ? projectTo2DBasis(point, custom.origin, custom.tangent, custom.bitangent)
-      : projectTo2D(point, plane.axis, plane.flipped);
-  };
+  // The view's own frame (`worldToDrawing`): a plan square to the building turns the reference with its drawing.
+  const project = (p: readonly [number, number, number]) => worldToDrawing(plane, { x: p[0], y: p[1], z: p[2] });
   const points = [project(corners[0]), project(corners[1]), project(corners[2]), project(corners[3])] as const;
   const [a,b,,d] = points;
   const area = (b.x-a.x)*(d.y-a.y)-(b.y-a.y)*(d.x-a.x);

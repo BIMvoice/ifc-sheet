@@ -35,6 +35,8 @@ export interface PlanCrossRefs {
   measure: DimAllMeasure;
   /** How section and elevation marks are headed (the project's graphic standard, #447); absent: the arrow. */
   markStyle?: MarkStyle | undefined;
+  /** The turn the plan is drawn at (`DrawingPlane.turn`, `turnOf`): its elevation marks face their elevations through it. */
+  turn?: number;
 }
 
 /** The marks alone: the section references and elevation marks of a plan, each with an id ending `~xref`. Any other view's: none. */
@@ -50,7 +52,7 @@ export function crossReferenceMarks(input: PlanCrossRefs): DraftEntity[] {
   const elevations = view && view.id === groundPlanId && bounds
     ? elevationMarkDrafts({
       measure, planViewId: view.id, layerId: '0', views, sheets, bounds, paperUnit: viewportPaperUnit(viewportScale),
-      factor: annotationFactor(viewportScale, view.scale), obstacles: [...obstacleBoxes(withSections, measure), ...symbols.filter(outside)], markStyle: input.markStyle,
+      factor: annotationFactor(viewportScale, view.scale), obstacles: [...obstacleBoxes(withSections, measure), ...symbols.filter(outside)], markStyle: input.markStyle, turn: input.turn,
     })
     : [];
   return [...sections, ...elevations];

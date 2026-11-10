@@ -14,12 +14,17 @@ import type { GeometryResult } from '@ifc-lite/geometry';
 import type { ProjectLevel, ProjectView } from '../document.js';
 import { levelFloorY, resolvePlanLevel } from '../view-defaults.js';
 import { roomFootprints, type RoomOfPlan } from './footprint.js';
+import { turnedPoint, type DrawingPlane } from '../drawing-frame.js';
 
-export function roomsOfPlan(view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined, guidOf: (renderId: number) => string | null): RoomOfPlan[] {
+export function roomsOfPlan(
+  view: ProjectView, levels: readonly ProjectLevel[], geometry: Pick<GeometryResult, 'meshes'> | null | undefined, guidOf: (renderId: number) => string | null,
+  plane?: DrawingPlane,
+): RoomOfPlan[] {
   if (view.kind !== 'plan') return [];
   const level = resolvePlanLevel(view, levels) ?? view.level;
   return roomFootprints(geometry?.meshes ?? [], levelFloorY(level) + view.cutHeight, levelFloorY(level)).flatMap((r) => {
     const guid = guidOf(r.renderId);
-    return guid ? [{ ...r, guid }] : [];
+    // The footprints are read on the world's axes; a plan square to the building (`plane`'s turn) has them turned.
+    return guid ? [{ ...r, ...(plane ? { ring: r.ring.map((p) => turnedPoint(plane, p)) } : {}), guid }] : [];
   });
 }

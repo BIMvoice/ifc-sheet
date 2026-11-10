@@ -14,5 +14,5 @@ import type { ProjectLevel } from './types';
 
 /** A plan of `level` named `name`, cut `cutHeight` metres above its floor; the id of the view added. */
 export function addStoreyPlan(level: ProjectLevel, name: string, cutHeight: number, reflected: boolean): string {
-  return addProjectView({ kind: 'plan', name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight, ...(reflected ? { reflected: true } : {}) });
+  return addProjectView({ kind: 'plan', name, level: { ...level, storeyGlobalIds: [...level.storeyGlobalIds] }, cutHeight, orientation: 'building', ...(reflected ? { reflected: true } : {}) });
 }

@@ -11,9 +11,10 @@
  * lower than it, is not).
  */
 
-import { getProjectionAxes, type Drawing2D } from '@ifc-lite/drawing-2d';
+import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import type { Pt } from '../draft-types.js';
+import { drawingProjector, type DrawingPlane } from '../drawing-frame.js';
 import type { PartKind, PlanPart } from './types.js';
 
 // A type (IfcWallType, IfcDoorStyle) is a template at the model's origin, not an element of the building.
@@ -24,14 +25,12 @@ export function kindOfClass(ifcType: string): PartKind | null {
 }
 
 /** What the drawing's plane sees of a mesh: every vertex, projected as the cut outlines are. */
-function bodyOf(mesh: MeshData, axis: 'x' | 'y' | 'z', flipped: boolean): Pt[] {
-  const { u, v } = getProjectionAxes(axis);
-  const [iu, iv] = [{ x: 0, y: 1, z: 2 }[u], { x: 0, y: 1, z: 2 }[v]];
+function bodyOf(mesh: MeshData, plane: DrawingPlane): Pt[] {
+  const project = drawingProjector(plane);
+  const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
+  const p = mesh.positions;
   const out: Pt[] = [];
-  for (let i = 0; i + 2 < mesh.positions.length; i += 3) {
-    const pu = mesh.positions[i + iu] + (mesh.origin?.[iu] ?? 0);
-    out.push({ x: flipped ? -pu : pu, y: mesh.positions[i + iv] + (mesh.origin?.[iv] ?? 0) });
-  }
+  for (let i = 0; i + 2 < p.length; i += 3) out.push(project(ox + p[i], oy + p[i + 1], oz + p[i + 2]));
   return out;
 }
 
@@ -50,7 +49,7 @@ export function planParts(drawing: Pick<Drawing2D, 'cutPolygons' | 'config'> | n
     for (const mesh of meshes) {
       const part = byId.get(mesh.expressId);
       if (!part || part.kind === 'wall' || part.kind === 'filler' || (mesh.geometryClass ?? 0) === 2) continue;
-      (part.body ??= []).push(...bodyOf(mesh, plane.axis, plane.flipped));
+      (part.body ??= []).push(...bodyOf(mesh, { ...plane, customPlane: undefined }));
     }
   }
   return [...byId.values()].sort((a, b) => a.id - b.id);

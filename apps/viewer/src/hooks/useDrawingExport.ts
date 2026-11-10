@@ -226,7 +226,7 @@ interface UseDrawingExportParams {
     scanSectionOpacity: number;
     scanSectionIncludeInExport: boolean;
   };
-  sectionPlane: { axis: 'down' | 'front' | 'side'; position: number; flipped: boolean; custom?: unknown };
+  sectionPlane: { axis: 'down' | 'front' | 'side'; position: number; flipped: boolean; turn?: number; custom?: unknown };
   activePresetId: string | null;
   entityColorMap: Map<number, [number, number, number, number]>;
   overridesEnabled: boolean;
@@ -940,6 +940,7 @@ function useDrawingExport({
       sectionAxis: sectionPlane.axis,
       isCustomPlane,
       flipped: sectionPlane.flipped,
+      turn: sectionPlane.turn,
       georeference,
     });
     const isGeoreferenced = georeference !== null && sectionPlane.axis === 'down' && !isCustomPlane;
