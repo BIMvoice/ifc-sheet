@@ -93,11 +93,12 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
   // than the 553 of the point sample. The slab top occludes on both sides (the band's edge allowance). 568 since an outline
   // line takes its own element's depth and a face seen edge-on no longer fills raster pixels (#557): one door piece fewer.
   const ground = (extra: Partial<PlanProjectView> = {}) => named(fzk, /Erdgeschoss/) && { ...named(fzk, /Erdgeschoss/)!, id: `fzk-eg-${JSON.stringify(extra)}`, ...extra };
-  // 557 since a line behind the plane is left out where it lies inside a cut face or on the seam between two (#749): a line that
+  // 554 since an edge's hidden end is bisected rather than halfway between two samples (#812): three seen projection pieces fewer, the edge
+  // ends having moved. 557 since a line behind the plane is left out where it lies inside a cut face or on the seam between two (#749): a line that
   // crosses a cut wall below the cut is split at the wall, and its piece under the wall is gone.
-  it('FZK Erdgeschoss, the default 1.2 m cut: 557 projection lines on both sides (#628, #768, #557, #749)', async (t) => {
-    await row(t, () => [fzk, ground()], 557);
-    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 557);
+  it('FZK Erdgeschoss, the default 1.2 m cut: 554 projection lines on both sides (#628, #768, #557, #749, #812)', async (t) => {
+    await row(t, () => [fzk, ground()], 554);
+    if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 554);
   });
   it('FZK Dachgeschoss', (t) => row(t, () => [fzk, named(fzk, /Dachgeschoss/)], 100));
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));

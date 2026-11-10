@@ -60,6 +60,12 @@ updates:
         versions: [">8.3.1"]
       - dependency-name: "rolldown"
         versions: [">1.2.11"]
+      # pdfjs-dist is pinned exactly (apps/viewer, packages/ifcsheet, packages/mcp): the PDF vector
+      # import is qualified against one decoder version, and vector-adapter.ts refuses any other
+      # ("This PDF decoder version has not been qualified for vectors"). 6.5.438 turned #808's
+      # PDF-vector tests red. Lift this with the pin, after re-qualifying the vectors on the new version.
+      - dependency-name: "pdfjs-dist"
+        versions: [">6.4.299"]
 
   - package-ecosystem: cargo
     directory: /

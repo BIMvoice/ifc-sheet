@@ -15,7 +15,7 @@ import { useDraftingKeys } from '../drafting/useDraftingKeys.js';
 import { toggleSnap, useDraftingSession } from '@/drafting/session';
 import { KeyboardSettings } from './KeyboardSettings.js';
 import { claimWallKey, useWallKeys, type WallHandlers } from './wall-key-bus.js';
-import { steppedHandlers, type SteppedActions } from './stepped-keys.js';
+import { NO_ARRANGE, steppedHandlers, type SteppedActions } from './stepped-keys.js';
 
 /** Review fixes on the keyboard settings and the drafting keys (#166, PR 213). */
 
@@ -188,6 +188,7 @@ describe('the Wall\'s live handlers', () => {
       startTool: (c) => { ran.push(`tool:${c}`); }, toggleAdd: rec('add'), fit: rec('fit'), print: rec('print'), previous: rec('previous'), next: rec('next'),
       back: rec('back'), leaveEdit: rec('leaveEdit'), comment: rec('comment'), paper: rec('paper'), titleBlock: rec('titleBlock'),
       revisions: rec('revisions'), printPreview: rec('printPreview'), exportDxf: rec('exportDxf'),
+      arrange: NO_ARRANGE,
     };
     const h = steppedHandlers(actions);
     const expected: Record<string, string> = {

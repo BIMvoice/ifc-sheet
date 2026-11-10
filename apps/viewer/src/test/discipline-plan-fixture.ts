@@ -40,9 +40,11 @@ export interface LoadedPlanModel {
   classOf: (id: number) => string;
   /**
    * The view as it draws: with its own omit predicate (`viewOmits`, the default), with the one a view had before
-   * discipline plans existed (`main`: a plan leaves out what a symbol draws), or with none.
+   * discipline plans existed (`main`: a plan leaves out what a symbol draws), or with none. `references`: the drawing the drafting
+   * tools snap to and find elements in (the drafting view hands them the generated drawing, not the styled one, whose like cut
+   * faces are joined, #349).
    */
-  planOf: (view: ProjectView, options?: { omits?: 'view' | 'main' | 'none' }) => Promise<Drawing2D>;
+  planOf: (view: ProjectView, options?: { omits?: 'view' | 'main' | 'none'; references?: boolean }) => Promise<Drawing2D>;
   /** Names of the model elements that have a cut face or a line in `drawing`. */
   drawnNames: (drawing: Drawing2D) => Set<string>;
   /** Classes of the model elements that have a cut face or a line in `drawing`. */
@@ -122,7 +124,8 @@ export async function loadPlanModel(path: string, options: { geometryHashes?: bo
     const omits = options?.omits ?? 'view';
     const omit = omits === 'none' ? undefined : omits === 'main' ? (view.kind === 'plan' ? drawnBySymbol : undefined) : viewOmits(view);
     // What a drawing tab and a sheet do: the elements and lines the view hides are left out first (#33), the rest styled by GlobalId (#32).
-    return styledDrawing(withoutHiddenElements(raw, view.graphics, renderIdGlobalId), view.graphics, partHostType, omit, null, null, null, renderIdGlobalId);
+    const shown = withoutHiddenElements(raw, view.graphics, renderIdGlobalId);
+    return options?.references ? shown : styledDrawing(shown, view.graphics, partHostType, omit, null, null, null, renderIdGlobalId);
   };
   const drawnIds = (drawing: Drawing2D) => new Set<number>([...drawing.cutPolygons.map((p) => p.entityId), ...drawing.lines.map((l) => l.entityId)]);
   const drawnNames = (drawing: Drawing2D) => new Set([...drawnIds(drawing)].map(nameOf).filter(Boolean));

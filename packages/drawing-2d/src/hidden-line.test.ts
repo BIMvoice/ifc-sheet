@@ -195,13 +195,14 @@ describe('applyVisibility split-segment depths (PR #2644 review)', () => {
     const [hiddenHalf, visibleHalf] = applied;
     expect(hiddenHalf.visibility).toBe('hidden');
     expect(visibleHalf.visibility).toBe('visible');
-    expect(visibleHalf.line.start.x).toBeCloseTo(2.37, 6);
+    // The occluder's edge is at x = 2.4: the split is found to within a pixel of it (it was 2.37, half a sample off, #557).
+    expect(visibleHalf.line.start.x).toBeCloseTo(2.4, 1);
 
     // Each split segment's endpoint depths must describe ITS OWN endpoints:
     // the shared split point carries the same lerped depth on both sides.
     expect(hiddenHalf.depth).toBe(7);
-    expect(hiddenHalf.depthEnd).toBeCloseTo(5.025, 9);
-    expect(visibleHalf.depth).toBeCloseTo(5.025, 9);
+    expect(hiddenHalf.depthEnd).toBeCloseTo(5, 1);
+    expect(visibleHalf.depth).toBe(hiddenHalf.depthEnd);
     expect(visibleHalf.depthEnd).toBeCloseTo(2, 9);
   });
 
@@ -214,11 +215,11 @@ describe('applyVisibility split-segment depths (PR #2644 review)', () => {
 
     const visible = merged.filter((l) => l.visibility === 'visible');
     expect(visible).toHaveLength(1);
-    expect(visible[0].line.start.x).toBeCloseTo(2.37, 6);
+    expect(visible[0].line.start.x).toBeCloseTo(2.4, 1);
     expect(visible[0].line.end.x).toBeCloseTo(10, 9);
     // The depth at the merged start must describe that point (about 5, the
     // occluder's own depth there), never L1's original start depth 7.
-    expect(visible[0].depth).toBeCloseTo(5.025, 6);
+    expect(visible[0].depth).toBeCloseTo(5, 1);
     expect(visible[0].depthEnd).toBeCloseTo(2, 9);
   });
 });
@@ -368,7 +369,8 @@ describe('HiddenLineClassifier endpoint sampling and raster-bounds edges (PR #26
     expect(result.segments).toHaveLength(2);
     expect(result.segments[0].visible).toBe(true);
     expect(result.segments[1].visible).toBe(false);
-    expect(result.segments[1].start.x).toBeCloseTo(9.5, 9);
+    // The occluder starts at x = 9.3 (the split was 9.5, half a sample off, #557).
+    expect(result.segments[1].start.x).toBeCloseTo(9.3, 1);
   });
 });
 
@@ -586,5 +588,25 @@ describe('HiddenLineClassifier, an edge on the outline of the surface in front o
     };
     const [result] = classifier.classifyLines([top]);
     expect(result.overallVisibility).toBe('hidden');
+  });
+});
+
+describe('where a line stops being hidden (#557)', () => {
+  it('is found to within a pixel, not half a sample: a wall edge behind a slab shows from the slab\'s top', () => {
+    // A slab in front of the lower 1.2 of a 10-high edge behind it. Ten samples are 1.0 apart: halfway between the two that
+    // disagree (1 and 2) put the visible part at 1.5, a 0.3 stub of the edge drawn on the slab.
+    const slab: MeshData = {
+      expressId: 1,
+      positions: new Float32Array([0, 0, -2, 10, 0, -2, 10, 1.2, -2, 0, 1.2, -2]),
+      normals: new Float32Array(12),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      color: [1, 1, 1, 1],
+    };
+    const classifier = new HiddenLineClassifier({ resolution: 1024 });
+    classifier.buildDepthBuffer([slab], { axis: 'z', position: 0, flipped: false }, 10, { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } });
+    const edge: DrawingLine = { line: { start: { x: 5, y: 0 }, end: { x: 5, y: 10 } }, category: 'projection', visibility: 'visible', entityId: 2, ifcType: 'IfcWall', modelIndex: 0, depth: 6 };
+    const visible = classifier.classifyLines([edge])[0].segments.filter((s) => s.visible);
+    expect(visible).toHaveLength(1);
+    expect(Math.min(visible[0].start.y, visible[0].end.y)).toBeCloseTo(1.2, 1);
   });
 });
