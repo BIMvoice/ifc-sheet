@@ -196,8 +196,8 @@ function turnedMarkDrafts(input: ElevationMarkInput, turn: number): DraftEntity[
     const d = turnedPoint(plan, SIDES[view.direction].out);
     const across = { x: -d.y, y: d.x };
     const at = (along: number, side: number): Pt => ({ x: mid.x + d.x * along + across.x * side, y: mid.y + d.y * along + across.y * side });
-    // The building's box reaches this far along `d`: the arrow stands clear of it.
-    const edge = hx * Math.abs(d.x) + hy * Math.abs(d.y);
+    // Where the line from the building's middle along `d` leaves its box: the arrow stands just outside, on that side.
+    const edge = Math.min(Math.abs(d.x) > 1e-9 ? hx / Math.abs(d.x) : Infinity, Math.abs(d.y) > 1e-9 ? hy / Math.abs(d.y) : Infinity);
     const label = referenceLabel(ref);
     const labelBox = textBoxIn(measure, { x: 0, y: 0 }, label, textH, 0);
     const build = (lift: number): { drafts: DraftEntity[]; box: CrossRefBox } => {
