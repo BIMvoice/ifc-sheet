@@ -246,17 +246,15 @@ export default defineConfig({
     // thread when it runs: about 175 ms of the app-start task (#154). The
     // worker build below keeps it; scripts/check-tla-chunk-await.mjs fails if a
     // chunk evaluated at app start is wrapped again.
-    cesiumStaticAssets(),
-    oauthCallbackRoutes(),
+    cesiumStaticAssets(), oauthCallbackRoutes(),
     // Dalux's API sends no CORS headers, so it must go through a same-origin
     // relay. Dev runs the SAME handler production does (#2792), rather than a
     // second proxy config that can drift from it.
     daluxRelayRoute(),
     // The docs edition must not ship what it leaves out (modelling, infrastructure, analysis).
     editionBundle('docs'),
-    // The product name in the page title and the web app manifest.
+    // The product name in the page title and the web app manifest, then the offline worker sw.js (#456).
     editionBranding('docs', path.resolve(__dirname, 'public')),
-    // The offline service worker (#456): sw.js, written after the bundle.
     offlineSw(path.resolve(__dirname, 'vite-plugins/offline-sw.template.js')),
   ],
   define: {
