@@ -147,12 +147,12 @@ describe('facade elevations and sections are unchanged', () => {
     // all four; a face seen edge-on no longer fills a column of the depth raster, and a point on the raster's far edge reads
     // the last pixel that can be filled. Before: north 200, south 246, east 390, west 527, north-deep 206, south-deep 266,
     // east-deep 398, west-deep 481, s1 609, s2 2044, s3 2050 lines.
-    north: '172/0/0/1795240601', south: '215/0/0/-1921870557', east: '377/0/0/-1749710729', west: '513/0/0/1135987581',
+    north: '172/0/0/-1749426442', south: '215/0/0/-666273152', east: '377/0/0/-1749710729', west: '513/0/0/1135987581',
     // The four deep views and s1 to s3 re-recorded for #749: a line behind the plane is left out where it lies inside a cut face, so
     // the pieces behind the walls and slabs a section or a deep view cuts are gone. The cut faces are the same. Before: north-deep
     // '161/0/0/-588991310', south-deep '221/0/0/2015243806', east-deep '389/0/0/2056835847', west-deep '525/0/0/779790265',
     // s1 '621/65/0/929328739', s2 '2062/32/0/1176559827', s3 '2071/39/0/707328083'.
-    'north-deep': '159/0/0/-1301104541', 'south-deep': '219/0/0/-469433539', 'east-deep': '387/0/0/1745650701', 'west-deep': '523/0/0/-1025810035',
+    'north-deep': '159/0/0/467752256', 'south-deep': '219/0/0/786163866', 'east-deep': '387/0/0/1745650701', 'west-deep': '523/0/0/-1025810035',
     // s1 and s3 re-recorded for #749: s1 stands on the roof's ridge and on the middle of two windows, s3 runs through the corner
     // the walls meet at. A vertex on the plane now counts on the side the section does not look at, so a part touching the
     // plane from behind is not cut and a face on the plane is cut once (s1 was '712/84/0/1814603118', s3 '1901/43/0/-787997569').
@@ -169,7 +169,9 @@ describe('facade elevations and sections are unchanged', () => {
     // south-deep '219/0/0/1404858974', east-deep '387/0/0/-197624601', west-deep '523/0/0/-449604071', s1 '649/65/0/-1827319273',
     // s2 '1913/32/0/1672971738', s3 '2025/39/0/-2130442263'.
     // s1 to s3 re-recorded for #557: a section draws no hidden line unless it says showHidden (lines 649, 1898, 1997 before; the cut faces, 65/32/39, are the same).
-    s1: '480/65/0/388912799', s2: '1032/32/0/440174499', s3: '663/39/0/-1471255360',
+    // north, south, north-deep, south-deep, s1 and s2 re-recorded for #557 (outline depth, slivers): a line just across a face-grid cell edge
+    // from a thin face took the wrong depth, so rafter tails now end where the roof slab hides them (s2 gains 1 line; cut faces unchanged).
+    s1: '480/65/0/173761075', s2: '1033/32/0/29524349', s3: '663/39/0/-1471255360',
   };
   const s = Math.SQRT1_2;
   const OFFSETS: Record<ElevationDirection, number> = { north: -12, south: 1, west: -2, east: 14 };
