@@ -11,6 +11,15 @@
 import type { WallKeyId } from '@/lib/commands/wall-key-commands';
 import type { WallHandlers } from './wall-key-bus';
 
+/** The rows that line chosen drawings up with each other (#168). */
+export type ArrangeKeyId = Extract<WallKeyId, `wall.align.${string}` | `wall.distribute.${string}`>;
+
+/** Nothing to line up: what a sheet with fewer than two drawings chosen offers. */
+export const NO_ARRANGE: SteppedActions['arrange'] = {
+  'wall.align.left': null, 'wall.align.right': null, 'wall.align.top': null, 'wall.align.bottom': null, 'wall.align.centreH': null, 'wall.align.centreV': null,
+  'wall.distribute.across': null, 'wall.distribute.down': null,
+};
+
 export interface SteppedActions {
   startTool: (command: string) => void;
   toggleAdd: () => void;
@@ -29,6 +38,8 @@ export interface SteppedActions {
   revisions: (() => void) | null;
   printPreview: (() => void) | null;
   exportDxf: (() => void) | null;
+  /** Lining up and spacing the chosen drawings: each `null` until enough drawings are chosen. */
+  arrange: Readonly<Record<ArrangeKeyId, (() => void) | null>>;
 }
 
 export function steppedHandlers(a: SteppedActions): WallHandlers {
@@ -53,6 +64,7 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.draw.fillet': tool('fillet'),
     'wall.draw.offset': tool('offset'),
     'wall.draw.chamfer': tool('chamfer'),
+    'wall.draw.hideline': tool('hideline'),
     'wall.addDrawing': a.toggleAdd,
     'wall.fit': a.fit,
     'wall.print': a.print,
@@ -66,5 +78,6 @@ export function steppedHandlers(a: SteppedActions): WallHandlers {
     'wall.revisions': a.revisions,
     'wall.printPreview': a.printPreview,
     'wall.exportDxf': a.exportDxf,
+    ...a.arrange,
   } satisfies Record<WallKeyId, (() => void) | null>;
 }

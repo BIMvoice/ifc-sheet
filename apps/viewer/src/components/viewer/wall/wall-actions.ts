@@ -114,6 +114,7 @@ export const EDIT_TOOLS: readonly DrawTool[] = [
   { command: 'fillet', labelKey: 'wall.draw.fillet', bodyKey: 'wall.draw.fillet.body' },
   { command: 'offset', labelKey: 'wall.draw.offset', bodyKey: 'wall.draw.offset.body' },
   { command: 'chamfer', labelKey: 'wall.draw.chamfer', bodyKey: 'wall.draw.chamfer.body' },
+  { command: 'hideline', labelKey: 'wall.draw.hideline', bodyKey: 'wall.draw.hideline.body' },
 ];
 
 /** Every tool that draws or edits on the drawing in front. */

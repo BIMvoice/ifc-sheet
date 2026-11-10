@@ -114,7 +114,8 @@ function profile(expressId: number): FlatProfiles {
       1, 0, 0, 0,
       0, 1, 0, 0,
       0, 0, 1, 0,
-      1, 0, 1, 1,
+      // Beside the 2 m wall box, not inside its cut face: a line inside a cut face is left out (#749).
+      4, 0, 1, 1,
     ]),
     extrusionDir: Float32Array.from([0, 0, 1]),
     extrusionDepth: Float32Array.from([2]),

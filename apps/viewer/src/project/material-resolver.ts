@@ -60,6 +60,9 @@ function polygonMaterialName(p: DrawingPolygon, soleToo: boolean): string | null
   return soleToo ? soleMaterialName(m, relationsFor(m)) : null;
 }
 
+/** The IfcMaterial a cut face is made of, table or not: what `styledDrawing` joins like cut faces by (#349). */
+export const cutMaterialName = (p: DrawingPolygon): string | null => polygonMaterialName(p, true);
+
 /** The IfcMaterial a mesh is painted by (`meshMaterialName`, the engine's, which the headless sheets name it with too); null for one with none. */
 export function meshMaterialOf(mesh: { expressId: number; materialId?: number }): string | null {
   const m = modelOf(mesh.expressId);

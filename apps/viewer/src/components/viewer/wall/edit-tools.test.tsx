@@ -8,10 +8,10 @@ import assert from 'node:assert/strict';
 import { cleanup, click, render } from '@/test/render.js';
 import { resetProject } from '@/project/project-store';
 import { resolveEnglish as t } from '@/i18n/registry';
-import { steppedHandlers, type SteppedActions } from './stepped-keys.js';
+import { NO_ARRANGE, steppedHandlers, type SteppedActions } from './stepped-keys.js';
 import { ToolRail } from './ToolRail.js';
 
-/** #189: TRIM, EXTEND, FILLET, OFFSET and CHAMFER are buttons on the rail, each with its key, and start their command. */
+/** #189: TRIM, EXTEND, FILLET, OFFSET, CHAMFER and HIDELINE are buttons on the rail, each with its key, and start their command. */
 
 beforeEach(() => resetProject());
 afterEach(() => cleanup());
@@ -22,6 +22,7 @@ const TOOLS = [
   ['fillet', 'Fillet', 'wall.draw.fillet'],
   ['offset', 'Offset', 'wall.draw.offset'],
   ['chamfer', 'Chamfer', 'wall.draw.chamfer'],
+  ['hideline', 'Hide line', 'wall.draw.hideline'],
 ] as const;
 
 describe('the edit tools on the rail (#189)', () => {
@@ -47,15 +48,15 @@ describe('the edit tools on the rail (#189)', () => {
     assert.ok(edit && draw, 'both section labels are on the rail');
     const grids = (h: Element) => h.nextElementSibling;
     const names = (el: Element | null | undefined) => [...(el?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
-    assert.deepEqual(names(grids(edit)), ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer']);
-    for (const label of ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer']) assert.ok(!names(grids(draw)).includes(label), `${label} is not under Draw`);
+    assert.deepEqual(names(grids(edit)), ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer', 'Hide line']);
+    for (const label of ['Trim', 'Extend', 'Fillet', 'Offset', 'Chamfer', 'Hide line']) assert.ok(!names(grids(draw)).includes(label), `${label} is not under Draw`);
   });
 
   it('their keys start the same commands', () => {
     const started: string[] = [];
     const actions: SteppedActions = {
       startTool: (c) => { started.push(c); }, toggleAdd: () => {}, fit: null, print: null, previous: null, next: null, back: () => {}, leaveEdit: null,
-      comment: null, paper: null, titleBlock: null, revisions: null, printPreview: null, exportDxf: null,
+      comment: null, paper: null, titleBlock: null, revisions: null, printPreview: null, exportDxf: null, arrange: NO_ARRANGE,
     };
     const handlers = steppedHandlers(actions);
     for (const [, , id] of TOOLS) handlers[id]?.();
