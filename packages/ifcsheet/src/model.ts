@@ -18,6 +18,9 @@ import type { ProjectLevel } from './document.js';
 import { createEntityBoundsLookup, type BoundingBox3D } from './entity-bounds.js';
 import { farElementLabel, frameEntities } from './framing.js';
 import { buildingElementIds } from './building-ids.js';
+import { groundReachOf } from './ground-frame.js';
+import { isTerrainMesh } from './contours.js';
+import { predefinedTypeReader } from './terrain.js';
 import { storeyFloorY } from './storey-origin.js';
 import { PROPOSAL_WALL_TYPES, type Footprint, type ProposalInput, type RoomFootprint } from './section-proposals.js';
 import type { StoreyInput } from './view-defaults.js';
@@ -224,6 +227,9 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
   const ids = buildingIds(ds, storeys);
   const includeFarElements = options.includeFarElements === true;
   const framing = ids.length && meshes.length ? frameEntities(meshes, ids, { includeFar: includeFarElements }) : null;
+  // The terrain the building stands on is outside its extent but inside the frame of an elevation and a section, which draw it (#557).
+  const typeOf = predefinedTypeReader(ds);
+  const ground = framing ? groundReachOf(meshes.filter((m) => isTerrainMesh(m, typeOf))) : undefined;
   const framed = framing?.extent ?? null;
   const farElements = (framing?.farElements ?? []).map((f): FarElementInfo => ({
     expressId: f.key,
@@ -233,7 +239,8 @@ export async function openModel(bytes: Uint8Array, options: OpenModelOptions = {
   const inBuilding = new Set(ids);
   // The building's footprint in a plan square to it: the framed elements, without the far ones the extent leaves out.
   const left = new Set(farElements.map((f) => f.expressId));
-  const extent = framed ? withSquareFrame(framed, meshes.filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId)), frame?.buildingRotation) : null;
+  const squared = framed ? withSquareFrame(framed, meshes.filter((m) => inBuilding.has(m.expressId) && !left.has(m.expressId)), frame?.buildingRotation) : null;
+  const extent = squared && ground ? { ...squared, ground } : squared;
   const project = ds.spatialHierarchy?.project;
   return {
     projectName: project?.longName || project?.name || '',

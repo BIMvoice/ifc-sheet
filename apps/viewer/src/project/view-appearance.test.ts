@@ -24,15 +24,18 @@ function house(): Drawing2D {
 describe('what an elevation shows', () => {
   it('draws no hidden lines unless the view asks for them', () => {
     assert.equal(viewShowsHidden({ kind: 'elevation' }), false);
-    assert.equal(viewShowsHidden({ kind: 'section' }), true);
+    assert.equal(viewShowsHidden({ kind: 'section' }), false);
+    assert.equal(viewShowsHidden({ kind: 'section', showHidden: true }), true);
+    assert.equal(viewShowsHidden({ kind: 'plan' }), true);
+    assert.equal(viewShowsHidden({ kind: 'plan', showHidden: false }), false);
     assert.equal(drawingAsViewShows(house(), { kind: 'elevation' }).lines.some((l) => l.visibility === 'hidden'), false);
     assert.equal(drawingAsViewShows(house(), { kind: 'elevation', showHidden: true }).lines.some((l) => l.visibility === 'hidden'), true);
   });
 
-  it('leaves a section as it was generated', () => {
+  it('leaves a section as it was generated when it shows its hidden lines', () => {
     const drawing = house();
     drawing.lines = drawing.lines.filter((l) => l.ifcType !== 'IfcSite');
-    assert.equal(drawingAsViewShows(drawing, { kind: 'section' }), drawing);
+    assert.equal(drawingAsViewShows(drawing, { kind: 'section', showHidden: true }), drawing);
   });
 
   it('makes the building outline heavier than the lines inside it', () => {

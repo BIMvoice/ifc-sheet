@@ -10,7 +10,8 @@
  * takes it off the sheet; its grips resize the crop (`ViewportHandles`). Alt and the wheel over a drawing move its cut (a
  * plan) or its depth (a section, an elevation). A view dragged from the card's list of what is not on the sheet yet shows
  * its outline at true size while it is over the paper, snapping like a move, and lands where it is let go (#168,
- * `viewport-drop.ts`). Plain drawing on the paper
+ * `viewport-drop.ts`). Shift+click adds a drawing to the ones chosen or takes it out; with two or more they are outlined (the
+ * first, the anchor of lining them up, in a heavier line) and Delete and the arrows leave them alone (#168). Plain drawing on the paper
  * (lines, text, hatched zones) goes through the same drafting session as a
  * view, in paper millimetres (`useSheetDrafting`).
  */
@@ -52,6 +53,10 @@ interface SheetCanvasProps {
   sheetContent: SheetContent;
   chosenId: string | null;
   onChoose: (viewportId: string | null) => void;
+  /** Shift+click on a drawing: add it to the drawings chosen, or take it out (#168). Absent: Shift+click chooses as a click does. */
+  onPick?: (viewportId: string) => void;
+  /** Every drawing chosen, the first being the anchor of lining them up; outlined when there is more than one. */
+  pickedIds?: readonly string[];
   /** Open a drawing to draw in (double-click). */
   onOpen: (viewport: SheetViewport) => void;
   /** Alt + wheel over a drawing: steps of its cut or depth. */
@@ -67,7 +72,7 @@ interface SheetCanvasProps {
 const ZOOM = { min: 0.05, max: 40 } as const;
 const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
 
-export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onOpen, onNudge, fitKey, dropView = null, extent = null }, paperRef) {
+export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function SheetCanvas({ sheet, sheetContent, chosenId, onChoose, onPick, pickedIds = [], onOpen, onNudge, fitKey, dropView = null, extent = null }, paperRef) {
   const host = useRef<HTMLDivElement>(null);
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
@@ -92,6 +97,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   useDraftingKeys({ inputRef, setText, submit: () => submitTypedLine('', last.current) });
   const draftSelection = useDraftingSession((s) => s.selection);
 
+  // With several drawings chosen, Delete and the arrows leave them alone: they act on one (#168).
+  const several = pickedIds.length > 1;
   const toPaper = (clientX: number, clientY: number): Pt => {
     const rect = host.current?.getBoundingClientRect();
     return { x: (clientX - (rect?.left ?? 0) - pan.x) / pan.k, y: (clientY - (rect?.top ?? 0) - pan.y) / pan.k };
@@ -135,7 +142,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Erase's keys as bound now (`drafting.erase`), not a key of this sheet's own.
-      if (!chosenId || !isDraftingKey('drafting.erase', e) || openKeyboardOverlay()) return;
+      if (!chosenId || several || !isDraftingKey('drafting.erase', e) || openKeyboardOverlay()) return;
       if (e.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       removeViewport(sheet.id, chosenId);
@@ -143,7 +150,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [chosenId, sheet.id, onChoose]);
+  }, [chosenId, several, sheet.id, onChoose]);
 
   // The arrow keys nudge the chosen drawing by a whole millimetre (10 with Shift), one undo step a press. They belong to
   // anything else that wants them: a text field (the command line included, as `keysBelongElsewhere` says for AutoCAD mode), a
@@ -152,7 +159,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
     const onKey = (e: KeyboardEvent) => {
       const arrow = ARROWS[e.key];
       const vp = chosenId ? (sheet.viewports ?? []).find((v) => v.id === chosenId) : undefined;
-      if (!arrow || !vp || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!arrow || !vp || several || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       if (keysBelongElsewhere(e.target) || openKeyboardOverlay()) return;
       if (runningCommand() || useDraftingSession.getState().selection.size > 0) return;
       e.preventDefault();
@@ -161,7 +168,7 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [chosenId, sheet]);
+  }, [chosenId, several, sheet]);
 
   const drag = useRef<{ kind: 'pan' | 'move'; sx: number; sy: number; start: Pan; vp?: SheetViewport; sheet?: ProjectSheet; targets?: SnapLine[]; last?: { x: number; y: number } } | null>(null);
   const [guides, setGuides] = useState<SnapLine[]>([]);
@@ -208,6 +215,11 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           const p = toPaper(e.clientX, e.clientY);
           if (e.button === 0 && drafting.down(p, e.shiftKey)) return;
           const vp = e.button === 0 ? viewportAt(p) : null;
+          // Shift+click on a drawing adds it to the ones chosen or takes it out, and starts no move.
+          if (vp && e.shiftKey && onPick) {
+            onPick(vp.id);
+            return;
+          }
           if (vp) onChoose(vp.id);
           // A cell of a list schedule is picked by a click on it (#446); the card then offers its value to override. A drag still moves the schedule.
           const cell = vp && e.button === 0 ? cellAt(sheetContent.content(vp).schedule, p) : null;
@@ -260,8 +272,14 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
         <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
           <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
         </div>
-        {shownGuides.length > 0 || dropping ? (
+        {shownGuides.length > 0 || dropping || several ? (
           <svg data-snap-guides className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }} width={paper.w * pan.k} height={paper.h * pan.k} viewBox={`0 0 ${paper.w} ${paper.h}`} aria-hidden="true">
+            {several ? pickedIds.map((id, i) => {
+              const vp = (sheet.viewports ?? []).find((v) => v.id === id);
+              if (!vp) return null;
+              const box = sheetContent.boxOf(vp);
+              return <rect key={id} data-picked={i === 0 ? 'anchor' : 'picked'} x={vp.x - box.width / 2} y={vp.y - box.height / 2} width={box.width} height={box.height} fill="none" stroke={i === 0 ? '#e11d8f' : '#0891b2'} strokeWidth={i === 0 ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" />;
+            }) : null}
             {dropping ? <rect data-drop-outline x={dropping.x - dropping.width / 2} y={dropping.y - dropping.height / 2} width={dropping.width} height={dropping.height} fill="#22d3ee" fillOpacity={0.08} stroke="#0891b2" strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" /> : null}
             {shownGuides.map((g) => (
               <line key={`${g.axis}${g.at}`} data-snap-guide={g.axis} x1={g.axis === 'x' ? g.at : g.from} x2={g.axis === 'x' ? g.at : g.to} y1={g.axis === 'x' ? g.from : g.at} y2={g.axis === 'x' ? g.to : g.at} stroke="#e11d8f" strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />

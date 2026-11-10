@@ -8,7 +8,8 @@
  * an aggregate (`elementToStorey`): a curtain wall's plates, members and doors, a stair's flights and railings, a wall's
  * IfcBuildingElementPart children. Those parts carry the geometry while their whole often has none, so without them a
  * curtain wall door is on no plan (#586). The storeys' spaces and zones, which `elementToStorey` also maps, stay out:
- * they are rooms, not building elements, and were never framed or cut.
+ * they are rooms, not building elements, and were never framed or cut. What a space contains is on the space's storey: ArchiCAD
+ * contains a roof window in the IfcSpace under it, and the hierarchy lists it under the space (`bySpace`), on no storey of its own.
  *
  * The engine (`openModel`) and the app (`buildingFraming` in `project/model-rooms.ts`) both call this, so the extent
  * and the drawings they make from a model cannot disagree about which elements are the building.
@@ -22,7 +23,7 @@ import { IfcTypeEnum, isSpatialStructureType, type SpatialHierarchy } from '@ifc
 import { isTerrainPredefinedType } from './terrain.js';
 
 export function storeyElementIds(
-  hierarchy: Pick<SpatialHierarchy, 'byStorey' | 'elementToStorey'>,
+  hierarchy: Pick<SpatialHierarchy, 'byStorey' | 'elementToStorey'> & Partial<Pick<SpatialHierarchy, 'bySpace'>>,
   storeys: Iterable<number>,
   typeOf: (expressId: number) => IfcTypeEnum,
   /** The PredefinedType of an element (null: none). Without it a geographic element counts as one that states none, a terrain. */
@@ -35,6 +36,13 @@ export function storeyElementIds(
   for (const storey of wanted) {
     for (const id of hierarchy.byStorey.get(storey) ?? []) {
       if (!seen.has(id) && isBuilding(id)) { seen.add(id); ids.push(id); }
+    }
+  }
+  for (const [space, contained] of hierarchy.bySpace ?? []) {
+    const storey = hierarchy.elementToStorey.get(space);
+    if (storey === undefined || !wanted.has(storey)) continue;
+    for (const id of contained) {
+      if (!seen.has(id) && !isSpatialStructureType(typeOf(id)) && isBuilding(id)) { seen.add(id); ids.push(id); }
     }
   }
   for (const [id, storey] of hierarchy.elementToStorey) {

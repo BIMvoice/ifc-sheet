@@ -91,8 +91,7 @@ export interface ProjectViewBase {
   viewDepth?: number | null;
   /**
    * Draw the lines that are hidden behind other geometry, dashed. Absent:
-   * an elevation does not (it shows what is seen from outside), every other
-   * view does.
+   * only a plan does; a section, an elevation and an axonometric do not.
    */
   showHidden?: boolean;
   /**

@@ -97,6 +97,9 @@ export interface HiddenLineOptions {
   edgeTolerancePx: number;
 }
 
+/** Halvings of the gap between two samples that disagree: 2^-7 of a tenth of a line, under a millimetre on a 3 m edge. */
+const TRANSITION_BISECTIONS = 7;
+
 const DEFAULT_OPTIONS: HiddenLineOptions = {
   resolution: 1024,
   samplesPerLine: 10,
@@ -279,8 +282,16 @@ export class HiddenLineClassifier {
       // 'partial' while the emitted segments were one uniform run; now the
       // two derive from the same transitions and cannot disagree.
       if (isVisible !== currentVisible) {
-        // Find transition point (approximate)
-        const transitionT = (i - 0.5) / numSamples;
+        // Find the transition point: bisect between the two samples that disagree. Halfway between them was off by half
+        // a sample (0.135 m on a 2.7 m wall edge) and drew that stub of a hidden edge past the slab in front of it (#557).
+        let lo = (i - 1) / numSamples;
+        let hi = t;
+        for (let k = 0; k < TRANSITION_BISECTIONS; k++) {
+          const mid = (lo + hi) / 2;
+          if (this.sampleVisibility(point2DLerp(line.line.start, line.line.end, mid), depthAt(mid), depthBias, owner) === currentVisible) lo = mid;
+          else hi = mid;
+        }
+        const transitionT = (lo + hi) / 2;
         const transitionPoint = point2DLerp(line.line.start, line.line.end, transitionT);
 
         segments.push({
