@@ -36,6 +36,7 @@ import type { OpenedModel } from '../model.js';
 import { storeyFloorsOf } from '../plan-projection.js';
 import type { SheetAnnotations } from '../sheet-annotations.js';
 import { paperUnitFor, styledParamsIn, styleBookOf } from '../style-fit.js';
+import { roomsOfCut } from '../tagall/cut-rooms.js';
 import { roomsOfPlan } from '../tagall/rooms.js';
 import { TAGALL_TYPES, type TagParts } from '../tagall/types.js';
 import { elementMark, markIndex, markKey } from '../element-mark.js';
@@ -175,6 +176,9 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
     const plan = plans.get(c.view.id);
     return plan && ds ? roomsOfPlan(plan, set.levels, { meshes: model.meshes }, guidOf) : [];
   };
+  // A section or an elevation tags the rooms its plane cuts, as the app's `viewInputs` reads them (#677).
+  const tagRoomsOf = (c: ReadCall<HeadlessView, Drawing2D>) => (c.view.kind === 'plan' ? roomsOf(c) : roomsOfCut(c.drawing.config.plane, c.drawing, model.meshes, guidOf));
+  const detailOf = (c: ReadCall<HeadlessView, Drawing2D>) => plans.get(c.view.id)?.detail;
   return {
     draftsOf: (view) => existing.filter((d) => d.viewId === view.id),
     dimall: (c) => ({
@@ -191,11 +195,13 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
         byGuid.set(guid, e.renderId);
         return [{ guid, className: ds?.entities.getTypeName(e.renderId) ?? '', anchor: e.anchor, renderId: e.renderId, ring: e.ring }];
       });
-      const rooms = roomsOf(c);
+      const rooms = tagRoomsOf(c);
       for (const r of rooms) byGuid.set(r.guid, r.renderId);
       const [mark, room] = TAGALL_TYPES;
       return {
         onPlan, elements, targets, rooms, existing: c.placed, obstacles: onPlan ? obstaclesOf(c) : [], placement: { ...placement(c), locale: c.locale }, types: { mark, room },
+        // A detail tags only what its crop shows, as the app passes the view's own.
+        ...(detailOf(c) ? { crop: detailOf(c) } : {}),
         env: { read, up: measureOf(c.drawing).frame.up, styled: (viewId, shape, cur) => styledParamsIn(book, paperUnit(c), shape, cur), newId: c.newId },
         reader: { sectionLink: () => null, measure: measureOf(c.drawing) }, rectsOf: rectsOfView(c.drawing),
       };

@@ -26,6 +26,8 @@ import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { withoutOpeningBodies } from './plan-openings.js';
 import { sheetGraphic } from './sheet-graphic.js';
 import { resolveViewGraphics } from './view-templates.js';
+import { joinLikeCuts, likeCutKey } from './cut-join-drawing.js';
+import { headlessMaterialSource } from './material-colour.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../apps/viewer/src/project/__fixtures__/plan-off-centre-wing.ifc', import.meta.url));
 const WASM = fileURLToPath(new URL('../../wasm/pkg/ifc-lite_bg.wasm', import.meta.url));
@@ -68,6 +70,9 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
     drawings = await generateViewDrawings(set.document.views, model.buildingMeshes, set.levels, model.extent!);
   }, 120_000);
 
+  /** The rings the sheet strokes of a drawing: its cut faces as the sheet draws them, like ones joined (#349), with their holes. */
+  const ringsOf = (d: Pick<Drawing2D, 'cutPolygons'>) => d.cutPolygons.reduce((n, p) => n + 1 + p.polygon.holes.length, 0);
+
   /** The cut outlines of one plan on its sheet, alone, and the box its viewport reserved. */
   const onSheet = (name: string, layout: DefaultSet = set) => {
     const view = layout.document.views.find((v) => v.kind === 'plan' && v.name === name)!;
@@ -75,7 +80,7 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
     const graphic = sheetGraphic(sheet, layout.document, new Map([[view.id, drawings.get(view.id)!]]), model.extent);
     const box = graphic.viewports.find((v) => v.viewId === view.id)!.box;
     const xs = graphic.cut.flatMap((run) => run.map((p) => p.x));
-    return { graphic, box, minX: Math.min(...xs), maxX: Math.max(...xs), rings: drawings.get(view.id)!.cutPolygons.length };
+    return { graphic, box, minX: Math.min(...xs), maxX: Math.max(...xs), rings: ringsOf(joinLikeCuts(drawings.get(view.id)!)) };
   };
 
   it('the fixture is 30 m wide', () => {
@@ -112,7 +117,10 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
   it('the same holds for the whole set, through sheetGraphics', async () => {
     const sheets = await sheetGraphics(set, model);
     const first = sheets.find((s) => s.number.startsWith('A-1'))!;
-    const total = set.document.views.filter((v) => v.kind === 'plan').reduce((n, v) => n + (drawings.get(v.id)?.cutPolygons.length ?? 0), 0);
+    // The set's sheets name each face's material (`headlessMaterialSource`), as the joins read it.
+    const names = headlessMaterialSource(model.dataStore!);
+    const joined = (d: Drawing2D) => joinLikeCuts(d, (p) => likeCutKey(p, names.nameOf(p, true)));
+    const total = set.document.views.filter((v) => v.kind === 'plan').reduce((n, v) => { const d = drawings.get(v.id); return n + (d ? ringsOf(joined(d)) : 0); }, 0);
     expect(first.cut.length).toBe(total);
   });
 });

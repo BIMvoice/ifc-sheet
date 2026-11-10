@@ -13,8 +13,8 @@ To check a change: build the packages once (`pnpm turbo run build --filter='./pa
 Read these before every task. They apply to every agent and to people.
 
 1. **A goal you can check.** Before you start, write one line, `DONE WHEN:`, naming a test you can run on your own work (a passing test file, a screenshot matching a reference, an IFC that validates). If you can't write it, ask one question to make the goal measurable. Run the test before you report, and report its result, not your opinion of it.
-2. **Use the context, don't guess.** Read the issue, the linked PRs, [LESSONS.md](LESSONS.md) and this file first. If something is missing, say what is missing. Never invent a fact, a number, a file path or a test result.
-3. **Match the example.** When an issue or a maintainer points to an example (a screenshot, an earlier PR, a reference sheet), match its structure and level of detail. Without one, build the smallest version that passes `DONE WHEN`, show it, and wait for feedback before building more.
+2. **Use the context, don't guess.** Read the user's issue if there is one, the open PRs, [ROADMAP.md](ROADMAP.md), [LESSONS.md](LESSONS.md) and this file first. If something is missing, say what is missing. Never invent a fact, a number, a file path or a test result.
+3. **Match the example.** When a user's issue or a maintainer points to an example (a screenshot, an earlier PR, a reference sheet), match its structure and level of detail. Without one, build the smallest version that passes `DONE WHEN`, show it, and wait for feedback before building more.
 4. **Learn from every correction.** When a maintainer corrects you, add one line to [LESSONS.md](LESSONS.md): the date, what was wrong, the rule from now on (in the maintainer's words where possible). A corrected mistake must not come back. A lesson that applies to every agent also goes into the rules below.
 5. **Weekly review.** Once a week, review the last 5 to 10 merged PRs against LESSONS.md, fix the rules or the code so repeated problems can't recur, and summarise what changed in five lines.
 6. **The cheapest model that does the job.** Read-only checks, log reading and recipe work go to the cheapest model; code goes to a mid-tier model; foundations, geometry and performance to the strongest. Move a task to a cheaper model only after it matched the stronger one on 3 real examples, and write the result down.
@@ -26,48 +26,44 @@ Read these before every task. They apply to every agent and to people.
 
 Several agent sessions push to this repository from one GitHub account. The rules here are how they avoid building the same thing twice. They apply to every agent and every session, including short-lived subagents.
 
-**Respect assignments, and assign yourself before you start.** This is not etiquette, it is the mechanism that stops two people building the same thing.
+**The issue list is for users only.** Never open, comment on, assign or claim an issue for our own work. Planned work is in [ROADMAP.md](ROADMAP.md); work in progress is on the GitHub Project board (draft items, which are not issues) and in open pull requests. A user's issue is the exception: answer it first, and the pull request that fixes it says `Fixes #n`.
 
-Before touching an issue:
+**Check before you start, claim before you write code.** A claim made at PR time claims nothing; the window it needed to cover has already closed.
 
-1. `gh issue view <n> --json assignees,title`: **if someone else is assigned, it is theirs.** See "Helping on someone else's issue" below for the two ways that changes.
-2. Look for an open PR on it. `gh pr list --search "<n>"` is a TEXT search: it matches comment bodies, so it both misses linked PRs that never mention the number and returns unrelated ones that happen to contain it. Treat a hit as a reason to look, not as an answer, and confirm by opening the PR. The linked-PR list on the issue page is authoritative where the two disagree.
-3. If both are clear, `gh issue edit <n> --add-assignee <you>` **before** writing code, not when you open the PR. An assignment made at PR time claims nothing; the window it needed to cover has already closed.
+1. `gh pr list --state open`: read every candidate, not only the titles. `gh pr list --search "<words>"` is a TEXT search and matches comment bodies, so treat a hit as a reason to look, not as an answer.
+2. Look at the project board's in-progress items for the same slice.
+3. If both are clear, claim it: add or move a board item that names your session and branch. Until the board exists, an open draft pull request is the claim: push the branch and open a draft right away.
 
-Check again immediately before opening the PR. A claim can appear while you work, and the second check is the cheap one.
+Check again immediately before opening the pull request. A claim can appear while you work, and the second check is the cheap one.
 
 ### Every agent is the same GitHub account
 
-`gh issue edit --add-assignee` cannot tell two agents apart: they all push and assign as the **same account**. An assignment to that account means *somebody* claimed this. It does not mean *you* did, and the field cannot tell you which. So treat it as a claim by someone else until you can show otherwise, and **leave a claim comment naming the session**, which is the only artifact that can:
+Every agent pushes as the **same account**, so the author of a pull request or a board item cannot tell sessions apart. Only the session and branch named in the claim can. Treat a claim without a session name as someone else's until you can show it is yours, and ask rather than assume. This applies to OUR sessions only. An outside contributor has their own account, so for them the author says what it appears to say.
 
-    gh issue comment <n> --body "Claiming this. Session <id>, branch <name>."
-
-If the account is assigned with no claim comment, ask on the issue rather than reading the field as your own. This applies to OUR sessions only. An outside contributor has their own account, so for them the field says what it appears to say.
-
-### The contributor check and the session check are different checks
+### Our sessions and outside contributors are different checks
 
 Doing one does not do the other. Run both, every time:
 
-    gh issue view <n> --json assignees      # is one of us on it
-    gh pr list --search "<n>"               # CANDIDATES; confirm on the issue page
+    gh pr list --state open                # open PRs, ours and outside contributors'
+    (project board, in-progress items)     # our sessions' claims
 
-The assignee check finds our own sessions. Only the PR search finds an outside contributor, who has no reason to know about an internal assignment: on the engine's repository the shared account was self-assigned and an outside contributor's PR for the same issue appeared 47 minutes later. No assignee field would have helped there.
+The board finds our own sessions. Only the pull request list finds an outside contributor, who has no reason to know about an internal claim: on the engine's repository an outside contributor's PR for the same work appeared 47 minutes after a session claimed it.
 
 ### When you collide mid-flight
 
-The expensive case is that both of you are already half-built when the claim appears. **The session named in the earliest claim comment decides. The other stops immediately** and hands over what it has as a comment or a patch on that session's PR. "The assignee decides" cannot work here, because the field holds one shared account and cannot name a session.
+The expensive case is that both of you are already half-built when the claim appears. **The session named in the earliest claim (board item or draft pull request) decides. The other stops immediately** and hands over what it has as a comment or a patch on that session's pull request. "The author decides" cannot work here, because the account is shared and cannot name a session.
 
 **An outside contributor's PR takes precedence over any internal claim, however early.** They cannot see our claims and are not bound by them. Stopping mid-build is cheap; two finished implementations of the same thing is not.
 
-### Helping on someone else's issue
+### Helping on someone else's work
 
-Helping is welcome. **Taking over is not.** Two things make it help: they accepted an offer (silence is not a yes), or it has gone quiet (no commits, no word, about a week; even then comment first and wait a couple of days).
+Helping is welcome. **Taking over is not.** Two things make it help: they accepted an offer (silence is not a yes), or it has gone quiet (no commits, no word, about a week; even then comment on their pull request first and wait a couple of days).
 
 Help, no permission needed: reviewing their PR including finding real defects; diagnosing a failing check and posting the cause; answering a question they asked; reporting a defect in shipped code even if their PR introduced it.
 
-Not help, however good the code: building a parallel implementation and announcing it afterwards; carrying an unraised branch that duplicates their work; pushing to their branch; opening a competing PR on their issue.
+Not help, however good the code: building a parallel implementation and announcing it afterwards; carrying an unraised branch that duplicates their work; pushing to their branch; opening a competing PR on their work.
 
-If you built something before noticing, say so plainly, hand it over, and let them decide. That is recoverable; landing it is not. When you find you have duplicated someone, the owner follows the rules above in order: an outside contributor's PR beats any internal claim; else the earliest claim comment wins; the assignee field decides only when neither applies, since it cannot name a session. Never whoever is further along or noticed first. Do not close the duplicate silently: enumerate what it holds that the survivor does not, and never push to a branch you do not own to "help".
+If you built something before noticing, say so plainly, hand it over, and let them decide. That is recoverable; landing it is not. When you find you have duplicated someone, the owner follows the rules above in order: an outside contributor's PR beats any internal claim; else the earliest claim wins. Never whoever is further along or noticed first. Do not close the duplicate silently: enumerate what it holds that the survivor does not, and never push to a branch you do not own to "help".
 
 ## Engine notes
 

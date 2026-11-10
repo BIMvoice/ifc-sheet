@@ -40,6 +40,7 @@ import { projectProfiles } from './profile-projector.js';
 import { bandsWithEdgeTolerance, getViewDirectionForPlane } from './projection-bands.js';
 import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } from './outline-depth.js';
 import { meshSilhouetteLines } from './silhouette-lines.js';
+import { roofBands, roofCreaseLines } from './roof-plan.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
@@ -272,31 +273,21 @@ export class Drawing2DGenerator {
         const outlineProvider = config.plane.customPlane ? undefined : opts.outlineProvider;
 
         for (const source of meshesForSilhouette) {
-          const clipped = config.clipProjectionBands
-            ? projectionBandMeshes(source, config.plane, bands.below, bands.above) : [source];
+          const reach = roofBands(source, config.plane, bands); // a roof the plan sees is drawn to its eaves (#490)
+          const clipped = config.clipProjectionBands ? projectionBandMeshes(source, config.plane, reach.below, reach.above) : [source];
           for (const mesh of clipped) {
             const outline = outlineProvider
               ? outlineProvider(mesh, config.plane.axis, config.plane.flipped)
               : null;
             if (outline && outline.contours.length > 0) {
-              projectionLines.push(
-                ...outlineLinesWithDepth(
-                  outline,
-                  {
-                    entityId: mesh.expressId,
-                    ifcType: mesh.ifcType ?? 'Unknown',
-                    modelIndex: mesh.modelIndex ?? 0,
-                  },
-                  config.plane,
-                  bands,
-                  mesh,
-                ),
-              );
+              const owner = { entityId: mesh.expressId, ifcType: mesh.ifcType ?? 'Unknown', modelIndex: mesh.modelIndex ?? 0 };
+              projectionLines.push(...outlineLinesWithDepth(outline, owner, config.plane, reach, mesh));
             } else {
-              projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, bands, viewDir, {
+              projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, reach, viewDir, {
                 includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView,
               }));
             }
+            projectionLines.push(...roofCreaseLines(mesh, config.plane, reach)); // a roof's ridges, hips and valleys (#490)
           }
         }
       }

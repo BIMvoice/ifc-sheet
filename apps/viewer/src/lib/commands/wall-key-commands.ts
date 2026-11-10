@@ -63,6 +63,15 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.revisions', labelKey: 'wall.keys.action.revisions', category: 'wall', when: 'wall', keys: [] },
   { id: 'wall.printPreview', labelKey: 'wall.keys.action.printPreview', category: 'wall', when: 'wall', keys: [] },
   { id: 'wall.exportDxf', labelKey: 'wall.keys.action.exportDxf', category: 'wall', when: 'wall', keys: [] },
+  // Lining chosen drawings up (#168): on offer with two (distribute: three) or more chosen; no key until a person gives one.
+  { id: 'wall.align.left', labelKey: 'wall.align.left', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.right', labelKey: 'wall.align.right', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.top', labelKey: 'wall.align.top', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.bottom', labelKey: 'wall.align.bottom', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.centreH', labelKey: 'wall.align.centreH', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.align.centreV', labelKey: 'wall.align.centreV', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.distribute.across', labelKey: 'wall.distribute.across', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.distribute.down', labelKey: 'wall.distribute.down', category: 'wall', when: 'wall', keys: [] },
 ] as const satisfies readonly KeyCommandDefinition[];
 
 export type WallKeyId = (typeof WALL_KEY_COMMANDS)[number]['id'];

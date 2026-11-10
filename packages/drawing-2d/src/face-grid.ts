@@ -2,7 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/** The faces of a mesh projected on a drawing plane, and a uniform grid of them, for `outline-depth.ts`. */
+/**
+ * The faces of a mesh projected on a drawing plane, and a uniform grid of them, for `outline-depth.ts`.
+ *
+ * Every clip stays inside its entry's bounding box grown by `reach`, and the grid files each entry under exactly that
+ * box, so a query never misses an entry a clip would take and the faces a line meets do not depend on the grid's cells
+ * (#557). Before, `clipToFace` grew a triangle by moving its edges out by `reach`, and a sliver's grown corner reached
+ * `reach / sin(half its angle)` past its tip, out of the box it was filed under: whether a line there met it depended
+ * on whether the line's cell held it.
+ */
 
 import type { MeshData } from '@ifc-lite/geometry';
 import type { SectionPlaneConfig } from './types.js';
@@ -112,13 +120,31 @@ export function projectMesh(mesh: MeshData, plane: SectionPlaneConfig): Float64A
 /** The last clip's `[t0, t1, alpha, beta]` (`clipToFace`, `clipToEdge`), kept here so no clip allocates. */
 export const SPAN = new Float64Array(4);
 
+/** `[t0, t1]` of `A + t·D` (t in [0, 1]) inside entry `o`'s box grown by `reach` (in `SPAN`), or false when it misses. */
+function clipToBox(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
+  let t0 = 0, t1 = 1;
+  for (let axis = 0; axis < 2; axis++) {
+    const a = axis === 0 ? ax : ay, d = axis === 0 ? dx : dy;
+    const lo = faces[o + BOX + axis] - reach, hi = faces[o + BOX + 2 + axis] + reach;
+    if (d === 0) { if (a < lo || a > hi) return false; continue; }
+    const ta = (lo - a) / d, tb = (hi - a) / d;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+    if (t0 > t1) return false;
+  }
+  SPAN[0] = t0; SPAN[1] = t1;
+  return true;
+}
+
 /**
  * The t interval of `A + t·D` (t in [0, 1]) inside face `o` grown by `reach`
- * on every edge, or false when it misses (Liang-Barsky against three edges),
- * with the face's depth there as `alpha + beta·t` (in `SPAN`).
+ * on every edge and kept to its box grown by `reach`, or false when it misses
+ * (Liang-Barsky), with the face's depth there as `alpha + beta·t` (in `SPAN`).
+ * Everything within `reach` of the face lies inside both.
  */
 export function clipToFace(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
-  let t0 = 0, t1 = 1;
+  if (!clipToBox(faces, o, ax, ay, dx, dy, reach)) return false;
+  let t0 = SPAN[0], t1 = SPAN[1];
   for (let e = 0; e < 3; e++) {
     const px = faces[o + e * 2], py = faces[o + e * 2 + 1];
     const nx = faces[o + 11 + e * 2], ny = faces[o + 12 + e * 2];
@@ -138,13 +164,15 @@ export function clipToFace(faces: Float64Array, o: number, ax: number, ay: numbe
 }
 
 /**
- * The t interval of `A + t·D` within `reach` of edge `o` (a box around it), with
- * the edge's depth there as `alpha + beta·t`, lowered by its slope times `reach`.
+ * The t interval of `A + t·D` within `reach` of edge `o` (a box around it, kept to
+ * its bounding box grown by `reach`), with the edge's depth there as
+ * `alpha + beta·t`, lowered by its slope times `reach`.
  */
 export function clipToEdge(faces: Float64Array, o: number, ax: number, ay: number, dx: number, dy: number, reach: number): boolean {
+  if (!clipToBox(faces, o, ax, ay, dx, dy, reach)) return false;
   const px = faces[o], py = faces[o + 1];
   const ex = faces[o + 11], ey = faces[o + 12], len = faces[o + 13];
-  let t0 = 0, t1 = 1;
+  let t0 = SPAN[0], t1 = SPAN[1];
   // Along the edge from -reach to len + reach, across it within reach.
   for (let side = 0; side < 2; side++) {
     const nx = side === 0 ? ex : -ey, ny = side === 0 ? ey : ex;
@@ -165,150 +193,96 @@ export function clipToEdge(faces: Float64Array, o: number, ax: number, ay: numbe
   return true;
 }
 
-/** The corners `reachBox` takes the box of. */
-const REACH_CORNERS = new Float64Array(8);
-
 /**
- * The box of what `clipToFace` or `clipToEdge` can take of entry `o` (the face with its edges moved out by `reach`, the
- * edge's box around it) into `out` at `at`, a hair larger so rounding never leaves a clip outside it.
- */
-function reachBox(faces: Float64Array, o: number, reach: number, out: Float64Array, at: number): void {
-  const c = REACH_CORNERS;
-  let n = 0;
-  if (faces[o + 9] === EDGE) {
-    const ex = faces[o + 11], ey = faces[o + 12], len = faces[o + 13];
-    for (let k = 0; k < 4; k++) {
-      const along = k < 2 ? -reach : len + reach, across = k % 2 === 0 ? -reach : reach;
-      c[n++] = faces[o] + ex * along - ey * across; c[n++] = faces[o + 1] + ey * along + ex * across;
-    }
-  } else {
-    // Each corner moves to where its two edges, each moved out by reach, meet.
-    for (let i = 0; i < 3; i++) {
-      const a = o + 11 + ((i + 2) % 3) * 2, b = o + 11 + i * 2;
-      const det = faces[a] * faces[b + 1] - faces[a + 1] * faces[b];
-      c[n++] = faces[o + i * 2] + (reach * (faces[a + 1] - faces[b + 1])) / det;
-      c[n++] = faces[o + i * 2 + 1] + (reach * (faces[b] - faces[a])) / det;
-    }
-  }
-  let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-  for (let k = 0; k < n; k += 2) {
-    if (!Number.isFinite(c[k]) || !Number.isFinite(c[k + 1])) { minU = minV = -Infinity; maxU = maxV = Infinity; break; }
-    minU = Math.min(minU, c[k]); maxU = Math.max(maxU, c[k]); minV = Math.min(minV, c[k + 1]); maxV = Math.max(maxV, c[k + 1]);
-  }
-  const pad = 1e-9 * (1 + Math.abs(minU) + Math.abs(maxU) + Math.abs(minV) + Math.abs(maxV));
-  out[at] = minU - pad; out[at + 1] = minV - pad; out[at + 2] = maxU + pad; out[at + 3] = maxV + pad;
-}
-
-/**
- * The faces a line may meet, exactly those of the grid #779 shipped. That grid filed each face in the cells of its box
- * grown by `reach` (cells as fine as one per face, up to 64 a side) and a line took every face of the cells of its own
- * box grown by `reach`, so each face sat in some 25 cells of a small element and a query walked it as often. Its cells
- * also decide which faces count: a sliver grown by `reach` reaches past its box, and whether a line there meets it
- * depends on the line's cell. So each face keeps the range of cells #779 filed it in, and a coarse grid of cells no
- * finer than `reach`, filed by what a clip can take of each face (`reachBox`), finds the candidates, of which a query
- * keeps those whose cell range meets the line's.
+ * A uniform grid of entry boxes grown by `reach`, so a line looks only at the entries near it. Its cells are no smaller
+ * than `reach`: finer ones file every entry in many cells and make a query walk it again in each.
  */
 export class FaceGrid {
-  /** Per entry: the cells #779's grid filed it in, `u0, v0, u1, v1`. */
-  private readonly cellsOf: Int32Array;
-  private readonly size: number;
-  private readonly minU: number;
-  private readonly minV: number;
-  private readonly cellU: number;
-  private readonly cellV: number;
-  /** Per entry: the box of what a clip can take of it. */
-  private readonly reachBoxes: Float64Array;
-  /** The coarse grid: cell `c` holds entries `items[start[c]]` up to `items[start[c + 1]]`, ascending. */
+  /** Cell `c` holds entries `items[start[c]]` up to `items[start[c + 1]]`, ascending. */
   private readonly start: Int32Array;
   private readonly items: Int32Array;
   private readonly nu: number;
   private readonly nv: number;
-  private readonly coarseU: number;
-  private readonly coarseV: number;
+  private readonly minU: number;
+  private readonly minV: number;
+  private readonly cellU: number;
+  private readonly cellV: number;
   private readonly seen: Int32Array;
   private stamp = 0;
-  private readonly reach: number;
   /** The entries the last `query` found, as many as it returned, ascending (so nearest first); reused, so a query allocates nothing. */
   readonly found: Int32Array;
 
   constructor(faces: Float64Array, reach: number) {
     const count = faces.length / STRIDE;
-    this.reach = reach;
     let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
     for (let o = 0; o < faces.length; o += STRIDE) {
       minU = Math.min(minU, faces[o + BOX]); minV = Math.min(minV, faces[o + BOX + 1]);
       maxU = Math.max(maxU, faces[o + BOX + 2]); maxV = Math.max(maxV, faces[o + BOX + 3]);
     }
-    this.size = count > 64 ? Math.min(64, Math.ceil(Math.sqrt(count))) : 1;
+    const size = count > 64 ? Math.min(64, Math.ceil(Math.sqrt(count))) : 1;
+    const spanU = maxU - minU + 2 * reach, spanV = maxV - minV + 2 * reach;
+    this.nu = Math.max(1, Math.min(size, Math.floor(spanU / reach)));
+    this.nv = Math.max(1, Math.min(size, Math.floor(spanV / reach)));
     this.minU = minU - reach;
     this.minV = minV - reach;
-    this.cellU = Math.max((maxU - minU + 2 * reach) / this.size, 1e-12);
-    this.cellV = Math.max((maxV - minV + 2 * reach) / this.size, 1e-12);
-    this.cellsOf = new Int32Array(count * 4);
-    this.reachBoxes = new Float64Array(count * 4);
-    for (let f = 0; f < count; f++) {
-      const o = f * STRIDE + BOX, c = f * 4;
-      this.cellsOf[c] = this.cell(faces[o] - reach, this.minU, this.cellU, this.size);
-      this.cellsOf[c + 1] = this.cell(faces[o + 1] - reach, this.minV, this.cellV, this.size);
-      this.cellsOf[c + 2] = this.cell(faces[o + 2] + reach, this.minU, this.cellU, this.size);
-      this.cellsOf[c + 3] = this.cell(faces[o + 3] + reach, this.minV, this.cellV, this.size);
-      reachBox(faces, f * STRIDE, reach, this.reachBoxes, c);
-    }
-    const spanU = maxU - minU + 2 * reach, spanV = maxV - minV + 2 * reach;
-    this.nu = Math.max(1, Math.min(this.size, Math.floor(spanU / reach)));
-    this.nv = Math.max(1, Math.min(this.size, Math.floor(spanV / reach)));
-    this.coarseU = Math.max(spanU / this.nu, 1e-12);
-    this.coarseV = Math.max(spanV / this.nv, 1e-12);
-    // Counts, then each coarse cell's entries in one array.
+    this.cellU = Math.max(spanU / this.nu, 1e-12);
+    this.cellV = Math.max(spanV / this.nv, 1e-12);
+    // Counts, then each cell's entries in one array.
     const cells = this.nu * this.nv;
     const start = new Int32Array(cells + 1);
-    this.fileEntries(count, (c) => { start[c + 1]++; });
+    this.fileEntries(faces, reach, (c) => { start[c + 1]++; });
     for (let c = 0; c < cells; c++) start[c + 1] += start[c];
     const items = new Int32Array(start[cells]);
     const next = start.slice(0, cells);
-    this.fileEntries(count, (c, f) => { items[next[c]++] = f; });
+    this.fileEntries(faces, reach, (c, f) => { items[next[c]++] = f; });
     this.start = start;
     this.items = items;
     this.seen = new Int32Array(count);
     this.found = new Int32Array(count);
   }
 
-  private fileEntries(count: number, file: (cell: number, f: number) => void): void {
-    const b = this.reachBoxes;
-    for (let f = 0; f < count; f++) {
-      const u0 = this.cell(b[f * 4], this.minU, this.coarseU, this.nu), v0 = this.cell(b[f * 4 + 1], this.minV, this.coarseV, this.nv);
-      const u1 = this.cell(b[f * 4 + 2], this.minU, this.coarseU, this.nu), v1 = this.cell(b[f * 4 + 3], this.minV, this.coarseV, this.nv);
+  private fileEntries(faces: Float64Array, reach: number, file: (cell: number, f: number) => void): void {
+    for (let f = 0, count = faces.length / STRIDE; f < count; f++) {
+      const o = f * STRIDE + BOX;
+      const u0 = this.cellU0(faces[o] - reach), v0 = this.cellV0(faces[o + 1] - reach);
+      const u1 = this.cellU0(faces[o + 2] + reach), v1 = this.cellV0(faces[o + 3] + reach);
       for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) file(v * this.nu + u, f);
     }
   }
 
-  private cell(x: number, min: number, size: number, n: number): number {
-    return Math.max(0, Math.min(n - 1, Math.floor((x - min) / size)));
+  private cellU0(x: number): number {
+    return Math.max(0, Math.min(this.nu - 1, Math.floor((x - this.minU) / this.cellU)));
   }
 
-  /** How many faces a line with the box `minU`..`maxV` may meet: the first that many of `found`. */
+  private cellV0(y: number): number {
+    return Math.max(0, Math.min(this.nv - 1, Math.floor((y - this.minV) / this.cellV)));
+  }
+
+  /**
+   * How many entries' grown boxes may meet the box `minU`..`maxV`: the first that many of `found`. Entries are filed
+   * grown, so pass the line's own box.
+   */
   query(minU: number, minV: number, maxU: number, maxV: number): number {
-    const { found, seen, start, items, nu, cellsOf, reachBoxes: b, reach } = this;
-    // The cells of #779's grid the line looked in.
-    const lu0 = this.cell(minU - reach, this.minU, this.cellU, this.size), lv0 = this.cell(minV - reach, this.minV, this.cellV, this.size);
-    const lu1 = this.cell(maxU + reach, this.minU, this.cellU, this.size), lv1 = this.cell(maxV + reach, this.minV, this.cellV, this.size);
-    const u0 = this.cell(minU, this.minU, this.coarseU, nu), v0 = this.cell(minV, this.minV, this.coarseV, this.nv);
-    const u1 = this.cell(maxU, this.minU, this.coarseU, nu), v1 = this.cell(maxV, this.minV, this.coarseV, this.nv);
-    const single = u0 === u1 && v0 === v1;
+    const u0 = this.cellU0(minU), v0 = this.cellV0(minV), u1 = this.cellU0(maxU), v1 = this.cellV0(maxV);
+    const { found, seen, start, items, nu } = this;
+    if (u0 === u1 && v0 === v1) {
+      const c = v0 * nu + u0;
+      found.set(items.subarray(start[c], start[c + 1]));
+      return start[c + 1] - start[c];
+    }
     const stamp = ++this.stamp;
     let n = 0;
     for (let v = v0; v <= v1; v++) {
       for (let u = u0; u <= u1; u++) {
         for (let i = start[v * nu + u], end = start[v * nu + u + 1]; i < end; i++) {
           const f = items[i];
-          if (!single) { if (seen[f] === stamp) continue; seen[f] = stamp; }
-          if (b[f * 4] > maxU || b[f * 4 + 2] < minU || b[f * 4 + 1] > maxV || b[f * 4 + 3] < minV) continue;
-          if (cellsOf[f * 4] > lu1 || cellsOf[f * 4 + 2] < lu0 || cellsOf[f * 4 + 1] > lv1 || cellsOf[f * 4 + 3] < lv0) continue;
+          if (seen[f] === stamp) continue;
+          seen[f] = stamp;
           found[n++] = f;
         }
       }
     }
-    if (!single) found.subarray(0, n).sort();
+    found.subarray(0, n).sort();
     return n;
   }
 }

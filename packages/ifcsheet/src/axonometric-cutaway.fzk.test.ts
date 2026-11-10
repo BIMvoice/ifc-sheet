@@ -89,9 +89,11 @@ describe.skipIf(missing !== null)('a cut-away axonometric of the FZK-Haus ground
     // IfcSlab: the ground slab's top north edge, at the foot of the north wall's outer face.
     const a = { x: 0.5, y: 0, z: -10 };
     const b = { x: 11, y: 0, z: -10 };
-    const on = drawing.lines.filter((l) => l.ifcType === 'IfcSlab' && ends(l).every((p) => near(p, { x: 0, y: 0, z: -10 }, { x: 11.4, y: 0, z: -10 }) < 0.02));
-    expect(on.length).toBeGreaterThan(0);
-    expect(on.filter((l) => l.visibility === 'visible')).toEqual([]);
+    const on = drawing.lines.filter((l) => l.ifcType === 'IfcSlab' && ends(l).every((p) => near(p, { x: 0, y: 0, z: -10 }, { x: 12, y: 0, z: -10 }) < 0.02));
+    expect(on.filter((l) => l.visibility === 'hidden').length).toBeGreaterThan(0);
+    // The hidden run now stops where the wall's end does (x 11.98, found by bisection, #557); the slab's last 2 cm to its corner stay visible.
+    const length = (l: DrawingLine) => { const [p, q] = ends(l); return Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z); };
+    expect(on.filter((l) => l.visibility === 'visible').reduce((s, l) => s + length(l), 0)).toBeLessThan(0.05);
     // No visible line of any element runs along it either.
     expect(drawing.lines.filter((l) => l.visibility === 'visible' && ends(l).every((p) => near(p, a, b) < 0.02))).toEqual([]);
   });

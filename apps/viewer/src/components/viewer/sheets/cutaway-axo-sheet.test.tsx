@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import { generateViewDrawings } from '@bimvoice/ifcsheet/headless';
+import { joinLikeCuts, likeCutKey } from '@bimvoice/ifcsheet';
+import { cutMaterialName } from '@/project/material-resolver';
 import { cleanup, render } from '@/test/render.js';
 import { meshFile } from '@/test/view-drawing-harness';
 import { addProjectSheet, addProjectView, resetProject, useProjectStore } from '@/project/project-store';
@@ -97,7 +99,8 @@ describe('a cut-away axonometric of the FZK-Haus ground floor on a sheet (issue 
     const fill = path('FILL');
     assert.ok(fill, 'the cut faces are a filled path');
     assert.match(fill[2], /fill="#[0-9a-f]{6}"/, 'filled, not outlined');
-    const rings = drawn.cutPolygons.reduce((n, p) => n + 1 + p.polygon.holes.length, 0);
+    // Like cut faces are joined where they meet (#349), so the sheet fills the joined faces, not the ones the cut made.
+    const rings = joinLikeCuts(drawn, (p) => likeCutKey(p, cutMaterialName(p))).cutPolygons.reduce((n, p) => n + 1 + p.polygon.holes.length, 0);
     assert.equal((fill[1].match(/M/g) ?? []).length, rings, 'every cut face and hole is in it');
     assert.ok((path('CUT')?.[1].match(/M/g) ?? []).length > 100, 'the cut outline in the heavy pen');
     assert.ok((path('SEEN')?.[1].match(/M/g) ?? []).length > 100, 'the line work seen beyond, in the light pen');
