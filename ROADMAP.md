@@ -18,6 +18,7 @@ The issue list holds only what is being built now and what users report. Ideas, 
 - **Country drawing practice and permit packs** (#799). On main: Romania (PAC, STAS / ISO 128), Norway (byggesak), Germany (Bauantrag per Land, DIN / ISO 128). Parked: United Kingdom (#549), Germany DIN 1356-1 (#550), Switzerland (#551), Netherlands (#552). Every pack stays optional.
 - **Drawings from more than IFC** (#172). On main: DXF underlays, the surveyor's DXF and LandXML contours on the site plan, IFCX read as IFC, a title block for formats without IFC data. Parked: point clouds to survey drawings (#181, #207), glTF with user levels and a 3D view (#183, #208), the remaining IFCX unit and anchor warnings, an Autodesk connector.
 - **DWG export and plot styles** (#52). Deferred on 26 October: the ODA libraries are commercial and need the maintainer's go; DXF covers the exchange today.
+- **An installable app that works offline** (#456). Built and tested locally on branch `feat/456-offline-app` (manifest, a service worker that precaches the shell and the wasm, a kill switch; an offline Playwright run passes). Held back on purpose: a maintainer closed #463 because a faulty service worker keeps users on an old version, and asked for the kill switch to be tested on a real deploy before it returns. That test needs a preview deploy.
 - **A community link in the help menu** (#455). Waits until a community place exists.
 - **Checks an office defines itself** in the list of what is missing, such as a north arrow on every plan (#24). Out of scope for now.
 
