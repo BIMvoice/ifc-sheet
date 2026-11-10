@@ -292,7 +292,9 @@ export function sheetGraphic(
       // Then like cut faces joined where they meet (#349), as the app's `styledDrawing` joins them: alike by material and by how this view draws them.
       const painted = scheme?.elementColours;
       const faces = joinLikeCuts(materials ? materialFaces(drawing, materialDrawing(drawing, materials)) : { cutPolygons: drawing.cutPolygons, lines: drawing.lines, hatches: [], membranes: [] }, (p) => {
-        const k = painted?.has(p.entityId) ? null : likeCutKey(p, materials?.nameOf?.(p));
+        // A face a colour scheme paints joins faces of its colour only, as the app's do (`withScheme` marks them `schemeColour`).
+        const colour = painted?.get(p.entityId);
+        const k = likeCutKey(colour ? { ...p, schemeColour: colour } : p, materials?.nameOf?.(p));
         const s = k === null ? null : styler.face(p);
         return s?.visible ? `${k}|${s.fill}|${s.stroke}|${s.weight}` : null;
       });
