@@ -22,7 +22,7 @@ const ICONS: Record<WallKeyId, Command['icon']> = {
   'wall.tool.dimaligned': PencilRuler, 'wall.tool.tag': PencilRuler, 'wall.tool.leader': PencilRuler,
   'wall.tool.level': PencilRuler, 'wall.tool.sectionline': PencilRuler, 'wall.tool.symbol': PencilRuler,
   'wall.draw.line': PencilRuler, 'wall.draw.polyline': PencilRuler, 'wall.draw.rectangle': PencilRuler, 'wall.draw.circle': PencilRuler,
-  'wall.draw.text': PencilRuler, 'wall.draw.hatch': PencilRuler, 'wall.draw.revcloud': PencilRuler, 'wall.draw.ptext': PencilRuler,
+  'wall.draw.text': PencilRuler, 'wall.draw.hatch': PencilRuler, 'wall.draw.revcloud': PencilRuler, 'wall.draw.pen': PencilRuler, 'wall.draw.ptext': PencilRuler,
   'wall.draw.trim': PencilRuler, 'wall.draw.extend': PencilRuler, 'wall.draw.fillet': PencilRuler, 'wall.draw.offset': PencilRuler, 'wall.draw.chamfer': PencilRuler, 'wall.draw.hideline': PencilRuler,
   'wall.addDrawing': Plus, 'wall.fit': Maximize, 'wall.print': Printer, 'wall.prevSheet': StepBack, 'wall.nextSheet': StepForward,
   'wall.back': ArrowLeft, 'wall.leaveEdit': ArrowLeft, 'wall.comment': MessageSquare, 'wall.paper': FileText, 'wall.titleBlock': FileText,

@@ -291,6 +291,14 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
   if (command.onPoint) finish(command.onPoint(constrainPoint(p)));
 }
 
+/** A freehand stroke (#833): the pointer moved to `p` while down, and let go. */
+export function strokeMove(p: Pt): void {
+  command?.stroke?.move(p);
+}
+export function strokeEnd(tolerance: number): void {
+  if (command?.stroke) finish(command.stroke.end(tolerance));
+}
+
 /** Window (fully inside) or crossing (touching) selection of a drawn rectangle. */
 export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean): void {
   selectIn(boxRegion(a, b), crossing, additive);

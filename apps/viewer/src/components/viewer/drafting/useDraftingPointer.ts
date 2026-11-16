@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { screenToDrawing, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
-import { baseDraftSettings, clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, selectIn, setDraftSelection, setOrthoHeld, useDraftingSession, visibleEntities, windowSelect } from '@/drafting/session';
+import { baseDraftSettings, clickDrawing, constrainFrom, constrainPoint, pickEntity, resolveLevelRef, runningCommand, selectIn, setDraftSelection, setOrthoHeld, strokeEnd, strokeMove, useDraftingSession, visibleEntities, windowSelect } from '@/drafting/session';
 import { commitSelectionDrag, dragSelectionTo, dragSnapTargets, selectionDragPreview, startSelectionDrag, type DragAim, type SelectionDrag } from '@/drafting/drag-selection';
 import { commitSelectionTurn, onTurnHandle, selectionTurnPreview, startSelectionTurn, turnHandleOf, turnSelectionTo, type SelectionTurn } from '@/drafting/turn-selection';
 import { thinPath } from '@/drafting/region-select';
@@ -35,6 +35,8 @@ const DRAG_PX = 4;
 /** A lasso keeps a point each time the pointer has moved this far on screen. */
 const LASSO_STEP_PX = 3;
 const GRIP_PX = 7;
+/** A freehand stroke is simplified to within this many screen pixels of the path (#833). */
+export const STROKE_TOLERANCE_PX = 0.5;
 const SNAP_ORDER: readonly SnapMode[] = ['endpoint', 'intersection', 'midpoint', 'center', 'quadrant', 'perpendicular', 'nearest'];
 const ALL_MODES: ReadonlySet<SnapMode> = new Set(SNAP_ORDER);
 
@@ -116,7 +118,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
   const [state, setState] = useState<DraftingPointerState>({ tracking: NO_TRACKING, cursor: null, snap: null, hoverId: null, window: null, lasso: null, gripDrag: null, gripHover: null, selectionDrag: null });
   /** A grip picked up by a click and carried until the next click drops it (#454). */
   const carry = useRef<Grip | null>(null);
-  const drag = useRef<{ kind: 'pan' | 'window' | 'lasso' | 'grip' | 'selection' | 'turn'; path?: readonly Pt[]; startScreen: Pt; startDrawing: Pt; startTransform: ViewTransform; grip?: Grip; selection?: SelectionDrag; turn?: SelectionTurn; moved?: boolean } | null>(null);
+  const drag = useRef<{ kind: 'pan' | 'window' | 'lasso' | 'grip' | 'selection' | 'turn' | 'stroke'; path?: readonly Pt[]; startScreen: Pt; startDrawing: Pt; startTransform: ViewTransform; grip?: Grip; selection?: SelectionDrag; turn?: SelectionTurn; moved?: boolean } | null>(null);
 
   const local = (e: { clientX: number; clientY: number }): Pt => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -202,6 +204,11 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       return;
     }
     const raw = screenToDrawing(s, transform, axis);
+    if (d?.kind === 'stroke') {
+      strokeMove(raw);
+      setState((prev) => ({ ...prev, cursor: raw, snap: null }));
+      return;
+    }
     if (d?.kind === 'turn' && d.turn) {
       // The handle turns the selection about its centre, in 15° steps; Shift turns it by the degree (#168).
       const turn = (d.turn = turnSelectionTo(d.turn, raw, e.shiftKey));
@@ -257,6 +264,11 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
       return;
     }
     const command = runningCommand();
+    if (command?.input() === 'stroke') {
+      drag.current = { kind: 'stroke', startScreen: s, startDrawing: raw, startTransform: transform };
+      strokeMove(raw);
+      return;
+    }
     if (command && command.input() === 'point') {
       clickDrawing(resolve(raw).point, PICK_PX / transform.scale, e.shiftKey);
       return;
@@ -291,6 +303,11 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     const d = drag.current;
     drag.current = null;
     if (!d || d.kind === 'pan') return;
+    if (d.kind === 'stroke') {
+      strokeMove(screenToDrawing(local(e), transform, axis));
+      strokeEnd(STROKE_TOLERANCE_PX / transform.scale);
+      return;
+    }
     if (d.kind === 'grip' && d.grip) {
       const at = local(e);
       if (Math.hypot(at.x - d.startScreen.x, at.y - d.startScreen.y) <= DRAG_PX) {

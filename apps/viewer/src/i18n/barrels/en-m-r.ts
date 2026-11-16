@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { polylineCardEn } from '../catalogues/polyline-card.en';
+import { penEn } from '../catalogues/pen.en';
 import { repeatToolEn } from '../catalogues/repeat-tool.en';
 import { manualValidationEn } from '../catalogues/manual-validation.en';
 import { materialsEn } from '../catalogues/materials.en';
@@ -121,4 +122,5 @@ export const enMR = {
   ...roomSummaryEn,
   ...roomToolEn,
   ...polylineCardEn,
+  ...penEn,
 } as const;

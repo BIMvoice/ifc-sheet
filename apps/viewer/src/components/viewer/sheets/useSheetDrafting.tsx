@@ -12,18 +12,19 @@
  * (preview, snap, cursor, selection).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '@/project/project-store';
 import { paperOf } from '@/project/sheets';
 import { draftsOfView } from '@/drafting/draft-store';
 import { findSnap } from '@/drafting/snaps';
 import {
-  attachDraftingView, clickDrawing, constrainPoint, pickEntity, runningCommand, setAnnotationProviders, setDraftSelection,
+  attachDraftingView, clickDrawing, constrainPoint, pickEntity, runningCommand, setAnnotationProviders, setDraftSelection, strokeEnd, strokeMove,
   setWorkPlaneProvider, useDraftingSession,
 } from '@/drafting/session';
 import { isGeometry, type Pt, type SnapHit, type SnapMode } from '@/drafting/types';
 import type { HatchPattern } from '@/drafting/hatch/pattern';
 import { DraftOverlay } from '../drafting/DraftOverlay';
+import { STROKE_TOLERANCE_PX } from '../drafting/useDraftingPointer';
 import { OnDrawingText } from '../drafting/OnDrawingText';
 
 const SNAP_PX = 10;
@@ -66,6 +67,11 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
   /** A press on the paper: true when drafting took it (a running command, or a sheet annotation). */
   const down = (p: Pt, additive: boolean): boolean => {
     const tolerance = PICK_PX / pan.k;
+    if (runningCommand()?.input() === 'stroke') {
+      stroking.current = true;
+      strokeMove(p);
+      return true;
+    }
     if (runningCommand()) {
       clickDrawing(resolve(p).p, tolerance, additive);
       return true;
@@ -78,7 +84,17 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
     return false;
   };
 
+  const stroking = useRef(false);
+  /** The press ended: a freehand stroke (#833) is saved, simplified to within half a screen pixel. */
+  const up = (p: Pt): void => {
+    if (!stroking.current) return;
+    stroking.current = false;
+    strokeMove(p);
+    strokeEnd(STROKE_TOLERANCE_PX / pan.k);
+  };
+
   const move = (p: Pt): boolean => {
+    if (stroking.current) strokeMove(p);
     const running = runningCommand() !== null;
     setCursor(running ? resolve(p) : null);
     return running;
@@ -108,5 +124,5 @@ export function useSheetDrafting(sheetId: string, pan: Pan, extraPatterns: reado
     <OnDrawingText transform={transform} axis="down" />
     </>
   );
-  return { entities, down, move, overlay, drafting: command !== null };
+  return { entities, down, move, up, overlay, drafting: command !== null };
 }

@@ -149,7 +149,7 @@ export function SheetView({ sheet }: { sheet: ProjectSheet }) {
             if (d.kind === 'pan') setPan({ ...d.start, x: d.start.x + dx, y: d.start.y + dy });
             else if (d.vp) { const to = { x: d.vp.x + dx / pan.k, y: d.vp.y + dy / pan.k }; d.last = to; updateViewport(sheet.id, d.vp.id, to); }
           }}
-          onPointerUp={endDrag}
+          onPointerUp={(e) => { sheetDrafting.up(toPaper(e.clientX, e.clientY)); endDrag(); }}
         >
           <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
             <SheetPaper

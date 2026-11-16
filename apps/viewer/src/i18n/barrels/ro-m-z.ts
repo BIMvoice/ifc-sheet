@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { polylineCardRo } from '../catalogues/polyline-card.ro';
+import { penRo } from '../catalogues/pen.ro';
 import { repeatToolRo } from '../catalogues/repeat-tool.ro';
 import { manualValidationRo } from '../catalogues/manual-validation.ro';
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
@@ -169,4 +170,5 @@ export const roMZ = {
   ...wallRo,
   ...whatChangedRo,
   ...polylineCardRo,
+  ...penRo,
 } as const;
