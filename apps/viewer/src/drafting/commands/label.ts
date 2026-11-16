@@ -15,7 +15,8 @@
 
 import type { AnnotationType } from '@/catalogue/types';
 import { getLocale } from '@/i18n';
-import { classesOf, unlabelledTargets, type LabelTarget } from '@bimvoice/ifcsheet';
+import { classesOf, planLabelPreset, presetNamed, unlabelledTargets, type LabelPreset, type LabelTarget } from '@bimvoice/ifcsheet';
+import { labelElementByGlobalId } from '@/labels/label-element';
 import { defaultCentres, labelDraft, labelTargets, type LabelPlacement } from '@/labels/label-all';
 import { paperUnitOf } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
@@ -95,6 +96,9 @@ function classNamed(text: string, classes: readonly string[]): string | undefine
   return classes.find((c) => c.toLowerCase() === wanted || c.toLowerCase() === `ifc${wanted}`);
 }
 
+/** The label presets the project holds. */
+const presetsOfProject = (): readonly LabelPreset[] => useProjectStore.getState().labelPresets ?? [];
+
 export const labelAllCommand: DraftCommandDef = {
   id: 'labelall',
   aliases: ['LABELALL', 'LBA'],
@@ -103,6 +107,25 @@ export const labelAllCommand: DraftCommandDef = {
     const elements = ctx.viewElements();
     const targets = labelTargets(elements);
     const classes = classesOf(targets);
+    // A label preset (#828): every group labels the elements that meet its conditions with its own type; the rest stay drawn, unlabelled.
+    const runPreset = (preset: LabelPreset): 'done' => {
+      const types = useProjectStore.getState().annotationTypes ?? [];
+      const plans = planLabelPreset(preset, targets, types, ctx.entities(), (guid) => labelElementByGlobalId(guid));
+      const missing = plans.filter((p) => !p.type).map((p) => p.group.labelType);
+      if (missing.length) {
+        ctx.say('drafting.msg.labelPresetNoType', { name: preset.name, types: [...new Set(missing)].join(', ') });
+        return 'done';
+      }
+      const at = placement(ctx);
+      const drafts = plans.flatMap(({ type, targets: plan }) => {
+        if (!type) return [];
+        const centres = defaultCentres(type, plan, elements, ctx.entities(), at);
+        return plan.flatMap((t) => labelDraft(type, t.guid, centres.get(t.guid) ?? t.anchor, at, t.ring) ?? []);
+      });
+      if (drafts.length) editDrafts({ add: drafts });
+      ctx.say(drafts.length ? 'drafting.msg.labelPresetDone' : 'drafting.msg.labelPresetNone', { name: preset.name, count: drafts.length });
+      return 'done';
+    };
     const run = (className: string): 'done' => {
       const type = currentLabelType(ctx);
       if (!type) {
@@ -118,11 +141,13 @@ export const labelAllCommand: DraftCommandDef = {
       return 'done';
     };
     return {
-      prompt: () => ({ key: 'drafting.prompt.labelAllClass', choices: classes.map((c) => ({ value: c.className, count: c.count })) }),
+      prompt: () => ({ key: 'drafting.prompt.labelAllClass', choices: [...presetsOfProject().map((p) => ({ value: p.name, count: p.groups.length })), ...classes.map((c) => ({ value: c.className, count: c.count }))] }),
       input: () => 'point',
       basePoint: () => null,
       wantsText: () => true,
       onText(text) {
+        const preset = presetNamed(presetsOfProject(), text);
+        if (preset) return runPreset(preset);
         const className = classNamed(text, classes.map((c) => c.className));
         if (!className) {
           ctx.say('drafting.msg.labelAllClass', { class: text });
