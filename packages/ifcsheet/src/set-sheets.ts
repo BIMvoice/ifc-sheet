@@ -57,6 +57,8 @@ export interface SheetGraphicsOptions {
   joinery?: JoineryProject;
   /** The project's building materials table (#633): a material whose Fill is the IFC colour or a colour paints the faces of elevations and sections. */
   materials?: readonly ProjectMaterial[];
+  /** What a DXF of these sheets needs (#831): see `sheetGraphic`'s last argument. */
+  dxf?: { byElement?: boolean; modelFrames?: boolean };
 }
 
 /** An element's properties as a preset's property rules read them (`view-style.ts`), from a model opened here: each element's sets read once, only when a view's rules ask. */
@@ -137,5 +139,5 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   // The title block's fields as the app fills them from the model (`title-block-sources.ts`): the phase, the roles, the organisation, the address.
   const projectFields = model.dataStore ? projectTitleFields(doc.titleBlock, doc.titleBlockSources, readStoreFacts(model.dataStore)) : undefined;
   const project = options.annotations || options.schedules ? { annotations: options.annotations, schedules: options.schedules } : undefined;
-  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces, openings, model.dataStore ? materialResolver(headlessMaterialSource(model.dataStore), options.materials ?? []) : undefined));
+  return doc.sheets.map((sheet) => sheetGraphic(sheet, doc, drawings, model.extent, schemes, globalIdOf, propertiesOf, options.pens ?? PEN_TABLE, materialOf, projectFields, options.language, { north: model.dataStore ? northOfStore(model.dataStore) : null, locale: sheetFormat(options.locale ?? 'en', options.units ?? doc.unitsAndNumbers) }, project, surfaces, openings, model.dataStore ? materialResolver(headlessMaterialSource(model.dataStore), options.materials ?? []) : undefined, options.dxf));
 }

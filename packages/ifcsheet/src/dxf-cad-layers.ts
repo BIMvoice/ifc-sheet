@@ -40,7 +40,7 @@ export function layerAndPens(
 ): { name: string } & TaggedPens {
   const pens = pensOf(tag, colour);
   if (rules.length === 0) return { name, ...pens };
-  const choice = resolveCadLayer(rules, { source: name, kind: tag('kind'), ifcClass: tag('class'), material: tag('material') });
+  const choice = resolveCadLayer(rules, { source: name, kind: tag('kind'), ifcClass: tag('class'), material: tag('material'), ...(tag('external') === '1' ? { external: true } : tag('external') === '0' ? { external: false } : {}) });
   if (!choice) return { name, ...pens };
   const over = (p: PenSpec): PenSpec => ({
     ...p,

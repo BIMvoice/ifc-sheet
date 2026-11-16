@@ -12,7 +12,7 @@ import type { CadKind } from './cad-layers.js';
 import type { LineType } from './draft-look.js';
 import type { DraftLayer } from './draft-types.js';
 
-export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined> & Partial<Record<`data-dxf-${'own-lw' | 'own-ltype' | 'print'}`, string | undefined>> & Partial<Record<`data-dxf-${'class' | 'material' | 'kind'}`, string | undefined>>;
+export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, string | undefined> & Partial<Record<`data-dxf-${'own-lw' | 'own-ltype' | 'print'}`, string | undefined>> & Partial<Record<`data-dxf-${'class' | 'material' | 'kind' | 'external'}`, string | undefined>>;
 
 /**
  * What the CAD layer standard (`project/cad-layers.ts`) matches on, beyond the
@@ -21,12 +21,12 @@ export type DxfTags = Record<`data-dxf-${'layer' | 'color' | 'lw' | 'ltype'}`, s
  * layers read them too), and the configured CAD names are applied at DXF write
  * time (`dxf-cad-layers.ts`).
  */
-export interface DxfSubject { ifcType?: string; material?: string; kind?: string }
+export interface DxfSubject { ifcType?: string; material?: string; kind?: string; external?: boolean }
 
 /** A role layer's tags (the generated drawing's pens). */
 export function penTags(layer: string, widthMm: number, dashed: boolean | LineType = false, color = '#000000', subject: DxfSubject = {}): DxfTags {
   const lineType = typeof dashed === 'string' ? dashed : dashed ? 'dashed' : 'continuous';
-  return { 'data-dxf-class': subject.ifcType, 'data-dxf-material': subject.material, 'data-dxf-kind': subject.kind, 'data-dxf-layer': layer, 'data-dxf-color': color, 'data-dxf-lw': String(widthMm), 'data-dxf-ltype': lineType };
+  return { 'data-dxf-class': subject.ifcType, 'data-dxf-material': subject.material, 'data-dxf-external': subject.external === undefined ? undefined : subject.external ? '1' : '0', 'data-dxf-kind': subject.kind, 'data-dxf-layer': layer, 'data-dxf-color': color, 'data-dxf-lw': String(widthMm), 'data-dxf-ltype': lineType };
 }
 
 

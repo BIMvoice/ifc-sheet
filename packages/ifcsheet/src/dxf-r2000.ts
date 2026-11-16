@@ -257,7 +257,8 @@ export class DxfR2000 {
   }
 
   /** The document, windows-1252 encoded. */
-  bytes(comment: string): Uint8Array {
+  /** `insunits`: the `$INSUNITS` the drawing's unit is (default 4, millimetres). */
+  bytes(comment: string, insunits = 4): Uint8Array {
     const ltypes = this.lineTypes();
     const layers = this.layerTable();
     const styles = this.tablesFace
@@ -266,6 +267,7 @@ export class DxfR2000 {
     const pairs = (list: string[]) => list.map((v, i) => (i % 2 === 0 ? v.padStart(3) : v)).join('\n');
     const text = skeleton
       .replace(/^999\n[^\n]*\n/, () => `999\n${escapeDxfText(comment.replace(/\n/g, ' '))}\n`)
+      .replace(/\$INSUNITS\n\s*70\n\d+/, `$INSUNITS\n 70\n${insunits}`)
       .replace('{{LTYPES}}\n', ltypes.length ? `${pairs(ltypes)}\n` : '')
       .replace('{{LAYERS}}\n', layers.length ? `${pairs(layers)}\n` : '')
       .replace('{{STYLES}}\n', styles.length ? `${pairs(styles)}\n` : '')
