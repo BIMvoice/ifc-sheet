@@ -11,6 +11,7 @@
  * frame.
  */
 
+import { BoxGrid } from './box-grid.js';
 import type { Box } from './outline.js';
 
 /** Gaps this narrow (metres) are the grid's to merge, not a gap. */
@@ -24,6 +25,27 @@ const MAX_TOL = 0.6;
 const FILLED = 0.9;
 /** The widest gap (metres) a filling closes: a glazed corner of a house, not the open side of a court. */
 const FILLED_REACH = 6;
+/** The cell (metres) of the grid the fillers are found in by where a gap is (#829). */
+const FILLER_CELL = 1;
+
+/** Fillers, and a grid of their indices: a gap reads only the fillers standing near it, in their order, not every one the plan cuts (#829). */
+interface Fillers {
+  boxes: readonly Box[];
+  grid: BoxGrid<number>;
+}
+
+function fillersOf(boxes: readonly Box[]): Fillers {
+  const grid = new BoxGrid<number>(FILLER_CELL);
+  boxes.forEach((b, i) => grid.add(b, i));
+  return { boxes, grid };
+}
+
+/** The fillers whose boxes meet the gap `g`, in the order they were given: the only ones that can stand in it. */
+function fillersAt(g: Box, fillers: Fillers): Box[] {
+  const near = fillers.grid.near(g);
+  if (near.size === 0) return [];
+  return [...near].sort((a, b) => a - b).map((i) => fillers.boxes[i]);
+}
 
 /** How wide a gap the walls close: their median thickness, within the limits. */
 export function closingTolerance(walls: readonly Box[]): number {
@@ -39,11 +61,12 @@ const overlap = (a0: number, a1: number, b0: number, b1: number): number => Math
  * along it joined. A filler stands in the band when its middle does: the plaster on the face of a wall beside the gap
  * lies outside it, the boards of a column's casing and the panes of a glazed wall inside.
  */
-function filledBy(g: Box, fillers: readonly Box[], alongX: boolean): boolean {
+function filledBy(g: Box, fillers: Fillers, alongX: boolean): boolean {
   const [g0, g1] = alongX ? [g.x0, g.x1] : [g.y0, g.y1];
   if (g1 - g0 <= TOUCH) return false;
   const inBand = (f: Box) => (alongX ? within((f.y0 + f.y1) / 2, g.y0, g.y1) : within((f.x0 + f.x1) / 2, g.x0, g.x1));
-  const spans = fillers
+  // A filler in the band whose span along the gap is not empty meets the gap's box: only those are read.
+  const spans = fillersAt(g, fillers)
     .filter(inBand)
     .map((f): [number, number] => (alongX ? [Math.max(f.x0, g0), Math.min(f.x1, g1)] : [Math.max(f.y0, g0), Math.min(f.y1, g1)]))
     .filter(([a, b]) => b > a)
@@ -65,7 +88,7 @@ const mid = (a: number, b: number) => (a + b) / 2;
  * the tolerance: each wall carried on along its own band to the other's far face, so the corner is the walls' own and not
  * the room's. Empty unless the fillers cover both.
  */
-function filledCorner(h: Box, v: Box, fillers: readonly Box[]): Box[] {
+function filledCorner(h: Box, v: Box, fillers: Fillers): Box[] {
   const left = mid(v.x0, v.x1) < mid(h.x0, h.x1);
   const below = mid(v.y0, v.y1) < mid(h.y0, h.y1);
   const alongH: Box = { x0: left ? v.x0 : h.x1, x1: left ? h.x0 : v.x1, y0: h.y0, y1: h.y1 };
@@ -111,7 +134,7 @@ export function closingBoxes(walls: readonly Box[], tol: number = closingToleran
 export function filledGaps(walls: readonly Box[], fillers: readonly Box[], tol: number = closingTolerance(walls)): Box[] {
   const out: Box[] = [];
   if (fillers.length === 0) return out;
-  const turned = [fillers, fillers.map((b) => ({ x0: b.y0, x1: b.y1, y0: b.x0, y1: b.x1 }))];
+  const turned = [fillersOf(fillers), fillersOf(fillers.map((b) => ({ x0: b.y0, x1: b.y1, y0: b.x0, y1: b.x1 })))];
   eachPair(walls, FILLED_REACH, (a, b, v, swap) => {
     const filling = turned[swap ? 1 : 0];
     const gx = b.x0 - a.x1;
