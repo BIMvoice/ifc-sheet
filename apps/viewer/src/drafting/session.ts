@@ -272,10 +272,7 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
       // The parts of a section symbol are picked and unpicked together.
       const parts = withSectionParts(new Set([hit.id]), visibleEntities(viewId));
       const unpick = next.has(hit.id) && additive;
-      for (const id of parts) {
-        if (unpick) next.delete(id);
-        else next.add(id);
-      }
+      for (const id of parts) { if (unpick) next.delete(id); else next.add(id); }
     }
     set({ selection: next });
     markWitnessPoint(next, additive || selecting ? null : hit, p, tolerance);
@@ -292,12 +289,8 @@ export function clickDrawing(p: Pt, tolerance: number, additive: boolean): void 
 }
 
 /** A freehand stroke (#833): the pointer moved to `p` while down, and let go. */
-export function strokeMove(p: Pt): void {
-  command?.stroke?.move(p);
-}
-export function strokeEnd(tolerance: number): void {
-  if (command?.stroke) finish(command.stroke.end(tolerance));
-}
+export function strokeMove(p: Pt): void { command?.stroke?.move(p); }
+export function strokeEnd(tolerance: number): void { if (command?.stroke) finish(command.stroke.end(tolerance)); }
 
 /** Window (fully inside) or crossing (touching) selection of a drawn rectangle. */
 export function windowSelect(a: Pt, b: Pt, crossing: boolean, additive: boolean): void {
