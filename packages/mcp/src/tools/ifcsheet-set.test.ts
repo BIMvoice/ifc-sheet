@@ -271,6 +271,14 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     expect(written.files.map((f: any) => f.sheet)).toEqual(['A-101', 'A-201', 'A-202', 'A-301']);
     expect((await readdir(dxfOut)).sort()).toEqual((await readdir(join(cliOut, 'dxf'))).sort());
     for (const f of await readdir(dxfOut)) expect(await readFile(join(dxfOut, f), 'utf8')).toBe(await readFile(join(cliOut, 'dxf', f), 'utf8'));
+    // As a CAD working file (#831): the tool's layers and units are the command line's --dxf-layers and --dxf-units.
+    const cliWork = join(tmp, 'cli-working');
+    await cli('build', FZK, '--out', join(cliWork, 'set.pdf'), '--dxf', join(cliWork, 'dxf'), '--dxf-layers', 'element', '--dxf-units', 'model');
+    const toolWork = join(tmp, 'tool-working');
+    await ok('ifcsheet_export_dxf', { document_id, directory: toolWork, layers: 'element', units: 'model' });
+    const working = await readFile(join(toolWork, 'A-101.dxf'), 'utf8');
+    expect(working).toContain('A-WALL-EXTR');
+    expect(working).toBe(await readFile(join(cliWork, 'dxf', 'A-101.dxf'), 'utf8'));
     // One sheet only.
     const one = await ok('ifcsheet_export_dxf', { document_id, directory: join(tmp, 'tool-one'), sheet: 'a-301' });
     expect(one.files).toHaveLength(1);

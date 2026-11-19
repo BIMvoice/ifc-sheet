@@ -27,7 +27,7 @@ import type { ToolContext } from '../context.js';
 import { annotatedCopy } from './ifcsheet-annotated.js';
 import { drawSet } from './ifcsheet-draw.js';
 import { SCHEDULES_KEY, projectFileBody } from './ifcsheet-project-file.js';
-import { DOCUMENT_ID, DRY_RUN, dryPrefix, findSheet, invalid, optBoolean, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
+import { DOCUMENT_ID, DRY_RUN, dryPrefix, findSheet, invalid, optBoolean, optChoice, optText, outputPath, pathOrInline, sheetsOf, text, unplacedViews } from './ifcsheet-shared.js';
 import { addSheetSet, getSheetModel, getSheetSet, type SetSchedule } from './ifcsheet-store.js';
 import type { Tool } from './types.js';
 import type { ToolGroup } from './ifcsheet-tool-group.js';
@@ -94,7 +94,7 @@ export const ifcsheetApplyTemplate: Tool = {
 export const ifcsheetExportDxf: Tool = {
   name: 'ifcsheet_export_dxf',
   description:
-    'Write the sheets of a drawing set as DXF files, one per sheet, into a directory on the server: named by sheet number (A-101.dxf), paper millimetres, the same files as `ifcsheet build --dxf`.  Like the engine\'s DXF, the files hold lines and no text. Give sheet (an id or number) to write one sheet only. The directory is created if absent and must be inside the allowed paths. Returns the files written (sheet, file, bytes).',
+    'Write the sheets of a drawing set as DXF files, one per sheet, into a directory on the server: named by sheet number (A-101.dxf), paper millimetres, the same files as `ifcsheet build --dxf`. With layers "element" each element class is on its own AIA-style layer (A-WALL-EXTR and A-WALL-INTR by IsExternal or the wall\'s name, A-DOOR, A-GLAZ, A-ANNO-DIMS, ...) instead of the pens\' (CUT, SEEN, ...); with units "model" each view is written at its model size in metres (a CAD working file: the frame and title block are left out) instead of paper millimetres.  Like the engine\'s DXF, the files hold lines and no text. Give sheet (an id or number) to write one sheet only. The directory is created if absent and must be inside the allowed paths. Returns the files written (sheet, file, bytes).',
   scope: 'export',
   inputSchema: {
     type: 'object',
@@ -102,6 +102,8 @@ export const ifcsheetExportDxf: Tool = {
       document_id: DOCUMENT_ID,
       directory: { type: 'string', description: 'The directory to write into.' },
       sheet: { type: 'string', description: 'One sheet\'s id or number. Default: every sheet.' },
+      layers: { type: 'string', enum: ['pen', 'element'], description: 'Layers by pen (CUT, SEEN, ...) or by element (A-WALL-EXTR, A-DOOR, ...). Default pen.' },
+      units: { type: 'string', enum: ['paper', 'model'], description: 'Paper millimetres at the sheet\'s scale, or each view at model size in metres. Default paper.' },
     },
     required: ['document_id', 'directory'],
     additionalProperties: false,
@@ -110,14 +112,16 @@ export const ifcsheetExportDxf: Tool = {
     const entry = getSheetSet(ctx, text(input, 'document_id'));
     const directory = await outputPath(input.directory, ctx);
     const one = optText(input, 'sheet');
-    const { sheetGraphicToDxf } = await import('@bimvoice/ifcsheet/headless');
-    const drawn = await drawSet(entry, entry.model);
+    const { sheetGraphicToDxf, DEFAULT_DXF_EXPORT } = await import('@bimvoice/ifcsheet/headless');
+    const layers = optChoice(input, 'layers', ['pen', 'element'] as const) ?? DEFAULT_DXF_EXPORT.layers;
+    const units = optChoice(input, 'units', ['paper', 'model'] as const) ?? DEFAULT_DXF_EXPORT.units;
+    const drawn = await drawSet(entry, entry.model, { byElement: layers === 'element', modelFrames: units === 'model' });
     const only = one === undefined ? undefined : findSheet(entry.set.document, one).id;
     const wanted = drawn.sheets.filter((g) => only === undefined || g.sheetId === only);
     const used = new Set<string>();
     const files = [];
     for (const sheet of wanted) {
-      const written = await write(join(directory, dxfName(sheet.number, used)), ctx, sheetGraphicToDxf(sheet));
+      const written = await write(join(directory, dxfName(sheet.number, used)), ctx, sheetGraphicToDxf(sheet, { layers, units }));
       files.push({ sheet: sheet.number, ...written });
     }
     return okResult(`Wrote ${files.length} DXF file${files.length === 1 ? '' : 's'} to ${directory}.${notedIn(drawn.notes)}`, { document_id: entry.id, directory, files, notes: drawn.notes });

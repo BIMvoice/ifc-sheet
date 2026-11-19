@@ -29,6 +29,8 @@ import { resolve } from '@/i18n/registry';
 import type { ProjectSheet } from '@/project/types';
 import type { CadLayerRule } from '@/project/cad-layers';
 import { layerAndPens } from './dxf-cad-layers';
+import { dxfCadRules, insunitsOf, modelPoint, type ModelFrame } from '@bimvoice/ifcsheet/dxf';
+import { useDxfExportOptions } from './dxf-export-options';
 import { clipLoop } from './dxf-hatch';
 import { findPattern } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
@@ -166,8 +168,18 @@ function clipPolyline(pts: P[], clip: Rect | null): P[][] {
   return pieces;
 }
 
+/** The sheet's DXF as the export options choose (#831): layers by pen or element, units of the paper or of the model (each viewport at its true size in metres). */
 export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
-  return svgToDxf(svg, paperOf(sheet).h, `units: millimetres (paper), sheet ${sheet.number} ${sheet.name}`);
+  const { layers, units } = useDxfExportOptions.getState();
+  const cad = dxfCadRules(useProjectStore.getState().cadLayers, layers);
+  if (units === 'model') return svgToDxf(svg, paperOf(sheet).h, `units: metres (model 1:1), sheet ${sheet.number} ${sheet.name}`, 1, cad, true);
+  return svgToDxf(svg, paperOf(sheet).h, `units: millimetres (paper), sheet ${sheet.number} ${sheet.name}`, 1, cad);
+}
+
+/** Where a viewport's drawing is on the sheet (`data-dxf-frame`: x y mm-per-metre kx ky), or null. */
+function frameOf(el: Element): ModelFrame | null {
+  const v = el.closest('[data-dxf-frame]')?.getAttribute('data-dxf-frame')?.split(' ').map(Number);
+  return v && v.length === 5 && v.every(Number.isFinite) ? { x: v[0], y: v[1], s: v[2], kx: v[3] < 0 ? -1 : 1, ky: v[4] < 0 ? -1 : 1 } : null;
 }
 
 /**
@@ -175,19 +187,23 @@ export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
  * `h` (y_dxf = h − y_svg) so the drawing reads the same way up. `cad` is the
  * project's CAD layer standard (default: the open
  * project's): the layer, colour, pen and line type an element goes on
- * (`layerAndPens`); empty, the layers its tags name.
+ * (`layerAndPens`); empty, the layers its tags name. `model` (#831): only what
+ * stands in a viewport (`data-dxf-frame`) is written, each point taken from
+ * the paper to the viewport's drawing coordinates, metres (`modelPoint`).
  */
-export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? []): Uint8Array {
+export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? [], model = false): Uint8Array {
   const root = svg.getScreenCTM()?.inverse();
-  const writer = new DxfR2000(patternScale);
+  const insunits = insunitsOf(model ? 'model' : 'paper');
+  const writer = new DxfR2000(model ? 1 / (frameOf(svg.querySelector('[data-dxf-frame]') ?? svg)?.s ?? 1000) : patternScale);
   for (const l of useProjectStore.getState().lineTypes ?? []) writer.defineLineType(l.id, l.name, l.dash);
-  if (!root) return writer.bytes(comment);
+  if (!root) return writer.bytes(comment, insunits);
   // Element-local → paper millimetres, Y up.
   const mapper = (el: SVGGraphicsElement) => {
     const m = root.multiply(el.getScreenCTM() ?? new DOMMatrix());
+    const frame = model ? frameOf(el) : null;
     return (p: P): P => {
       const q = new DOMPoint(p.x, p.y).matrixTransform(m);
-      return { x: q.x, y: h - q.y };
+      return frame ? modelPoint(frame, q) : { x: q.x, y: h - q.y };
     };
   };
   // The viewport frame an element is clipped to, in paper millimetres (Y up).
@@ -197,9 +213,17 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     const rect = id ? svg.querySelector(`clipPath[id="${CSS.escape(id)}"] rect`) as SVGRectElement | null : null;
     if (!rect) return null;
     const x = rect.x.baseVal.value, y = rect.y.baseVal.value, w = rect.width.baseVal.value, hh = rect.height.baseVal.value;
+    const frame = model ? frameOf(el) : null;
+    if (frame) {
+      const a = modelPoint(frame, { x, y }), b = modelPoint(frame, { x: x + w, y: y + hh });
+      return { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) };
+    }
     return { x0: x, x1: x + w, y0: h - (y + hh), y1: h - y };
   };
-  const skip = (el: Element) => !!el.closest('[data-export-ignore="true"], [data-export-ignore-dxf="true"], clipPath, defs');
+  // In a working file the sheet's own parts (frame, title block, notes) and a viewport's title are left out: they are not the building.
+  const skip = (el: Element) => !!el.closest('[data-export-ignore="true"], [data-export-ignore-dxf="true"], clipPath, defs') || (model && (!el.closest('[data-dxf-frame]') || layerOf(el) === 'VIEWPORT-LABELS'));
+  // Paper millimetres of an element's size in the file's units: one in paper, 1/s of a metre in a model.
+  const unitOf = (el: Element) => (model ? 1 / (frameOf(el)?.s ?? 1) : 1);
 
   const emit = (el: SVGGraphicsElement, subpaths: { pts: P[]; closed: boolean }[]) => {
     const stroke = strokeOf(el);
@@ -246,7 +270,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
     const clip = clipOf(el);
     const subpaths = (STRAIGHT.test(d) ? straightSubpaths(d) : sampledSubpaths(el, d)).filter((s) => s.pts.length > 2);
     const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), el.getAttribute('data-dxf-color') ?? '#000000');
-    writer.patternHatch(subpaths.map((s) => (clip ? clipLoop(s.pts.map(map), clip) : s.pts.map(map))), pattern, unit, writer.layer(pens.name, pens.layer), pens.own);
+    writer.patternHatch(subpaths.map((s) => (clip ? clipLoop(s.pts.map(map), clip) : s.pts.map(map))), pattern, unit * unitOf(el), writer.layer(pens.name, pens.layer), pens.own);
   };
 
   for (const el of Array.from(svg.querySelectorAll<SVGGraphicsElement>('path, line, rect, circle, ellipse, polyline, polygon, text'))) {
@@ -275,7 +299,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
       const anchor = getComputedStyle(el).textAnchor;
       const fill = getComputedStyle(el).fill || '#000';
       const pens = layerAndPens(cad, (n) => tag(el, n), layerOf(el), fill);
-      writer.text(at, text, size * scale * 0.72, writer.layer(pens.name, pens.layer), {
+      writer.text(at, text, size * scale * unitOf(el) * 0.72, writer.layer(pens.name, pens.layer), {
         rotationDeg: (-Math.atan2(m.b, m.a) * 180) / Math.PI,
         align: anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left',
         pen: pens.own,
@@ -306,7 +330,7 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
       emit(el, [{ pts, closed: !(el instanceof SVGPolylineElement) }]);
     }
   }
-  return writer.bytes(comment);
+  return writer.bytes(comment, insunits);
 }
 
 export function exportSheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): void {

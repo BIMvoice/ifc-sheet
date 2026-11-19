@@ -17,6 +17,7 @@ export { sheetGraphic, type Polyline, type SheetGraphic, type SheetImage, type S
 export { headlessMaterialOf, headlessPropertiesOf, sheetGraphics, type SheetGraphicsOptions } from './set-sheets.js';
 export { exportPdf } from './export.js';
 export { sheetGraphicToDxf, type SheetDxfOptions } from './sheet-dxf.js';
+export { DEFAULT_DXF_EXPORT } from './dxf-export-options.js';
 export { exportSvg } from './svg-export.js';
 export { projectSheetOptions, projectSheetOptionsWithViews, type LeftOut, type ProjectSheetSource } from './project-sheets.js';
 export { SCHEDULE_CONTINUED } from './sheet-schedules.js';

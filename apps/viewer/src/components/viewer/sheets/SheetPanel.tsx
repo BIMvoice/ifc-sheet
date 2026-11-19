@@ -8,6 +8,7 @@
  */
 
 import { ViewportLayers } from './ViewportLayers';
+import { DxfOptions } from './DxfOptions';
 import { tabsNav } from '@/check/go';
 import { FindingList } from './FindingList';
 import { IssueForm } from './IssueForm';
@@ -95,6 +96,7 @@ export function SheetPanel({ sheet, viewport, box, viewportName, onExportSvg, on
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" className="flex-1" onClick={onExportSvg}><Download className="size-3.5 mr-1" />{t('sheets.svg')}</Button>
         <Button variant="outline" size="sm" className="flex-1" onClick={onExportDxf}><Download className="size-3.5 mr-1" />{t('sheets.dxf')}</Button>
+        <DxfOptions />
         <Button variant="outline" size="sm" className="w-full" onClick={onPrint}><Printer className="size-3.5 mr-1" />{t('sheets.pdf')}</Button>
       </div>
       <h3 className="pt-2 font-bold uppercase tracking-wider">{t('check.section')}</h3>

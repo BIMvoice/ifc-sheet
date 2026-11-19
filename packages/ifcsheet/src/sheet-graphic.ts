@@ -34,7 +34,7 @@ export { printableLogo } from './sheet-title-block.js';
 import { titleBlock } from './sheet-title-block.js';
 import { DEFAULT_SHEET_TYPE } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
-import { isExternalOf, type ModelFrame } from './dxf-export-options.js';
+import { elementPens, type DxfSheetOptions, type ModelFrame } from './dxf-export-options.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
@@ -97,11 +97,8 @@ export interface SheetPen {
   runs: Polyline[];
   /** A fill's regions, clipped to the viewport; each loop ends where it starts. */
   regions: Polyline[][];
-  /** With `byElement`: the class (and `IsExternal`) of the elements the pen draws, for the CAD layer standard (`dxf-export-options.ts`). */
-  ifcType?: string;
-  external?: boolean;
-  /** With `modelFrames`: where this pen's viewport drawing is on the paper, to write it at its model coordinates. */
-  frame?: ModelFrame;
+  /** With the DXF options (`DxfSheetOptions`): the class and `IsExternal` of what the pen draws, and where its viewport's drawing is on the paper. */
+  ifcType?: string; external?: boolean; frame?: ModelFrame;
 }
 
 /** An image on the paper, fitted whole and centred in `box` (paper mm): the title block's logo. */
@@ -228,8 +225,8 @@ export function sheetGraphic(
   openings: ReadonlyMap<string, readonly OpeningSymbol[]> = new Map(),
   /** How the model names a cut band's IfcMaterial (`materialResolver`): its bands are filled and hatched by material, as the app's sheets do (#645). Absent: the plain cut. */
   materials?: MaterialResolver,
-  /** What a DXF of this sheet needs besides the shapes (#831): pens split by element class and `IsExternal` (`byElement`), and each viewport's pens carrying where their drawing is on the paper (`modelFrames`). Both off: the sheet as ever. */
-  dxf: { byElement?: boolean; modelFrames?: boolean } = {},
+  /** What a DXF of this sheet needs besides the shapes (#831; `DxfSheetOptions`). Absent: the sheet as ever. */
+  dxf: DxfSheetOptions = {},
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
@@ -314,25 +311,15 @@ export function sheetGraphic(
         out.lines.push(...clipPolyline([at(line.line.start), at(line.line.end)], box));
       }
       // A face a colour scheme paints is in `fills` already (`viewportFills`), under the linework.
-      const firstPen = out.pens.length;
-      const externalOf = (id: number | undefined) => (id === undefined ? undefined : isExternalOf(propertiesOf?.(id)));
-      const split = dxf.byElement ? (l: { ifcType?: string; entityId?: number }) => `|${l.ifcType ?? ''}|${externalOf(l.entityId) ?? ''}` : undefined;
-      for (const g of penGroups(faces.cutPolygons.filter((p) => !painted?.has(p.entityId)), faces.lines, styler, split)) {
+      const firstPen = out.pens.length, element = elementPens(dxf, propertiesOf);
+      for (const g of penGroups(faces.cutPolygons.filter((p) => !painted?.has(p.entityId)), faces.lines, styler, element.split)) {
         const regions = g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map((l) => clipPolygon(l.map(at), box)).filter((l) => l.length >= 3).map(closeRing)).filter((r) => r.length > 0);
         const runs = g.lines.flatMap((l) => clipPolyline([at(l.line.start), at(l.line.end)], box));
-        const who = dxf.byElement ? g.lines[0] : undefined;
-        const external = who ? externalOf(who.entityId) : undefined;
-        if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions, ...(who?.ifcType ? { ifcType: who.ifcType } : {}), ...(external !== undefined ? { external } : {}) });
+        if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions, ...element.tags(g.lines[0]) });
       }
       out.pens.push(...materialPens(faces, styler, at, box, pens, patterns));
       if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
-      if (dxf.modelFrames) {
-        const k = 1000 / vp.scale;
-        const { kx, ky } = paperSigns(drawing.config.plane.axis);
-        const c = at({ x: 0, y: 0 });
-        const frame: ModelFrame = { x: c.x, y: c.y, s: k, kx, ky };
-        for (const p of out.pens.slice(firstPen)) p.frame = frame;
-      }
+      if (dxf.modelFrames) for (const p of out.pens.slice(firstPen)) p.frame = { ...at({ x: 0, y: 0 }), s: 1000 / vp.scale, ...paperSigns(drawing.config.plane.axis) };
       for (const label of contoured?.texts ?? []) {
         const p = at(label.at);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) out.texts.push(contourSheetText(label, p));

@@ -69,15 +69,22 @@ export function dxfCadRules(project: readonly CadLayerRule[] | undefined, layers
   return layers === 'element' ? elementLayerRules() : [];
 }
 
-/** Whether an element is external, from its property sets (`Pset_*Common.IsExternal`); undefined when no set says. */
-export function isExternalOf(properties: Record<string, Record<string, unknown>> | undefined): boolean | undefined {
-  if (!properties) return undefined;
-  for (const set of Object.values(properties)) {
+const EXTERNAL_NAME = /(^|[^a-zäöüß])(ext|extern|external|exterior|aussen|au(ss|ß)en\w*)([^a-zäöüß]|$)/i;
+const INTERNAL_NAME = /(^|[^a-zäöüß])(int|intern|internal|interior|innen\w*)([^a-zäöüß]|$)/i;
+
+/**
+ * Whether an element is external: its `IsExternal` property (`Pset_*Common`) when a set has one, else what its name says (`Wand-Ext-ERDG-1`,
+ * `Wall Internal`: a model that does not fill the property often still names its walls so); undefined when neither says.
+ */
+export function isExternalOf(properties: Record<string, Record<string, unknown>> | undefined, name?: string): boolean | undefined {
+  for (const set of Object.values(properties ?? {})) {
     const v = set?.IsExternal;
     if (v === true || v === 'true' || v === 'TRUE' || v === 'T') return true;
     if (v === false || v === 'false' || v === 'FALSE' || v === 'F') return false;
   }
-  return undefined;
+  if (!name) return undefined;
+  if (EXTERNAL_NAME.test(name)) return true;
+  return INTERNAL_NAME.test(name) ? false : undefined;
 }
 
 /**
@@ -93,3 +100,22 @@ export function modelPoint(frame: ModelFrame, p: Point2D): Point2D {
 
 /** `$INSUNITS` of a DXF: 4 millimetres (paper), 6 metres (model). */
 export const insunitsOf = (units: DxfUnits): number => (units === 'model' ? 6 : 4);
+
+/** What a sheet is drawn with for a DXF (`sheetGraphic`'s last argument): pens split by element (`byElement`), viewports' frames kept (`modelFrames`), and the names the external-or-not rule reads. */
+export interface DxfSheetOptions { byElement?: boolean; modelFrames?: boolean; nameOf?: (entityId: number) => string | undefined }
+
+/** A pen's line, as far as the element layer standard reads it. */
+interface Subjected { ifcType?: string; entityId?: number }
+
+/** How the pens of a viewport are split and tagged by element: `split` (for `penGroups`; absent unless by element) and `tags` (the class and `IsExternal` of a pen's first line). */
+export function elementPens(dxf: DxfSheetOptions, propertiesOf: ((id: number) => Record<string, Record<string, unknown>> | undefined) | undefined) {
+  const externalOf = (id: number | undefined) => (id === undefined ? undefined : isExternalOf(propertiesOf?.(id), dxf.nameOf?.(id)));
+  return {
+    split: dxf.byElement ? (l: Subjected) => `|${l.ifcType ?? ''}|${externalOf(l.entityId) ?? ''}` : undefined,
+    tags: (who: Subjected | undefined): { ifcType?: string; external?: boolean } => {
+      if (!dxf.byElement || !who) return {};
+      const external = externalOf(who.entityId);
+      return { ...(who.ifcType ? { ifcType: who.ifcType } : {}), ...(external !== undefined ? { external } : {}) };
+    },
+  };
+}

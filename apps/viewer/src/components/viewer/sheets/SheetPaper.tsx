@@ -42,6 +42,8 @@ import { memoOn, sharedMemo } from './shared-memo';
 import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers, viewTitleLayout, type ViewTitleLayout } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
+import { dxfCadRules } from '@bimvoice/ifcsheet/dxf';
+import { useDxfExportOptions } from './dxf-export-options';
 import { OverlayPaths } from './OverlayPaths';
 import { matrixText, printedUnderlays, underlayMatrix } from '@/underlay/underlay';
 import { DxfUnderlayTexts } from '@/underlay/DxfUnderlayTexts';
@@ -146,7 +148,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const standard = useGraphicStandard();
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
-  const cadLayers = useProjectStore((s) => s.cadLayers);
+  const projectCadLayers = useProjectStore((s) => s.cadLayers);
+  // The sheet's DXF layers by element (#831): the element layer standard is the project's own rules' fallback, and the pens carry what it matches on.
+  const dxfLayers = useDxfExportOptions((s) => s.layers);
+  const cadLayers = useMemo(() => dxfCadRules(projectCadLayers, dxfLayers), [projectCadLayers, dxfLayers]);
   const allUnderlays = useProjectStore((s) => s.underlays);
   const allDxfUnderlays = useProjectStore((s) => s.dxfUnderlays);
   // The graphics the view draws with: its template's, then its own over them (#44).
@@ -166,6 +171,11 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const left = vp.x - box.width / 2;
   const top = vp.y - box.height / 2;
   const clipId = `vp-${vp.id}`;
+  // Where the drawing's origin is on the paper, and its sign each way (`modelPoint`): a DXF at model size reads the viewport back through it (#831).
+  const dxfFrame = (() => {
+    const o = drawingToScreen({ x: 0, y: 0 }, t, axis), ex = drawingToScreen({ x: 1, y: 0 }, t, axis), ey = drawingToScreen({ x: 0, y: 1 }, t, axis);
+    return `${o.x} ${o.y} ${Math.abs(ex.x - o.x)} ${ex.x < o.x ? -1 : 1} ${ey.y < o.y ? -1 : 1}`;
+  })();
   // A detail shows exactly its area (the drawing is centred on it); every other view, its box.
   const clip = view?.detail
     ? (() => {
@@ -199,7 +209,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, la
   const markBoxes = (content.markBoxes ?? []).map((b) => paperBox(drawingToScreen(b.min, t, axis), drawingToScreen(b.max, t, axis)));
   const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber, { text: titleText, marks: markBoxes, areaBottom: drawingArea.y + drawingArea.h });
   return (
-    <g data-viewport-id={vp.id}>
+    <g data-viewport-id={vp.id} data-dxf-frame={dxfFrame}>
       <clipPath id={clipId}><rect x={clip.x} y={clip.y} width={clip.width} height={clip.height} /></clipPath>
       <g clipPath={`url(#${clipId})`}>
         {underlays.map((u) => <image key={u.id} data-underlay-id={u.id} data-export-ignore-dxf="true" href={u.href} x={0} y={0} width={u.widthPx} height={u.heightPx} preserveAspectRatio="none" opacity={u.opacity} transform={matrixText(underlayMatrix(u, t, axis))} />)}

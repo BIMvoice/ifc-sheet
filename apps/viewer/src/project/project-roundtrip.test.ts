@@ -229,7 +229,7 @@ const civil: Required<ProjectCivilDrawing> = {
 };
 const material: Required<ProjectMaterial> = { id: 'm1', name: 'Mineral wool', hatch: 'INSULATION', hatchScale: 1.5, fill: '#ffeeaa', hatchPen: 'light', membrane: true };
 
-const cadRule: Required<CadLayerRule> = {
+const cadRule: Required<Omit<CadLayerRule, 'external'>> = {
   id: 'cad1', source: 'CUT', kind: 'text', ifcClasses: ['IfcWall', 'IfcWallStandardCase'], material: 'Beton armat', layer: 'A-WALL-CUT', color: '#7f1d1d', lineWeight: 0.5, lineType: 'dashed',
 };
 
