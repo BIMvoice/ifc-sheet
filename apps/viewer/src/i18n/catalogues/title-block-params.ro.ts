@@ -13,7 +13,7 @@ export const titleBlockParamsRo = {
   'wall.draw.ptext': 'Text cu parametri',
   'wall.draw.ptext.body': 'Faceți clic unde se așază pe planșă și scrieți textul. Puneți numele unui parametru între acolade pentru a-i tipări valoarea.',
   'tbparams.title': 'Parametri',
-  'tbparams.hint': 'Dați o dată un nume unei valori, apoi scrieți {token} în orice text din cartuș sau de pe planșă pentru a o tipări. O planșă poate avea propria valoare.',
+  'tbparams.hint': 'Dați o dată un nume unei valori, apoi scrieți {token} în orice text din cartuș, notă sau etichetă de pe o planșă sau o vedere pentru a o tipări. O planșă poate avea propria valoare.',
   'tbparams.builtin': 'Predefinite, completate de program: {names}',
   'tbparams.none': 'Încă nu există parametri.',
   'tbparams.add': 'Adaugă un parametru',

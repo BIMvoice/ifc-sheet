@@ -7,7 +7,7 @@ import type { TranslationValue } from '../types';
 // `{token}` carries a literal `{Name}` the reader is shown how to write; it is a value, not a placeholder of its own.
 export const titleBlockParamsEn = {
   'tbparams.title': 'Parameters',
-  'tbparams.hint': 'Give a value a name once, then write {token} in any title block text or sheet text to print it. A sheet can give its own value.',
+  'tbparams.hint': 'Give a value a name once, then write {token} in any title block text, note or label on a sheet or a view to print it. A sheet can give its own value.',
   'tbparams.builtin': 'Built in, filled by the program: {names}',
   'tbparams.none': 'No parameters yet.',
   'tbparams.add': 'Add a parameter',
