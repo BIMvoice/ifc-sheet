@@ -24,3 +24,4 @@ export { LEADER_MODES, DEFAULT_LEADER, DISPLACED_MM, asLeaderMode, leaderTip, re
 export { COMPUTED_AREA, COMPUTED_SET, extrasOf, resolveWithExtras, type LabelExtras } from '../labels/label-extras.js';
 export { MISSING_MODES, readField, readFieldValue, readStored, resolveTemplate, type FieldValue, type LabelElement, type MissingMode, type PropertySetLike, type QuantitySetLike } from '../labels/label-resolve.js';
 export { centredAnchor, classesOf, unlabelledTargets, type LabelTarget } from '../labels/label-place.js';
+export { LABEL_FILTER_KINDS, describeFilter, labelTypeNamed, matchesFilter, matchesFilters, planLabelPreset, presetNamed, readLabelPresets, type LabelFilter, type LabelFilterKind, type LabelGroupPlan, type LabelPreset, type LabelPresetGroup } from '../labels/label-preset.js';

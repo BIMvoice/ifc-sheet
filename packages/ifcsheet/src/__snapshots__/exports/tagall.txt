@@ -10,12 +10,18 @@ DEFAULT_LEADER: value
 DISPLACED_MM: value
 ElementReader: type (type-only)
 FieldValue: type (type-only)
+LABEL_FILTER_KINDS: value
 LEADER_MODES: value
 LEGACY_ROOM_TEMPLATE: value
 LabelElement: type (type-only)
 LabelEnv: type (type-only)
 LabelExtras: type (type-only)
+LabelFilter: type (type-only)
+LabelFilterKind: type (type-only)
+LabelGroupPlan: type (type-only)
 LabelPlacement: type (type-only)
+LabelPreset: type (type-only)
+LabelPresetGroup: type (type-only)
 LabelSpec: type (type-only)
 LabelTarget: type (type-only)
 LeaderMode: type (type-only)
@@ -49,15 +55,22 @@ asLeaderMode: value
 centredAnchor: value
 classesOf: value
 clipLoop: value
+describeFilter: value
 extrasOf: value
 labelDraft: value
 labelSize: value
+labelTypeNamed: value
 leaderCrossesOutsideEntry: value
 leaderTip: value
+matchesFilter: value
+matchesFilters: value
 modelArea: value
+planLabelPreset: value
 planTagAll: value
+presetNamed: value
 readField: value
 readFieldValue: value
+readLabelPresets: value
 readStored: value
 refToRing: value
 resolveTemplate: value

@@ -16,6 +16,7 @@ import { useProjectStore } from '@/project/project-store';
 import { closeFrontPanel, setPanel, useWallNav } from '../wall/wall-nav';
 import { WALL_PILL } from '../wall/wall-type';
 import { AnnotateSummary } from './AnnotateSummary';
+import { LabelPresets } from './LabelPresets';
 
 const CHOICES: readonly { command: AnnotateCommand; label: 'wall.annotate.tagall' | 'wall.annotate.dimall' | 'wall.annotate.levelall' }[] = [
   { command: 'tagall', label: 'wall.annotate.tagall' },
@@ -82,6 +83,7 @@ function AnnotatePanel() {
             <button type="button" className={WALL_PILL} disabled={name.trim() === '' || !hasChoices(choices)} onClick={() => { if (saveAnnotationPreset(name, { on, tagParts })) setName(''); }}>{t('wall.annotate.presetSave')}</button>
           </div>
         </section>
+        <LabelPresets />
         {running ? <output className="m-0 block text-xs text-sky-200" data-testid="annotate-progress">{t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName })}</output> : null}
         {summary ? <AnnotateSummary summary={summary} /> : null}
       </div>
