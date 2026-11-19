@@ -39,13 +39,15 @@ export interface LabelPreset {
 const norm = (s: string): string => s.trim().toLowerCase();
 const text = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'true' : 'false') : typeof v === 'number' || typeof v === 'string' ? String(v) : '');
 
-/** Whether one condition holds for the element: values compare as the same text whatever their case; `Wall` and `IfcWall` are one class. */
+/** Whether one condition holds for the element: values compare as the same text whatever their case; `Wall` and `IfcWall` are one class, and `IfcWall` takes its standard and elemented cases. */
 export function matchesFilter(el: LabelElement, f: LabelFilter): boolean {
   const want = norm(f.value);
   switch (f.by) {
     case 'class': {
-      const have = norm(el.className());
-      return have === want || have === `ifc${want}`;
+      // IfcWallStandardCase and IfcWallElementedCase are IfcWall (IFC's own subtype rule), so a wall filter reaches a model that wrote either.
+      const have = norm(el.className()).replace(/(standardcase|elementedcase)$/, '');
+      const exact = norm(el.className());
+      return exact === want || exact === `ifc${want}` || have === want || have === `ifc${want}`;
     }
     case 'type': return norm(el.typeName()) === want;
     case 'material': return el.materials().some((m) => norm(m) === want);
