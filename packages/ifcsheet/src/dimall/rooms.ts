@@ -20,6 +20,7 @@
  */
 
 import type { AnnotationShape, Pt } from '../draft-types.js';
+import { BoxGrid } from './box-grid.js';
 import { figureWidth, type DimAllMeasure } from './measure.js';
 import { boxOf, pointInRing, rotate, type Box } from './outline.js';
 import { readPlan } from './read.js';
@@ -52,6 +53,8 @@ export interface RoomPlan {
   chains: RoomChain[];
   /** Chains left out: no true figure, or no place clear of everything. */
   dropped: number;
+  /** Of `dropped`, the chains whose places were not all tried: the room offered more than `MAX_TRIES` (#829). */
+  outOfTries: number;
   /** The model has no spaces on this plan. */
   noRooms: boolean;
   /** The dimension shape of each chain, in the order of `chains`, with its figure placed. */
@@ -75,6 +78,8 @@ const INSET = 0.15;
 const STEP = 0.05;
 /** A figure slides along its line in steps of this (metres). */
 const SLIDE = 0.1;
+/** The most places a room's figure is tried at in one direction (lines through the room times steps along them); past it the chain is left out and counted (#829). A large hall tried at every 5 cm line and every 10 cm step would otherwise run into the hundreds of thousands. */
+export const MAX_TRIES = 20_000;
 /** A room smaller than this either way (metres) has no room for a figure. */
 const MIN_SIDE = 0.8;
 /** A wall at an angle within this of a room (metres) means its sides are not walls on the axes. */
@@ -87,6 +92,11 @@ const FIGURE_BAND = 1.05;
 const T = (p: Pt): Pt => ({ x: p.y, y: p.x });
 const tBox = (b: Box): Box => ({ x0: b.y0, y0: b.x0, x1: b.y1, y1: b.x1 });
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+/** Whether two boxes meet, edges touching included: a segment that hits a rectangle, or runs along a line, has a box that meets the rectangle's. */
+const meets = (a: Box, b: Box) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
+const segBox = (l: { a: Pt; b: Pt }): Box => ({ x0: Math.min(l.a.x, l.b.x), y0: Math.min(l.a.y, l.b.y), x1: Math.max(l.a.x, l.b.x), y1: Math.max(l.a.y, l.b.y) });
+const grown = (b: Box, m: number): Box => ({ x0: b.x0 - m, y0: b.y0 - m, x1: b.x1 + m, y1: b.y1 + m });
+const union = (a: Box, b: Box): Box => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) });
 
 /** The free stretches of the line `y` between the solids, each as [from, to]. */
 function freeRuns(solids: readonly Box[], y: number, within: readonly [number, number]): [number, number][] {
@@ -124,16 +134,14 @@ function linesOf(ring: readonly Pt[], solids: readonly Box[]): Line[] {
 const ALONG_TOL = 0.04;
 const ALONG_MIN = 0.05;
 
-/** Whether the dimension line from `a` to `b` runs along one of `lines`: parallel to it, within `ALONG_TOL`, over more than `ALONG_MIN` of its length. */
-function runsAlong(a: Pt, b: Pt, lines: readonly { a: Pt; b: Pt }[]): boolean {
+/** Whether the dimension line from `a` to `b` runs along `l`: parallel to it, within `ALONG_TOL`, over more than `ALONG_MIN` of its length. Only a line whose box meets the dimension line's, grown by `ALONG_TOL`, can. */
+function runsAlong(a: Pt, b: Pt, l: { a: Pt; b: Pt }): boolean {
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
-  return lines.some((l) => {
-    const [da, db] = [l.a, l.b].map((p) => (p.x - a.x) * -u.y + (p.y - a.y) * u.x);
-    if (Math.abs(da) > ALONG_TOL || Math.abs(db) > ALONG_TOL) return false;
-    const [sa, sb] = [l.a, l.b].map((p) => (p.x - a.x) * u.x + (p.y - a.y) * u.y);
-    return Math.min(len, Math.max(sa, sb)) - Math.max(0, Math.min(sa, sb)) > ALONG_MIN;
-  });
+  const [da, db] = [l.a, l.b].map((p) => (p.x - a.x) * -u.y + (p.y - a.y) * u.x);
+  if (Math.abs(da) > ALONG_TOL || Math.abs(db) > ALONG_TOL) return false;
+  const [sa, sb] = [l.a, l.b].map((p) => (p.x - a.x) * u.x + (p.y - a.y) * u.y);
+  return Math.min(len, Math.max(sa, sb)) - Math.max(0, Math.min(sa, sb)) > ALONG_MIN;
 }
 
 /** Whether a dimension line may run over `t`: it is a thing that crosses the line (longer across it than along it), not one that runs with it, which would draw the line on top of another. */
@@ -153,7 +161,7 @@ function chainShape(l: Line, flip: boolean, back: (p: Pt) => Pt, height: number,
 }
 
 export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomInput[], settings: RoomSettings): RoomPlan {
-  const out: RoomPlan = { chains: [], dropped: 0, noRooms: rooms.length === 0, shapes: [] };
+  const out: RoomPlan = { chains: [], dropped: 0, outOfTries: 0, noRooms: rooms.length === 0, shapes: [] };
   if (rooms.length === 0) return out;
   const { angle, wallBoxes, bridged, offAxis } = readPlan(parts);
   const solids = [...wallBoxes, ...bridged.filter((o) => o.exact !== false).map((o) => o.box)];
@@ -162,7 +170,17 @@ export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomI
   const back = (p: Pt) => rotate(p, angle);
   // Everything already on the view, in the frame of the walls; what this run places joins it.
   const taken: (Box & { crossable?: boolean })[] = settings.obstacles.map((r) => ({ ...boxOf([{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }].map((p) => rotate(p, -angle))), ...(r.crossable ? { crossable: true } : {}) }));
-  const drawn = (settings.lines ?? []).map((l) => ({ a: rotate(l.a, -angle), b: rotate(l.b, -angle) }));
+  // Every place a figure is tried is tested against what stands there, not against the whole drawing (#829): the lines and what is taken are kept in grids by where they are.
+  const cell = Math.max(0.25, 2 * h);
+  const takenGrid = new BoxGrid<Box & { crossable?: boolean }>(cell);
+  const take = (t: Box & { crossable?: boolean }) => takenGrid.add(t, t);
+  taken.forEach(take);
+  const drawn = new BoxGrid<{ a: Pt; b: Pt; box: Box }>(cell);
+  for (const l of settings.lines ?? []) {
+    const r = { a: rotate(l.a, -angle), b: rotate(l.b, -angle) };
+    const box = segBox(r);
+    drawn.add(box, { ...r, box });
+  }
   for (const room of [...rooms].sort((a, b) => a.id.localeCompare(b.id))) {
     const ring = room.ring.map((p) => rotate(p, -angle));
     const box = boxOf(ring);
@@ -172,7 +190,7 @@ export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomI
       continue;
     }
     // The drawing's lines in and round this room.
-    const near = drawn.filter((l) => Math.max(l.a.x, l.b.x) > box.x0 - 0.3 && Math.min(l.a.x, l.b.x) < box.x1 + 0.3 && Math.max(l.a.y, l.b.y) > box.y0 - 0.3 && Math.min(l.a.y, l.b.y) < box.y1 + 0.3);
+    const isNear = (l: { box: Box }) => l.box.x1 > box.x0 - 0.3 && l.box.x0 < box.x1 + 0.3 && l.box.y1 > box.y0 - 0.3 && l.box.y0 < box.y1 + 0.3;
     for (const dir of ['x', 'y'] as const) {
       const flip = dir === 'y';
       const lines = flip ? linesOf(ring.map(T), solidsT) : linesOf(ring, solids);
@@ -186,7 +204,16 @@ export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomI
         return widths.get(k) as number;
       };
       const reach = Math.max(0, ...lines.map((l) => (l.hi - l.lo) / 2 - widthOf(l) / 2 - h));
+      // Whether a line of the drawing runs along the dimension line: the same wherever its figure slides, so asked once a line.
+      const along = new Map<Line, boolean>();
+      const alongOf = (l: Line, pa: Pt, pb: Pt): boolean => {
+        let v = along.get(l);
+        if (v === undefined) along.set(l, (v = drawn.some(grown(segBox({ a: pa, b: pb }), ALONG_TOL), (ln) => isNear(ln) && runsAlong(pa, pb, ln))));
+        return v;
+      };
+      let tries = 0;
       const tryPlace = (l: Line, du: number): boolean => {
+        tries++;
         const width = widthOf(l);
         // The figure must sit between the faces, with a text height to spare each side for the ticks.
         if (width + 2 * h > l.hi - l.lo) return false;
@@ -197,22 +224,27 @@ export function planRoomChains(parts: readonly PlanPart[], rooms: readonly RoomI
         // The line ends on the faces it measures: only the figure is tested against the walls.
         const [figureAt, lineAt] = [frameBox(figure), frameBox(line)];
         const [pa, pb] = [l.lo, l.hi].map((u) => (flip ? { x: l.cross, y: u } : { x: u, y: l.cross }));
-        if (near.some((ln) => segmentHitsRect(ln, figureAt, 0)) || runsAlong(pa, pb, near)) return false;
-        if (solids.some((s) => overlaps(figureAt, s)) || taken.some((t) => overlaps(figureAt, t) || (overlaps(lineAt, t) && !crosses(t, flip)))) return false;
+        if (drawn.some(figureAt, (ln) => meets(ln.box, figureAt) && isNear(ln) && segmentHitsRect(ln, figureAt, 0)) || alongOf(l, pa, pb)) return false;
+        const both = union(figureAt, lineAt);
+        if (solids.some((s) => overlaps(figureAt, s)) || takenGrid.some(both, (t) => meets(t, both) && (overlaps(figureAt, t) || (overlaps(lineAt, t) && !crosses(t, flip))))) return false;
         // A line may cross the other line of its room (the two cross, or meet at a corner); no line runs through a figure.
-        taken.push({ ...lineAt, crossable: true }, figureAt);
+        take({ ...lineAt, crossable: true });
+        take(figureAt);
         const [a, b] = [l.lo, l.hi].map((u) => back(flip ? { x: l.cross, y: u } : { x: u, y: l.cross }));
         out.chains.push({ key: `room:${room.id}:${dir}`, room: room.id, dir, a, b, length: l.hi - l.lo, from: l.lo, to: l.hi });
         out.shapes.push(chainShape(l, flip, back, h, du));
         return true;
       };
-      for (let k = 0; k <= Math.floor(reach / SLIDE + 1e-9) && !placed; k++) {
+      for (let k = 0; k <= Math.floor(reach / SLIDE + 1e-9) && !placed && tries < MAX_TRIES; k++) {
         for (const sign of k === 0 ? [1] : [1, -1]) {
-          placed = lines.some((l) => tryPlace(l, sign * k * SLIDE));
-          if (placed) break;
+          placed = lines.some((l) => tries < MAX_TRIES && tryPlace(l, sign * k * SLIDE));
+          if (placed || tries >= MAX_TRIES) break;
         }
       }
-      if (!placed) out.dropped++;
+      if (!placed) {
+        out.dropped++;
+        if (tries >= MAX_TRIES) out.outOfTries++;
+      }
     }
   }
   return out;
