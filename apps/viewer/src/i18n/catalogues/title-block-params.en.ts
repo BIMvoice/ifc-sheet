@@ -7,7 +7,7 @@ import type { TranslationValue } from '../types';
 // `{token}` carries a literal `{Name}` the reader is shown how to write; it is a value, not a placeholder of its own.
 export const titleBlockParamsEn = {
   'tbparams.title': 'Parameters',
-  'tbparams.hint': 'Give a value a name once, then write {token} in any title block text or sheet text to print it. A sheet can give its own value.',
+  'tbparams.hint': 'Give a value a name once, then write {token} in any title block text, note or label on a sheet or a view to print it. A sheet can give its own value.',
   'tbparams.builtin': 'Built in, filled by the program: {names}',
   'tbparams.none': 'No parameters yet.',
   'tbparams.add': 'Add a parameter',
@@ -15,7 +15,7 @@ export const titleBlockParamsEn = {
   'tbparams.value': 'Value of {name}',
   'tbparams.delete': 'Delete the parameter {name}',
   'tbparams.problem.empty': 'A parameter needs a name.',
-  'tbparams.problem.invalid': 'Use a letter, then letters, digits or underscores.',
+  'tbparams.problem.invalid': 'Use a letter, then letters, digits, spaces, hyphens or underscores.',
   'tbparams.problem.builtin': 'That name is built in.',
   'tbparams.problem.duplicate': 'Another parameter has that name.',
   'tbparams.sheetHint': 'This sheet\'s own values for the parameters. Leave one alone and it follows the project.',

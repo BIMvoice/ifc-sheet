@@ -26,5 +26,5 @@ export { checkParamName, PARAM_NAME, type ParamNameProblem };
 
 /** `text` with `{from}` written `{to}`. */
 export function renameParamIn(text: string, from: string, to: string): string {
-  return text.replace(TOKEN, (whole, name: string) => (name === from ? `{${to}}` : whole));
+  return text.replace(TOKEN, (whole, name: string) => (name.trim() === from ? `{${to}}` : whole));
 }

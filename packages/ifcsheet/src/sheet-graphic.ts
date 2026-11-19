@@ -21,6 +21,8 @@
 
 import type { Drawing2D, Point2D } from '@ifc-lite/drawing-2d';
 import { sheetScaleLine } from './sheet-scale.js';
+import { resolvedTextDrafts } from './draft-text-params.js';
+import { sheetLookup } from './title-block-print.js';
 import { layoutContourLabels, type ContourText } from './contour-labels.js';
 import { clipPolygon, clipPolyline } from './clip.js';
 import { activeColourScheme, shownRooms, type SchemeResult } from './colour-fills.js';
@@ -229,6 +231,8 @@ export function sheetGraphic(
   /** The drawing number of each view's viewport, in reading order unless the viewport has its own (`drawingNumbers`): what a section or elevation mark names. */
   const numbers = drawingNumbers(sheet, new Set(doc.views.map((v) => v.id)));
   const strokes: SheetStroke[] = [];
+  // A note names the project's text values, `{Name}` (#832): the sheet's own lookup fills them, as the title block's.
+  const noted = project?.annotations ? { ...project.annotations, drafts: resolvedTextDrafts(project.annotations.drafts, sheetLookup(sheet, doc, sheetScaleLine(sheet, doc.views), projectFields, language)) } : undefined;
   // The project's own hatch patterns (`.pat` text) beside the built-in ones, for a colour scheme's hatches (#493).
   const patterns = parsePat(doc.hatchPatterns ?? '').patterns;
   const drawingArea = drawingAreaIn(paper, frameOf(sheet));
@@ -322,10 +326,10 @@ export function sheetGraphic(
     // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
     const markBoxes: PaperBox[] = [];
     const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale }) : null;
-    if (drawing && (project?.annotations || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
+    if (drawing && (noted || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const frame = paperSigns(drawing.config.plane.axis);
-      const printed = [...(project?.annotations ? [viewportAnnotations({ view, vp, at, frame, box, plane: drawing.config.plane }, project.annotations)] : []), ...(crossRefs ? [viewportAnnotations({ view, vp, at, frame, box: drawingArea, plane: drawing.config.plane }, crossRefs)] : [])];
+      const printed = [...(noted ? [viewportAnnotations({ view, vp, at, frame, box, plane: drawing.config.plane }, noted)] : []), ...(crossRefs ? [viewportAnnotations({ view, vp, at, frame, box: drawingArea, plane: drawing.config.plane }, crossRefs)] : [])];
       for (const drafted of printed) {
         strokes.push(...drafted.strokes);
         out.texts.push(...drafted.texts);

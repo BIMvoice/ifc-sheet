@@ -16,8 +16,8 @@ type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
 
-/** A name: a letter, then letters, digits and underscores. */
-export const PARAM_NAME = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+/** A name: a letter, then letters, digits, spaces, hyphens and underscores, not ending in a space (#832). */
+export const PARAM_NAME = /^[A-Za-z](?:[A-Za-z0-9 _-]{0,38}[A-Za-z0-9_-])?$/;
 
 const BUILTIN_LOWER = new Set(BUILTIN_PARAMS.map((n) => n.toLowerCase()));
 

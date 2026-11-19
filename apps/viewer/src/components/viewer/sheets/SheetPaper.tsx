@@ -134,15 +134,16 @@ function TitleNumber({ number, size }: { number: NonNullable<ViewTitleLayout['nu
 
 const pensMemo = sharedMemo<ReturnType<typeof viewportPens>>();
 
-const ViewportGraphic = memo(function ViewportGraphic({ sheetId, vp, content, layers, extraPatterns, selected, drawingArea, highlight = null }: {
-  sheetId: string; vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
+const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, content, layers, extraPatterns, selected, drawingArea, highlight = null }: {
+  sheetId: string; /** What `{Name}` means on this sheet: a note on the view names the project's text values (#832). */ lookup: (name: string) => string | undefined; vp: SheetViewport; content: ViewportContent; layers: readonly DraftLayer[]; extraPatterns: readonly HatchPattern[]; selected: boolean;
   /** The frame above the title block, paper mm: the marks stay inside it (`drawingAreaIn`). */
   drawingArea: PaperRect;
   /** On a key plan: the part its keyed viewport shows, paper mm. */
   highlight?: Rect | null;
 }) {
   const { t: tr } = useTranslation();
-  const { view, drawing, drafts } = content;
+  const { view, drawing } = content;
+  const drafts = useMemo(() => content.drafts.map((d) => resolvedDraft(d, lookup)), [content.drafts, lookup]);
   const standard = useGraphicStandard();
   const axis: SectionAxisName = drawing ? AXIS_NAME[drawing.config.plane.axis] : 'down';
   const t = viewportTransform(vp, drawing, axis);
@@ -339,6 +340,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
   const { w, h } = paperOf(sheet);
   const revisions = useProjectStore((s) => s.revisions);
   const projectDrafts = useProjectStore((s) => s.drafts);
+  const lookup = useSheetParamLookup(sheet, projectName, issueDate);
   const own = useMemo(() => sheetRevisions(sheet, { revisions, drafts: projectDrafts }), [sheet, revisions, projectDrafts]);
   const shows = useMemo(() => {
     if (!currentCloudsOnly) return null;
@@ -359,7 +361,7 @@ export const SheetPaper = forwardRef<SVGSVGElement, SheetPaperProps>(function Sh
         if (c.legend) return <LegendViewport key={vp.id} vp={vp} layout={c.legend} selected={vp.id === selectedViewportId} />;
         return c.schedule
           ? <ScheduleViewport key={vp.id} vp={vp} layout={c.schedule} selected={vp.id === selectedViewportId} />
-          : <ViewportGraphic key={vp.id} sheetId={sheet.id} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} drawingArea={drawingArea} highlight={keyedExtent(sheet, vp, content, c)} />;
+          : <ViewportGraphic key={vp.id} sheetId={sheet.id} lookup={lookup} vp={vp} content={c} layers={layers} extraPatterns={extraPatterns} selected={vp.id === selectedViewportId} drawingArea={drawingArea} highlight={keyedExtent(sheet, vp, content, c)} />;
       })}
       <RevisionTable revisions={own} block={titleBlockRect({ w, h }, frameOf(sheet))} strip={frameOf(sheet).titleBlock === 'right'} />
       <g data-sheet-notes="" {...penTags('VIEWPORT-LABELS', 0.25)}>

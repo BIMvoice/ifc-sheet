@@ -86,6 +86,8 @@ readTitleSources: value
 resolveField: value
 resolveParamText: value
 resolveTitleBlock: value
+resolvedTextDraft: value
+resolvedTextDrafts: value
 resolvedTitleBlock: value
 romanianTitleBlock: value
 sameSource: value
