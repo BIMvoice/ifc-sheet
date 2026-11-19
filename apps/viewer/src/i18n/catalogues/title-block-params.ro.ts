@@ -21,7 +21,7 @@ export const titleBlockParamsRo = {
   'tbparams.value': 'Valoarea lui {name}',
   'tbparams.delete': 'Șterge parametrul {name}',
   'tbparams.problem.empty': 'Un parametru are nevoie de un nume.',
-  'tbparams.problem.invalid': 'Folosiți o literă, apoi litere, cifre sau liniuțe de subliniere.',
+  'tbparams.problem.invalid': 'Folosiți o literă, apoi litere, cifre, spații, cratime sau liniuțe de subliniere.',
   'tbparams.problem.builtin': 'Numele este predefinit.',
   'tbparams.problem.duplicate': 'Un alt parametru are deja acest nume.',
   'tbparams.sheetHint': 'Valorile proprii ale acestei planșe pentru parametri. Unul lăsat neschimbat urmează proiectul.',

@@ -18,8 +18,8 @@ export interface TitleBlockParam {
   value: string;
 }
 
-/** `{Name}`: a letter, then letters, digits and underscores. */
-export const TOKEN = /\{([A-Za-z][A-Za-z0-9_]{0,39})\}/g;
+/** `{Name}`: a letter, then letters, digits, spaces, underscores and hyphens (`{Cladding product}`, #832). A space after the name is ignored, `{Name }`. */
+export const TOKEN = /\{([A-Za-z][A-Za-z0-9 _-]{0,39})\}/g;
 
 /**
  * The names the program fills, which a user's parameter cannot take: the
@@ -65,7 +65,10 @@ export function fieldBuiltins(fields: Readonly<Record<string, string>>, language
 
 /** `text` with each `{Name}` replaced by what `lookup` says; a name nothing answers to prints as `{Name?}`. */
 export function resolveParamText(text: string, lookup: (name: string) => string | undefined): string {
-  return text.replace(TOKEN, (_, name: string) => lookup(name) ?? `{${name}?}`);
+  return text.replace(TOKEN, (_, raw: string) => {
+    const name = raw.trim();
+    return lookup(name) ?? `{${name}?}`;
+  });
 }
 
 /**

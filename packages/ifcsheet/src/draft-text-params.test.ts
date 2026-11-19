@@ -64,4 +64,9 @@ describe('linked text on a view (#832)', () => {
     expect(printed(sheet('A-1', { titleBlockParams: { Cladding: 'own' } }), values, [note('n', '{Cladding}')])).toContain('own');
     expect(printed(sheet('A-2'), values, [note('n', '{Cladding}')])).toContain('project');
   });
+
+  it('a name may hold spaces, as the issue writes its legends: {Cladding product}, {XYZ Cavity product} (#832)', () => {
+    const words = printed(sheet('A-1'), [{ name: 'Cladding product', value: 'larch' }, { name: 'XYZ Cavity product', value: 'batten' }], [note('n', '{Cladding product} on {XYZ Cavity product } and {Other thing}')]);
+    expect(words).toContain('larch on batten and {Other thing?}');
+  });
 });

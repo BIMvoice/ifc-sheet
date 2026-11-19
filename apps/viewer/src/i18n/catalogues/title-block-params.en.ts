@@ -15,7 +15,7 @@ export const titleBlockParamsEn = {
   'tbparams.value': 'Value of {name}',
   'tbparams.delete': 'Delete the parameter {name}',
   'tbparams.problem.empty': 'A parameter needs a name.',
-  'tbparams.problem.invalid': 'Use a letter, then letters, digits or underscores.',
+  'tbparams.problem.invalid': 'Use a letter, then letters, digits, spaces, hyphens or underscores.',
   'tbparams.problem.builtin': 'That name is built in.',
   'tbparams.problem.duplicate': 'Another parameter has that name.',
   'tbparams.sheetHint': 'This sheet\'s own values for the parameters. Leave one alone and it follows the project.',
