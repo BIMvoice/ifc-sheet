@@ -104,6 +104,7 @@ export const PLAIN_DRAW_TOOLS: readonly DrawTool[] = [
   { command: 'text', labelKey: 'wall.draw.text', bodyKey: 'wall.draw.text.body' },
   { command: 'hatch', labelKey: 'wall.draw.hatch', bodyKey: 'wall.draw.hatch.body' },
   { command: 'revcloud', labelKey: 'wall.draw.revcloud', bodyKey: 'wall.draw.revcloud.body' },
+  { command: 'pen', labelKey: 'wall.draw.pen', bodyKey: 'wall.draw.pen.body' },
   { command: 'ptext', labelKey: 'wall.draw.ptext', bodyKey: 'wall.draw.ptext.body' },
 ];
 

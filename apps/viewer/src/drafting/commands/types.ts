@@ -36,7 +36,7 @@ export interface Prompt {
 }
 
 /** What a click on the drawing means at the current step. */
-export type InputKind = 'point' | 'pick';
+export type InputKind = 'point' | 'pick' | 'stroke';
 
 export interface DraftContext {
   viewId: string;
@@ -153,6 +153,8 @@ export interface DraftCommand {
   /** A typed keyword (e.g. "C" to close); `undefined` if not understood. */
   onKeyword?(word: string): StepResult | undefined;
   onEnter?(): StepResult;
+  /** A freehand step (`input()` is 'stroke'): points of the pointer's path while it is down, then its end; `tolerance` is how far the saved line may stray, drawing units. */
+  stroke?: { move(p: Pt): void; end(tolerance: number): StepResult };
   preview?(cursor: Pt): DraftShape[];
 }
 
