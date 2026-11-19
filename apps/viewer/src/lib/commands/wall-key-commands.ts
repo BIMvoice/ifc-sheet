@@ -42,7 +42,7 @@ export const WALL_KEY_COMMANDS = [
   { id: 'wall.draw.text', labelKey: 'wall.draw.text', category: 'wall', when: 'wall', keys: [digit(4, true)] },
   { id: 'wall.draw.hatch', labelKey: 'wall.draw.hatch', category: 'wall', when: 'wall', keys: [digit(5, true)] },
   { id: 'wall.draw.revcloud', labelKey: 'wall.draw.revcloud', category: 'wall', when: 'wall', keys: [digit(6, true)] },
-  { id: 'wall.draw.pen', labelKey: 'wall.draw.pen', category: 'wall', when: 'wall', keys: [] },
+  { id: 'wall.draw.pen', labelKey: 'wall.draw.pen', category: 'wall', when: 'wall', keys: [{ key: 'code:KeyP', alt: true, shift: true }] },
   { id: 'wall.draw.ptext', labelKey: 'wall.draw.ptext', category: 'wall', when: 'wall', keys: [digit(7, true)] },
   { id: 'wall.draw.trim', labelKey: 'wall.draw.trim', category: 'wall', when: 'wall', keys: [digit(7)] },
   { id: 'wall.draw.extend', labelKey: 'wall.draw.extend', category: 'wall', when: 'wall', keys: [digit(8)] },
