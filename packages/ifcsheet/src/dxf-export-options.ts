@@ -93,6 +93,9 @@ export function isExternalOf(properties: Record<string, Record<string, unknown>>
  */
 export interface ModelFrame { x: number; y: number; s: number; kx: 1 | -1; ky: 1 | -1 }
 
+/** On a sheet pen, with the DXF options (`DxfSheetOptions`): the class and `IsExternal` of what the pen draws, and where its viewport's drawing is on the paper. */
+export interface DxfPenTags { ifcType?: string; external?: boolean; frame?: ModelFrame }
+
 /** A paper point (millimetres, y down as drawn) in its viewport's drawing coordinates, metres. */
 export function modelPoint(frame: ModelFrame, p: Point2D): Point2D {
   return { x: (p.x - frame.x) / (frame.kx * frame.s), y: (p.y - frame.y) / (frame.ky * frame.s) };

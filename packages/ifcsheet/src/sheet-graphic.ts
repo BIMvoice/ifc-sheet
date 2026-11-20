@@ -36,7 +36,7 @@ export { printableLogo } from './sheet-title-block.js';
 import { titleBlock } from './sheet-title-block.js';
 import { DEFAULT_SHEET_TYPE } from './title-block-standard.js';
 import { resolveViewGraphics } from './view-templates.js';
-import { elementPens, type DxfSheetOptions, type ModelFrame } from './dxf-export-options.js';
+import { elementPens, type DxfPenTags, type DxfSheetOptions } from './dxf-export-options.js';
 import { penGroups, penOrder, type PenLayer } from './drawing-pens.js';
 import { atDetailLevel, resolveDetailLevel } from './detail-level.js';
 import { PEN_TABLE, viewStyler, type PenTable, type ViewStyleInputs } from './view-style.js';
@@ -87,7 +87,7 @@ export interface SheetText {
 const onLayer = (texts: readonly SheetText[], layer: NonNullable<SheetText['layer']>): SheetText[] => texts.map((t) => ({ ...t, layer }));
 
 /** One pen of a viewport's drawing on the paper: a fill (its regions, each an outer loop and holes filled even-odd) or a stroke (its runs). */
-export interface SheetPen {
+export interface SheetPen extends DxfPenTags {
   layer: PenLayer;
   stroke: string | null;
   /** Paper mm; 0 for a fill. */
@@ -99,8 +99,6 @@ export interface SheetPen {
   runs: Polyline[];
   /** A fill's regions, clipped to the viewport; each loop ends where it starts. */
   regions: Polyline[][];
-  /** With the DXF options (`DxfSheetOptions`): the class and `IsExternal` of what the pen draws, and where its viewport's drawing is on the paper. */
-  ifcType?: string; external?: boolean; frame?: ModelFrame;
 }
 
 /** An image on the paper, fitted whole and centred in `box` (paper mm): the title block's logo. */
@@ -227,8 +225,7 @@ export function sheetGraphic(
   openings: ReadonlyMap<string, readonly OpeningSymbol[]> = new Map(),
   /** How the model names a cut band's IfcMaterial (`materialResolver`): its bands are filled and hatched by material, as the app's sheets do (#645). Absent: the plain cut. */
   materials?: MaterialResolver,
-  /** What a DXF of this sheet needs besides the shapes (#831; `DxfSheetOptions`). Absent: the sheet as ever. */
-  dxf: DxfSheetOptions = {},
+  dxf: DxfSheetOptions = {}, // What a DXF of this sheet needs besides the shapes (#831); absent: the sheet as ever.
 ): SheetGraphic {
   const paper = paperOf(sheet);
   const out: SheetGraphic = { sheetId: sheet.id, number: sheet.number, name: sheet.name, paper, frame: [rect(frameRect(paper, frameOf(sheet)))], fills: [], cut: [], lines: [], pens: [], symbols: { strokes: [], solids: [] }, marks: [], texts: [], images: [], underlays: [], viewports: [] };
