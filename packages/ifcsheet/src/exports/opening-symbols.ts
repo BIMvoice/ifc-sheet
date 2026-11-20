@@ -26,5 +26,8 @@ export {
   drawnBySymbol, openingPens, openingReads, openingSheetPens, planOpeningSymbols, simplifyOpeningSymbol, viewOpeningSymbols, withoutOpeningBodies,
   type OpeningPen, type OpeningSources,
 } from '../plan-openings.js';
+// Which loaded model draws a door's or window's symbol when several are loaded: the architectural one, and one copy (#830)
+export { symbolMeshes, type OpeningSource } from '../opening-owners.js';
+export { modelDisciplineOf, type ModelDiscipline } from '../model-discipline.js';
 // What an elevation or a section draws of the doors and windows its drawing shows
 export { elevationOpeningSymbols, visibleEntities, type ElevationReads } from '../elevation-openings.js';

@@ -6,9 +6,11 @@ ElevationPlacementOptions: type (type-only)
 ElevationReads: type (type-only)
 HeadArch: type (type-only)
 JoineryStroke: type (type-only)
+ModelDiscipline: type (type-only)
 OpeningConvention: type (type-only)
 OpeningPen: type (type-only)
 OpeningRect: type (type-only)
+OpeningSource: type (type-only)
 OpeningSources: type (type-only)
 OpeningSymbol: type (type-only)
 P2: type (type-only)
@@ -28,6 +30,7 @@ hostWallMeshes: value
 hostedInCutWall: value
 hullCandidates: value
 minAreaRect: value
+modelDisciplineOf: value
 openingHostsOf: value
 openingMarks: value
 openingPens: value
@@ -41,6 +44,7 @@ simplifyOpeningSymbol: value
 statedDoorElevationSymbol: value
 storeyMembersOf: value
 strokeBounds: value
+symbolMeshes: value
 symbolShapes: value
 typedElevationSymbol: value
 typedPlanSymbol: value

@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { curtainPartsOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, visibleEntities, type DetailLevel, type ProjectLevel } from '@bimvoice/ifcsheet';
+import { curtainPartsOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, modelDisciplineOf, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, symbolMeshes, visibleEntities, type DetailLevel, type ModelDiscipline, type OpeningSource, type ProjectLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
@@ -51,6 +51,25 @@ function onPlanStorey(level: Pick<ProjectLevel, 'storeyGlobalIds'> | undefined):
   };
 }
 
+/**
+ * The meshes whose doors and windows draw a symbol when several models are loaded (#830, `opening-owners.ts`, the engine's rule):
+ * with an architectural model visible, only its doors and windows; and one copy of a door two models hold. One model: `meshes`.
+ */
+function ownSymbolMeshes(meshes: readonly MeshData[]): readonly MeshData[] {
+  const s = useViewerStore.getState();
+  const models = [...s.models.values()].filter((m) => m.visible && m.ifcDataStore);
+  if (models.length < 2) return meshes;
+  const sources = new Map(models.map((m, order) => [m.id, { model: m.id, discipline: modelDisciplineOf(m.ifcDataStore!, m.name), order }]));
+  const disciplines: ModelDiscipline[] = [...sources.values()].map((x) => x.discipline);
+  const sourceOf = (id: number): OpeningSource | undefined => {
+    const ref = s.resolveGlobalIdFromModels(id);
+    const source = ref ? sources.get(ref.modelId) : undefined;
+    if (!ref || !source) return undefined;
+    return { ...source, globalId: s.models.get(ref.modelId)?.ifcDataStore?.entities?.getGlobalId(ref.expressId) || undefined };
+  };
+  return symbolMeshes(meshes, sourceOf, disciplines);
+}
+
 /** The opening symbols of a plan at `plane`; `level` is the plan's own storey, the only one whose doors and windows the host-wall rule (#586) draws. */
 export function viewOpeningSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
@@ -59,7 +78,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(meshes, plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId))
+  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }
@@ -91,6 +110,6 @@ export function viewElevationSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return elevationOpeningSymbols(meshes, plane, visible, hidden, { typedOf: drawnJoineryOfRenderId, operationOf: doorOperationOfRenderId, flipsOf }, openingConvention())
+  return elevationOpeningSymbols(ownSymbolMeshes(meshes), plane, visible, hidden, { typedOf: drawnJoineryOfRenderId, operationOf: doorOperationOfRenderId, flipsOf }, openingConvention())
     .map((s) => simplifyOpeningSymbol(s, detail));
 }

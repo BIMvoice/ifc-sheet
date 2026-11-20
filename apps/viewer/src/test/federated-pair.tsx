@@ -23,7 +23,7 @@ import { useEffect } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { IfcParser, type IfcDataStore } from '@ifc-lite/parser';
-import { GeometryProcessor, type GeometryResult } from '@ifc-lite/geometry';
+import { GeometryProcessor, type GeometryResult, type MeshData } from '@ifc-lite/geometry';
 import { FederationRegistry } from '@ifc-lite/renderer';
 import { initSync } from '@ifc-lite/wasm';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -81,22 +81,57 @@ function fixtureBytes(file: string, elevated: boolean): Uint8Array {
   return new TextEncoder().encode(text);
 }
 
-async function parse(file: string, processor: GeometryProcessor, elevated: boolean): Promise<Parsed> {
-  const bytes = fixtureBytes(file, elevated);
+async function parseBytes(bytes: Uint8Array, processor: GeometryProcessor): Promise<Parsed> {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const store = await new IfcParser().parseColumnar(buffer, { disableWorkerScan: true });
   const geometry = await processor.process(new Uint8Array(bytes));
   return { store, geometry };
 }
 
-function federated(id: string, name: string, parsed: Parsed, idOffset: number): FederatedModel {
+/** The largest express id of a freshly parsed file, read in a loop (a spread overflows the stack on a large model). */
+function maxIdOf(store: IfcDataStore): number {
+  let max = 0;
   // @raw-entity-enumeration-ok test fixture sizes a freshly parsed source before any mutation view exists
-  const maxExpressId = Math.max(...parsed.store.entityIndex.byId.keys());
+  for (const id of store.entityIndex.byId.keys()) if (id > max) max = id;
+  return max;
+}
+
+function federated(id: string, name: string, parsed: Parsed, idOffset: number): FederatedModel {
+  const maxExpressId = maxIdOf(parsed.store);
   for (const mesh of parsed.geometry.meshes) applyFederationOffsetToMesh(mesh, idOffset);
   return {
     id, name, ifcDataStore: parsed.store, geometryResult: parsed.geometry, visible: true, collapsed: false,
     schemaVersion: 'IFC4', loadedAt: idOffset, fileSize: 0, idOffset, maxExpressId, loadState: 'complete',
   } as unknown as FederatedModel;
+}
+
+/** A model to federate: its id in the store, its file name and its bytes. */
+export interface FederatedFile { id: string; name: string; bytes: Uint8Array }
+
+/**
+ * Load `files` into the store and the project the way the viewer federates them, in order (the first is the host): each parsed and
+ * meshed, re-homed onto the federation's id space, the RTC frames converged unless `converge` is false, and the project synced.
+ */
+export async function loadFederated(files: readonly FederatedFile[], options: { converge?: boolean } = {}): Promise<FederatedModel[]> {
+  initSync({ module: readFileSync(WASM) });
+  const processor = new GeometryProcessor();
+  const parsed: Parsed[] = [];
+  try {
+    await processor.init();
+    for (const file of files) parsed.push(await parseBytes(file.bytes, processor));
+  } finally {
+    processor.dispose();
+  }
+  const registry = new FederationRegistry();
+  const models = files.map((file, i) => {
+    const offset = registry.registerModel(file.id, maxIdOf(parsed[i].store));
+    return federated(file.id, file.name, parsed[i], offset);
+  });
+  useViewerStore.setState({ models: new Map(models.map((m) => [m.id, m])), activeModelId: files[0]?.id ?? null, geometryResult: null, ifcDataStore: null });
+  if (options.converge !== false) convergeFederationRtcFrame();
+  resetProject();
+  syncProjectWithModels(models.map(modelRef), models.flatMap((m) => modelLevels(m.id)));
+  return models;
 }
 
 /**
@@ -105,33 +140,22 @@ function federated(id: string, name: string, parsed: Parsed, idOffset: number): 
  * negative control that shows the fixture can tell a frame bug apart.
  */
 export async function loadFederatedPair(options: { converge?: boolean; elevated?: boolean } = {}): Promise<LoadedPair> {
-  initSync({ module: readFileSync(WASM) });
-  const processor = new GeometryProcessor();
-  let archParsed: Parsed, strParsed: Parsed;
-  try {
-    await processor.init();
-    archParsed = await parse('arch.ifc', processor, options.elevated === true);
-    strParsed = await parse('str.ifc', processor, options.elevated === true);
-  } finally {
-    processor.dispose();
-  }
-  const registry = new FederationRegistry();
-  // @raw-entity-enumeration-ok test fixture sizes freshly parsed sources
-  const archOffset = registry.registerModel('arch', Math.max(...archParsed.store.entityIndex.byId.keys()));
-  // @raw-entity-enumeration-ok test fixture sizes freshly parsed sources
-  const strOffset = registry.registerModel('str', Math.max(...strParsed.store.entityIndex.byId.keys()));
-  const arch = federated('arch', 'arch.ifc', archParsed, archOffset);
-  const str = federated('str', 'str.ifc', strParsed, strOffset);
-  useViewerStore.setState({ models: new Map([['arch', arch], ['str', str]]), activeModelId: 'arch', geometryResult: null, ifcDataStore: null });
-  if (options.converge !== false) convergeFederationRtcFrame();
-  resetProject();
-  syncProjectWithModels([modelRef(arch), modelRef(str)], [...modelLevels('arch'), ...modelLevels('str')]);
-  return { arch, str, strId: (localId) => localId + strOffset };
+  const elevated = options.elevated === true;
+  const [arch, str] = await loadFederated([
+    { id: 'arch', name: 'arch.ifc', bytes: fixtureBytes('arch.ifc', elevated) },
+    { id: 'str', name: 'str.ifc', bytes: fixtureBytes('str.ifc', elevated) },
+  ], options);
+  return { arch, str, strId: (localId) => localId + str.idOffset };
 }
+
+let drawnMeshes: readonly MeshData[] = [];
+/** The federated meshes the last `drawView` drew from (`useFederatedGeometry`, as a tab gets them). */
+export const federatedMeshes = (): readonly MeshData[] => drawnMeshes;
 
 function Runtime(): null {
   const models = useViewerStore((s) => s.models);
   const geometryResult = useFederatedGeometry(models, null, modelIndices(models), 0);
+  drawnMeshes = geometryResult?.meshes ?? [];
   useEffect(() => {
     publishDrawingRuntime({ geometryResult, sourceCoordinateInfo: geometryResult?.coordinateInfo, generateDrawing: async () => {}, isRegenerating: false });
   }, [geometryResult]);
