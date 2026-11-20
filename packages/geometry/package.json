@@ -56,10 +56,10 @@
     "@ifc-lite/wasm-lifecycle": "workspace:^"
   },
   "optionalDependencies": {
-    "@tauri-apps/api": "^2.12.4"
+    "@tauri-apps/api": "^2.12.5"
   },
   "devDependencies": {
-    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/api": "^2.12.5",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"
   },

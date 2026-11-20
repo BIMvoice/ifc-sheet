@@ -147,7 +147,7 @@
     "@vercel/functions": "3.11.3",
     "gltf-validator": "2.0.0-dev.3.10",
     "knip": "^6.45.1",
-    "oxlint": "^1.93.0",
+    "oxlint": "^1.94.0",
     "tsx": "^4.23.15",
     "turbo": "^2.11.11",
     "typescript": "^6.0.3",
