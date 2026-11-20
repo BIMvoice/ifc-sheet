@@ -122,7 +122,10 @@ describe('LandXML federated overlay coordinates (#5048)', () => {
     const target = reference(-9_240_280.602725117, 10_330_575.179250661, 0, 'EPSG:32632');
     const updates = await buildLandXmlRenderedLineUpdates(parsed, source, target, undefined);
     applyLandXmlRenderedLineUpdates(updates);
-    assert.deepStrictEqual(parsed.surfaces[0].breaklines[0].renderedPoints, [[0, 0, 0]]);
+    // proj4 2.23 lands one f64 ulp (1.9e-9 m at 9.2e6 m) off the false origin that 2.22 hit exactly; both are right to a nanometre.
+    const [rendered] = parsed.surfaces[0].breaklines[0].renderedPoints!;
+    assert.equal(rendered.length, 3);
+    for (const value of rendered) assert.ok(Math.abs(value) < 1e-6, `rendered ${value} is within a micrometre of the false origin`);
   });
 
   it('suppresses only a failed 1e100 line instead of falling back to source coordinates in an aligned surface (#5048)', async () => {
