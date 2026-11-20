@@ -7,3 +7,4 @@ export * from './dxf-r2000.js';
 export * from './cad-layers.js';
 export * from './dxf-cad-layers.js';
 export * from './dxf-pen-tags.js';
+export * from './dxf-export-options.js';

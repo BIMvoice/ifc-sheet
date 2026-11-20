@@ -33,6 +33,8 @@ export interface CadLayerRule {
   /** IFC class names (`IfcWall`), compared case-insensitively. */
   ifcClasses?: string[];
   material?: string;
+  /** The element's `IsExternal` property: true for external, false for internal (a wall's AIA layer, #831). Not stored in project files; the element-layer preset sets it. */
+  external?: boolean;
   /** The CAD layer name (stored as typed; the DXF writer folds it, see `cadLayerName`). */
   layer: string;
   /** True colour, `#rrggbb`; the ACI index is derived from it. Absent: the drawing's own. */
@@ -48,6 +50,8 @@ export interface CadSubject {
   kind?: string;
   ifcClass?: string;
   material?: string;
+  /** The element's `IsExternal` property; absent when it has none. */
+  external?: boolean;
 }
 
 export interface CadLayerChoice {
@@ -61,13 +65,14 @@ export interface CadLayerChoice {
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /** A rule with no criterion would swallow everything: it never matches. */
-const hasCriterion = (r: CadLayerRule) => !!(r.source?.trim() || r.kind || r.ifcClasses?.length || r.material?.trim());
+const hasCriterion = (r: CadLayerRule) => !!(r.source?.trim() || r.kind || r.ifcClasses?.length || r.material?.trim() || r.external !== undefined);
 
 function matches(r: CadLayerRule, s: CadSubject): boolean {
   if (!hasCriterion(r)) return false;
   if (r.source?.trim() && norm(r.source) !== norm(s.source)) return false;
   if (r.kind && r.kind !== s.kind) return false;
   if (r.ifcClasses?.length && !(s.ifcClass && r.ifcClasses.some((c) => c.trim().toUpperCase() === s.ifcClass?.toUpperCase()))) return false;
+  if (r.external !== undefined && r.external !== s.external) return false;
   if (r.material?.trim() && !(s.material && norm(r.material) === norm(s.material))) return false;
   return true;
 }

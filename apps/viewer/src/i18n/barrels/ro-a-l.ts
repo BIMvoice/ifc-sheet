@@ -27,6 +27,7 @@ import { draftingRo } from '../catalogues/drafting.ro';
 import { drawOrderRo } from '../catalogues/draw-order.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { dxfViewRo } from '../catalogues/dxf-view.ro';
+import { dxfWorkingFileRo } from '../catalogues/dxf-working-file.ro';
 import { dxfSiteRo } from '../catalogues/dxf-site.ro';
 import { doorFlipButtonsRo } from '../catalogues/door-flip-buttons.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
@@ -87,6 +88,7 @@ export const roAL = {
   ...drawOrderRo,
   ...draftingStandardsRo,
   ...dxfViewRo,
+  ...dxfWorkingFileRo,
   ...dxfSiteRo,
   ...doorFlipButtonsRo,
   ...elementGraphicsRo,

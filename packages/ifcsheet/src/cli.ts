@@ -42,6 +42,8 @@ export async function run(argv: readonly string[], io: CliIo = processIo): Promi
       options: {
         out: { type: 'string' },
         dxf: { type: 'string' },
+        'dxf-layers': { type: 'string' },
+        'dxf-units': { type: 'string' },
         handover: { type: 'string' },
         pattern: { type: 'string' },
         name: { type: 'string' },

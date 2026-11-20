@@ -15,7 +15,9 @@
  * per element), and only when the project has CAD layer rules.
  */
 
-import type { IfcDataStore } from '@ifc-lite/parser';
+import { extractPropertiesOnDemand, type IfcDataStore } from '@ifc-lite/parser';
+import { elementProperties } from '@bimvoice/ifcsheet';
+import { isExternalOf } from '@bimvoice/ifcsheet/dxf';
 import { useViewerStore } from '@/store';
 import { layerSetBehind, liveConforms, liveRelatedLists, readLayerSet, type LiveModel } from '@/lib/commands/modeling/authored-kinds';
 import type { CadPenContext } from '@/components/viewer/sheets/viewport-pens';
@@ -54,7 +56,23 @@ function elementMaterial(model: LiveModel, expressId: number): string | null {
 /** The CAD layer standard's view of the loaded models, or undefined when there are no rules (pens stay unsplit). */
 export function cadPenContext(rules: readonly CadLayerRule[] | undefined): CadPenContext | undefined {
   if (!rules?.length) return undefined;
+  const external = new Map<number, boolean | undefined>();
   return {
+    // The element's IsExternal, else what its name says (`isExternalOf`): the element layer standard splits walls by it (#831).
+    externalOf(entityId) {
+      if (external.has(entityId)) return external.get(entityId);
+      const m = modelOf(entityId);
+      let value: boolean | undefined;
+      if (m) {
+        try {
+          value = isExternalOf(elementProperties(extractPropertiesOnDemand(m.dataStore, m.expressId)), m.dataStore.entities.getName(m.expressId) || undefined);
+        } catch (error) {
+          console.warn('IsExternal of an element could not be read', error);
+        }
+      }
+      external.set(entityId, value);
+      return value;
+    },
     materialOf(entityId, materialId) {
       const m = modelOf(entityId);
       if (!m) return null;

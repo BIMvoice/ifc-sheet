@@ -17,6 +17,7 @@ import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { CadLayerRule } from './cad-layers.js';
 import type { CustomLineType } from './draft-look.js';
 import { layerAndPens } from './dxf-cad-layers.js';
+import { dxfCadRules, insunitsOf, modelPoint, type DxfLayerScheme, type DxfUnits } from './dxf-export-options.js';
 import { penTags, type DxfSubject, type DxfTags } from './dxf-pen-tags.js';
 import { DxfR2000 } from './dxf-r2000.js';
 import { FILL_HATCH } from './sheet-colours.js';
@@ -27,6 +28,10 @@ import { DEFAULT_SHEET_WEIGHTS } from './title-block-standard.js';
 export interface SheetDxfOptions {
   cadLayers?: readonly CadLayerRule[];
   lineTypes?: readonly CustomLineType[];
+  /** Layers by pen (default) or by element, AIA-style (#831): the project's own CAD layer rules win over the element names. */
+  layers?: DxfLayerScheme;
+  /** `paper` (default): the sheet in millimetres. `model`: each viewport's pens at their model coordinates in metres (the sheet must be made with `modelFrames`); the frame, title block, notes and drafts are left out. */
+  units?: DxfUnits;
 }
 
 const SYMBOL_PEN = 0.25;
@@ -40,7 +45,8 @@ const closes = (run: Polyline): boolean => run.length > 3 && run[0].x === run[ru
 
 /** One sheet as DXF R2000 text (windows-1252 bytes), paper millimetres with y up and the origin at the paper's bottom-left corner. */
 export function sheetGraphicToDxf(sheet: SheetGraphic, options: SheetDxfOptions = {}): Uint8Array {
-  const cad = options.cadLayers ?? [];
+  const cad = dxfCadRules(options.cadLayers, options.layers ?? 'pen');
+  const model = options.units === 'model';
   const writer = new DxfR2000();
   for (const l of options.lineTypes ?? []) writer.defineLineType(l.id, l.name, l.dash);
   const flip = (p: Point2D): Point2D => ({ x: p.x, y: sheet.paper.h - p.y });
@@ -51,17 +57,30 @@ export function sheetGraphicToDxf(sheet: SheetGraphic, options: SheetDxfOptions 
     const chosen = layerAndPens(cad, (name) => tags[`data-dxf-${name}` as keyof typeof tags], tags['data-dxf-layer'] ?? role, colour);
     return { layer: writer.layer(chosen.name, chosen.layer), own: chosen.own };
   };
-  const runs = (list: readonly Polyline[], role: string, width: number, colour = '#000000', dashed = false, drafted?: DxfTags) => {
-    const { layer, own } = pen(role, width, colour, dashed, {}, drafted);
+  const runs = (list: readonly Polyline[], role: string, width: number, colour = '#000000', dashed = false, drafted?: DxfTags, subject: DxfSubject = {}, to: (p: Point2D) => Point2D = flip) => {
+    const { layer, own } = pen(role, width, colour, dashed, subject, drafted);
     for (const run of list) {
       const closed = closes(run);
-      writer.polyline((closed ? run.slice(0, -1) : run).map(flip), layer, own, closed);
+      writer.polyline((closed ? run.slice(0, -1) : run).map(to), layer, own, closed);
     }
   };
-  const solid = (loops: readonly Polyline[], role: string, width: number, colour: string, drafted?: DxfTags) => {
+  const solid = (loops: readonly Polyline[], role: string, width: number, colour: string, drafted?: DxfTags, to: (p: Point2D) => Point2D = flip) => {
     const { layer, own } = pen(role, width, colour, false, {}, drafted);
-    writer.hatch(loops.map((l) => (closes(l) ? l.slice(0, -1) : l).map(flip)), layer, own);
+    writer.hatch(loops.map((l) => (closes(l) ? l.slice(0, -1) : l).map(to)), layer, own);
   };
+
+  if (model) {
+    // A CAD working file: the viewports' drawings only, each at its model coordinates in metres.
+    for (const p of sheet.pens) {
+      const frame = p.frame;
+      if (!frame) continue;
+      const to = (q: Point2D) => modelPoint(frame, q);
+      const subject: DxfSubject = { ...(p.ifcType ? { ifcType: p.ifcType } : {}), ...(p.external !== undefined ? { external: p.external } : {}) };
+      if (p.stroke !== null && p.runs.length > 0) runs(p.runs, p.layer, p.width, p.stroke, !!p.dash, undefined, subject, to);
+      else if (p.fill && p.regions.length > 0) solid(p.regions.flat(), p.layer, 0, p.fill, undefined, to);
+    }
+    return writer.bytes(`units: metres (model 1:1), sheet ${sheet.number} ${sheet.name}`, insunitsOf('model'));
+  }
 
   // The frame is the first rectangle, the title block's box and rules follow it.
   runs(sheet.frame.slice(0, 1), 'FRAME', DEFAULT_SHEET_WEIGHTS.frame);
@@ -70,7 +89,7 @@ export function sheetGraphicToDxf(sheet: SheetGraphic, options: SheetDxfOptions 
     solid(fill.loops, 'COLOUR', 0, fill.colour);
     if (fill.hatch) runs(fill.hatch.strokes, 'HATCH', fill.hatch.width, FILL_HATCH.ink);
   }
-  for (const p of sheet.pens) if (p.stroke !== null && p.runs.length > 0) runs(p.runs, p.layer, p.width, p.stroke, !!p.dash);
+  for (const p of sheet.pens) if (p.stroke !== null && p.runs.length > 0) runs(p.runs, p.layer, p.width, p.stroke, !!p.dash, undefined, { ...(p.ifcType ? { ifcType: p.ifcType } : {}), ...(p.external !== undefined ? { external: p.external } : {}) });
   runs(sheet.marks, 'LEGEND', LEGEND_PEN);
   for (const s of sheet.strokes ?? []) {
     if (s.fill) solid(s.runs, 'SHEET', s.width, s.colour, s.dxf);

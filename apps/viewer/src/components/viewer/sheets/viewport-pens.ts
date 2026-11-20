@@ -50,12 +50,15 @@ export interface Pen {
   /** With a CAD layer standard: the element class and material the pen is split by (`dxf-tags.ts`). */
   ifcType?: string;
   material?: string;
+  external?: boolean;
 }
 
 /** The CAD layer standard's view of a drawing: pens are split per element class and material only when it is given. */
 export interface CadPenContext {
   /** The IfcMaterial name of an element (or of one of its layers when `materialId` is given), or null. */
   materialOf(entityId: number, materialId?: number): string | null;
+  /** Whether the element is external (`IsExternal`, #831): the element layer standard splits walls by it. */
+  externalOf?(entityId: number): boolean | undefined;
 }
 
 /** The hairline a coloured surface is stroked with, in its own colour, paper millimetres: it closes the seams between its triangles. */
@@ -81,10 +84,11 @@ export function viewportPens(
   };
   const loop = (pts: readonly { x: number; y: number }[]) => `M${pts.map(pt).join('L')}Z`;
   // Under a CAD layer standard a pen also carries the class and material of what it draws, and is split by them.
-  const subject = (ifcType: string | undefined, entityId: number | undefined, materialId?: number): { key: string; tags: Pick<Pen, 'ifcType' | 'material'> } => {
+  const subject = (ifcType: string | undefined, entityId: number | undefined, materialId?: number): { key: string; tags: Pick<Pen, 'ifcType' | 'material' | 'external'> } => {
     if (!cad) return { key: '', tags: {} };
     const material = entityId === undefined ? null : cad.materialOf(entityId, materialId);
-    return { key: `|${ifcType ?? ''}|${material ?? ''}`, tags: { ...(ifcType ? { ifcType } : {}), ...(material ? { material } : {}) } };
+    const external = entityId === undefined ? undefined : cad.externalOf?.(entityId);
+    return { key: `|${ifcType ?? ''}|${material ?? ''}|${external ?? ''}`, tags: { ...(ifcType ? { ifcType } : {}), ...(material ? { material } : {}), ...(external !== undefined ? { external } : {}) } };
   };
   const out: Pen[] = [];
   // The coloured surfaces come first, in their own order: pens grouped by colour would paint a far face over a near one.

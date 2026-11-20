@@ -22,6 +22,8 @@ export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;
 export interface CliValues {
   out?: string;
   dxf?: string;
+  'dxf-layers'?: string;
+  'dxf-units'?: string;
   handover?: string;
   pattern?: string;
   name?: string;

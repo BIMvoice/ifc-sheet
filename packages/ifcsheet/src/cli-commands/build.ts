@@ -20,6 +20,7 @@ import { PAC_INTERVENTIONS, PAC_MODES, type PacIntervention, type PacMode } from
 import { pacPages, pacTemplateFor } from '../cli-pac.js';
 import { sheetFormat } from '../units-and-numbers.js';
 import { buildStandard, unknownStandardMessage, withTitleBlock } from '../cli-standard.js';
+import { DEFAULT_DXF_EXPORT, DXF_LAYER_SCHEMES, DXF_UNITS, type DxfExportOptions } from '../dxf-export-options.js';
 import { underlayNotes } from '../cli-underlays.js';
 import { emptyPlanNote, sheetNumbersOf } from '../empty-plan-note.js';
 import { type CliIo } from '../cli-command.js';
@@ -31,6 +32,8 @@ interface BuildArgs {
   handover?: string;
   pattern?: string;
   dxf?: string;
+  /** What a DXF is written for (#831): layers by pen or element, units paper or model. */
+  dxfOptions?: DxfExportOptions;
   name?: string;
   template?: string;
   /** The permit project (PAC): its set template, and the opis page first in the PDF. */
@@ -135,9 +138,10 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
     annotations = annotations ? { ...annotations, drafts: done.all } : annotationsOf(done.all, format);
     for (const view of done.summary.views) io.stderr(`ifcsheet: annotated ${view.name}: ${view.skipped ? 'left out, the view has no drawing' : view.results.map((r) => `${r.command} ${r.outcome === 'added' ? `+${r.added}` : r.outcome === 'already' ? 'complete' : 'nothing to do'}`).join(', ')}\n`);
   }
-  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, ...(annotations ? { annotations } : {}), onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
+  const dxfWanted = args.dxfOptions ?? DEFAULT_DXF_EXPORT;
+  const sheets = await sheetGraphics({ ...set, document }, model, { ...(standard.pens ? { pens: standard.pens } : {}), locale: language, ...(project?.materials ? { materials: project.materials } : {}), ...(project?.unitsAndNumbers ? { units: project.unitsAndNumbers } : {}), language, ...(project || standard.openingLines ? { joinery: { ...(project ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }), ...(standard.openingLines ? { openingLines: standard.openingLines } : {}) } } : {}), ...extras, ...(annotations ? { annotations } : {}), dxf: { byElement: dxfWanted.layers === 'element', modelFrames: dxfWanted.units === 'model' }, onEmptyView: (view) => io.stderr(`${emptyPlanNote(sheetNumbersOf(document, view), view, language)}\n`) });
   // The DXF is written through the project's CAD layer standard and line types, as the app's is (#619).
-  const dxfOptions = { ...(project?.set.cadLayers ? { cadLayers: project.set.cadLayers } : {}), lineTypes: project?.set.lineTypes ?? [] };
+  const dxfOptions = { ...(project?.set.cadLayers ? { cadLayers: project.set.cadLayers } : {}), lineTypes: project?.set.lineTypes ?? [], ...(args.dxfOptions ?? {}) };
   const pdf = await exportPdf(args.pac ? pacPages(sheets, set, language, args.intervention, pacMode) : sheets, { title: set.document.name });
   // What the template's rules met in this model (the other notes are the app's to show).
   for (const note of set.notes) if (note.key.startsWith('setTemplate.')) io.stdout(`${describeTemplateNote({ key: note.key as TemplateNoteKey, params: note.params }, language)}\n`);
@@ -184,11 +188,13 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
 export const buildCommand: CliCommand = {
   name: 'build',
   usageRank: 100,
-  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir>] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements] [--annotate[=<all|dimension,tag,level|preset>]]`,
+  usage: `  ifcsheet build <model.ifc> [--out <set.pdf>] [--dxf <dir> [--dxf-layers <pen|element>] [--dxf-units <paper|model>]] [--handover <package.zip>] [--pattern <file names>] [--name <project name>] [--template <office.bvset> | --pac [--pac-mode <full|rural>]] [--project <file>] [--standard <id>] [--locale <ro|en>] [--include-far-elements] [--annotate[=<all|dimension,tag,level|preset>]]`,
   helpRank: 100,
   help: `  build   Lay out the starting drawing set of the model (a plan per level, the
           elevations, the proposed sections) and write it as one PDF, a page per
-          sheet. With --dxf, also write one DXF per sheet into that directory.
+          sheet. With --dxf, also write one DXF per sheet into that directory: --dxf-layers element
+          puts each element class on its own AIA-style layer (A-WALL-EXTR, A-DOOR, A-GLAZ, A-ANNO-DIMS...), --dxf-units model writes
+          each view at its model size in metres (a CAD working file) instead of paper millimetres.
           With --template, the sheets are made by the rules of a set template (a .bvset file
           saved from a project) instead: the same plan-per-storey, elevation and section
           rules the app applies, a rule the model cannot meet skipped and said.
@@ -235,12 +241,23 @@ export const buildCommand: CliCommand = {
       io.stderr('ifcsheet build --pac sets the sheets itself; it cannot be combined with --template.\n');
       return EXIT.usage;
     }
+    const layers = DXF_LAYER_SCHEMES.find((l) => l === values['dxf-layers']);
+    const units = DXF_UNITS.find((u) => u === values['dxf-units']);
+    if ((values['dxf-layers'] !== undefined && !layers) || (values['dxf-units'] !== undefined && !units)) {
+      io.stderr(`ifcsheet build --dxf-layers is one of ${DXF_LAYER_SCHEMES.join(', ')} and --dxf-units one of ${DXF_UNITS.join(', ')}.\n`);
+      return EXIT.usage;
+    }
+    if ((layers || units) && !values.dxf && !values.handover) {
+      io.stderr('ifcsheet build has --dxf-layers and --dxf-units only with --dxf or --handover.\n');
+      return EXIT.usage;
+    }
+    const dxfOptions: DxfExportOptions | undefined = layers || units ? { ...DEFAULT_DXF_EXPORT, ...(layers ? { layers } : {}), ...(units ? { units } : {}) } : undefined;
     if (rest.length !== 1 || (!values.out && !values.handover)) {
       io.stderr(`ifcsheet build needs one model and --out or --handover: ifcsheet build <model.ifc> --out <set.pdf>\n`);
       return EXIT.usage;
     }
     try {
-      return await build({ model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, ...(values.annotate !== undefined ? { annotate: values.annotate } : {}), includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
+      return await build({ ...(dxfOptions ? { dxfOptions } : {}), model: rest[0], out: values.out, handover: values.handover, pattern: values.pattern, dxf: values.dxf, name: values.name, template: values.template, project: values.project, ...(values.annotate !== undefined ? { annotate: values.annotate } : {}), includeFarElements: values['include-far-elements'] === true, pac: values.pac === true, locale: values.locale, ...(intervention ? { intervention } : {}), ...(pacMode ? { pacMode } : {}), ...(values.standard !== undefined ? { standard: values.standard } : {}) }, io);
     } catch (error) {
       io.stderr(`ifcsheet: build of ${basename(rest[0])} failed: ${(error as Error).message}\n`);
       return EXIT.failed;

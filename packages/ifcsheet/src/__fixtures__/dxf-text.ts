@@ -43,3 +43,24 @@ export function dxfLayerWeight(dxf: string, layer: string): number | undefined {
   }
   return undefined;
 }
+
+/** The extent of the points (group codes 10/11 and 20/21) of the entities on one layer: x and y minima and maxima, in the file's units; undefined when the layer carries nothing. */
+export function dxfLayerExtent(dxf: string, layer: string): { x0: number; x1: number; y0: number; y1: number } | undefined {
+  const lines = dxf.split(/\r?\n/);
+  const start = lines.findIndex((l, i) => l.trim() === 'ENTITIES' && lines[i - 1]?.trim() === '2');
+  let out: { x0: number; x1: number; y0: number; y1: number } | undefined;
+  for (let i = start + 1; i + 1 < lines.length; i += 2) {
+    if (lines[i].trim() !== '0') continue;
+    if (lines[i + 1].trim() === 'ENDSEC') break;
+    const pairs: [string, string][] = [];
+    let j = i + 2;
+    for (; j + 1 < lines.length && lines[j].trim() !== '0'; j += 2) pairs.push([lines[j].trim(), lines[j + 1]]);
+    if (!pairs.some(([c, v]) => c === '8' && v === layer)) continue;
+    for (const [c, v] of pairs) {
+      const n = Number(v);
+      if (c === '10' || c === '11') out = { ...(out ?? { x0: n, x1: n, y0: Infinity, y1: -Infinity }), x0: Math.min(out?.x0 ?? n, n), x1: Math.max(out?.x1 ?? n, n) };
+      if (c === '20' || c === '21') out = { ...(out ?? { x0: Infinity, x1: -Infinity, y0: n, y1: n }), y0: Math.min(out?.y0 ?? n, n), y1: Math.max(out?.y1 ?? n, n) };
+    }
+  }
+  return out;
+}

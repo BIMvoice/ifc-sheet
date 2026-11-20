@@ -123,14 +123,14 @@ export function drawLanguage(document: ProjectDocument): 'en' | 'ro' {
 }
 
 /** Every sheet of the set as shapes on its paper, schedules included; a loaded project's drafts and placed schedules as `ifcsheet build --project` prints them, in the project's language (else English). */
-export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry): Promise<DrawnSet> {
+export async function drawSet(entry: SheetSetEntry, model: SheetModelEntry, dxf?: { byElement?: boolean; modelFrames?: boolean }): Promise<DrawnSet> {
   const headless = await import('@bimvoice/ifcsheet/headless');
   const { projectSheetOptionsWithViews, sheetGraphics } = headless;
   const project = projectOf(entry.set.document, headless);
   const language = drawLanguage(entry.set.document);
   const notes: string[] = [];
   const extras = project ? await projectSheetOptionsWithViews(project, model.model, language, sheetFormat(language, entry.set.document.unitsAndNumbers), model.name, (left) => notes.push(`${left.sheet}: ${left.what} not printed yet.`)) : {};
-  const sheets = await sheetGraphics(entry.set, model.model, { ...extras, materials: readMaterials((entry.set.document as unknown as Record<string, unknown>).materials) });
+  const sheets = await sheetGraphics(entry.set, model.model, { ...extras, materials: readMaterials((entry.set.document as unknown as Record<string, unknown>).materials), ...(dxf ? { dxf } : {}) });
   const schedules: DrawnSet['schedules'] = [];
   for (const schedule of entry.schedules) {
     const sheet = entry.set.document.sheets.find((s) => s.id === schedule.sheetId);
