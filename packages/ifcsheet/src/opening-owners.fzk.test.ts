@@ -101,7 +101,9 @@ const DISCIPLINES: Array<[string, ModelDiscipline]> = [
 describe('the discipline of a model is read from its content (#830)', () => {
   for (const [path, expected] of DISCIPLINES) {
     const file = at(path);
-    it.skipIf(!existsSync(file))(`${path.split('/').pop()} is ${expected}`, async () => {
+    const name = `${path.split('/').pop()} is ${expected}`;
+    const present = existsSync(file);
+    it.skipIf(!present)(present ? name : `${name} (tests/models fixtures missing, run \`pnpm fixtures\`)`, async () => {
       const bytes = readFileSync(file);
       const store = await new IfcParser().parseColumnar(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
       expect(modelDisciplineOf(store, path.split('/').pop())).toBe(expected);
