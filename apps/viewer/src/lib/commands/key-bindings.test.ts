@@ -37,6 +37,7 @@ const SHIPPED: Readonly<Record<string, readonly KeyChord[]>> = {
   'wall.draw.text': [{ key: 'code:Digit4', alt: true, shift: true }],
   'wall.draw.hatch': [{ key: 'code:Digit5', alt: true, shift: true }],
   'wall.draw.revcloud': [{ key: 'code:Digit6', alt: true, shift: true }],
+  'wall.draw.pen': [{ key: 'code:KeyP', alt: true, shift: true }],
   'wall.draw.ptext': [{ key: 'code:Digit7', alt: true, shift: true }],
   'wall.draw.trim': [{ key: 'code:Digit7', alt: true }],
   'wall.draw.extend': [{ key: 'code:Digit8', alt: true }],

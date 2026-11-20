@@ -92,11 +92,33 @@ describe('parametric text (#143)', () => {
     assert.ok(texts(ui).includes('x {Nope?}'));
   });
 
-  it('a text that is not marked parametric prints as typed', () => {
-    addTitleBlockParam('Phase', 'DTAC');
+  it('a plain note, not made by the parameter text tool, reads the names too (#832): two values in one note, and a change reaches every note', () => {
+    addTitleBlockParam('Cladding', 'larch');
+    addTitleBlockParam('Insulation', 'rock wool');
     const first = sheets()[0] as ProjectSheet;
-    const plain = newDraft(first.id, '0', { type: 'text', p: { x: 20, y: 20 }, text: 'keep {Phase}', height: 3.5, rotation: 0 }, {});
-    assert.ok(texts(paper(first, [plain])).includes('keep {Phase}'));
+    const plain = (id: string, text: string) => newDraft(id, '0', { type: 'text', p: { x: 20, y: 20 }, text, height: 3.5, rotation: 0 }, {});
+    const notes = (s: ProjectSheet) => [plain(s.id, 'Wt1 = {Cladding} over {Insulation}'), plain(s.id, 'Spec {Cladding}'), plain(s.id, 'x {Nope}')];
+    let ui = paper(first, notes(first));
+    assert.ok(texts(ui).includes('Wt1 = larch over rock wool'));
+    assert.ok(texts(ui).includes('x {Nope?}'), 'an unknown name stays visible');
+    cleanup();
+    setTitleBlockParamValue('Cladding', 'render');
+    for (const s of sheets()) {
+      ui = paper(s, notes(s));
+      assert.ok(texts(ui).includes('Wt1 = render over rock wool') && texts(ui).includes('Spec render'), `both notes follow on ${s.number}`);
+      cleanup();
+    }
+  });
+
+  it('a note drafted on a view inside a viewport reads the names as well (#832)', () => {
+    addTitleBlockParam('Cladding', 'larch');
+    const first = sheets()[0] as ProjectSheet;
+    const inView = newDraft('v', '0', { type: 'text', p: { x: 0, y: 0 }, text: 'Cl {Cladding}', height: 3.5, rotation: 0 }, {});
+    const ui = render(
+      <SheetPaper sheet={{ ...first, viewports: [{ id: 'vp', viewId: 'v', x: 100, y: 100, scale: 50, width: 0, height: 0, center: null }] }} projectName="P" content={() => ({ view: undefined, drawing: null, drafts: [inView] })}
+        layers={[]} extraPatterns={[]} selectedViewportId={null} pxPerMm={1} />,
+    );
+    assert.ok(texts(ui).includes('Cl larch'));
   });
 
   it('the built-in parameters read the sheet: number, name, page n/N, and the title block fields', () => {

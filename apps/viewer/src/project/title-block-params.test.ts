@@ -68,7 +68,8 @@ describe('parameter names (#143)', () => {
     assert.equal(checkParamName('', existing), 'empty');
     assert.equal(checkParamName('  ', existing), 'empty');
     assert.equal(checkParamName('2nd', existing), 'invalid');
-    assert.equal(checkParamName('has space', existing), 'invalid');
+    assert.equal(checkParamName('bad!', existing), 'invalid');
+    assert.equal(checkParamName('Cladding product', existing), null); // #832: a name may hold spaces
     assert.equal(checkParamName('SheetNumber', existing), 'builtin');
     assert.equal(checkParamName('sheetnumber', existing), 'builtin');
     assert.equal(checkParamName('Phase', existing), 'duplicate');

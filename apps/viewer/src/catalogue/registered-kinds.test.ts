@@ -18,16 +18,16 @@ const kind = (key: string): RegisteredCatalogueKind => ({ key } as RegisteredCat
 
 describe('registered library kinds', () => {
   it('lists the kinds in the order the dialog always had', () => {
-    assert.equal(CATALOGUE_KINDS.length, 15);
-    assert.deepEqual([...CATALOGUE_KINDS], ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings']);
-    assert.deepEqual(Object.keys(emptyCatalogue()), ['layers', 'layerGroups', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings']);
+    assert.equal(CATALOGUE_KINDS.length, 16);
+    assert.deepEqual([...CATALOGUE_KINDS], ['layers', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'tagFields', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings', 'labelPresets']);
+    assert.deepEqual(Object.keys(emptyCatalogue()), ['layers', 'layerGroups', 'textStyles', 'dimStyles', 'hatchPatterns', 'materials', 'annotationTypes', 'symbols', 'legends', 'cadLayers', 'details', 'sheetTemplates', 'boqArticles', 'viewTemplates', 'classificationMappings', 'labelPresets']);
   });
 
   it('finds every file of kinds/ and each registers a kind, none twice', () => {
     const files = readdirSync(new URL('./kinds', import.meta.url)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
     assert.ok(files.length > 0);
     assert.equal(REGISTERED_CATALOGUE_KIND_DEFS.length, files.length, `kinds/ holds ${files.join(', ')}; the glob found ${REGISTERED_CATALOGUE_KIND_DEFS.map((d) => d.key).join(', ')}`);
-    assert.deepEqual(REGISTERED_CATALOGUE_KINDS.map((d) => d.key), ['classificationMappings']);
+    assert.deepEqual(REGISTERED_CATALOGUE_KINDS.map((d) => d.key), ['classificationMappings', 'labelPresets']);
     assert.equal(new Set(REGISTERED_CATALOGUE_KINDS.map((d) => d.key)).size, REGISTERED_CATALOGUE_KINDS.length);
   });
 

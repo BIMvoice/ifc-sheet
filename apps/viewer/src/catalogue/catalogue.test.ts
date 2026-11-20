@@ -55,6 +55,7 @@ const full: Catalogue = {
     id: 'cl1', system: { name: 'Uniclass', edition: '2015' },
     rules: [{ by: 'type', match: 'T240', code: 'EXAMPLE-Ss_25', title: 'EXAMPLE: walls' }, { by: 'class', match: 'IfcDoor', code: 'EXAMPLE-Ss_32' }],
   }],
+  labelPresets: [{ id: 'lp1', name: 'Precast walls', groups: [{ labelType: 'Wall label', filters: [{ by: 'class', value: 'IfcWall' }, { by: 'property', set: 'Pset_Precast', name: 'Mark', value: 'P1' }] }] }],
   viewTemplates: [
     { id: 'vt1', name: 'Plans, heavy walls', kind: 'plan', graphics: {
       presetId: 'preset-architectural', categories: { doors: { lineWeight: 'light' } },
