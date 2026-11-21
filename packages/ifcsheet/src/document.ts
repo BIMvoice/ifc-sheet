@@ -85,8 +85,9 @@ export interface ProjectViewBase {
   createdAt: number;
   /**
    * View depth: how far beyond the cut plane the view sees, metres. `null`
-   * or absent is the view kind's default — a plan shows the cut only, a
-   * section / elevation projects with the automatic depth bands.
+   * or absent is the view kind's default — a plan sees down to its level's
+   * floor (as deep as its cut is high), a section / elevation projects with
+   * the automatic depth bands.
    */
   viewDepth?: number | null;
   /**

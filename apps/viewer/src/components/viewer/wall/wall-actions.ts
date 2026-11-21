@@ -4,8 +4,9 @@
 
 /**
  * What the Wall's controls change on a view: a plan's cut height, stepped by
- * the wheel, its overhead band and a section's or elevation's view depth; and
- * the few large tools it offers for adding information to a drawing.
+ * the wheel, its overhead band, how far below its cut it sees, and a section's
+ * or elevation's view depth; and the few large tools it offers for adding
+ * information to a drawing.
  */
 
 import { updateProjectView, useProjectStore } from '@/project/project-store';
@@ -57,6 +58,18 @@ export function setPlanOverheadHeight(viewId: string, metres: number | null): vo
   if (view?.kind !== 'plan' || view.reflected) return;
   if (metres !== null && (!Number.isFinite(metres) || metres < 0)) return;
   updateProjectView(viewId, { overheadHeight: metres });
+}
+
+/**
+ * How far below its cut a plan sees: `null` is the automatic depth (down to
+ * this floor, as deep as the cut is high), 0 the cut only, and a depth of its
+ * own reaches the floor below, its stair through the opening.
+ */
+export function setPlanDepth(viewId: string, metres: number | null): void {
+  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
+  if (view?.kind !== 'plan' || view.reflected) return;
+  if (metres !== null && (!Number.isFinite(metres) || metres < 0)) return;
+  updateProjectView(viewId, { viewDepth: metres });
 }
 
 /**

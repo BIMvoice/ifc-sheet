@@ -101,6 +101,15 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
     if (fzk) assert.equal((await both(fzk, ground()!)).app.seenProjection, 554);
   });
   it('FZK Dachgeschoss', (t) => row(t, () => [fzk, named(fzk, /Dachgeschoss/)], 100));
+  it('FZK Dachgeschoss, depth 4: the stair of the floor below, through the opening (#979)', async (t) => {
+    if (!fzk) { t.skip('wasm bundle not built: run `pnpm build:wasm:fetch` first'); return; }
+    const view = named(fzk, /Dachgeschoss/) && { ...named(fzk, /Dachgeschoss/)!, id: 'fzk-dg-depth4', viewDepth: 4 };
+    assert.ok(view, 'the plan exists');
+    const drawing = await viewDrawing(view, fzk.geometry, fzk.model.dataStore.spatialHierarchy, { ...TYPE_VISIBILITY_SEMANTIC_DEFAULTS, site: false });
+    assert.ok(drawing, 'the app drew nothing');
+    const lower = drawing.lines.filter((l) => l.category === 'projection' && l.ifcType === 'IfcStair' && l.visibility !== 'hidden' && l.depth > view.cutHeight + 0.1);
+    assert.ok(lower.length >= 20, `the lower stair is drawn through the opening (drew ${lower.length})`);
+  });
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));
   it('FZK Erdgeschoss, depth 1', (t) => row(t, () => [fzk, ground({ viewDepth: 1 })], 20));
   it('FZK Erdgeschoss, reflected', (t) => row(t, () => [fzk, ground({ reflected: true })], 1));

@@ -5,14 +5,15 @@
 /**
  * The controls beside a sheet on the Wall: a plan's cut height on a ruler
  * with the usual window sill and head marked, what the plan draws above that
- * cut (the overhead band), and a section's or elevation's view depth. The
- * wheel inside the drawing moves the same values.
+ * cut (the overhead band) and how far below it the plan sees, and a section's
+ * or elevation's view depth. The wheel inside the drawing moves the cut or the
+ * section's depth.
  */
 
 import { viewOverheadHeight } from '@bimvoice/ifcsheet';
 import { formatLocaleFixed, useTranslation } from '@/i18n';
 import type { ProjectView } from '@/project/types';
-import { CUT_HEIGHT_RANGE, nudgeViewDepth, setCutHeight, setPlanOverhead, setPlanOverheadHeight } from './wall-actions';
+import { CUT_HEIGHT_RANGE, nudgeViewDepth, setCutHeight, setPlanDepth, setPlanOverhead, setPlanOverheadHeight } from './wall-actions';
 
 /** The ruler's range, metres, and where a window's sill and head usually are. */
 const RULER = { min: 0.5, max: 2.5 } as const;
@@ -103,6 +104,42 @@ export function OverheadControl({ view }: { view: Extract<ProjectView, { kind: '
           />
         </label>
       )}
+    </div>
+  );
+}
+
+/**
+ * How far below its cut a plan sees: empty is the automatic depth (down to
+ * this floor, as deep as the cut is high), 0 the cut only, and a depth of its
+ * own reaches the floor below, its stair through the opening.
+ */
+export function PlanDepthControl({ view }: { view: Extract<ProjectView, { kind: 'plan' }> }) {
+  const { t } = useTranslation();
+  const commit = (input: HTMLInputElement): void => {
+    const raw = input.value.trim();
+    const metres = raw === '' ? null : Number(raw);
+    if (metres === null) { setPlanDepth(view.id, null); return; }
+    if (Number.isFinite(metres) && metres >= 0) { setPlanDepth(view.id, metres); return; }
+    input.value = view.viewDepth == null ? '' : String(view.viewDepth);
+  };
+  return (
+    <div className="flex flex-col gap-2 text-xs text-sky-200">
+      <label className="flex flex-col gap-1">
+        <span className="text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('planDepth.label')}</span>
+        <span className="text-xs text-sky-200/70">{t('planDepth.hint')}</span>
+        <input
+          key={view.viewDepth ?? 'auto'}
+          type="number"
+          min={0}
+          step={0.1}
+          defaultValue={view.viewDepth ?? ''}
+          placeholder={t('planDepth.toThisFloor', { depth: view.cutHeight.toFixed(2) })}
+          aria-label={t('planDepth.label')}
+          className="min-w-0 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-sm text-white"
+          onBlur={(e) => commit(e.target)}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        />
+      </label>
     </div>
   );
 }
