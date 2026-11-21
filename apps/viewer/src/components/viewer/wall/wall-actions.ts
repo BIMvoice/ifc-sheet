@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * What the Wall's controls change on a view: a plan's cut height and a
- * section's or elevation's view depth, stepped by the wheel; and the few large
- * tools it offers for adding information to a drawing.
+ * What the Wall's controls change on a view: a plan's cut height, stepped by
+ * the wheel, its overhead band and a section's or elevation's view depth; and
+ * the few large tools it offers for adding information to a drawing.
  */
 
 import { updateProjectView, useProjectStore } from '@/project/project-store';
@@ -38,6 +38,25 @@ export function setCutHeight(viewId: string, metres: number): void {
   if (view?.kind !== 'plan') return;
   const next = Number(clampStep(metres, CUT_HEIGHT_RANGE).toFixed(2));
   if (next !== view.cutHeight) updateProjectView(viewId, { cutHeight: next });
+}
+
+/**
+ * A plan's overhead band (#490): what lies above the cut, drawn dashed. Off it
+ * stores 0 and nothing is drawn; on it stores `null`, the automatic range up to
+ * the floor above, and the height field is back.
+ */
+export function setPlanOverhead(viewId: string, draw: boolean): void {
+  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
+  if (view?.kind !== 'plan' || view.reflected) return;
+  updateProjectView(viewId, { overheadHeight: draw ? null : 0 });
+}
+
+/** The height above the cut a plan's overhead band reaches; `null` is the floor above. */
+export function setPlanOverheadHeight(viewId: string, metres: number | null): void {
+  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
+  if (view?.kind !== 'plan' || view.reflected) return;
+  if (metres !== null && (!Number.isFinite(metres) || metres < 0)) return;
+  updateProjectView(viewId, { overheadHeight: metres });
 }
 
 /**
