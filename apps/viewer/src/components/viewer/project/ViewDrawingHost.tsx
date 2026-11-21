@@ -84,7 +84,7 @@ function ModelDrawingHost({ view }: { view: Exclude<ProjectView, { kind: '3d' }>
   const shownOf = useCallback((d: Drawing2D) => drawingShownBy(view, d),
     // `view` is read through `drawingShownBy`; it is re-read when one of the parts of it that decide the drawing changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view.kind, view.showHidden, view.detail, interior, discipline, disciplineLevel]);
+    [view.kind, view.showHidden, view.detail, view.kind === 'plan' ? view.cutHeight : undefined, view.kind === 'plan' ? view.showLowerFloor : undefined, interior, discipline, disciplineLevel]);
   const setDrawing = useCallback((d: Drawing2D | null) => {
     generated.current = d;
     patchViewDrawing(viewId, { drawing: d ? shownOf(d) : null });

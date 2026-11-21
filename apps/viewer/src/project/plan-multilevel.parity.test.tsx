@@ -57,7 +57,7 @@ async function load(file: URL): Promise<Loaded | null> {
 }
 
 /** Both sides draw `view`; the rows say how much projection it has to have. */
-async function both(l: Loaded, view: PlanProjectView) {
+async function drawings(l: Loaded, view: PlanProjectView) {
   const hierarchy = l.model.dataStore.spatialHierarchy;
   const app = await viewDrawing(view, l.geometry, hierarchy, { ...TYPE_VISIBILITY_SEMANTIC_DEFAULTS, site: false });
   assert.ok(app, 'the app drew nothing');
@@ -66,6 +66,11 @@ async function both(l: Loaded, view: PlanProjectView) {
   const floors = storeyFloorsOf(l.model.buildingMeshes, hierarchy);
   const engine = (await generateViewDrawings([view], l.model.buildingMeshes, l.levels, l.model.extent!, undefined, undefined, floors)).get(view.id);
   assert.ok(engine, 'the engine drew nothing');
+  return { app, engine };
+}
+
+async function both(l: Loaded, view: PlanProjectView) {
+  const { app, engine } = await drawings(l, view);
   return { app: counts(app), engine: counts(engine) };
 }
 
@@ -109,6 +114,24 @@ describe('plans of a model with two or more storeys, and reflected plans, app ag
     assert.ok(drawing, 'the app drew nothing');
     const lower = drawing.lines.filter((l) => l.category === 'projection' && l.ifcType === 'IfcStair' && l.visibility !== 'hidden' && l.depth > view.cutHeight + 0.1);
     assert.ok(lower.length >= 20, `the lower stair is drawn through the opening (drew ${lower.length})`);
+  });
+  it('FZK Dachgeschoss, depth 4 without the floor below: its dashed lines go, the stair through the opening stays', async (t) => {
+    if (!fzk) { t.skip('wasm bundle not built: run `pnpm build:wasm:fetch` first'); return; }
+    const base = named(fzk, /Dachgeschoss/);
+    assert.ok(base, 'the plan exists');
+    // The default draws the floor below: the row has something to remove before it says the switch removes it.
+    const drawn = await drawings(fzk, { ...base, id: 'fzk-dg-depth4-lower-on', viewDepth: 4 });
+    const view = { ...base, id: 'fzk-dg-depth4-lower-off', viewDepth: 4, showLowerFloor: false };
+    const { app, engine } = await drawings(fzk, view);
+    const dashed = (d: Drawing2D) => d.lines.filter((l) => l.visibility === 'hidden' || l.category === 'hidden');
+    const belowFloor = (d: Drawing2D) => dashed(d).filter((l) => Math.min(l.depth, l.depthEnd ?? l.depth) > view.cutHeight + 1e-6);
+    assert.ok(belowFloor(drawn.app).length > 0, 'the default draws the floor below, dashed');
+    assert.equal(belowFloor(app).length, 0, 'the app leaves the floor below out');
+    assert.equal(belowFloor(engine).length, 0, 'the engine leaves the floor below out');
+    assert.deepEqual(counts(engine), counts(app));
+    const stair = (d: Drawing2D) => d.lines.filter((l) => l.category === 'projection' && l.ifcType === 'IfcStair' && l.visibility !== 'hidden' && l.depth > view.cutHeight + 0.1);
+    assert.ok(stair(app).length >= 20, `the stair through the opening stays (drew ${stair(app).length})`);
+    assert.ok(dashed(app).some((l) => l.depth <= view.cutHeight + 1e-6), 'the overhead band stays, dashed');
   });
   it('FZK Erdgeschoss, depth 0 (the cut only)', (t) => row(t, () => [fzk, ground({ viewDepth: 0 })], 0));
   it('FZK Erdgeschoss, depth 1', (t) => row(t, () => [fzk, ground({ viewDepth: 1 })], 20));

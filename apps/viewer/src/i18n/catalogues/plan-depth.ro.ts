@@ -10,4 +10,6 @@ export const planDepthRo = {
   'planDepth.label': 'Adâncimea vederii',
   'planDepth.toThisFloor': 'Până la acest nivel ({depth} m)',
   'planDepth.hint': 'De la secțiune. Gol: până la acest nivel; măriți-l pentru a vedea nivelul de dedesubt. 0 = doar secțiunea.',
+  'planDepth.showLowerFloor': 'Desenează nivelul de dedesubt',
+  'planDepth.lowerFloorHint': 'Liniile lui întrerupte; ce se vede prin gol rămâne.',
 } as const satisfies Partial<Record<TranslationKey, TranslationValue>>;

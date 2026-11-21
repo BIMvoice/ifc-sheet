@@ -10,10 +10,10 @@
  * section's depth.
  */
 
-import { viewOverheadHeight } from '@bimvoice/ifcsheet';
+import { viewOverheadHeight, viewShowsLowerFloor } from '@bimvoice/ifcsheet';
 import { formatLocaleFixed, useTranslation } from '@/i18n';
 import type { ProjectView } from '@/project/types';
-import { CUT_HEIGHT_RANGE, nudgeViewDepth, setCutHeight, setPlanDepth, setPlanOverhead, setPlanOverheadHeight } from './wall-actions';
+import { CUT_HEIGHT_RANGE, nudgeViewDepth, setCutHeight, setPlanDepth, setPlanLowerFloor, setPlanOverhead, setPlanOverheadHeight } from './wall-actions';
 
 /** The ruler's range, metres, and where a window's sill and head usually are. */
 const RULER = { min: 0.5, max: 2.5 } as const;
@@ -111,7 +111,9 @@ export function OverheadControl({ view }: { view: Extract<ProjectView, { kind: '
 /**
  * How far below its cut a plan sees: empty is the automatic depth (down to
  * this floor, as deep as the cut is high), 0 the cut only, and a depth of its
- * own reaches the floor below, its stair through the opening.
+ * own reaches the floor below, its stair through the opening. The switch
+ * below takes the floor below's dashed lines out, keeping what shows through
+ * the opening.
  */
 export function PlanDepthControl({ view }: { view: Extract<ProjectView, { kind: 'plan' }> }) {
   const { t } = useTranslation();
@@ -139,6 +141,19 @@ export function PlanDepthControl({ view }: { view: Extract<ProjectView, { kind: 
           onBlur={(e) => commit(e.target)}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         />
+      </label>
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          aria-label={t('planDepth.showLowerFloor')}
+          className="mt-0.5"
+          checked={viewShowsLowerFloor(view)}
+          onChange={(e) => setPlanLowerFloor(view.id, e.target.checked)}
+        />
+        <span className="flex flex-col gap-0.5">
+          <span>{t('planDepth.showLowerFloor')}</span>
+          <span className="text-xs text-sky-200/70">{t('planDepth.lowerFloorHint')}</span>
+        </span>
       </label>
     </div>
   );

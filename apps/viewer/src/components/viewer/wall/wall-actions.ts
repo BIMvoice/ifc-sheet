@@ -4,9 +4,9 @@
 
 /**
  * What the Wall's controls change on a view: a plan's cut height, stepped by
- * the wheel, its overhead band, how far below its cut it sees, and a section's
- * or elevation's view depth; and the few large tools it offers for adding
- * information to a drawing.
+ * the wheel, its overhead band, how far below its cut it sees and whether it
+ * draws the floor below, and a section's or elevation's view depth; and the
+ * few large tools it offers for adding information to a drawing.
  */
 
 import { updateProjectView, useProjectStore } from '@/project/project-store';
@@ -70,6 +70,13 @@ export function setPlanDepth(viewId: string, metres: number | null): void {
   if (view?.kind !== 'plan' || view.reflected) return;
   if (metres !== null && (!Number.isFinite(metres) || metres < 0)) return;
   updateProjectView(viewId, { viewDepth: metres });
+}
+
+/** Whether a plan draws, dashed, what lies below its floor: the floor below seen through the slab. */
+export function setPlanLowerFloor(viewId: string, draw: boolean): void {
+  const view = useProjectStore.getState().views.find((v) => v.id === viewId);
+  if (view?.kind !== 'plan' || view.reflected) return;
+  updateProjectView(viewId, { showLowerFloor: draw });
 }
 
 /**

@@ -21,7 +21,7 @@ import { customPlaneCenter } from './section-plane.js';
 import { drawAxonometricView, isVectorAxonometric } from './axonometric.js';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './mesh-outline-provider.js';
-import { viewCutOptions, viewShowsHidden } from './view-cut-options.js';
+import { drawingWithoutLowerFloor, viewCutOptions, viewShowsHidden } from './view-cut-options.js';
 import { automaticDepthOfSpan, planProjectionBands, viewOverheadHeight, viewProjection } from './plan-projection.js';
 import { levelFloorY, resolvePlanLevel } from './view-defaults.js';
 import { drawingWithGround } from './ground.js';
@@ -177,8 +177,10 @@ export async function generateViewDrawings(
           outlineProvider: cut.outline && typeof meshOutline2dFn === 'function' ? createMeshOutlineProvider(meshOutline2dFn) : undefined,
         });
         const generated = grounded ? drawingWithGround(raw, view.kind as 'elevation' | 'section') : turnDrawing(raw, config.plane);
-        // The hidden lines it found are drawn unless the view leaves them out (`viewShowsHidden`, as the app).
-        const drawing = viewShowsHidden(view) ? generated : { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') };
+        // The hidden lines it found are drawn unless the view leaves them out (`viewShowsHidden`, as the app), and a
+        // plan that leaves the floor below out drops its dashed lines (as the app).
+        const kept = viewShowsHidden(view) ? generated : { ...generated, lines: generated.lines.filter((l) => l.visibility !== 'hidden' && l.category !== 'hidden') };
+        const drawing = view.kind === 'plan' ? drawingWithoutLowerFloor(kept, view) : kept;
         if (view.kind === 'plan' && isEmptyDrawing(drawing)) onEmpty(view);
         out.set(view.id, drawing);
       } catch (err) {

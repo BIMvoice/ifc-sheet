@@ -12,7 +12,7 @@
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { drawingWithGround, viewShowsHidden } from '@bimvoice/ifcsheet';
+import { drawingWithGround, drawingWithoutLowerFloor, viewShowsHidden } from '@bimvoice/ifcsheet';
 import { cropDrawing } from './drawing-crop';
 import { interiorCropRect } from './interior-crop';
 import { outlineLines } from './elevation-outline';
@@ -24,6 +24,10 @@ export { viewShowsHidden };
 const occluded = (l: Drawing2D['lines'][number]) => l.visibility === 'hidden' || l.category === 'hidden';
 
 type Shown = Pick<ProjectView, 'kind' | 'showHidden' | 'detail'> & {
+  /** A plan's cut above its level's floor, metres: the floor below (and its dashed lines) sits that deep. */
+  cutHeight?: number;
+  /** Whether the plan draws the dashed lines of the floor below (`viewShowsLowerFloor`). */
+  showLowerFloor?: boolean;
   interior?: InteriorElevation;
   /**
    * What a discipline plan leaves out (`viewOmits`). The sheet and the tab draw the drawing without those elements, so the
@@ -49,10 +53,16 @@ function boundsKept(drawing: Drawing2D, omits: NonNullable<Shown['omits']>): Dra
 function withoutOverlays(source: Drawing2D, view: Shown): Drawing2D {
   // The ground line is a facade's: an interior elevation looks at a wall from inside the room.
   const drawing = (view.kind === 'elevation' && !view.interior) || view.kind === 'section' ? drawingWithGround(source, view.kind) : source;
-  if (view.kind !== 'elevation') return viewShowsHidden(view) ? drawing : { ...drawing, lines: drawing.lines.filter((l) => !occluded(l)) };
-  const kept = viewShowsHidden(view) ? drawing.lines : drawing.lines.filter((l) => !occluded(l));
-  const outline = outlineLines({ ...drawing, lines: kept });
-  return { ...drawing, lines: kept.map((l) => (outline.has(l) ? { ...l, category: 'silhouette' as const } : l)) };
+  if (view.kind === 'elevation') {
+    const lines = viewShowsHidden(view) ? drawing.lines : drawing.lines.filter((l) => !occluded(l));
+    const outline = outlineLines({ ...drawing, lines });
+    return { ...drawing, lines: lines.map((l) => (outline.has(l) ? { ...l, category: 'silhouette' as const } : l)) };
+  }
+  const kept = viewShowsHidden(view) ? drawing : { ...drawing, lines: drawing.lines.filter((l) => !occluded(l)) };
+  // A plan that leaves the floor below out drops the dashed lines beyond its floor (one rule, `packages/ifcsheet`).
+  return view.kind === 'plan' && view.cutHeight !== undefined
+    ? drawingWithoutLowerFloor(kept, { cutHeight: view.cutHeight, showLowerFloor: view.showLowerFloor })
+    : kept;
 }
 
 /** The drawing as `view` shows it: hidden lines and outline as above, a detail cropped to its area and an interior elevation to its wall and the side walls cut at its ends. The generated drawing is not changed. */

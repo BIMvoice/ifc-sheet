@@ -16,7 +16,9 @@ import type { ProjectView } from './types';
 export function drawingShownBy(view: ProjectView, generated: Drawing2D): Drawing2D {
   const omits = view.kind === 'plan' && view.discipline ? viewOmits(view) : undefined;
   return drawingAsViewShows(generated, {
-    kind: view.kind, showHidden: view.showHidden, detail: view.detail, interior: view.kind === 'elevation' ? view.interior : undefined,
+    kind: view.kind, showHidden: view.showHidden, detail: view.detail,
+    ...(view.kind === 'plan' ? { cutHeight: view.cutHeight, showLowerFloor: view.showLowerFloor } : {}),
+    interior: view.kind === 'elevation' ? view.interior : undefined,
     ...(omits ? { omits } : {}),
   });
 }

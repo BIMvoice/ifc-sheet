@@ -5,15 +5,16 @@
 /**
  * A plan's view depth on the Wall: empty is the automatic depth (down to this
  * floor, as deep as the cut is high), a depth of its own reaches the floor
- * below, 0 the cut only, a negative value is refused, and no control on a
- * reflected ceiling plan.
+ * below, 0 the cut only, a negative value is refused; and the switch that
+ * leaves the floor below's dashed lines out, neither offered on a reflected
+ * ceiling plan.
  */
 
 import '@/test/setup-dom.js';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { viewProjection } from '@bimvoice/ifcsheet';
-import { blur, cleanup, render, type } from '@/test/render.js';
+import { blur, cleanup, click, render, type } from '@/test/render.js';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { PlanProjectView, ProjectSheet, SheetViewport } from '@/project/types';
 import { ViewportCard } from './ViewportCard.js';
@@ -25,6 +26,7 @@ const SHEET: ProjectSheet = { id: 's', number: 'A-101', name: 'Plans', createdAt
 const stored = (): PlanProjectView => useProjectStore.getState().views.find((v) => v.id === 'p') as PlanProjectView;
 const card = (): HTMLElement => render(<ViewportCard sheet={SHEET} slot={VIEWPORT} onOpen={() => {}} onChoose={() => {}} />);
 const depth = (ui: HTMLElement): HTMLInputElement | null => ui.querySelector('input[aria-label="View depth"]');
+const lowerFloor = (ui: HTMLElement): HTMLInputElement | null => ui.querySelector('input[aria-label="Draw the floor below"]');
 
 beforeEach(() => {
   resetProject();
@@ -70,9 +72,21 @@ describe('a plan\'s view depth on the Wall', () => {
     assert.equal(depth(ui)?.value, '');
   });
 
+  it('draws the floor below by default, and can leave its dashed lines out', () => {
+    const ui = card();
+    assert.equal(lowerFloor(ui)?.checked, true);
+    click(lowerFloor(ui)!);
+    assert.equal(stored().showLowerFloor, false);
+    assert.equal(lowerFloor(ui)?.checked, false);
+    click(lowerFloor(ui)!);
+    assert.equal(stored().showLowerFloor, true);
+    assert.equal(lowerFloor(ui)?.checked, true);
+  });
+
   it('is not offered on a reflected ceiling plan', () => {
     useProjectStore.setState({ views: [{ ...PLAN, reflected: true }] });
     const ui = card();
     assert.equal(depth(ui), null);
+    assert.equal(lowerFloor(ui), null);
   });
 });
