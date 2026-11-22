@@ -37,7 +37,7 @@ import { TypeClassificationCard } from './TypeClassificationCard';
 import { BoqCard } from '../boq/BoqCard';
 import { ListScheduleCard } from '../lists/ListScheduleCard';
 import { ThreeDControls } from './ThreeDControls';
-import { CutHeightControl, DepthControl } from './ViewControls';
+import { CutHeightControl, DepthControl, OverheadControl, PlanDepthControl } from './ViewControls';
 import { canBeColoured, ColourSchemeCard } from './ColourSchemeCard';
 import { canBePhased, PhaseCard } from './PhaseCard';
 import { GraphicsCard } from './GraphicsCard';
@@ -129,6 +129,12 @@ export function ViewportCard({ sheet, slot, onOpen, onChoose, drawingBounds = nu
           {schedule ? <ScheduleExportCard key={`${schedule.id}:export`} schedule={schedule} /> : null}
           {view?.kind === '3d' ? <ThreeDControls view={view} slot={slot} bounds={drawingBounds} /> : null}
           {view?.kind === 'plan' ? <div className="mt-4"><CutHeightControl view={view} /></div> : null}
+          {view?.kind === 'plan' && !view.reflected ? (
+            <div className="mt-4 flex flex-col gap-4 border-t border-sky-300/20 pt-4">
+              <OverheadControl view={view} />
+              <div className="border-t border-sky-300/20 pt-4"><PlanDepthControl view={view} /></div>
+            </div>
+          ) : null}
           {view ? <GraphicsCard key={`${view.id}:${slot.id}`} sheet={sheet} slot={slot} view={view} /> : null}
           {view && templateKindOf(view) !== null ? <HiddenElementsSection key={`${view.id}:hidden`} view={view} /> : null}
           {canBeColoured(view) ? <ColourSchemeCard key={view.id} sheet={sheet} view={view} /> : null}

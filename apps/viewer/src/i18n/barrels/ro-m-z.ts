@@ -11,6 +11,7 @@ import { miscPanelsBRo } from '../catalogues/misc-panels-b.ro';
 import { miscReachableRo } from '../catalogues/misc-reachable.ro';
 import { mutationPermissionRo } from '../catalogues/mutation-permission.ro';
 import { namesRo } from '../catalogues/names.ro';
+import { planDepthRo } from '../catalogues/plan-depth.ro';
 import { planOverheadRo } from '../catalogues/plan-overhead.ro';
 import { norwayRo } from '../catalogues/norway.ro';
 import { onboardingRo } from '../catalogues/onboarding.ro';
@@ -98,6 +99,7 @@ export const roMZ = {
   ...norwayRo,
   ...onboardingRo,
   ...pacRo,
+  ...planDepthRo,
   ...planOverheadRo,
   ...panelTitlesRo,
   ...phasesRo,

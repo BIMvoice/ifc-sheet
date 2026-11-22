@@ -85,8 +85,9 @@ export interface ProjectViewBase {
   createdAt: number;
   /**
    * View depth: how far beyond the cut plane the view sees, metres. `null`
-   * or absent is the view kind's default — a plan shows the cut only, a
-   * section / elevation projects with the automatic depth bands.
+   * or absent is the view kind's default — a plan sees down to its level's
+   * floor (as deep as its cut is high), a section / elevation projects with
+   * the automatic depth bands.
    */
   viewDepth?: number | null;
   /**
@@ -151,6 +152,12 @@ export interface PlanProjectView extends ProjectViewBase {
    * Read through `viewOverheadHeight`.
    */
   overheadHeight?: number | null;
+  /**
+   * Draw, dashed, what lies below this level's floor when the view depth reaches past it: the floor
+   * below seen through the slab. Absent: it does, as plans always have. What shows through an
+   * opening stays (it is visible, not dashed). Read through `viewShowsLowerFloor`.
+   */
+  showLowerFloor?: boolean;
 }
 
 /** Which way up a plan is drawn (`PlanProjectView.orientation`). */
