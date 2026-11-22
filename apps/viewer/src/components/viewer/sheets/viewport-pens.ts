@@ -64,6 +64,28 @@ export interface CadPenContext {
 /** The hairline a coloured surface is stroked with, in its own colour, paper millimetres: it closes the seams between its triangles. */
 const SURFACE_SEAM = 0.1;
 
+type Ring = readonly { x: number; y: number }[];
+
+/** Twice a ring's signed area; positive is counter-clockwise in the drawing coordinates it is given in. */
+const signedArea = (ring: Ring): number => {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+};
+
+/**
+ * A fill's rings (its outer ring first, then its holes) wound for a non-zero fill: every outer ring the same way and every hole
+ * the other way. A pen gathers every face of its colour into one path, and the non-zero fill of them is their union — two
+ * overlapping faces add up instead of cancelling as even-odd does — while a hole still cancels its own outer ring. A degenerate
+ * ring (zero area) cannot be wound and fills nothing either way.
+ */
+const wound = (rings: readonly Ring[]): Ring[] =>
+  rings.map((ring, i) => ((signedArea(ring) >= 0) === (i === 0) ? ring : [...ring].reverse()));
+
 /** Default pens, paper millimetres (the default graphic standard's; the overlays that do not take a standard yet draw with these). */
 export const PEN = DEFAULT_GRAPHIC_STANDARD.pens;
 
@@ -96,14 +118,14 @@ export function viewportPens(
     for (const f of drawing.surfaceFills) {
       if (!styler.face(f).visible) continue;
       const last = out[out.length - 1];
-      const d = [f.polygon.outer].map(loop).join('');
+      const d = wound([f.polygon.outer]).map(loop).join('');
       if (last?.surface && last.fill === f.surfaceColour) last.d += d;
       else out.push({ d, stroke: f.surfaceColour, width: SURFACE_SEAM, fill: f.surfaceColour, layer: 'SURFACE', surface: true });
     }
   }
   for (const g of penGroups(fillOrder(drawing), drawing.lines, styler, cad ? (l) => subject(l.ifcType, l.entityId).key : undefined)) {
     if (g.fill !== null) {
-      out.push({ d: g.faces.map((p) => [p.polygon.outer, ...p.polygon.holes].map(loop).join('')).join(''), stroke: null, width: 0, fill: g.fill, layer: g.layer, ...(g.layer === 'COLOUR' ? { solid: true } : {}) });
+      out.push({ d: g.faces.map((p) => wound([p.polygon.outer, ...p.polygon.holes]).map(loop).join('')).join(''), stroke: null, width: 0, fill: g.fill, layer: g.layer, ...(g.layer === 'COLOUR' ? { solid: true } : {}) });
       continue;
     }
     const first = g.lines[0];
@@ -135,7 +157,7 @@ export function viewportPens(
     }
     const color = ink(h.color, h.source?.entityId);
     if (pattern.solid) {
-      add(`solid:${color}`, { stroke: null, width: 0, fill: color, layer: 'HATCH' }, h.loops.map(loop).join(''));
+      add(`solid:${color}`, { stroke: null, width: 0, fill: color, layer: 'HATCH' }, wound(h.loops).map(loop).join(''));
       continue;
     }
     const segments = hatchSegments(h.loops, pattern, { scale: h.scale * HATCH_UNIT_M, angleDeg: 0, maxSegments: 20000 }).segments;
