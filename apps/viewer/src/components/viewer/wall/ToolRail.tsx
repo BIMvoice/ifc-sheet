@@ -28,9 +28,9 @@ import { keyProps } from './wall-key-title';
 import { useKeyBindingsRevision } from '@/lib/commands/key-bindings';
 
 const DRAW_ICONS: Record<string, ReactNode> = {
-  line: <Slash className="size-5" />, polyline: <Spline className="size-5" />, rectangle: <Square className="size-5" />, circle: <Circle className="size-5" />,
-  text: <Type className="size-5" />, hatch: <PaintBucket className="size-5" />, revcloud: <Cloud className="size-5" />, pen: <Pencil className="size-5" />, ptext: <Braces className="size-5" />,
-  trim: <Scissors className="size-5" />, extend: <ArrowRightToLine className="size-5" />, fillet: <CornerUpRight className="size-5" />, offset: <SquareStack className="size-5" />, chamfer: <Slice className="size-5" />, hideline: <EyeOff className="size-5" />,
+  line: <Slash className="size-4" />, polyline: <Spline className="size-4" />, rectangle: <Square className="size-4" />, circle: <Circle className="size-4" />,
+  text: <Type className="size-4" />, hatch: <PaintBucket className="size-4" />, revcloud: <Cloud className="size-4" />, pen: <Pencil className="size-4" />, ptext: <Braces className="size-4" />,
+  trim: <Scissors className="size-4" />, extend: <ArrowRightToLine className="size-4" />, fillet: <CornerUpRight className="size-4" />, offset: <SquareStack className="size-4" />, chamfer: <Slice className="size-4" />, hideline: <EyeOff className="size-4" />,
 };
 
 interface ToolRailProps {
@@ -58,9 +58,12 @@ export function ToolRail({ active, last = null, onTool, adding, onAdd, viewKind,
     const id = wallToolKey(command);
     return id ? keyProps(t, name, id) : { title: name };
   };
-  /** A small grid of tools: the plain drawing ones, or the edit ones. */
+  /**
+   * A list of tools: the plain drawing ones, or the edit ones. One tool to a row, icon then name: two to a row left each
+   * name 48 px, and "Rectangle", "Parameter text" and most Romanian names need more, so they were cut at the rail's edge.
+   */
   const toolGrid = (tools: readonly DrawTool[]) => (
-    <div className="grid grid-cols-2 gap-1.5">
+    <div className="flex flex-col gap-1">
       {tools.map((tool) => {
         const on = active === tool.command;
         return (
@@ -72,19 +75,20 @@ export function ToolRail({ active, last = null, onTool, adding, onAdd, viewKind,
             {...keyed(t(toolHelpKey(tool.command)), tool.command)}
             onClick={() => onTool(tool.command)}
             className={cn(
-              'flex flex-col items-center gap-0.5 rounded-xl border px-1 py-1 text-xs leading-tight',
+              'flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-left text-xs leading-tight [&>svg]:shrink-0',
               on ? 'border-sky-400 bg-sky-500 text-white' : last === tool.command ? 'border-dashed border-sky-300/80 text-sky-100' : 'border-sky-300/20 text-sky-100 hover:border-sky-300/60',
             )}
           >
             {DRAW_ICONS[tool.command]}
-            {t(tool.labelKey)}
+            {/* A name longer than the row wraps, and a single word longer than it breaks: it is never cut. */}
+            <span className="min-w-0 break-words">{t(tool.labelKey)}</span>
           </button>
         );
       })}
     </div>
   );
   return (
-    <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[116px] shrink-0 flex-col gap-1.5 overflow-y-auto py-1">
+    <nav aria-label={t('wall.tools.rail')} {...tourAnchor(TOUR_ANCHORS.wallToolRail)} className="flex w-[116px] shrink-0 flex-col gap-1.5 overflow-y-auto py-1 [scrollbar-width:thin]">
       {WALL_TOOLS.map((tool) => {
         const on = active === tool.command;
         const all = WALL_ALL[tool.command];
