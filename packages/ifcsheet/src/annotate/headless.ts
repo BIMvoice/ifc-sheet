@@ -49,6 +49,7 @@ import { scheduleModelsOf } from '../schedule-models.js';
 import type { SheetLocale } from '../units-and-numbers.js';
 import { generateViewDrawings, terrainMeshesOf } from '../view-drawings.js';
 import type { AnnotateChoices } from './choices.js';
+import { roomNumberOf } from '../labels/room-number.js';
 import { annotateViews, type AnnotateReaders, type AnnotateView, type AnnotateViewsResult, type ReadCall } from './views.js';
 
 export { DEFAULT_DRAFT_LAYER };
@@ -106,7 +107,7 @@ function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, rende
           case 'Name': return p.getEntityName(id);
           case 'Tag': return p.getEntityTag(id);
           case 'LongName': return longNameOf(id);
-          case 'RoomNumber': return longNameOf(id) ? p.getEntityName(id) : '';
+          case 'RoomNumber': return roomNumberOf(p.getEntityName(id), longNameOf(id));
           case 'Mark': return markOf(id, p.getEntityTag(id));
           case 'TagName': return '';
           case 'ObjectType': return p.getEntityObjectType(id);
