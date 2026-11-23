@@ -20,7 +20,7 @@ import { elementByGlobalId } from '@/project/element-label';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
-import type { LabelElement, QuantitySetLike } from '@bimvoice/ifcsheet';
+import { roomNumberOf, type LabelElement, type QuantitySetLike } from '@bimvoice/ifcsheet';
 
 interface Cached {
   version: number;
@@ -77,7 +77,7 @@ export function labelElementOf(modelId: string, expressId: number): LabelElement
         case 'Name': return p.getEntityName(expressId);
         case 'Tag': return p.getEntityTag(expressId);
         case 'LongName': return longNameOf(modelId, expressId);
-        case 'RoomNumber': return longNameOf(modelId, expressId) ? p.getEntityName(expressId) : '';
+        case 'RoomNumber': return roomNumberOf(p.getEntityName(expressId), longNameOf(modelId, expressId));
         case 'Mark': return isOpening(p.getEntityTypeName(expressId)) ? openingMarkOf(modelId, expressId, p.getEntityTag(expressId)) : markOf(p.getEntityTag(expressId));
         case 'TagName': return '';
         case 'ObjectType': return p.getEntityObjectType(expressId);

@@ -14,4 +14,5 @@ export {
   type AttributeField, type FieldRef, type ParsedTemplate, type TemplateField,
 } from '../labels/label-template.js';
 export { formatValue, parseFormatSpec } from '../labels/label-format.js';
+export { roomNumberOf } from '../labels/room-number.js';
 export { viewElements, type ViewElement } from '../labels/view-elements.js';

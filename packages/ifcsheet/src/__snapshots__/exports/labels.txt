@@ -24,5 +24,6 @@ rectInsideRing: value
 rectRingGap: value
 rectsOverlap: value
 ringBounds: value
+roomNumberOf: value
 unionRect: value
 viewElements: value
