@@ -8,7 +8,6 @@ import type { TranslationValue } from '../types';
 /** Romanian for the Wall (`wall.en.ts`). Term choices: `../ro-glossary.md`. */
 export const wallRo = {
   'wall.tab': 'Panou',
-  'wall.empty': 'Deschideți un model IFC și setul lui de planșe se afișează aici.',
   'wall.intro.read': 'Model citit: {name}',
   'wall.intro.titleStart': 'Setul dumneavoastră de planșe',
   'wall.intro.titleEnd': 'este deja desenat.',

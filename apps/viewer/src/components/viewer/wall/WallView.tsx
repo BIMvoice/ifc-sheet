@@ -24,9 +24,8 @@ import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallCompare } from './WallCompare';
 import { WallIntro } from './WallIntro';
-import { openDemoModel } from '../ifcsheet/demo-model';
+import { WallStart } from './WallStart';
 import { ProjectDrawer } from './ProjectDrawer';
-import { NewFromTemplate } from './SetTemplate';
 import { IssuePanel, MissingPanel } from './SetPanels';
 import { SubReportReview } from './SubReportReview';
 import { closeFrontPanel, setReview, stepInto, useWallNav } from './wall-nav';
@@ -82,13 +81,7 @@ export function WallView() {
   return (
     <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_top,#0c2a52,#061a36_60%)] text-sky-50">
       {models.size === 0 && !legacy ? (
-        <div className="flex h-full flex-col items-center justify-center gap-5 text-base text-sky-200/80">
-          <p className="m-0">{t('wall.empty')}</p>
-          <button type="button" className="max-w-md rounded-md bg-sky-600 px-4 py-2 text-center text-sm text-white hover:bg-sky-500" onClick={() => void openDemoModel().catch((err: unknown) => console.warn('[ifcsheet] could not open the demo project', err))}>
-            {t('wall.demo')}
-          </button>
-          <NewFromTemplate />
-        </div>
+        <WallStart />
       ) : sheets.length === 0 ? (
         <output className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
           {allFailed ? failures.join(' ') : noGeometry ? t('wall.intro.noGeometry', { name: loaded[0]?.name ?? '' }) : t('wall.intro.waiting')}
