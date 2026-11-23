@@ -12,7 +12,7 @@ import type { TranslationValue } from '../types';
  */
 export const featuresRo = {
   'settings.privacy.toastDisclosureLocal': '{app} păstrează un jurnal de acțiuni pe dispozitivul dumneavoastră. Această versiune nu trimite date de analiză.',
-  'wall.demo': 'Sau încercați proiectul demonstrativ: un bloc de locuințe, parter plus patru etaje',
+  'wall.demo': 'Nu aveți un model la îndemână? Deschideți proiectul demonstrativ: un bloc de locuințe, parter plus patru etaje',
   'wall.group.legends': 'Legende',
   'wall.elevationScale': 'Scara fațadelor',
   'wall.sectionScale': 'Scara secțiunilor',
