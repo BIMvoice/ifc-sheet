@@ -15,20 +15,20 @@ export type ToolIconName = 'dimension' | 'tag' | 'note' | 'level' | 'section' | 
 /** Ink strokes, accent strokes and accent fills of each icon. */
 const ICONS: Record<ToolIconName, { ink?: string; accent?: string; fill?: string; extra?: (accent: string) => ReactNode }> = {
   dimension: { ink: 'M14 12v34M50 12v34M24 26h16', accent: 'M6 36h52M9 41l10-10M45 41l10-10' },
-  tag: {
-    ink: 'M31 34L16 48', accent: 'M30 17h22M30 25h14',
-    extra: (accent) => (
-      <>
-        <rect x="22" y="8" width="38" height="26" rx="8" fill="none" stroke="currentColor" strokeWidth={3} />
-        <circle cx="12" cy="52" r="3.8" fill={accent} />
-      </>
-    ),
+  // Each is the mark the tool places, as it stands on a sheet: no speech bubbles and no arrows.
+  // A tag is its label box, pointed at both ends, with the mark written in it.
+  tag: { ink: 'M18 18h28l12 14-12 14H18L6 32z', accent: 'M22 32h20' },
+  // A note is its text and the leader that ties it to what it describes, ending in a dot.
+  note: {
+    ink: 'M30 14h26M30 24h26M30 34h14', accent: 'M24 24h-6L10 48',
+    extra: (accent) => <circle cx="10" cy="50" r="3.8" fill={accent} />,
   },
-  note: { ink: 'M30 12h26M30 22h26M30 32h14', accent: 'M36 38L21 47', fill: 'M10 54l14.8-2.6-5.8-9.4z' },
-  level: { ink: 'M8 36h48M24 48h16M28 55h8', accent: 'M21 20h22L32 36z' },
+  // A level mark: the triangle standing on the level, half filled, and the height written on its shoulder.
+  level: { ink: 'M6 46h52M42 28h16', accent: 'M20 28h22L31 46zM46 19h10', fill: 'M20 28h11v18z' },
+  // A section head: the circle with the drawing's number over its sheet, the wedge showing which way it looks, and the cut line.
   section: {
-    ink: 'M32 29v31', accent: 'M27.5 23L32 11l4.5 12M29 19.5h6M32 38h17L32 54z',
-    extra: () => <circle cx="32" cy="17" r="12" fill="none" stroke="currentColor" strokeWidth={3} />,
+    ink: 'M32 38v22M20 24h24', fill: 'M8 24L23.83 12.63A14 14 0 0 0 23.83 35.37z',
+    extra: () => <circle cx="32" cy="24" r="14" fill="none" stroke="currentColor" strokeWidth={3} />,
   },
   symbol: {
     accent: 'M32 14l9 30-9-7-9 7z', fill: 'M32 14l9 30-9-7z',
