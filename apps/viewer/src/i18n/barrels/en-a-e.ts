@@ -8,6 +8,7 @@ import { aiReportsEn } from '../catalogues/ai-reports.en';
 import { alignmentSectionEn } from '../catalogues/alignment-section.en';
 import { analysisPanelEn } from '../catalogues/analysis-panel.en';
 import { annotateAllEn } from '../catalogues/annotate-all.en';
+import { annotateRunEn } from '../catalogues/annotate-run.en';
 import { annotateSetEn } from '../catalogues/annotate-set.en';
 import { annotatedIfcEn } from '../catalogues/annotated-ifc.en';
 import { annotationsEn } from '../catalogues/annotations.en';
@@ -92,6 +93,7 @@ export const enAE = {
   ...addDrawingKindsEn,
   ...contoursEn,
   ...annotateAllEn,
+  ...annotateRunEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
   ...annotationsEn,
