@@ -4,8 +4,8 @@
 
 /** Annotation types as project actions: create, change, delete, and draw with one. */
 
-import { currentLayerId, currentStyles, draftSettings, patchDraftSettings, setCurrentLayer, setCurrentStyles, startDraftCommand } from '@/drafting/session';
-import { isDrawingTabActive } from '@/project/document-tabs';
+import { currentLayerId, currentStyles, draftSettings, patchDraftSettings, setCurrentLayer, setCurrentStyles } from '@/drafting/session';
+import { startOnDrawingInFront } from '@/drafting/drawing-in-front';
 import { styleBook } from '@/project/drafting-standards';
 import { useProjectStore } from '@/project/project-store';
 import { freshProjectId } from '@/project/view-defaults';
@@ -49,8 +49,18 @@ export function applyAnnotationType(id: string): AnnotationType | undefined {
   return type;
 }
 
-/** Draw with a type: it becomes the current one and (on a drawing tab) its tool starts. */
-export function useAnnotationType(id: string): void {
+/** Draw with a type: it becomes the current one and, with a drawing in front (a tab, or a drawing on a sheet), its tool starts. Returns whether it started. */
+export function useAnnotationType(id: string): boolean {
   const type = applyAnnotationType(id);
-  if (type && isDrawingTabActive()) startDraftCommand(type.tool);
+  return type ? startOnDrawingInFront(type.tool) : false;
+}
+
+/**
+ * Label all with a parametric label type (#842): it becomes the current one and LABELALL starts on the drawing in
+ * front (or the one chosen on the sheet), which offers the view's classes and the label presets to pick from. False
+ * when the type is no label type or there is no drawing to label; the type is still the current one then.
+ */
+export function labelAllWithType(id: string): boolean {
+  const type = applyAnnotationType(id);
+  return type?.tool === 'label' && type.label ? startOnDrawingInFront('labelall') : false;
 }

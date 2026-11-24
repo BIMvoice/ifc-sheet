@@ -228,11 +228,11 @@ export function DraftingView({ view, bare = false, target }: { view: Exclude<Pro
   const hidden = useMemo(() => hiddenClasses(graphics), [graphics]);
   const hatches = useMemo(() => (shown ? cutHatches(shown, graphics, undefined, materialOf) : []), [shown, graphics]);
 
+  useDraftingProviders({ view, drawing: viewDrawing, references, entities, plane, levels, scale: viewTransform.scale });
   useEffect(() => {
-    // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100).
+    // Annotation sizes are paper sizes at the view's scale (the settings read as at 1:100). After the providers: a command started on attaching (`startWhenAttached`, #842) reads this view's elements.
     attachDraftingView(view.id, axis, (min, max) => (references ? referencesIn(references, min, max) : []), (view.scale ?? 100) / 100);
   }, [view.id, axis, references, view.scale]);
-  useDraftingProviders({ view, drawing: viewDrawing, references, entities, plane, levels, scale: viewTransform.scale });
   const patternText = useProjectStore((s) => s.hatchPatterns ?? '');
   const extraPatterns = useMemo(() => parsePat(patternText).patterns, [patternText]);
   const selectedModelIds = useViewerStore((s) => s.selectedEntityIds);
