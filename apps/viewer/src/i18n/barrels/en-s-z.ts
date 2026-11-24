@@ -80,6 +80,7 @@ import { wallReviewEn } from '../catalogues/wall-review.en';
 import { wallPhasesEn } from '../catalogues/wall-phases.en';
 import { sectionRoomTagsEn } from '../catalogues/section-room-tags.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
+import { wallIntroActionsEn } from '../catalogues/wall-intro-actions.en';
 import { wallStartEn } from '../catalogues/wall-start.en';
 import { wallEn } from '../catalogues/wall.en';
 import { webgpuTroubleshootingEn } from '../catalogues/webgpu-troubleshooting.en';
@@ -166,6 +167,7 @@ export const enSZ = {
   ...sectionRoomTagsEn,
   ...sectionCreatedDocsEn,
   ...wallSectionsEn,
+  ...wallIntroActionsEn,
   ...wallStartEn,
   ...wallEn,
   ...webgpuTroubleshootingEn,
