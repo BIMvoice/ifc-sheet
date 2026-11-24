@@ -7,7 +7,7 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
-import { asTextFrame, type AnnotationShape, type DraftEntity, type DraftLayer, type LevelRef, type DraftParamValue, type DraftShape, type EntityShape, type Pt } from './draft-types.js';
+import { asLeaderEnd, asTextFrame, type AnnotationShape, type DraftEntity, type DraftLayer, type LevelRef, type DraftParamValue, type DraftShape, type EntityShape, type Pt } from './draft-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -34,6 +34,14 @@ function readLevelRef(v: unknown, path: string): LevelRef {
   return { at: readPt(v.at, `${path}.at`), ...(isString(v.storey) ? { storey: v.storey } : {}) };
 }
 
+/** A leader's end (#842): absent is the arrow, and so is `arrow`, which is never stored; anything else not one of the ends fails. */
+function readLeaderEnd(v: Json, path: string): { leaderEnd?: 'dot' | 'none' } {
+  if (v.leaderEnd === undefined) return {};
+  const end = asLeaderEnd(v.leaderEnd);
+  if (!end) fail(`${path}.leaderEnd`, 'must be arrow, dot or none');
+  return end === 'arrow' ? {} : { leaderEnd: end };
+}
+
 function readAnnotation(v: Json, path: string): AnnotationShape | null {
   const pt = (key: string) => readPt(v[key], `${path}.${key}`);
   switch (v.type) {
@@ -42,11 +50,11 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       {
       const frame = asTextFrame(v.frame);
       if (v.frame !== undefined && !frame) fail(`${path}.frame`, 'must be box, rounded or bubble');
-      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}) };
+      return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}), ...readLeaderEnd(v, path) };
     }
     case 'leader':
       if (!Array.isArray(v.pts) || v.pts.length < 2 || !isString(v.text)) fail(path, 'must be a leader { pts, text }');
-      return { type: 'leader', pts: v.pts.map((p, i) => readPt(p, `${path}.pts/${i}`)), text: v.text, height: readHeight(v, path) };
+      return { type: 'leader', pts: v.pts.map((p, i) => readPt(p, `${path}.pts/${i}`)), text: v.text, height: readHeight(v, path), ...readLeaderEnd(v, path) };
     case 'dimension':
       return {
         type: 'dimension', variant: v.variant === 'linear' ? 'linear' : 'aligned', a: pt('a'), b: pt('b'), at: pt('at'),

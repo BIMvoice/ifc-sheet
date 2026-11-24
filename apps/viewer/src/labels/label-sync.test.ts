@@ -37,6 +37,14 @@ describe('settleLabels', () => {
     const third = settleLabels(second, [type({ template: 'Fire {Pset_WallCommon.FireRating}' })], byGuid(wall()), 'en');
     assert.ok(third[0].shape.type === 'text' && !('frame' in third[0].shape), 'dropping the frame takes it off');
   });
+  it('follows a change of the type\'s leader end (#842): dot on, and off again with the arrow', () => {
+    const first = settleLabels([label()], [type()], byGuid(wall()), 'en');
+    const dotted = settleLabels(first, [type({ leaderEnd: 'dot' })], byGuid(wall()), 'en');
+    assert.ok(dotted[0].shape.type === 'text' && dotted[0].shape.leaderEnd === 'dot');
+    assert.equal(settleLabels(dotted, [type({ leaderEnd: 'dot' })], byGuid(wall()), 'en'), dotted, 'settled: nothing more to change');
+    const back = settleLabels(dotted, [type({ leaderEnd: 'arrow' })], byGuid(wall()), 'en');
+    assert.ok(back[0].shape.type === 'text' && !('leaderEnd' in back[0].shape), 'the arrow is the absence of the field');
+  });
   it('returns the very same array when nothing changed', () => {
     const once = settleLabels([label()], [type()], byGuid(wall()), 'en');
     assert.equal(settleLabels(once, [type()], byGuid(wall()), 'en'), once);

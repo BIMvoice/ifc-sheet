@@ -4,7 +4,7 @@
 
 /** The annotation type, a named preset for one annotation tool (#707: the engine's TAGALL draws with its label types). */
 
-import type { AxisShape } from './draft-types.js';
+import type { AxisShape, LeaderEnd } from './draft-types.js';
 import type { TextFrame } from './draft-types.js';
 import type { LeaderMode } from './labels/label-leader.js';
 import type { MissingMode } from './labels/label-resolve.js';
@@ -27,6 +27,8 @@ export interface LabelSpec {
   missing: MissingMode;
   /** Whether the label is joined to its element by a leader: never, once displaced, or always. Absent: once displaced. */
   leader?: LeaderMode;
+  /** What the leader carries at its tip (#842): an arrow, a dot or nothing. Absent: an arrow. */
+  leaderEnd?: LeaderEnd;
 }
 
 export const DEFAULT_LABEL: LabelSpec = { template: '{Name}', missing: 'question' };

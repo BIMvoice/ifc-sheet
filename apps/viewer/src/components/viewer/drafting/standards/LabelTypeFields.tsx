@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The fields of a parametric label type: the template, its frame and the
- * placeholder for a missing value, with a picker that lists what the selected
+ * The fields of a parametric label type: the template, its frame, its leader and
+ * the leader's end, and the placeholder for a missing value, with a picker that lists what the selected
  * model element actually has (attributes, property sets, quantity sets, its
  * type's) so nothing is typed from memory, and a preview of the result.
  */
@@ -14,7 +14,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import type { LabelSpec } from '@/catalogue/types';
 import { TEXT_FRAMES } from '@/drafting/text-block';
 import { listFields } from '@/labels/label-fields';
-import { DEFAULT_LEADER, LEADER_MODES, type LeaderMode } from '@bimvoice/ifcsheet';
+import { DEFAULT_LEADER, LEADER_ENDS, LEADER_MODES, type LeaderEnd, type LeaderMode } from '@bimvoice/ifcsheet';
 import { labelElementOf } from '@/labels/label-element';
 import { MISSING_MODES, resolveTemplate } from '@bimvoice/ifcsheet';
 import { parseTemplate } from '@bimvoice/ifcsheet';
@@ -50,7 +50,7 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
       {parsed.issues.length > 0 ? <p role="alert" className="text-amber-600">{t('label.issues', { text: parsed.issues.map((i) => i.text).join(' ') })}</p> : null}
       <div className="flex min-h-8 items-center justify-between gap-3">
         <span className="text-zinc-500">{t('label.frame')}</span>
-        <select aria-label={t('label.frame')} className={INPUT} value={label.frame ?? ''} onChange={(e) => onChange({ template: label.template, missing: label.missing, ...(label.leader ? { leader: label.leader } : {}), ...(e.target.value ? { frame: e.target.value as (typeof TEXT_FRAMES)[number] } : {}) })}>
+        <select aria-label={t('label.frame')} className={INPUT} value={label.frame ?? ''} onChange={(e) => { const { frame: _old, ...rest } = label; onChange({ ...rest, ...(e.target.value ? { frame: e.target.value as (typeof TEXT_FRAMES)[number] } : {}) }); }}>
           <option value="">{t('label.frame.none')}</option>
           {TEXT_FRAMES.map((f) => <option key={f} value={f}>{t(`label.frame.${f}` as TranslationKey)}</option>)}
         </select>
@@ -59,6 +59,13 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
         <span className="text-zinc-500">{t('label.leader')}</span>
         <select aria-label={t('label.leader')} className={INPUT} value={label.leader ?? DEFAULT_LEADER} onChange={(e) => onChange({ ...label, leader: e.target.value as LeaderMode })}>
           {LEADER_MODES.map((m) => <option key={m} value={m}>{t(`label.leader.${m}` as TranslationKey)}</option>)}
+        </select>
+      </div>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <span className="text-zinc-500">{t('label.leaderEnd')}</span>
+        {/* The arrow is the absence of the field (#842), so a type that never chose keeps drawing what it drew. */}
+        <select aria-label={t('label.leaderEnd')} className={INPUT} value={label.leaderEnd ?? 'arrow'} onChange={(e) => { const { leaderEnd: _old, ...rest } = label; const end = e.target.value as LeaderEnd; onChange(end === 'arrow' ? rest : { ...rest, leaderEnd: end }); }}>
+          {LEADER_ENDS.map((m) => <option key={m} value={m}>{t(`label.leaderEnd.${m}` as TranslationKey)}</option>)}
         </select>
       </div>
       <div className="flex min-h-8 items-center justify-between gap-3">

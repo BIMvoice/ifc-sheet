@@ -6,14 +6,15 @@
  * A drafted text's frame and leader on the paper (#479), as the app's sheet draws them (`Label` and the text case of
  * `AnnotationGraphics.tsx`): the frame is laid out in the text's own frame by `textBlock` (the one layout the app's drawing, picking and
  * bounds use), turned with the text and drawn in the text's colour at the app's width of `max(0.06 of the height, 0.5)` paper mm;
- * the leader is the line from the frame's edge to the tip with an arrow at the tip, in the layer's colour. The frame is measured with
+ * the leader is the line from the frame's edge to the tip with its head at the tip (an arrow, or the end the text asks for, #842),
+ * in the layer's colour. The frame is measured with
  * the width table (`text-width.ts`); the app measures with the browser's font, so the two differ by the font's own advances only.
  */
 
 import type { Point2D } from '@ifc-lite/drawing-2d';
 import type { AnnotationShape, Pt } from './draft-types.js';
-import { K, type MarkContext } from './sheet-marks.js';
-import { readableAngle, tickStrokes, type Frame } from './sheet-stroke.js';
+import { K, pushLeaderHead, type MarkContext } from './sheet-marks.js';
+import { readableAngle, type Frame } from './sheet-stroke.js';
 import { textBlock, type FrameShape } from './text-block.js';
 import { textLeaderOf } from './text-leader.js';
 import type { TextFace } from './text-advance.js';
@@ -61,7 +62,7 @@ export function drawTextFrame(shape: Extract<AnnotationShape, { type: 'text' }>,
   if (!line) return;
   const [from, tip] = [c.at(line.from), c.at(line.tip)];
   c.out.strokes.push({ colour: c.colour, width: K, runs: c.clip([from, tip]) });
-  c.out.strokes.push(...tickStrokes('arrow', [{ p: tip, dir: { x: tip.x - from.x, y: tip.y - from.y } }], Math.max(c.look.dim.arrowSize * 1.2, 4 * K), c.colour, K));
+  pushLeaderHead(c, shape.leaderEnd, tip, { x: tip.x - from.x, y: tip.y - from.y });
 }
 
 /** Which way is up on the screen in drawing y for a view with these signs: -ky (+1 for sections and elevations, -1 for plans). */

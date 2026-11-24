@@ -19,7 +19,8 @@ import { HATCH_UNIT_M, findPattern } from './hatch-library.js';
 import type { HatchPattern } from './hatch-pattern.js';
 import type { Rect } from './sheet-frame.js';
 import type { SheetText } from './sheet-graphic.js';
-import { label, textInk, tickStrokes, type Frame, type SheetStroke, type TextInk } from './sheet-stroke.js';
+import { leaderHeadLoops, leaderHeadSize, type LeaderEnd } from './leader-head.js';
+import { label, textInk, type Frame, type SheetStroke, type TextInk } from './sheet-stroke.js';
 import type { SheetLocale } from './units-and-numbers.js';
 
 /** What a mark is drawn with: the viewport's mapping to the paper, its room, and the draft's layer colour and look. */
@@ -60,14 +61,20 @@ export function drawCurve(shape: DraftShape, pen: Pick<ReturnType<typeof entityP
   c.out.strokes.push({ colour: pen.color, width: pen.width, ...(pen.dash.length ? { dash: pen.dash } : {}), runs: c.clip(pts.map(c.at)) });
 }
 
-/** A leader: its line, an arrow at the tip, the text beyond the end of the last segment. */
+/** A leader's head at `tip` pointing along `dir`, the end it asks for (an arrow by default, #842), filled in the layer's colour. */
+export function pushLeaderHead(c: Pick<MarkContext, 'look' | 'colour' | 'out'>, end: LeaderEnd | undefined, tip: Point2D, dir: Point2D): void {
+  const loops = leaderHeadLoops(end, tip, dir, leaderHeadSize(c.look.dim.arrowSize, 4 * K));
+  if (loops.length) c.out.strokes.push({ colour: c.colour, width: 0, runs: loops, fill: true });
+}
+
+/** A leader: its line, its head at the tip, the text beyond the end of the last segment. */
 export function drawLeader(shape: Extract<AnnotationShape, { type: 'leader' }>, c: MarkContext): void {
   const [a, b] = [c.at(shape.pts[0]), c.at(shape.pts[1] ?? shape.pts[0])];
   const end = c.at(shape.pts[shape.pts.length - 1]);
   const right = leaderTextRight(shape.pts, c.frame.kx);
   const px = shape.height * c.mmPerMetre;
   c.out.strokes.push({ colour: c.colour, width: K, runs: c.clip(shape.pts.map(c.at)) });
-  c.out.strokes.push(...tickStrokes('arrow', [{ p: a, dir: { x: a.x - b.x, y: a.y - b.y } }], Math.max(c.look.dim.arrowSize * 1.2, 4 * K), c.colour, K));
+  pushLeaderHead(c, shape.leaderEnd, a, { x: a.x - b.x, y: a.y - b.y });
   c.out.texts.push(...lines(shape.text, { x: end.x + (right ? 3 : -3) * K, y: end.y }, px, 0, right ? 'left' : 'right', px * 0.35, markInk(c)));
 }
 

@@ -7,7 +7,7 @@
  * text (`params.labelOf`, the element's GlobalId) stamped with its label type
  * (`params.atype`). When the model changes (a property edited, an element
  * renamed, a load) or the type's template does, every label re-reads its
- * element and takes the new text and frame. The text is derived data, so it
+ * element and takes the new text and frame, and its leader the type's end. The text is derived data, so it
  * changes without an undo step. A label whose element is gone, or whose type
  * is gone, keeps what it last said.
  */
@@ -24,7 +24,7 @@ import { useViewerStore } from '@/store';
 import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
-import { extrasOf, resolveWithExtras } from '@bimvoice/ifcsheet';
+import { extrasOf, resolveWithExtras, withLeaderEnd } from '@bimvoice/ifcsheet';
 import type { LabelElement } from '@bimvoice/ifcsheet';
 import { parseTemplate, type ParsedTemplate } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
@@ -59,6 +59,11 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
         const { frame: _old, ...rest } = d.shape;
         out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };
       }
+    }
+    // The end of its leader follows the type too (#842), whether or not the element is loaded.
+    if (out.shape.type === 'text') {
+      const shape = withLeaderEnd(out.shape, spec.leaderEnd);
+      if (shape !== out.shape) out = { ...out, shape };
     }
     // Where the label is, and how big its text now makes it, decide whether it has a leader.
     // ...measured in the label's own view, not the one the session is in: opening a project must not move a leader (#297).

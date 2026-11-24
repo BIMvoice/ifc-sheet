@@ -20,6 +20,7 @@ export { clipLoop } from '../clip-loop.js';
 export { ANNOTATION_TOOLS, TAG_FIELDS, DEFAULT_LABEL, type AnnotationTool, type TagFieldName, type LabelSpec, type AnnotationType } from '../annotation-type.js';
 export { labelDraft, labelSize, type ElementReader, type LabelEnv, type LabelPlacement } from '../labels/label-draft.js';
 export { textRectOf, withLeaderOf, type TextShape, type WidthOf } from '../labels/label-attach.js';
+export { LEADER_ENDS, asLeaderEnd, leaderHeadLoops, leaderHeadSize, withLeaderEnd, type LeaderEnd } from '../leader-head.js';
 export { LEADER_MODES, DEFAULT_LEADER, DISPLACED_MM, asLeaderMode, leaderTip, refToRing, ringToRef, type LeaderMode } from '../labels/label-leader.js';
 export { COMPUTED_AREA, COMPUTED_SET, extrasOf, resolveWithExtras, type LabelExtras } from '../labels/label-extras.js';
 export { MISSING_MODES, readField, readFieldValue, readStored, resolveTemplate, type FieldValue, type LabelElement, type MissingMode, type PropertySetLike, type QuantitySetLike } from '../labels/label-resolve.js';

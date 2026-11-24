@@ -10,6 +10,7 @@ import { analysisPanelEn } from '../catalogues/analysis-panel.en';
 import { annotateAllEn } from '../catalogues/annotate-all.en';
 import { annotateSetEn } from '../catalogues/annotate-set.en';
 import { annotatedIfcEn } from '../catalogues/annotated-ifc.en';
+import { annotationLeaderEndEn } from '../catalogues/annotation-leader-end.en';
 import { annotationsEn } from '../catalogues/annotations.en';
 import { anonymizedExportEn } from '../catalogues/anonymized-export.en';
 import { appearanceAssignmentListEn } from '../catalogues/appearance-assignment-list.en';
@@ -94,6 +95,7 @@ export const enAE = {
   ...annotateAllEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
+  ...annotationLeaderEndEn,
   ...annotationsEn,
   ...anonymizedExportEn,
   ...appearanceAssignmentListEn,

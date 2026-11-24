@@ -17,7 +17,7 @@ import {
   type AnnotationTool, type AnnotationType, type LegendCategory, type ProjectLegend, type TagFieldName,
 } from './types';
 import { asTextFrame } from '@/drafting/text-block';
-import { asLeaderMode } from '@bimvoice/ifcsheet';
+import { asLeaderEnd, asLeaderMode } from '@bimvoice/ifcsheet';
 import { MISSING_MODES } from '@bimvoice/ifcsheet';
 
 type Json = Record<string, unknown>;
@@ -55,7 +55,8 @@ export function readAnnotationType(v: unknown, path: string, what?: string): Ann
   if (isObject(v.label) && isString(v.label.template)) {
     const frame = asTextFrame(v.label.frame);
     const leader = asLeaderMode(v.label.leader);
-    out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}) };
+    const leaderEnd = asLeaderEnd(v.label.leaderEnd);
+    out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}), ...(leaderEnd ? { leaderEnd } : {}) };
   }
   return out;
 }
