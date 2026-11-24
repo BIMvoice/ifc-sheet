@@ -107,7 +107,7 @@ describe('leaving edit mode (#142)', () => {
     const ui = stepIn(false);
     esc(5);
     assert.equal(backs, 0, 'Esc does not go back to the Wall');
-    const back = button(ui, 'Wall');
+    const back = button(ui, 'All sheets');
     assert.ok(back);
     click(back);
     assert.equal(backs, 1);

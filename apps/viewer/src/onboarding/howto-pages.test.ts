@@ -41,7 +41,7 @@ describe('how-to pages', () => {
   it('names the buttons as the interface labels them today', () => {
     // Each page leans on these labels; a renamed button must change its step too.
     const needs: Record<string, RegExp[]> = {
-      open: [/Open a model/, /Demo project/, /Hang it on the wall/, /Save the project/],
+      open: [/Open a model/, /Demo project/, /Open the drawing set/, /Save the project/],
       hang: [/1 : 50/, /\+ Sheet/],
       dimension: [/Dimension/, /Tag/, /Done/],
       schedules: [/\+ Door and window schedule/, /\+ Material takeoff/, /\+ Drawing register/],
@@ -49,7 +49,7 @@ describe('how-to pages', () => {
       export: [/PDF/, /DXF/, /Preview at paper size/, /What is missing/, /Issue the set/, /Issue as PDF/],
     };
     const labels: Record<string, string> = {
-      'wall.shell.open': 'Open a model', 'wall.shell.demo': 'Demo project', 'wall.intro.hang': 'Hang it on the wall',
+      'wall.shell.open': 'Open a model', 'wall.shell.demo': 'Demo project', 'wall.intro.hang': 'Open the drawing set',
       'wall.shell.saveProject': 'Save the project', 'wall.project.addSheet': '+ Sheet', 'wall.tool.dimension': 'Dimension',
       'wall.tool.tag': 'Tag', 'wall.tool.done': 'Done', 'wall.project.addJoinery': '+ Door and window schedule',
       'wall.project.addTakeoff': '+ Material takeoff', 'wall.project.addRegister': '+ Drawing register',

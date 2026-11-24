@@ -20,7 +20,7 @@ export const setTemplateEn = {
   'wall.setTemplate.name': 'Template name',
   'wall.setTemplate.summary': 'Sheets: {sheets}. Drawings found by rule: {slots}. Schedules: {schedules}.',
   'wall.setTemplate.annotations': 'Annotation commands on these views: {commands}.',
-  'wall.setTemplate.nothing': 'No plan, elevation or section hangs on a sheet of this project, so there are no rules to save.',
+  'wall.setTemplate.nothing': 'No plan, elevation or section is placed on a sheet of this project, so there are no rules to save.',
   'wall.setTemplate.download': 'Save {file}',
   'wall.setTemplate.keep': 'Keep in this browser',
   'wall.setTemplate.saved': 'Saved {file}.',

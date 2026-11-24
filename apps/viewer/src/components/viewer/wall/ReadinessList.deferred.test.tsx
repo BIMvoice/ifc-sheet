@@ -36,7 +36,7 @@ describe('what the model lacks, when a model arrives', () => {
     assert.equal(said(), false, 'nothing is said while no model is open');
 
     await updateInThisTask(() => useViewerStore.setState({ models: new Map([['m', { ifcDataStore, name: 'building-architecture.ifc' }]]) } as never));
-    assert.match(root.textContent ?? '', /Hang it on the wall/, 'the render of the arrival has run');
+    assert.match(root.textContent ?? '', /Open the drawing set/, 'the render of the arrival has run');
     assert.equal(said(), false, 'the facts are not read in the task the model arrives in');
 
     await laterTasksUntil(said);

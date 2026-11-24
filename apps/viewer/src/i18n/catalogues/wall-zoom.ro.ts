@@ -5,7 +5,7 @@
 import type { TranslationValue } from '../types';
 
 export const wallZoomRo = {
-  'wall.zoom.label': 'Zoom pe panou',
+  'wall.zoom.label': 'Zoom pe planșe',
   'wall.zoom.in': 'Mărește (+)',
   'wall.zoom.out': 'Micșorează (-)',
   'wall.zoom.percent': '{percent} %',

@@ -67,7 +67,7 @@ describe('the intro screen with an autosave on offer', () => {
     assert.notEqual(useRecoveryStore.getState().offer, null, 'and hanging the set leaves the offer standing');
   });
 
-  it('going on without answering (ArrowRight, Enter, Hang it, the intro closing) keeps the offer and its slot', () => {
+  it('going on without answering (ArrowRight, Enter, Open the drawing set, the intro closing) keeps the offer and its slot', () => {
     const key = 'ifc-lite:project:v1:house';
     localStorage.setItem(recoverableKey(key), 'the kept session');
     offerRecovery({ key, doc: projectDocument(), savedAt: 1, modelName: 'house.ifc' });
@@ -75,7 +75,7 @@ describe('the intro screen with an autosave on offer', () => {
     const ui = render(<WallIntro modelName="house.ifc" extent={HOUSE} onHang={() => { hung++; }} />);
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    click([...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Hang it on the wall')!);
+    click([...ui.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Open the drawing set')!);
     assert.equal(hung, 3);
     cleanup();
     assert.equal(useRecoveryStore.getState().offer?.key, key, 'still on offer after the intro is gone');

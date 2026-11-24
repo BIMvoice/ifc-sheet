@@ -76,7 +76,7 @@ describe('IfcSheet tour: first run, seen, help button', () => {
     assert.equal(card(), null);
 
     // The help button in the header brings it back.
-    const help = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Show the tour of the Wall');
+    const help = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Show the tour');
     assert.ok(help, 'the header has a help button');
     click(help);
     await waitFor(() => card() !== null, 'the help button reopens the tour');

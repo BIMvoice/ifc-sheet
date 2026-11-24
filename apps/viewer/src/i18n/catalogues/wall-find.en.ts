@@ -9,6 +9,6 @@ export const wallFindEn = {
   'wall.find.placeholder': 'Find a sheet or a drawing',
   'wall.find.results': 'Sheets found',
   'wall.find.none': 'No sheet matches.',
-  'wall.map.label': 'Map of the Wall',
-  'wall.map.hint': 'Click or drag to move the screen on the Wall',
+  'wall.map.label': 'Map of the sheets',
+  'wall.map.hint': 'Click or drag to move the view across the sheets',
 } as const satisfies Record<string, TranslationValue>;

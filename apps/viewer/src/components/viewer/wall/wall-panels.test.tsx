@@ -150,7 +150,7 @@ describe('Tab order on the face (#295)', () => {
     const order = [
       at((e) => e.closest('header') !== null && label('Project')(e), 'Project'),
       at((e) => e.closest('header') !== null && label('Feedback')(e), 'Feedback'),
-      at(label('Wall'), 'Wall'),
+      at(label('All sheets'), 'All sheets'),
       at(label('Comment'), 'Comment'),
       at(label('Dimension'), 'Dimension'),
       at((e) => e instanceof HTMLSelectElement, 'card select'),
