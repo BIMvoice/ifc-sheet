@@ -9,11 +9,12 @@
  */
 
 import { useState } from 'react';
-import { Copy, Pencil, Trash2 } from 'lucide-react';
+import { Copy, Pencil, Tags, Trash2 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
-import { addAnnotationTypeFromCurrent, duplicateAnnotationType, removeAnnotationType, updateAnnotationType, useAnnotationType } from '@/catalogue/annotation-type-actions';
+import { addAnnotationTypeFromCurrent, duplicateAnnotationType, labelAllWithType, removeAnnotationType, updateAnnotationType, useAnnotationType } from '@/catalogue/annotation-type-actions';
+import { toast } from '@/components/ui/toast';
 import { ANNOTATION_TOOLS, DEFAULT_LABEL, TAG_FIELDS, type AnnotationTool, type AnnotationType } from '@/catalogue/types';
 import { builtInPatterns } from '@/drafting/hatch/library';
 import { parsePat } from '@/drafting/hatch/pattern';
@@ -120,7 +121,12 @@ function Editor({ type }: { type: AnnotationType }) {
         </Row>
       ) : null}
       {type.tool === 'label' ? <LabelTypeFields label={type.label ?? DEFAULT_LABEL} onChange={(label) => set({ label })} /> : null}
-      <Button size="sm" onClick={() => { closeStandards(); useAnnotationType(type.id); }}><Pencil className="mr-1 size-3" />{t('atype.use')}</Button>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => { closeStandards(); useAnnotationType(type.id); }}><Pencil className="mr-1 size-3" />{t('atype.use')}</Button>
+        {type.tool === 'label' ? (
+          <Button size="sm" variant="outline" title={t('atype.labelAll.hint')} onClick={() => { closeStandards(); if (!labelAllWithType(type.id)) toast.info(t('atype.labelAll.noDrawing')); }}><Tags className="mr-1 size-3" />{t('atype.labelAll')}</Button>
+        ) : null}
+      </div>
     </div>
   );
 }

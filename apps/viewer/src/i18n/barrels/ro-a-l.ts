@@ -60,6 +60,7 @@ import { landxmlRo } from '../catalogues/landxml.ro';
 import { lineStyleRo } from '../catalogues/line-style.ro';
 import { layerDuplicateRo } from '../catalogues/layer-duplicate.ro';
 import { labelPresetsRo } from '../catalogues/labelpresets.ro';
+import { labelAllTypeRo } from '../catalogues/label-all-type.ro';
 import { listScheduleRo } from '../catalogues/list-schedule.ro';
 
 /** The catalogues whose file starts with `a` to `l` (#144): a sub-barrel keeps the barrel under the module-size limit, and adding a catalogue touches one of them. Static imports, so `TranslationKey` sees every key. */
@@ -122,5 +123,6 @@ export const roAL = {
   ...layerDuplicateRo,
   ...listScheduleRo,
   ...labelPresetsRo,
+  ...labelAllTypeRo,
   ...dimensionChainCardRo,
 } as const;
