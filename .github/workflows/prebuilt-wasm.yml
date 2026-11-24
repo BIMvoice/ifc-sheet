@@ -1,0 +1,103 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Publishes the engine runtime built from main's Rust to the `prebuilt-wasm`
+# branch, so a clone without Rust (Windows, for one) can run
+# `pnpm build:wasm:fetch` and get a runtime that matches this repository
+# instead of ifc-lite's npm package, which is behind it (#856).
+#
+# The branch holds ifc-lite.js, ifc-lite_bg.wasm and manifest.json (source
+# commit, sha256 of each file, sha256 of the ifc-lite.d.ts the build made) in
+# ONE commit, replaced on every run: the history of a binary is worth nothing
+# here and would grow the repository by megabytes per build. It is a bot-owned
+# data branch, not a pull request branch; the main ruleset does not cover it.
+# scripts/fetch-prebuilt-wasm.mjs reads it from raw.githubusercontent.com.
+#
+# The commit is made with git plumbing in the checkout (hash-object, mktree,
+# commit-tree) and pushed to the branch ref, so the working tree and the
+# credentials actions/checkout set up are used as they are.
+
+name: Prebuilt wasm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rust/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/build-wasm.sh'
+      - 'scripts/run-build-wasm.mjs'
+      - 'scripts/write-prebuilt-wasm-manifest.mjs'
+      - 'scripts/lib/prebuilt-wasm.mjs'
+      - 'packages/wasm/**'
+      - '.github/actions/setup-wasm-build/**'
+      - '.github/workflows/prebuilt-wasm.yml'
+  workflow_dispatch:
+
+# One run at a time, the newest waiting: an older build never lands after a newer one.
+concurrency:
+  group: prebuilt-wasm
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Build and publish the prebuilt wasm
+    # A dispatch from another branch would publish that branch's Rust as main's.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-wasm-build
+        with:
+          # Restore the cargo cache CI's wasm job writes from main; write none of our own.
+          cache-prefix: ci-wasm
+          save-if: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Build the runtime from this commit's Rust
+        run: bash scripts/build-wasm.sh
+
+      # fetch-prebuilt-wasm.mjs checks a runtime against the committed .d.ts,
+      # so a runtime whose types differ from it must not be published.
+      - name: The build's ifc-lite.d.ts is the committed one
+        run: git diff --exit-code -- packages/wasm/pkg/ifc-lite.d.ts
+
+      - name: Commit the runtime and its manifest to prebuilt-wasm
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/prebuilt-wasm"
+          mkdir -p "$out"
+          cp packages/wasm/pkg/ifc-lite.js packages/wasm/pkg/ifc-lite_bg.wasm "$out/"
+          node scripts/write-prebuilt-wasm-manifest.mjs "$out" "$GITHUB_SHA" packages/wasm/pkg/ifc-lite.d.ts
+          printf '%s\n' \
+            "Engine runtime built from https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+            "by .github/workflows/prebuilt-wasm.yml, run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID." \
+            "Read by scripts/fetch-prebuilt-wasm.mjs (pnpm build:wasm:fetch). Replaced on every run; do not commit here." \
+            > "$out/README.md"
+          tree=$(
+            for f in README.md ifc-lite.js ifc-lite_bg.wasm manifest.json; do
+              printf '100644 blob %s\t%s\n' "$(git hash-object -w "$out/$f")" "$f"
+            done | git mktree
+          )
+          commit=$(git commit-tree "$tree" -m "Prebuilt wasm from $GITHUB_SHA")
+          git ls-tree -l "$commit"
+          git push --force origin "$commit:refs/heads/prebuilt-wasm"
+          echo "Published $commit (from $GITHUB_SHA) to prebuilt-wasm."

@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { classMembers, declaredExports } from './lib/wasm-export-parity.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const UNREACHABLE = 'http://127.0.0.1:1/prebuilt-wasm';
 const realDts = resolve(here, '../packages/wasm/pkg/ifc-lite.d.ts');
 const LACKING = ['setGeometryProgressCallback', 'proposeScanElements', 'segmentScanPoints'];
 const roots = [];
@@ -74,7 +75,9 @@ function run(root) {
   return spawnSync(process.execPath, [join(root, 'scripts/fetch-prebuilt-wasm.mjs')], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}` },
+    // The prebuilt-wasm branch is pointed at a port nothing listens on, so these
+    // cases exercise the npm fallback and never touch the network.
+    env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`, IFCSHEET_PREBUILT_WASM_URL: UNREACHABLE },
   });
 }
 

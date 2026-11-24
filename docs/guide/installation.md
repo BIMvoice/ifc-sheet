@@ -300,9 +300,12 @@ pnpm dev
     The generated WASM type declarations are committed, so type-checking does
     not require Rust. The WASM runtime itself is gitignored: a fresh checkout
     must either build it with the pinned Rust toolchain and `wasm-pack` or run
-    `pnpm build:wasm:fetch` to download the published bundle before the viewer
-    can run or bundle. `pnpm build` rebuilds the runtime automatically when the
-    Rust tools are installed.
+    `pnpm build:wasm:fetch` to download the runtime that CI builds from `main`
+    (the `prebuilt-wasm` branch) before the viewer can run or bundle. The fetch
+    checks it against the committed types and refuses one that does not match,
+    for example on a branch that changes Rust. `pnpm build` rebuilds the
+    runtime automatically when the Rust tools are installed; without them it
+    keeps the fetched runtime and does not need bash for it.
 
 ### Rebuilding WASM
 
