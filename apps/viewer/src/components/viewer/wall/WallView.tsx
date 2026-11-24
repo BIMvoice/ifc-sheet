@@ -87,7 +87,7 @@ export function WallView() {
           {allFailed ? failures.join(' ') : noGeometry ? t('wall.intro.noGeometry', { name: loaded[0]?.name ?? '' }) : t('wall.intro.waiting')}
         </output>
       ) : intro && extent ? (
-        <WallIntro modelName={modelName} extent={extent} onHang={hang} />
+        <WallIntro modelName={modelName} extent={extent} onHang={hang} onOpenSheet={(id) => { stepInto(id); hang(); }} />
       ) : steppedSheet ? (
         <SteppedSheet key={`${steppedSheet.id}:${visit}`} sheet={steppedSheet} extent={extent} proposals={proposals} initialFocus={focus} onBack={back} onStep={(id) => stepInto(id)} />
       ) : (
