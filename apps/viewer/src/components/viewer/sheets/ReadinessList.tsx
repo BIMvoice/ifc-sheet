@@ -134,7 +134,8 @@ function RoomLink({ guid, skin }: { guid: string; skin: SetSkin }) {
   return <button type="button" className={`${skin.note} underline`} onClick={() => goToRoom(guid)}>{t('ready.estimatedAreas.go')}</button>;
 }
 
-export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compact?: boolean }) {
+/** `foldAs`: the findings sit behind one line that says how many there are (the intro), opened by the person; absent: listed. */
+export function ReadinessList({ skin, compact = false, foldAs }: { skin: SetSkin; compact?: boolean; foldAs?: (count: number) => string }) {
   const { t } = useTranslation();
   const readiness = useModelReadiness();
   const norway = useByggesaksbim();
@@ -144,8 +145,7 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
   let nextOwner = 0;
   const settings = compact ? null : <><FramingSetting skin={skin} /><ByggesaksbimSetting skin={skin} /></>;
   if (findings.length === 0) return compact ? null : <><p className={skin.note}>{t('ready.none')}</p>{settings}</>;
-  return (
-    <>
+  const list = (
     <ul className="m-0 list-none p-0">
       {findings.map((f) => (
         <li key={`${f.kind}-${f.params.schedule ?? ''}-${f.params.sheet ?? ''}-${f.params.field ?? ''}-${f.params.class ?? ''}`} className="py-0.5">
@@ -157,7 +157,15 @@ export function ReadinessList({ skin, compact = false }: { skin: SetSkin; compac
         </li>
       ))}
     </ul>
-    {settings}
-    </>
   );
+  if (foldAs) {
+    return (
+      // Its summary keeps its own Enter and Space: on the intro, Enter elsewhere opens the set.
+      <details data-owns-keys data-testid="readiness-fold">
+        <summary className={`cursor-pointer ${skin.note}`}>{foldAs(findings.length)}</summary>
+        <div className="mt-2">{list}{settings}</div>
+      </details>
+    );
+  }
+  return <>{list}{settings}</>;
 }
