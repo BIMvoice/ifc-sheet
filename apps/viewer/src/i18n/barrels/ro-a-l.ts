@@ -7,6 +7,7 @@ import { addDrawingKindsRo } from '../catalogues/add-drawing-kinds.ro';
 import { contoursRo } from '../catalogues/contours.ro';
 import { lengthUnitsFootRo } from '../catalogues/length-units-foot.ro';
 import { annotateAllRo } from '../catalogues/annotate-all.ro';
+import { annotateRunRo } from '../catalogues/annotate-run.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
 import { annotationLeaderEndRo } from '../catalogues/annotation-leader-end.ro';
@@ -70,6 +71,7 @@ export const roAL = {
   ...addDrawingKindsRo,
   ...contoursRo,
   ...annotateAllRo,
+  ...annotateRunRo,
   ...annotateSetRo,
   ...annotatedIfcRo,
   ...annotationLeaderEndRo,

@@ -15,6 +15,7 @@ import { applyAnnotationPreset, runAnnotateSet, stopAnnotateSet, switchCommand, 
 import { useProjectStore } from '@/project/project-store';
 import { closeFrontPanel, setPanel, useWallNav } from '../wall/wall-nav';
 import { WALL_PILL } from '../wall/wall-type';
+import { AnnotateProblem } from './AnnotateProblem';
 import { AnnotateSummary } from './AnnotateSummary';
 import { LabelPresets } from './LabelPresets';
 
@@ -34,7 +35,7 @@ const frame = 'absolute inset-y-0 right-0 z-20 flex w-96 flex-col border-l borde
 
 function AnnotatePanel() {
   const { t } = useTranslation();
-  const { on, tagParts, running, summary } = useAnnotatePanel();
+  const { on, tagParts, running, summary, problem } = useAnnotatePanel();
   const presets = useProjectStore((s) => s.annotationPresets) ?? [];
   const [name, setName] = useState('');
   // The views the choice runs on; read again when the set changes.
@@ -85,6 +86,7 @@ function AnnotatePanel() {
         </section>
         <LabelPresets />
         {running ? <output className="m-0 block text-xs text-sky-200" data-testid="annotate-progress">{t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName })}</output> : null}
+        {problem?.kind === 'failed' ? <AnnotateProblem problem={problem} /> : null}
         {summary ? <AnnotateSummary summary={summary} /> : null}
       </div>
     </aside>

@@ -20,19 +20,24 @@ interface AnnotatePanelState {
   tagParts: TagParts;
   running: AnnotateProgress | null;
   summary: SetSummary | null;
+  /** Why the last click did not annotate, or what stopped the run (#869); cleared by the next run or a change of commands. */
+  problem: AnnotateProblem | null;
 }
+
+export type AnnotateProblem = { kind: 'nothingOn' } | { kind: 'failed'; message: string };
 
 export const useAnnotatePanel = create<AnnotatePanelState>()(() => ({
   on: { tagall: true, dimall: true, levelall: true },
   tagParts: { ...ALL_TAG_PARTS },
   running: null,
   summary: null,
+  problem: null,
 }));
 
 let abort: AbortController | null = null;
 
 export function switchCommand(command: AnnotateCommand, on: boolean): void {
-  useAnnotatePanel.setState((s) => ({ on: { ...s.on, [command]: on } }));
+  useAnnotatePanel.setState((s) => ({ on: { ...s.on, [command]: on }, problem: null }));
 }
 
 export function switchTagPart(part: keyof TagParts, on: boolean): void {
@@ -53,12 +58,20 @@ export async function runAnnotateSet(): Promise<void> {
   const { running, ...panel } = useAnnotatePanel.getState();
   const { on, tagParts } = effectiveOptions(panel);
   const choices = choicesFrom(on);
-  if (running || !hasChoices(choices)) return;
+  if (running) return;
+  if (!hasChoices(choices)) {
+    useAnnotatePanel.setState({ problem: { kind: 'nothingOn' } });
+    return;
+  }
   abort = new AbortController();
-  useAnnotatePanel.setState({ running: { done: 0, total: 0, viewName: '' }, summary: null });
+  useAnnotatePanel.setState({ running: { done: 0, total: 0, viewName: '' }, summary: null, problem: null });
   try {
     const summary = await annotateSet({ choices, tagParts, mode: 'undoable', signal: abort.signal, onProgress: (running) => useAnnotatePanel.setState({ running }) });
     useAnnotatePanel.setState({ summary });
+  } catch (error) {
+    // What was drafted before the error stays as one undo step; the user is told, not left with a button that did nothing.
+    console.error('Annotate the set failed', error);
+    useAnnotatePanel.setState({ problem: { kind: 'failed', message: error instanceof Error ? error.message : String(error) } });
   } finally {
     abort = null;
     useAnnotatePanel.setState({ running: null });

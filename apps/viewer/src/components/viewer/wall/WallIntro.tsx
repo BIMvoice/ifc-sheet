@@ -21,6 +21,7 @@ import { ReadinessList } from '../sheets/ReadinessList';
 import { WALL_SKIN } from '../sheets/set-skin';
 import { WallSheet } from './WallSheet';
 import { useIssue } from '../sheets/useIssue';
+import { AnnotateProblem } from '../annotate/AnnotateProblem';
 import { runAnnotateSet, useAnnotatePanel } from '@/annotate-set/store';
 import { startWallFill } from '@/wall/wall-fill';
 
@@ -36,6 +37,7 @@ function IntroActions() {
   const { t } = useTranslation();
   const running = useAnnotatePanel((s) => s.running);
   const summary = useAnnotatePanel((s) => s.summary);
+  const problem = useAnnotatePanel((s) => s.problem);
   const { busy, lines, issue } = useIssue();
   const added = summary?.views.reduce((n, v) => n + v.results.reduce((m, r) => m + r.added, 0), 0) ?? 0;
   const views = summary?.views.filter((v) => v.results.some((r) => r.added > 0)).length ?? 0;
@@ -48,7 +50,7 @@ function IntroActions() {
         <button type="button" className={quiet} disabled={busy || running !== null} onClick={() => void issue('pdf', { name: '', listFirst: true, archival: false })}>{t('issue.pdf')}</button>
       </div>
       <output className="mt-2 block text-xs leading-relaxed text-sky-200">
-        {running ? t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName }) : summary ? (added > 0 ? t('wall.introActions.annotated', { count: added, views }) : t('wall.introActions.nothing')) : null}
+        {running ? t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName }) : problem ? <AnnotateProblem problem={problem} /> : summary ? (added > 0 ? t('wall.introActions.annotated', { count: added, views }) : t('wall.introActions.nothing')) : null}
         {lines.map((l, i) => <span key={i} className="block">{l}</span>)}
       </output>
     </div>
