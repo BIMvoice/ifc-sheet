@@ -90,7 +90,7 @@ const SKIPPED_MEMBERS = new Set(['constructor', 'free']);
  * members sit at four spaces in both wasm-bindgen's `.d.ts` and `.js`.
  * Getters, setters and properties are not counted.
  */
-function classMembers(text, isDts) {
+export function classMembers(text, isDts) {
   const members = new Set();
   const member = isDts ? /^ {4}(?:static )?(\w+)\(/ : /^ {4}(?:static )?(?:async )?(\w+)\(/;
   let current = null;

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { declaredExports } from './lib/wasm-export-parity.mjs';
+import { classMembers, declaredExports } from './lib/wasm-export-parity.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const realDts = resolve(here, '../packages/wasm/pkg/ifc-lite.d.ts');
@@ -40,15 +40,13 @@ function makeCheckout({ withDts }) {
   if (withDts) writeFileSync(join(root, 'packages/wasm/pkg/ifc-lite.d.ts'), dts);
   // A published runtime that has every declared export and class method except the three above.
   const classes = new Map();
-  let open = null;
-  for (const line of dts.split('\n')) {
-    const c = /^export class (\w+)/.exec(line);
-    if (c) classes.set((open = c[1]), []);
-    else if (line.startsWith('}')) open = null;
-    const m = open && /^ {4}(?:static )?(\w+)\(/.exec(line);
-    if (m && m[1] !== 'constructor' && !LACKING.includes(m[1])) classes.get(open).push(m[1]);
+  for (const full of classMembers(dts, true)) {
+    const [c, m] = full.split('.');
+    if (!classes.has(c)) classes.set(c, []);
+    if (!LACKING.includes(m)) classes.get(c).push(m);
   }
-  const names = [...declaredExports(dts)].filter((n) => n !== 'default' && !classes.has(n) && !LACKING.includes(n));
+  const skip = new Set(['default', ...classes.keys(), ...LACKING]);
+  const names = [...declaredExports(dts)].filter((n) => !skip.has(n));
   const src = join(root, 'published/package/pkg');
   mkdirSync(src, { recursive: true });
   writeFileSync(
@@ -82,16 +80,17 @@ function run(root) {
 
 test('#856 the repository carries the generated ifc-lite.d.ts', () => {
   assert.ok(existsSync(realDts), 'packages/wasm/pkg/ifc-lite.d.ts is not committed; run scripts/build-wasm.sh and commit it');
-  const dts = readFileSync(realDts, 'utf8');
-  for (const n of LACKING) assert.match(dts, new RegExp(`\\b${n}\\(`), `${n} missing from the committed d.ts`);
+  const declared = new Set([...declaredExports(readFileSync(realDts, 'utf8')), ...classMembers(readFileSync(realDts, 'utf8'), true)]);
+  assert.ok(declared.has('IfcAPI.proposeScanElements') && declared.has('IfcAPI.segmentScanPoints'));
+  assert.ok(declared.has('setGeometryProgressCallback'));
 });
 
 test('#856 a fetch on a clean tree whose published runtime is behind exits non-zero naming the exports and the fix', () => {
   const root = makeCheckout({ withDts: true });
   const r = run(root);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  for (const n of LACKING) assert.match(r.stderr, new RegExp(n));
-  assert.match(r.stderr, /IfcAPI\.proposeScanElements/);
+  const words = new Set(r.stderr.split(/\W+/));
+  assert.deepEqual(LACKING.filter((n) => words.has(n)), LACKING);
   assert.match(r.stderr, /pnpm build:wasm/);
   assert.equal(existsSync(join(root, 'packages/wasm/pkg/ifc-lite_bg.wasm')), false);
 });
