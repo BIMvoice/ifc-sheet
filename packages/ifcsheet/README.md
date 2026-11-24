@@ -36,7 +36,40 @@ When a package is published the entry becomes `"command": "npx", "args": ["-y", 
 
 MPL-2.0. IfcSheet derives from [ifc-lite](https://github.com/LTplus-AG/ifc-lite), also MPL-2.0; source files keep their headers, and the tarball carries `LICENSE` and `NOTICE`. The bundled font, Inter, is under the SIL Open Font License (`fonts/Inter-OFL.txt`).
 
-## From an IFC to a drawing set, in Node
+## From an IFC to a drawing set, in your own program
+
+One call takes the bytes of an IFC file and gives the drawing set back: the sheets, and the PDF, DXF and SVG files written from them.
+
+```ts
+import { readFileSync, writeFileSync } from 'node:fs';
+import { drawingSetFromIfc } from '@bimvoice/ifcsheet/headless';
+
+const set = await drawingSetFromIfc(readFileSync('house.ifc'), { annotate: true });
+
+writeFileSync('house.pdf', await set.pdf());
+for (const file of set.dxf()) writeFileSync(file.fileName, file.data);   // A-101.dxf, A-201.dxf, ...
+for (const file of set.svg()) writeFileSync(file.fileName, file.data);   // A-101.svg, ...
+writeFileSync('house.drawing-set.json', JSON.stringify(set.document, null, 2));
+```
+
+The set is the one the app makes when the model opens: a plan per level, the four elevations and the two proposed sections, on sheets numbered A-101, A-201 and so on. It is what `ifcsheet build house.ifc` writes; a test builds AC20-FZK-Haus both ways and compares the DXFs.
+
+| Option | What it does | Default |
+|---|---|---|
+| `annotate` | `true` drafts dimension strings and tags on the plans and level marks on the elevations and sections; or a list of `dimension`, `tag`, `level` | none |
+| `name` | the project's name, on the set and in every title block | the name of the model's IfcProject |
+| `language` | `en` or `ro`: sheet and view names, labels, figures | `en` |
+| `standard` | `ro` or `de`: that drawing standard's pens, title block and sheet numbering | the engine's own |
+| `dxf` | `{ layers: 'pen' \| 'element', units: 'paper' \| 'model' }` | by pen, paper millimetres |
+| `includeFarElements` | frame the set on everything, far-away small elements included | left out |
+
+What comes back: `name`, `document` (the views and sheets, plain data), `sheets` (the shapes in paper millimetres), `notes`, `emptyViews` (plans that hold nothing), `annotated` (what was drafted on each view) and the three writers `pdf()`, `dxf()`, `svg()`. An unknown standard or language, a bad `annotate` and a model with no geometry throw a `DrawingSetRefusal` whose message says which.
+
+It reads IFC2X3, IFC4 and IFC4X3 (STEP) and IFC5 (IFCX JSON). It needs the wasm geometry engine (`@ifc-lite/wasm`, built with `pnpm build:wasm` or fetched with `pnpm build:wasm:fetch`). In a browser, pass the font bytes to `set.pdf({ font })`.
+
+### The steps one by one
+
+For a saved project's own sheets, a set template or a different layout, call the steps yourself:
 
 ```ts
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -50,10 +83,9 @@ if (!set) throw new Error('The model has no geometry to lay a set out on.');
 const sheets = await sheetGraphics(set, model);
 writeFileSync('house.pdf', await exportPdf(sheets));
 for (const sheet of sheets) writeFileSync(`${sheet.number}.dxf`, sheetGraphicToDxf(sheet));
-writeFileSync('house.drawing-set.json', JSON.stringify(set.document, null, 2));
 ```
 
-`openModel` parses the file and meshes it with the wasm geometry engine (`@ifc-lite/wasm`, built with `pnpm build:wasm` or fetched with `pnpm build:wasm:fetch`). `generateDefaultSet` lays out the same views and sheets the Wall makes when the model opens: a plan per level, the four elevations, the two proposed sections, on sheets numbered A-101, A-201… `set.notes` says what the person should know (no storeys, drawings larger than their paper).
+`openModel` parses the file and meshes it. `generateDefaultSet` lays out the views and sheets; `set.notes` says what the person should know (no storeys, drawings larger than their paper). `cli-commands/build.ts` is the full chain, with a project file, a template and the permit set.
 
 ## The `ifcsheet` command
 
@@ -78,7 +110,7 @@ Exit code 0 on success, 1 when the work failed (unreadable file, a model with no
 
 ## What the output is today
 
-- **PDF**: one page per sheet at its paper size, vector lines and text in Inter (shipped in `fonts/`, SIL Open Font License; ș and ț print), true to scale. Each drawing is clipped to its viewport. Unstyled: no pens, hatches, symbols or annotation yet.
+- **PDF**: one page per sheet at its paper size, vector lines and text in Inter (shipped in `fonts/`, SIL Open Font License; ș and ț print), true to scale. Each drawing is clipped to its viewport. A standard's pens and the drafted annotation are printed.
 - **DXF**: one R2000 file per sheet in paper millimetres, written by the same code and the same layer names as the app's DXF button: `FRAME`, `TITLEBLOCK`, `CUT`, `SEEN`, `HIDDEN`, `SYMBOLS`, `VIEWPORT-LABELS` and the rest. With `--project`, the project's CAD layer standard (`cadLayers`) and line types apply. The sheet's text is TEXT, with ă, ș, ț as `\U+XXXX` escapes. A drafted line or text goes on `SHEET` (the app puts it on its drafting layer's name; a sheet layout does not carry that yet).
 
 ## Names
