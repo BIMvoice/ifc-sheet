@@ -109,7 +109,7 @@ describe.skipIf(missing !== null)('a plan of walls meeting at a corner and a T (
     const plan: PlanProjectView = { id: 'p', kind: 'plan', name: 'p', createdAt: 0, level: set.levels[0], cutHeight: 1.2, viewDepth: 0 };
     raw = (await generateViewDrawings([plan], model.buildingMeshes, set.levels, model.extent)).get('p')!;
     const names = headlessMaterialSource(model.dataStore!);
-    joined = joinLikeCuts(raw, (p) => likeCutKey(p, names.nameOf(p, true)));
+    joined = joinLikeCuts(raw, (p) => likeCutKey(p, names.nameOf(p, 'sole')));
   }, 120_000);
 
   it('the plan cuts the four walls, A and B meeting on the mitre diagonal', () => {

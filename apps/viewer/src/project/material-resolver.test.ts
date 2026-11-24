@@ -25,7 +25,7 @@ const MODEL = 'm154-materials';
  * #40 is concrete and wool; #41 adds the foil between them. `layerSet` is the
  * one the wall is associated with.
  */
-function fixture(layerSet: 40 | 41): string {
+function fixture(layerSet: 40 | 41 | 42): string {
   const lines = [
     "#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'P',$,$,$,$,$,#2);",
     '#2=IFCUNITASSIGNMENT((#3));',
@@ -34,17 +34,21 @@ function fixture(layerSet: 40 | 41): string {
     "#20=IFCMATERIAL('Concrete C25/30',$,$);",
     "#21=IFCMATERIAL('PE foil',$,$);",
     "#22=IFCMATERIAL('Mineral wool',$,$);",
+    "#23=IFCMATERIAL('Air',$,$);",
     '#30=IFCMATERIALLAYER(#20,200.,$,$,$,$,$);',
     '#31=IFCMATERIALLAYER(#21,0.2,$,$,$,$,$);',
     '#32=IFCMATERIALLAYER(#22,100.,$,$,$,$,$);',
+    '#33=IFCMATERIALLAYER(#23,300.,.T.,$,$,$,$);',
     "#40=IFCMATERIALLAYERSET((#30,#32),'Plain',$);",
     "#41=IFCMATERIALLAYERSET((#30,#31,#32),'With foil',$);",
+    // #850: wool, a ventilated air gap thicker than anything, then the concrete.
+    "#42=IFCMATERIALLAYERSET((#32,#33,#30),'Ventilated',$);",
     `#50=IFCRELASSOCIATESMATERIAL('2XPyKWY018sA1ygZKgQPtX',$,$,$,(#10),#${layerSet});`,
   ];
   return `ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n${lines.join('\n')}\nENDSEC;\nEND-ISO-10303-21;\n`;
 }
 
-async function load(layerSet: 40 | 41): Promise<IfcDataStore> {
+async function load(layerSet: 40 | 41 | 42): Promise<IfcDataStore> {
   const bytes = new TextEncoder().encode(fixture(layerSet));
   return new IfcParser().parseColumnar(bytes.buffer as ArrayBuffer, { disableWorkerScan: true });
 }
@@ -113,5 +117,18 @@ describe('viewMaterials reads the models afresh for each drawing (#154)', () => 
     })();
     show(null);
     assert.ok(await collected(ref), 'the removed model\'s data store was still held by the relationship cache');
+  });
+});
+
+describe('a wall of several layers cut in one piece is hatched by its thickest layer (#850)', () => {
+  beforeEach(() => useProjectStore.setState({ materials: [] }));
+  /** The wall cut in one piece, as a 1:100 plan draws it (coarse detail): its outline, of no layer. */
+  const outline = (): Drawing2D => ({ cutPolygons: [{ ...band(20, 0, 0.6), materialId: undefined }], lines: [] }) as unknown as Drawing2D;
+  const rows = [{ id: 'c', name: 'Concrete C25/30', hatch: 'CONCRETE' }, { id: 'a', name: 'Air', hatch: 'DOTS' }, { id: 'w', name: 'Mineral wool', hatch: 'INSUL' }];
+
+  it('an air gap (IsVentilated) is never the layer it is drawn by, however thick: the concrete is', async () => {
+    show(await load(42));
+    useProjectStore.setState({ materials: rows });
+    assert.deepEqual(viewMaterials(outline())?.hatches.map((h) => h.pattern), ['CONCRETE']);
   });
 });

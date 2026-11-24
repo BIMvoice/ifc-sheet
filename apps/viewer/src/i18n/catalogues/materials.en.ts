@@ -5,7 +5,7 @@ import type { TranslationValue } from '../types';
 export const materialsEn = {
   'materials.cmd': 'Materials',
   'materials.title': 'Building materials',
-  'materials.hint': 'How each material draws where a plan or section cuts it: its hatch, the fill behind it and the hatch pen. A membrane (a vapour barrier, a foil — and any layer under 2 mm, which is not cut into a band of its own) draws as a heavy dashed line. Where two elements\' bands of one material meet, the line between them goes, so the material reads as one. Applies to every view, sheet and DXF.',
+  'materials.hint': 'How each material draws where a plan or section cuts it: its hatch, the fill behind it and the hatch pen. A membrane (a vapour barrier, a foil — and any layer under 2 mm, which is not cut into a band of its own) draws as a heavy dashed line. Where two elements\' bands of one material meet, the line between them goes, so the material reads as one. A wall of several layers drawn as one outline (coarse detail, the default at 1:100) takes the hatch of its thickest layer; an element of several materials, of its main one. Applies to every view, sheet and DXF.',
   'materials.none': 'No materials in the loaded models yet. Give walls and slabs layers (Element types, or the Model inspector), or add one below.',
   'materials.col.swatch': 'Swatch',
   'materials.col.name': 'Material',

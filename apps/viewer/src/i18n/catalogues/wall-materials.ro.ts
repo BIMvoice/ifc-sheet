@@ -9,7 +9,7 @@ import type { TranslationValue } from '../types';
 export const wallMaterialsRo = {
   'materials.cmd': 'Materiale',
   'materials.title': 'Materiale de construcție',
-  'materials.hint': 'Cum desenează fiecare material unde îl taie un plan sau o secțiune: hașura, culoarea de umplere de sub ea și grosimea liniilor hașurii. O membrană (o barieră de vapori, o folie, dar și orice strat sub 2 mm, care nu se taie într-o bandă proprie) se desenează ca o linie groasă întreruptă. Unde benzile aceluiași material a două elemente se ating, linia dintre ele dispare, așa că materialul se citește ca unul singur. Se aplică în toate vederile, planșele și fișierele DXF.',
+  'materials.hint': 'Cum desenează fiecare material unde îl taie un plan sau o secțiune: hașura, culoarea de umplere de sub ea și grosimea liniilor hașurii. O membrană (o barieră de vapori, o folie, dar și orice strat sub 2 mm, care nu se taie într-o bandă proprie) se desenează ca o linie groasă întreruptă. Unde benzile aceluiași material a două elemente se ating, linia dintre ele dispare, așa că materialul se citește ca unul singur. Un perete din mai multe straturi desenat ca un singur contur (detaliu grosier, implicit la 1:100) ia hașura stratului celui mai gros; un element din mai multe materiale, pe a materialului principal. Se aplică în toate vederile, planșele și fișierele DXF.',
   'materials.none': 'Încă nu există materiale în modelele încărcate. Dați pereților și planșeelor straturi (Tipuri de elemente sau inspectorul de model) sau adăugați unul mai jos.',
   'materials.col.swatch': 'Eșantion',
   'materials.col.name': 'Material',

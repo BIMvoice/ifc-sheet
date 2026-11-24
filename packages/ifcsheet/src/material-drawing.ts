@@ -23,6 +23,7 @@
 
 import type { Drawing2D, DrawingLine, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { DraftShape, Pt } from './draft-types.js';
+import type { PieceNaming } from './dominant-material.js';
 import { cutFillOf } from './material-colour.js';
 import { MEMBRANE_THICKNESS_M, materialGraphics, type MaterialGraphics, type ProjectMaterial } from './materials.js';
 
@@ -34,7 +35,7 @@ export interface LayerRef {
 }
 
 export interface MaterialResolver {
-  /** The graphics of a polygon's material (a layer's, or the one material of an element cut in a piece), or null when it has none. */
+  /** The graphics of a polygon's material (a layer's, or that of an element cut in a piece: `pieceNaming`), or null when it has none. */
   graphics(polygon: DrawingPolygon): MaterialGraphics | null;
   /** The element's layers in order, when it has a layer set. */
   layers(entityId: number, modelIndex: number): LayerRef[] | null;
@@ -179,7 +180,7 @@ export function materialDrawing(drawing: Drawing2D, r: MaterialResolver): Materi
     if (!layers) continue;
     layers.forEach((layer, i) => {
       if (!r.membrane(layer) || layer.thickness >= 0.002 && polys.some((x) => x.p.materialId === layer.materialId)) return;
-      const before = [...layers.slice(0, i)].reverse().find((l) => !r.membrane(l));
+      const before = layers.slice(0, i).reverse().find((l) => !r.membrane(l));
       const after = layers.slice(i + 1).find((l) => !r.membrane(l));
       if (!before || !after) return;
       const side = (l: LayerRef) => polys.filter((x) => x.p.materialId === l.materialId).flatMap((x) => edges(x.p));
@@ -196,17 +197,27 @@ export function materialDrawing(drawing: Drawing2D, r: MaterialResolver): Materi
 
 /** What a caller gives `materialResolver`: how its model names a cut face's IfcMaterial and reads an element's layers. */
 export interface MaterialSource {
-  /** The IfcMaterial a cut face is made of (its layer's, or an element of one material's); null when it has none. `soleToo`: the table has rows, so an element cut in one piece is named too. */
-  nameOf(polygon: DrawingPolygon, soleToo: boolean): string | null;
+  /**
+   * The IfcMaterial a cut face is made of: its layer's, else (an element cut in one piece) as `naming` says (`pieceMaterialOf`: its one
+   * material, or its dominant one); null when it has none.
+   */
+  nameOf(polygon: DrawingPolygon, naming: PieceNaming): string | null;
   /** The element's layers in order, when it has a layer set. */
   layers(entityId: number, modelIndex: number): LayerRef[] | null;
 }
+
+/**
+ * How an element cut in one piece is named for a project's materials `table`. With rows, by its dominant material when it has several
+ * (#850: a layered wall at coarse detail takes the hatch of its thickest layer), for its hatch and for the joins alike. With none, it takes
+ * no hatch, and joins (`forJoins`) by its one material only, as always.
+ */
+export const pieceNaming = (table: readonly ProjectMaterial[], forJoins: boolean): PieceNaming => (table.length > 0 ? 'dominant' : forJoins ? 'sole' : 'none');
 
 /** The resolver of `materialDrawing` for `source` and the project's materials `table`: the one place a name becomes a hatch, a fill or a membrane. */
 export function materialResolver(source: MaterialSource, table: readonly ProjectMaterial[]): MaterialResolver {
   return {
     graphics(p) {
-      const name = source.nameOf(p, table.length > 0);
+      const name = source.nameOf(p, pieceNaming(table, false));
       if (!name) return null;
       const g = materialGraphics(name, table);
       // A material the project has no row for keeps the cut an element of one piece has always had: no hatch from its name alone.
@@ -214,7 +225,7 @@ export function materialResolver(source: MaterialSource, table: readonly Project
     },
     layers: source.layers,
     membrane: (layer) => layer.thickness < MEMBRANE_THICKNESS_M || (!!layer.name && !!materialGraphics(layer.name, table).membrane),
-    nameOf: (p) => source.nameOf(p, true),
+    nameOf: (p) => source.nameOf(p, pieceNaming(table, true)),
   };
 }
 

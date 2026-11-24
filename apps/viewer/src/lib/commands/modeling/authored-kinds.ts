@@ -226,6 +226,8 @@ export interface LayerRow {
   readonly materialId: number | null;
   /** Metres. */
   readonly thickness: number;
+  /** IfcMaterialLayer.IsVentilated: an air gap, never the material a wall cut in one piece is drawn by. */
+  readonly ventilated?: boolean;
 }
 
 export interface LiveLayerSet {
@@ -243,7 +245,8 @@ export function readLayerSet(model: LiveModel, layerSetId: number): LayerRow[] |
   const unit = { lengthUnitScale: getModelLengthUnitScale(model.dataStore) };
   return refs.map((ref) => {
     const layer = liveAttributes(model, refId(ref) ?? 0);
-    return { materialId: refId(layer?.[0]), thickness: fromNativeLength(unit, real(layer?.[1])) };
+    const ventilated = layer?.[2] === true || layer?.[2] === '.T.';
+    return { materialId: refId(layer?.[0]), thickness: fromNativeLength(unit, real(layer?.[1])), ...(ventilated ? { ventilated } : {}) };
   });
 }
 

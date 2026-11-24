@@ -119,7 +119,7 @@ describe.skipIf(missing !== null)('a plan on its sheet lies where the extent put
     const first = sheets.find((s) => s.number.startsWith('A-1'))!;
     // The set's sheets name each face's material (`headlessMaterialSource`), as the joins read it.
     const names = headlessMaterialSource(model.dataStore!);
-    const joined = (d: Drawing2D) => joinLikeCuts(d, (p) => likeCutKey(p, names.nameOf(p, true)));
+    const joined = (d: Drawing2D) => joinLikeCuts(d, (p) => likeCutKey(p, names.nameOf(p, 'sole')));
     const total = set.document.views.filter((v) => v.kind === 'plan').reduce((n, v) => { const d = drawings.get(v.id); return n + (d ? ringsOf(joined(d)) : 0); }, 0);
     expect(first.cut.length).toBe(total);
   });
@@ -148,7 +148,7 @@ describe.skipIf(skolebyggMissing !== null)('Skolebygg: the plans keep their outl
       const drawing = (await generateViewDrawings([view], model.buildingMeshes, set.levels, model.extent!)).values().next().value!;
       const detailed = atDetailLevel(drawing, resolveDetailLevel(resolveViewGraphics(view, set.document.viewTemplates), vp.scale));
       const plain = view.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
-      return ringsOf(joinLikeCuts(plain, (p) => likeCutKey(p, names.nameOf(p, true))));
+      return ringsOf(joinLikeCuts(plain, (p) => likeCutKey(p, names.nameOf(p, 'sole'))));
     };
     const kept = (sheet: string) => sheets.find((s) => s.number === sheet)!.cut.length;
     const ground = await given('Plan 01', 'A-101') + await given('Plan 00U', 'A-101');
