@@ -83,6 +83,7 @@ import { wallDropRo } from '../catalogues/wall-drop.ro';
 import { wallZoomRo } from '../catalogues/wall-zoom.ro';
 import { wallCompareRo } from '../catalogues/wall-compare.ro';
 import { starRo } from '../catalogues/star.ro';
+import { wallIntroActionsRo } from '../catalogues/wall-intro-actions.ro';
 import { wallStartRo } from '../catalogues/wall-start.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { plainHintsRo } from '../catalogues/plain-hints.ro';
@@ -170,6 +171,7 @@ export const roMZ = {
   ...wallDropRo,
   ...wallAlignRo,
   ...wallCompareRo,
+  ...wallIntroActionsRo,
   ...wallStartRo,
   ...wallRo,
   ...whatChangedRo,
