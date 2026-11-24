@@ -22,7 +22,7 @@ export const commandPaletteRo = {
   'commandPalette.footer.close': 'închide',
   'commandPalette.category.recent': 'Recente',
   'commandPalette.category.sheets': 'Planșe',
-  'commandPalette.category.wall': 'Panou',
+  'commandPalette.category.wall': 'Planșe',
   'commandPalette.category.file': 'Fișier',
   'commandPalette.category.view': 'Vedere',
   'commandPalette.category.tools': 'Instrumente',

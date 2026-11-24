@@ -15,6 +15,6 @@ export const wallCompareEn = {
   'wall.compare.paneRight': 'Right sheet, {name}',
   'wall.compare.together': 'Pan together',
   'wall.compare.swap': 'Swap the two sheets',
-  'wall.compare.close': 'Back to the Wall (Esc)',
+  'wall.compare.close': 'Back to all sheets (Esc)',
   'wall.compare.zoom': 'Zoom of both sheets',
 } as const satisfies Record<string, TranslationValue>;

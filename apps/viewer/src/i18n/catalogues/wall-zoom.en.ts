@@ -5,7 +5,7 @@
 import type { TranslationValue } from '../types';
 
 export const wallZoomEn = {
-  'wall.zoom.label': 'Zoom the Wall',
+  'wall.zoom.label': 'Zoom the sheets',
   'wall.zoom.in': 'Zoom in (+)',
   'wall.zoom.out': 'Zoom out (-)',
   'wall.zoom.percent': '{percent} %',

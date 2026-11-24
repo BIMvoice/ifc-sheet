@@ -32,7 +32,7 @@ async function openPlan(page: Page): Promise<void> {
   const sheet = page.locator('button[aria-label^="A-101"]').first();
   await sheet.waitFor();
   await sheet.dblclick();
-  await page.getByRole('button', { name: 'Wall', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).waitFor();
   await page.mouse.dblclick(550, 400); // the plan on the sheet: opens its drawing
   await expect(page.getByRole('button', { name: 'Back to sheet' })).toBeVisible();
   // The drawing settles first: its scale on screen is what the scaling is measured against.
@@ -142,7 +142,7 @@ test('#457 PDF page 2 and a PNG as underlays: scale by two points, fade, lock, p
   await frame.evaluate((el) => el.remove());
 
   // 6. Moving the centre to 1 m moves the printed picture 10 mm per metre moved (1:100); a locked picture refuses, so unlock, move, lock.
-  await page.getByRole('button', { name: 'Wall', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).waitFor();
   await page.mouse.dblclick(550, 400);
   await page.getByRole('button', { name: 'Underlay', exact: true }).click();
   await panel(page).getByLabel('Lock position and scale').uncheck();
@@ -155,7 +155,7 @@ test('#457 PDF page 2 and a PNG as underlays: scale by two points, fade, lock, p
   expect(moved.f).toBeCloseTo(on.f, 3);
 
   // 7. A PNG: kept as a JPEG within the cap, at 96 dpi until scaled.
-  await page.getByRole('button', { name: 'Wall', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).waitFor();
   await page.mouse.dblclick(550, 400);
   await page.getByRole('button', { name: 'Underlay', exact: true }).click();
   await addUnderlay(page, { name: 'scan.png', mimeType: 'image/png', buffer: halfBlackPng() });
@@ -172,9 +172,9 @@ test('#457 PDF page 2 and a PNG as underlays: scale by two points, fade, lock, p
   await panel(page).locator('[data-underlay-card]').first().getByLabel('A-101 Floor plans 1').uncheck();
   await page.getByRole('button', { name: 'Back to sheet' }).click();
   await expect(page.locator('image[data-underlay-id]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Wall', exact: true }).click();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).click();
   await page.locator('button[aria-label^="A-102"]').first().dblclick();
-  await page.getByRole('button', { name: 'Wall', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).waitFor();
   await expect(page.locator('image[data-underlay-id]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

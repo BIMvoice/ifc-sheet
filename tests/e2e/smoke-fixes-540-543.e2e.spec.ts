@@ -30,7 +30,7 @@ async function openSheet(page: Page): Promise<void> {
   const sheet = page.locator('button[aria-label^="A-101"]').first();
   await sheet.waitFor();
   await sheet.dblclick();
-  await page.getByRole('button', { name: 'Wall', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'All sheets', exact: true }).waitFor();
 }
 
 async function openDrawing(page: Page): Promise<void> {

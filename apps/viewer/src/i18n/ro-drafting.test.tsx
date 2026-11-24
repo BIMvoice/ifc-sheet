@@ -152,6 +152,6 @@ describe('the Info dialog in Romanian (#314)', () => {
     const text = document.body.textContent ?? '';
     assert.ok(text.includes('Aflați mai multe:'), text.slice(0, 300));
     assert.doesNotMatch(text, /Learn more:/);
-    assert.equal(resolve('commands.category.wall'), 'Panoul');
+    assert.equal(resolve('commands.category.wall'), 'Planșe');
   });
 });

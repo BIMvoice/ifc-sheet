@@ -19,7 +19,7 @@ export const commandsEn = {
   'commands.category.visibility': 'Visibility',
   'commands.category.camera': 'Camera',
   'commands.category.search': 'Search',
-  'commands.category.wall': 'The Wall',
+  'commands.category.wall': 'Sheets',
   'commands.category.drafting': 'Drafting',
   'commands.category.ui': 'UI',
   'commands.category.help': 'Help',

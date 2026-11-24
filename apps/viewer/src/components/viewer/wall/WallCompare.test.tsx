@@ -89,7 +89,7 @@ describe('compare two sheets on the Wall (#498)', () => {
     assert.equal(useWallZoom.getState().k, 2);
     assert.ok(pickButton(ui, 'A-101'), 'the Wall is still there');
     open(ui);
-    click(ui.querySelector<HTMLButtonElement>('button[aria-label^="Back to the Wall"]')!);
+    click(ui.querySelector<HTMLButtonElement>('button[aria-label^="Back to all sheets"]')!);
     assert.equal(dialog(ui), null);
     assert.equal(useWallZoom.getState().k, 2);
   });
@@ -100,7 +100,7 @@ describe('compare two sheets on the Wall (#498)', () => {
     const d = dialog(ui)!;
     assert.equal(d.getAttribute('aria-modal'), 'true');
     assert.equal(d.getAttribute('aria-label'), 'Compare two sheets');
-    assert.equal(document.activeElement, ui.querySelector('button[aria-label^="Back to the Wall"]'));
+    assert.equal(document.activeElement, ui.querySelector('button[aria-label^="Back to all sheets"]'));
     for (const el of d.querySelectorAll('button, select, input')) assert.ok(el.getAttribute('aria-label') || el.closest('label') || el.textContent, 'every control is named');
     for (const side of [0, 1]) assert.equal(pane(ui, side).tabIndex, 0, 'a pane takes focus, so arrows pan it');
     const select = d.querySelector<HTMLSelectElement>('select[aria-label="Right sheet"]')!;

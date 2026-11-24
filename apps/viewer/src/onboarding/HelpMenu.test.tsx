@@ -43,7 +43,7 @@ describe('the ? menu', () => {
 
   it('offers shortcuts, the six how-tos, report or suggest, the project on GitHub, the tour and the hints setting in English', () => {
     open();
-    assert.deepEqual(items(), ['Keyboard shortcuts', 'Open a model', 'Hang the set', 'Dimension and tag', 'Schedules', 'Title block', 'Export', 'Report a bug or suggest a feature', 'IfcSheet on GitHub', 'Tour of the Wall', 'Hints in Settings']);
+    assert.deepEqual(items(), ['Keyboard shortcuts', 'Open a model', 'See the whole set', 'Dimension and tag', 'Schedules', 'Title block', 'Export', 'Report a bug or suggest a feature', 'IfcSheet on GitHub', 'Guided tour', 'Hints in Settings']);
   });
 
   it('offers the same items in Romanian', () => {
@@ -87,17 +87,17 @@ describe('the ? menu', () => {
 
   it('reads a how-to page in the app, steps numbered', async () => {
     open();
-    click([...document.querySelectorAll('[role="menuitem"]')].find((e) => e.textContent === 'Hang the set')!);
+    click([...document.querySelectorAll('[role="menuitem"]')].find((e) => e.textContent === 'See the whole set')!);
     await new Promise((r) => setTimeout(r, 50));
     const steps = document.querySelectorAll('[data-howto-steps] li');
     assert.equal(steps.length, 6);
-    assert.match(steps[0].textContent ?? '', /Hang it on the wall/);
+    assert.match(steps[0].textContent ?? '', /Open the drawing set/);
   });
 
   it('runs the tour from its item', () => {
     let ran = 0;
     open(() => { ran += 1; });
-    click([...document.querySelectorAll('[role="menuitem"]')].find((e) => e.textContent === 'Tour of the Wall')!);
+    click([...document.querySelectorAll('[role="menuitem"]')].find((e) => e.textContent === 'Guided tour')!);
     assert.equal(ran, 1);
   });
 });

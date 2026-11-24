@@ -64,7 +64,7 @@ export const keyboardShortcutsRo = {
   'commands.category.visibility': 'Vizibilitate',
   'commands.category.camera': 'Cameră',
   'commands.category.search': 'Căutare',
-  'commands.category.wall': 'Panoul',
+  'commands.category.wall': 'Planșe',
   'commands.category.drafting': 'Desenare',
   'commands.category.ui': 'Interfață',
   'commands.category.help': 'Ajutor',

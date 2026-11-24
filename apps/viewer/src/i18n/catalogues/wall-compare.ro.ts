@@ -15,6 +15,6 @@ export const wallCompareRo = {
   'wall.compare.paneRight': 'Planșa din dreapta, {name}',
   'wall.compare.together': 'Deplasare împreună',
   'wall.compare.swap': 'Schimbă între ele cele două planșe',
-  'wall.compare.close': 'Înapoi la panou (Esc)',
+  'wall.compare.close': 'Înapoi la toate planșele (Esc)',
   'wall.compare.zoom': 'Zoom pentru ambele planșe',
 } as const satisfies Record<string, TranslationValue>;
