@@ -91,13 +91,13 @@ function build(shape: EntityShape, ctx: IfcShapeContext): IfcShapes {
     case 'text': {
       text(shape.p, shape.text, shape.height, shape.rotation);
       const lead = textLeader(shape);
-      if (lead) { line([lead.from, lead.tip]); arrow('arrow', lead.tip, { x: lead.tip.x - lead.from.x, y: lead.tip.y - lead.from.y }, arrowSize * 1.2); }
+      if (lead) { line([lead.from, lead.tip]); arrow(shape.leaderEnd ?? 'arrow', lead.tip, { x: lead.tip.x - lead.from.x, y: lead.tip.y - lead.from.y }, arrowSize * 1.2); }
       break;
     }
     case 'leader': {
       line(shape.pts);
       const [tip, next] = [shape.pts[0], shape.pts[1] ?? shape.pts[0]];
-      arrow('arrow', tip, { x: tip.x - next.x, y: tip.y - next.y }, arrowSize * 1.2);
+      arrow(shape.leaderEnd ?? 'arrow', tip, { x: tip.x - next.x, y: tip.y - next.y }, arrowSize * 1.2);
       const end = shape.pts[shape.pts.length - 1];
       const right = leaderTextRight(shape.pts, 1);
       const width = textBlock(shape.text, shape.height, undefined, ctx.look.text).box.x1;

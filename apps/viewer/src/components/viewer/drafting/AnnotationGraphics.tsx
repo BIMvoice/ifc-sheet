@@ -16,7 +16,7 @@
  */
 
 import { memo, useId, useMemo } from 'react';
-import { arrowMark, flattenShape, missingSymbolMark, placeSymbol, liveSymbol, type LiveSymbolContext } from '@bimvoice/ifcsheet';
+import { arrowMark, flattenShape, leaderHeadLoops, leaderHeadSize, missingSymbolMark, placeSymbol, liveSymbol, type LeaderEnd, type LiveSymbolContext } from '@bimvoice/ifcsheet';
 import { axisLayout, dimensionLayout, formatLevel, HATCH_UNIT_M, textLeader } from '@/drafting/annotation';
 import { witnessLine } from '@/drafting/level-mark';
 import { drawingToScreen, screenSigns, type SectionAxisName, type ViewTransform } from '@/drafting/frame';
@@ -130,6 +130,16 @@ function arrowPath(kind: DimStyle['arrow'], p: Pt, dir: Pt, size: number): { d: 
   return { d: `M${mark.pts.map((q) => `${q.x} ${q.y}`).join('L')}${mark.fill ? 'Z' : ''}`, fill: mark.fill };
 }
 
+/**
+ * A leader's head at `tip` pointing along `dir` (screen), the end its shape asks for (#842): the engine's loops
+ * (`leaderHeadLoops`, which the PDF, SVG and DXF of `ifcsheet build` draw too), filled, and marked as a solid fill so the
+ * sheet's DXF writes it as a hatch rather than leave it out. Nothing for a leader with no end.
+ */
+function LeaderHead({ end, tip, dir, size, color }: { end: LeaderEnd | undefined; tip: Pt; dir: Pt; size: number; color: string }) {
+  const d = leaderHeadLoops(end, tip, dir, size).map((loop) => `M${loop.slice(0, -1).map((q) => `${q.x} ${q.y}`).join('L')}Z`).join('');
+  return d ? <path d={d} fill={color} data-dxf-fill="solid" /> : null;
+}
+
 function Hatch({ shape, color, t, axis, extraPatterns, k }: { shape: Extract<AnnotationShape, { type: 'hatch' }>; color: string; t: ViewTransform; axis: SectionAxisName; extraPatterns: readonly HatchPattern[]; k: number }) {
   const clipId = useId();
   const pattern = findPattern(shape.pattern, extraPatterns);
@@ -194,14 +204,13 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const line = textLeader(shape, up);
       const label = <Label at={s(shape.p)} text={shape.text} px={px} deg={readableAngle(shape.rotation, axis)} color={textColor} style={look.text} anchor="start" frame={shape.frame} />;
       if (!line) return label;
-      // The same line and arrow an element tag's leader has.
+      // The same line and head an element tag's leader has.
       const [from, tip] = [s(line.from), s(line.tip)];
-      const head = arrowPath('arrow', tip, { x: tip.x - from.x, y: tip.y - from.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
       const lineColor = selected ? '#2563eb' : base;
       return (
         <g>
           <path d={`M${from.x} ${from.y}L${tip.x} ${tip.y}`} stroke={lineColor} strokeWidth={k} fill="none" />
-          <path d={head.d} fill={lineColor} />
+          <LeaderHead end={shape.leaderEnd} tip={tip} dir={{ x: tip.x - from.x, y: tip.y - from.y }} size={leaderHeadSize(mm(look.dim.arrowSize), 4 * k)} color={lineColor} />
           {label}
         </g>
       );
@@ -213,12 +222,11 @@ export const AnnotationGraphics = memo(function AnnotationGraphics({
       const end = s(shape.pts[shape.pts.length - 1]);
       // The text sits beyond the end of the last segment (the one place this is decided is `leaderTextRight`).
       const textRight = leaderTextRight(shape.pts, screenSigns(axis).kx);
-      const head = arrowPath('arrow', a, { x: a.x - b.x, y: a.y - b.y }, Math.max(mm(look.dim.arrowSize) * 1.2, 4 * k));
       const lineColor = selected ? '#2563eb' : base;
       return (
         <g>
           <path d={polyline(shape.pts, t, axis)} stroke={lineColor} strokeWidth={k} fill="none" />
-          <path d={head.d} fill={lineColor} />
+          <LeaderHead end={shape.leaderEnd} tip={a} dir={{ x: a.x - b.x, y: a.y - b.y }} size={leaderHeadSize(mm(look.dim.arrowSize), 4 * k)} color={lineColor} />
           <Label at={{ x: end.x + (textRight ? 3 : -3) * k, y: end.y }} text={shape.text} px={px} deg={0} color={textColor} style={look.text} anchor={textRight ? 'start' : 'end'} shift={px * 0.35} />
         </g>
       );

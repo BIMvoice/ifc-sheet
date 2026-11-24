@@ -25,6 +25,14 @@ export type TextFrame = (typeof TEXT_FRAMES)[number];
 /** The frames a stored value may name, else none. */
 export const asTextFrame = (v: unknown): TextFrame | undefined => (TEXT_FRAMES as readonly unknown[]).includes(v) ? (v as TextFrame) : undefined;
 
+/** The ends a leader may carry at its tip (#842); the arrow is the absence of the field. */
+export const LEADER_ENDS = ['arrow', 'dot', 'none'] as const;
+/** The end a leader carries at its tip: an arrow (the default), a dot, or nothing. */
+export type LeaderEnd = (typeof LEADER_ENDS)[number];
+
+/** A leader end a stored value may name, else undefined. */
+export const asLeaderEnd = (v: unknown): LeaderEnd | undefined => ((LEADER_ENDS as readonly unknown[]).includes(v) ? (v as LeaderEnd) : undefined);
+
 export interface Pt {
   x: number;
   y: number;
@@ -42,8 +50,8 @@ export type DraftShape =
  * 0.25). A dimension measures between its points; `at` places its line.
  */
 export type AnnotationShape =
-  | { type: 'text'; p: Pt; text: string; height: number; rotation: number; frame?: TextFrame; leader?: Pt }
-  | { type: 'leader'; pts: Pt[]; text: string; height: number }
+  | { type: 'text'; p: Pt; text: string; height: number; rotation: number; frame?: TextFrame; leader?: Pt; leaderEnd?: Exclude<LeaderEnd, 'arrow'> }
+  | { type: 'leader'; pts: Pt[]; text: string; height: number; leaderEnd?: Exclude<LeaderEnd, 'arrow'> }
   | { type: 'dimension'; variant: 'aligned' | 'linear'; a: Pt; b: Pt; at: Pt; height: number; text?: string; textAt?: Pt }
   | { type: 'radial'; c: Pt; r: number; at: Pt; diameter: boolean; height: number }
   | { type: 'angular'; c: Pt; a: Pt; b: Pt; at: Pt; height: number }

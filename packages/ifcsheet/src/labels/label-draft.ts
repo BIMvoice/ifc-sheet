@@ -12,6 +12,7 @@
 
 import type { AnnotationType } from '../annotation-type.js';
 import type { DraftEntity, DraftParamValue, EntityShape, Pt } from '../draft-types.js';
+import { storedLeaderEnd } from '../leader-head.js';
 import { makeDraft } from '../make-draft.js';
 import type { SheetLocale } from '../names.js';
 import { textBlock } from '../text-block.js';
@@ -59,7 +60,7 @@ export function labelDraft(env: LabelEnv, type: AnnotationType, guid: string, ce
   const spec = type.label;
   const text = labelText(env, type, guid, at.locale, extras);
   if (!spec || text === null) return null;
-  const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, env.up, env.widthOf), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}) };
+  const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, env.up, env.widthOf), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}), ...storedLeaderEnd(spec.leaderEnd) };
   const shape = withLeaderOf(plain, ring ?? null, spec.leader, at.paperUnit, env.up, env.widthOf);
   const styled = env.styled(at.viewId, shape, { textStyle: at.textStyle, dimStyle: at.dimStyle });
   return makeDraft(shape, { id: env.newId(), viewId: at.viewId, layerId: at.layerId, params: { ...styled, labelOf: guid, atype: type.id, ...extras, ...(ring ? { labelRef: ringToRef(ring) } : {}) } });

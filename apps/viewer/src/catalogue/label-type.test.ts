@@ -21,6 +21,10 @@ describe('label annotation type', () => {
     const t = readAnnotationType({ ...base, label: { template: 'x', frame: 'hexagon', missing: 'sometimes' } }, '/t');
     assert.deepEqual(t.label, { template: 'x', missing: DEFAULT_LABEL.missing });
   });
+  it('reads the leader\'s end and drops an unknown one (#842)', () => {
+    assert.deepEqual(readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', leaderEnd: 'dot' } }, '/t').label, { template: 'x', missing: 'empty', leaderEnd: 'dot' });
+    assert.deepEqual(readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', leaderEnd: 'star' } }, '/t').label, { template: 'x', missing: 'empty' });
+  });
   it('has no label when none is stored (an older type) and refuses nothing', () => {
     assert.equal(readAnnotationType({ ...base }, '/t').label, undefined);
     assert.equal(readAnnotationType({ ...base, label: { frame: 'box' } }, '/t').label, undefined);

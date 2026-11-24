@@ -127,8 +127,8 @@ const GEOMETRY: { [K in DraftShape['type']]: Required<Extract<DraftShape, { type
   arc: { type: 'arc', c: pt(1, 1), r: 2, start: 0.5, end: 2 },
 };
 const ANNOTATION: { [K in AnnotationShape['type']]: Required<Extract<AnnotationShape, { type: K }>> } = {
-  text: { type: 'text', p: pt(1, 1), text: 'Kitchen\n12.50 m²', height: 0.25, rotation: 1.2, frame: 'bubble', leader: pt(4, 1) },
-  leader: { type: 'leader', pts: [pt(0, 0), pt(1, 1)], text: 'W1', height: 0.25 },
+  text: { type: 'text', p: pt(1, 1), text: 'Kitchen\n12.50 m²', height: 0.25, rotation: 1.2, frame: 'bubble', leader: pt(4, 1), leaderEnd: 'dot' },
+  leader: { type: 'leader', pts: [pt(0, 0), pt(1, 1)], text: 'W1', height: 0.25, leaderEnd: 'none' },
   dimension: { type: 'dimension', variant: 'linear', a: pt(0, 0), b: pt(5, 0), at: pt(2, 1), height: 0.25, text: 'EQ', textAt: pt(3, 1.5) },
   radial: { type: 'radial', c: pt(0, 0), r: 2, at: pt(3, 3), diameter: true, height: 0.25 },
   angular: { type: 'angular', c: pt(0, 0), a: pt(1, 0), b: pt(0, 1), at: pt(2, 2), height: 0.25 },
@@ -148,7 +148,7 @@ const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
 const annotationType: Required<AnnotationType> = {
   id: 'at1', name: 'Grid axis', tool: 'axis', textStyle: 'big', dimStyle: 'arch', layer: 'L-pen',
   axis: { bubble: 'square', ends: 'start', size: 0.8, lineType: 'dashed' }, hatch: { pattern: 'ANSI31', scale: 2, angle: 45 }, tagField: 'class',
-  label: { template: 'Fire {Pset_WallCommon.FireRating}\n{Qto_WallBaseQuantities.Length:0.00 m|n/a}', frame: 'rounded', missing: 'field' },
+  label: { template: 'Fire {Pset_WallCommon.FireRating}\n{Qto_WallBaseQuantities.Length:0.00 m|n/a}', frame: 'rounded', missing: 'field', leader: 'always', leaderEnd: 'dot' },
 };
 const symbols: Required<DraftSymbol>[] = [
   { id: 'sym-paper', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: pt(0, 0), r: 4 }, { type: 'text', p: pt(0, 1), text: 'A', height: 2.5, rotation: 0.3 }, { type: 'line', a: pt(0, 0), b: pt(5, 0) }] },
