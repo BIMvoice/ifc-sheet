@@ -100,6 +100,8 @@ pnpm build              # builds all packages
 pnpm dev                # builds, then runs the app at http://localhost:3000
 ```
 
+Without Rust, on Windows too, `pnpm build:wasm:fetch` downloads the engine that CI builds from `main` (the `prebuilt-wasm` branch) and checks it against the committed `packages/wasm/pkg/ifc-lite.d.ts`. On a branch that changes Rust it refuses until that change is on `main` and rebuilt; build with `pnpm build:wasm` then. Once the engine is in place, `pnpm build` uses it without Rust or bash.
+
 Drawing sets without the app: [from the command line](docs/guide/ifcsheet-cli.md), or by an AI assistant through [the MCP server](docs/guide/ifcsheet-mcp.md).
 
 Tests and type checks: `pnpm test` and `pnpm typecheck`. Details are in [AGENTS.md](AGENTS.md).

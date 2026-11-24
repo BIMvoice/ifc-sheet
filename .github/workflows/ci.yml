@@ -780,6 +780,7 @@ jobs:
           q --test scripts/docs/generate-docs-sections.test.mjs
           q --test scripts/enforce-pipeline-labels.test.mjs
           q --test scripts/examples-current.test.mjs
+          q --test scripts/fetch-prebuilt-wasm.branch.test.mjs
           q --test scripts/fetch-prebuilt-wasm.test.mjs
           q --test scripts/fetch-prebuilt-wasm.committed.test.mjs
           q --test scripts/fixtures/build-manifest.test.mjs
@@ -885,6 +886,7 @@ jobs:
           q --test scripts/review/provider-fallbacks.test.mjs
           q --test scripts/review/refresh-eval-case.test.mjs
           q --test scripts/review/semantic-match.test.mjs
+          q --test scripts/run-build-wasm.test.mjs
           q --test scripts/sync-versions.test.mjs
           q --test scripts/tla-sourcemaps.test.mjs
           q --test scripts/typecheck-tests.test.mjs
