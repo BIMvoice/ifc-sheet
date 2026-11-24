@@ -13,6 +13,7 @@ import { memo, useEffect, useMemo } from 'react';
 import { useTranslation } from '@/i18n';
 import { useViewerStore } from '@/store';
 import { useProjectStore } from '@/project/project-store';
+import { useOpeningConvention } from '@/joinery/opening-convention';
 import type { ProjectSchedule, ProjectSheet, SheetViewport } from '@/project/types';
 import { isJoinerySchedule, layoutJoineryOnSheet, layoutTableOnSheet, syncSchedulePages } from '@/project/schedule-fit';
 import type { ScheduleData } from '@/joinery/schedule-data';
@@ -130,6 +131,8 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   // The cells typed over the model's text (#446) are part of the data.
   const joineryOverrides = useProjectStore((s) => s.joineryOverrides);
   const labels = useScheduleLabels(schedule?.name ?? '');
+  // The direction of the opening lines (#870): `layoutSchedule` reads it from the project store.
+  const convention = useOpeningConvention();
   const data = useMemo(() => {
     if (!schedule || schedule.kind === 'materials' || schedule.kind === 'finishes' || schedule.kind === 'types' || schedule.kind === 'register' || schedule.kind === 'urban' || schedule.kind === 'rooms' || schedule.kind === 'boq' || schedule.kind === 'list') return null;
     return scheduleDataOf(schedule, undefined, schedules ?? [], joineryOverrides);
@@ -138,7 +141,8 @@ export function useScheduleLayout(schedule: ProjectSchedule | undefined): { data
   const scale = schedule?.scale ?? 50;
   const requests = useMemo<ViewRequest[]>(() => (data ? [{ id: 'self', data, scale }] : []), [data, scale]);
   const views = useElementViews(requests).get('self');
-  return useMemo(() => (data ? { data, layout: layoutSchedule(data, labels, { scale, views }), views } : null), [data, labels, scale, views]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- convention is read through the project store
+  return useMemo(() => (data ? { data, layout: layoutSchedule(data, labels, { scale, views }), views } : null), [data, labels, scale, views, convention]);
 }
 
 /** The layouts of the schedules placed on `sheet`, by schedule id. */
@@ -150,6 +154,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
   const models = useViewerStore((s) => s.models);
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
+  // The direction of the opening lines (#870): the joinery layout reads it from the project store.
+  const convention = useOpeningConvention();
   // The codes the quantities by type show (#89).
   const classificationMappings = useProjectStore((s) => s.classificationMappings);
   const labels = useScheduleLabels('');
@@ -240,8 +246,8 @@ export function useSheetSchedules(sheet: ProjectSheet): Map<string, ScheduleLayo
       if (schedule.kind !== 'register' && isJoinerySchedule(schedule) && joinery.find((r) => r.id === schedule.id)?.data.entries.length) loaded.add(schedule.id);
     }
     return { layouts: out, loaded };
-    // mutationVersion / models / catalogue / mapping: the inputs `scheduleData` and the takeoff read from the stores.
-  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, classificationMappings, urban, urbanLabels, roomData, roomLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping]);
+    // mutationVersion / models / catalogue / mapping / convention: the inputs `scheduleData`, the takeoff and the joinery layout read from the stores.
+  }, [sheet, sheets, schedules, labels, continued, takeoffLabels, finishLabels, typeLabels, registerLabels, registerRows, pagePaper, placesTakeoff, placesFinishes, placesTypes, classificationMappings, urban, urbanLabels, roomData, roomLabels, joinery, joineryViews, mutationVersion, models, catalogue, mapping, convention]);
   // A schedule that runs over several pages has a sheet for each: the sheets follow the layout, from the schedule's first one.
   useEffect(() => {
     for (const vp of sheet.viewports ?? []) {
