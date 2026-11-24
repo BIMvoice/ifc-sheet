@@ -64,6 +64,15 @@ describe('a door in a wall it is thinner than (#678, stated invariant)', () => {
     expect(xs(leaf.pts)[0]).toBeCloseTo(1.5, 3);
   });
 
+  it('takes no edge of the wall\'s faces farther inside the frame than its lining for a jamb (#831)', () => {
+    // The same wall with a full-height edge in its faces at x 2.25 (where a face's triangles meet, as at a wall join): it crosses the cut
+    // like a jamb and has as many vertices, but lies 0.2 m inside the frame's end.
+    const joined = box(1, 'IfcWall', [0, 4], [-0.2, 0], 3, [1.525, 2.25, 2.425]);
+    const [symbol] = openingSymbols([door], plane, () => 0, () => null, () => null, () => false, hostWallMeshes([joined, door], (id) => (id === 2 ? 1 : undefined)));
+    const arc = symbol.shapes.find((s) => s.type === 'arc');
+    expect(arc?.type === 'arc' ? arc.r : 0, 'the swing as wide as the void').toBeCloseTo(0.9, 3);
+  });
+
   it('leaves the door alone when its wall does not hold it (a door beside a wall, not in it)', () => {
     const away = box(3, 'IfcWall', [0, 4], [3, 3.2], 3);
     const [symbol] = openingSymbols([door], plane, () => 0, () => null, () => null, () => false, hostWallMeshes([away], () => 3));
