@@ -40,8 +40,11 @@ describe('the demo project hatches its cut walls and slabs by material (#850)', 
     model = await openModel(new Uint8Array(readFileSync(BLOC)));
     const made = generateDefaultSet(model, { now: 0 });
     if (!made || !model.extent) throw new Error('bloc-p4 gave no set');
-    set = made;
-    drawings = await generateViewDrawings(set.document.views, model.buildingMeshes, set.levels, model.extent, (_v, e) => { throw e; }, () => {}, storeyFloorsOf(model.buildingMeshes, model.dataStore.spatialHierarchy));
+    // The two sheets looked at, and the views on them: drawing the whole set twice is minutes on a slow machine.
+    const sheets = made.document.sheets.filter((s) => s.number === 'A-101' || s.number === 'A-301');
+    set = { ...made, document: { ...made.document, sheets } };
+    const hung = new Set(sheets.flatMap((s) => (s.viewports ?? []).map((vp) => vp.viewId)));
+    drawings = await generateViewDrawings(set.document.views.filter((v) => hung.has(v.id)), model.buildingMeshes, set.levels, model.extent, (_v, e) => { throw e; }, () => {}, storeyFloorsOf(model.buildingMeshes, model.dataStore.spatialHierarchy));
   });
 
   /** The hatch patterns of a view's cut by IFC type, drawn at the detail level of the sheet it is on. */

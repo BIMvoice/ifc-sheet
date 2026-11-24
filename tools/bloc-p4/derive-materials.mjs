@@ -117,7 +117,7 @@ if (decode(get(REINFORCED_CONCRETE, 'IFCMATERIAL').args[0]) !== 'Reinforced conc
 /** The material of a wall from its name and thickness. */
 function wallMaterial(name, t, id) {
   if (/^(Casa scarii|Lift|Perete median)\b/.test(name)) return 'concrete';
-  if (/^Fatada /.test(name) && (Math.abs(t - 0.35) < EPS || Math.abs(t - 0.3) < EPS)) return 'brick';
+  if (name.startsWith('Fatada ') &&(Math.abs(t - 0.35) < EPS || Math.abs(t - 0.3) < EPS)) return 'brick';
   if (Math.abs(t - 0.25) < EPS) return 'brick';
   if (Math.abs(t - 0.125) < EPS) return 'aac';
   return fail(`#${id} '${name}' (${t} m): no material for it`);
