@@ -82,18 +82,52 @@ export function providedExports(js) {
   return names;
 }
 
+const SKIPPED_MEMBERS = new Set(['constructor', 'free']);
+
+/**
+ * Instance and static method names per class, as `Class.method`. A class body
+ * runs from its `export class X {` line to the first line that starts with `}`;
+ * members sit at four spaces in both wasm-bindgen's `.d.ts` and `.js`.
+ * Getters, setters and properties are not counted.
+ */
+function classMembers(text, isDts) {
+  const members = new Set();
+  const member = isDts ? /^ {4}(?:static )?(\w+)\(/ : /^ {4}(?:static )?(?:async )?(\w+)\(/;
+  let current = null;
+  for (const line of text.split('\n')) {
+    const open = /^export (?:declare )?(?:abstract )?class (\w+)/.exec(line);
+    if (open) {
+      current = line.trimEnd().endsWith('{}') ? null : open[1];
+      continue;
+    }
+    if (current === null) continue;
+    if (line.startsWith('}')) {
+      current = null;
+      continue;
+    }
+    const m = member.exec(line);
+    if (m && !SKIPPED_MEMBERS.has(m[1])) members.add(`${current}.${m[1]}`);
+  }
+  return members;
+}
+
 /**
  * @param {string} dts committed `.d.ts` text (what this checkout expects)
  * @param {string} js `.js` text of the runtime (fetched or already installed)
  * @returns {{ missing: string[], extra: string[] }} `missing` is declared but
- *   not provided (the build breaks); `extra` is provided but not declared
- *   (the package is ahead of this checkout).
+ *   not provided (the build breaks): a top-level export, or a class method as
+ *   `Class.method` (`IfcAPI.proposeScanElements` is one, #856); `extra` is
+ *   provided but not declared (the package is ahead of this checkout).
  */
 export function compareWasmExports(dts, js) {
   const declared = declaredExports(dts);
   const provided = providedExports(js);
+  const providedMembers = classMembers(js, false);
   return {
-    missing: [...declared].filter((n) => !provided.has(n)).sort(),
+    missing: [
+      ...[...declared].filter((n) => !provided.has(n)),
+      ...[...classMembers(dts, true)].filter((n) => !providedMembers.has(n)),
+    ].sort(),
     extra: [...provided].filter((n) => !declared.has(n)).sort(),
   };
 }

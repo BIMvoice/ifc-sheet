@@ -37,6 +37,17 @@ const force = process.argv.includes('--force');
 const committedDts = join(wasmOut, 'ifc-lite.d.ts');
 const RUNTIME_FILES = ['ifc-lite_bg.wasm', 'ifc-lite.js'];
 
+// Without the committed .d.ts there is nothing to check the runtime against, and
+// the build then fails two steps later with TS7016 or a bundler error (#856).
+if (!existsSync(committedDts)) {
+  console.error(
+    `\n${committedDts} is missing, so the runtime cannot be checked against this checkout.\n` +
+      `It is committed to the repository: restore it with \`git checkout -- packages/wasm/pkg/ifc-lite.d.ts\`, ` +
+      `or build everything from source with a Rust toolchain (pnpm build:wasm).`,
+  );
+  process.exit(1);
+}
+
 if (existsSync(wasmFile) && !force) {
   console.log(`Prebuilt WASM already present at ${wasmFile}`);
   // An installed runtime may have been fetched before this check existed, or
@@ -110,8 +121,10 @@ if (fetchedParity.missing.length > 0) {
   console.error(
     `\nThe published ${tarball} is behind this checkout (${checkoutCommit()}).\n` +
       listMissing(fetchedParity.missing) +
-      `\n\nNothing was installed. Either build from source with a Rust toolchain ` +
-      `(pnpm build:wasm), or wait for a publish that includes these exports.`,
+      `\n\nNothing was installed. This checkout's Rust has moved past what is published, so the ` +
+      `prebuilt runtime cannot build it. Install Rust nightly + wasm-pack and run \`pnpm build:wasm\` ` +
+      `(see .github/actions/setup-wasm-build for the pinned toolchain; on Windows use WSL or rustup), ` +
+      `then \`pnpm build\`.`,
   );
   process.exit(1);
 }
@@ -137,7 +150,6 @@ function checkoutCommit() {
 
 /** Exports the committed .d.ts declares vs those `js` provides; empty if there is no committed .d.ts. */
 function parityAgainstCommittedDts(js) {
-  if (!existsSync(committedDts)) return { missing: [], extra: [] };
   return compareWasmExports(readFileSync(committedDts, 'utf8'), js);
 }
 
