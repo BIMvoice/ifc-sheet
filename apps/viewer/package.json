@@ -90,7 +90,7 @@
     "@radix-ui/react-tooltip": "1.4.1",
     "@tanstack/react-virtual": "3.14.26",
     "@vercel/analytics": "^2.0.1",
-    "@xyflow/react": "^12.12.1",
+    "@xyflow/react": "^13.0.2",
     "apache-arrow": "^21.2.0",
     "autoprefixer": "^10.6.2",
     "beautiful-theme-toggle": "^1.0.1",
