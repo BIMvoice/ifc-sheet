@@ -415,6 +415,13 @@ jobs:
           # retries; `vitest run --reporter=verbose` marks them "(retry x1)".
           pnpm turbo run test "${args[@]}" --concurrency=2 -- --retry=1
 
+      # The engine as a stranger gets it (docs/architecture/npm-publishing.md): the one tarball with our own
+      # @ifc-lite copies inside, installed in an empty folder, builds a drawing set from the command and as a library.
+      - name: The packed engine installs and builds a drawing set
+        run: |
+          pnpm turbo run build --filter="@bimvoice/ifcsheet..."
+          node --test scripts/pack-ifcsheet.install.test.mjs
+
   # The viewer suite is about 15k tests, so it is split by test file across
   # eight runners (TEST_SHARD / TEST_SHARDS, see apps/viewer/package.json).
   viewer-tests:

@@ -2,18 +2,27 @@
 
 The IfcSheet drawing-set engine: the project document, the starting set of views and sheets a model opens with, and PDF and DXF export, without a browser. The IfcSheet web app (`apps/viewer`) is a client of it.
 
-Not on npm yet (the package is `private` until the owner decides to publish; see `docs/architecture/npm-publishing.md`). The design and what is still to move are in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
+Not on npm yet: the package is ready to install (one tarball, with the geometry engine inside) and waits for the `@bimvoice` npm scope; see `docs/architecture/npm-publishing.md`. The design is in [`docs/architecture/ifcsheet-engine.md`](../../docs/architecture/ifcsheet-engine.md).
 
 ## Install
 
-Once published (not yet), no clone is needed:
+Once published (not yet):
 
 ```sh
 npx @bimvoice/ifcsheet build model.ifc --out set.pdf
-npm install --global @bimvoice/ifcsheet   # then: ifcsheet build model.ifc --out set.pdf
+npm install @bimvoice/ifcsheet
 ```
 
-Node 22.13 or newer. The geometry engine (WebAssembly) arrives with the `@ifc-lite/wasm` dependency; nothing else is downloaded at run time. Until it is published, build from a clone as described under "The `ifcsheet` command".
+Today, from a clone, as one file you can install anywhere:
+
+```sh
+pnpm install && pnpm build:wasm && pnpm turbo run build --filter="@bimvoice/ifcsheet..."
+node scripts/pack-ifcsheet.mjs --out /tmp/ifcsheet        # writes bimvoice-ifcsheet-<version>.tgz
+cd /your/project && npm install /tmp/ifcsheet/bimvoice-ifcsheet-*.tgz
+npx ifcsheet build model.ifc --out set.pdf
+```
+
+Node 22.13 or newer. The geometry engine (WebAssembly) is inside the package; nothing is downloaded at run time.
 
 ## Use from an AI assistant (MCP)
 

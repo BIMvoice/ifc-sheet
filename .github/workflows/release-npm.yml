@@ -9,9 +9,10 @@
 #     approve it and which holds NPM_TOKEN as an environment secret (not a repo secret);
 #   - the token does not exist yet;
 #   - `dry_run` is true by default, so a first run only packs and prints.
-# Publishing also needs "private": true removed from packages/ifcsheet/package.json,
-# and the decisions in docs/architecture/npm-publishing.md settled first: until
-# then the package cannot install from npm.
+# What is published is the one tarball `scripts/pack-ifcsheet.mjs` makes (our own
+# @ifc-lite copies inside it, see docs/architecture/npm-publishing.md), after the
+# install test has proved it. packages/ifcsheet/package.json stays "private": true,
+# so no other publish command can send it.
 name: Release npm (manual)
 
 on:
@@ -57,13 +58,21 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile --filter "@bimvoice/ifcsheet..."
-      - run: pnpm build:wasm:fetch
+      # Built from this repository's Rust, as CI builds it: the wasm ifc-lite publishes is not this engine's.
+      - uses: ./.github/actions/setup-wasm-build
+        with:
+          cache-prefix: release-wasm
+      - run: pnpm --filter @ifc-lite/wasm build
       - run: pnpm turbo run build --filter="@bimvoice/ifcsheet..."
+      - name: Pack the one tarball and prove it installs
+        run: |
+          node --test scripts/pack-ifcsheet.install.test.mjs
+          node scripts/pack-ifcsheet.mjs --out "$RUNNER_TEMP/pack"
       - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          flags="--access public --no-git-checks --provenance"
+          flags="--access public --provenance"
           if [ "$DRY_RUN" = "true" ]; then flags="$flags --dry-run"; fi
-          pnpm --filter @bimvoice/ifcsheet publish $flags
+          npm publish "$RUNNER_TEMP"/pack/bimvoice-ifcsheet-*.tgz $flags
