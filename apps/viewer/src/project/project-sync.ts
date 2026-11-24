@@ -26,6 +26,7 @@ import { noticeAutosaveTooNew } from './autosave-notice';
 import { forgetRecoveryOffer, offerRecovery, restoreModelState } from './recovery-store';
 import { restoreRasters } from './autosave-rasters';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
+import { startingMaterials } from './demo-project';
 
 interface StoreySource {
   spatialHierarchy?: { byStorey: ReadonlyMap<number, unknown>; storeyElevations: ReadonlyMap<number, number> } | null;
@@ -89,7 +90,12 @@ export function useProjectSync(): void {
           loadProjectDocument(plan.restore.doc);
           void restoreModelState(key, () => slot);
           void restoreRasters(key);
-        } else if (!overlaps) resetProject();
+        } else if (!overlaps) {
+          resetProject();
+          // The demo project starts with the materials its model is built of, hatched (`demo-project.ts`).
+          const materials = startingMaterials(refs);
+          if (materials) useProjectStore.setState({ materials });
+        }
         // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
         if (plan.recoverable) offerRecovery({ key, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: refs.map((r) => r.name).join(', ') });
         if (plan.tooNew) noticeAutosaveTooNew();
