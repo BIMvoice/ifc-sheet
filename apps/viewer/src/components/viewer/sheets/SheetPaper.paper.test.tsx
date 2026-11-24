@@ -122,3 +122,34 @@ describe('the sheet SVG on a paper of any size', () => {
     assert.deepEqual(titleBlockBox(doc), { x0: 651, y0: 534, x1: 831, y1: 584, strip: false });
   });
 });
+
+/**
+ * The frame around the viewport picked in the editor is a mark for the person editing, never the drawing. Inkscape has no
+ * `transparent` in its paint parser: an invalid `fill` declaration is dropped and `fill` falls back to its initial value,
+ * black, so a `fill="transparent"` frame drawn after the clipped view covered every plan (Inkscape report, 2026-11-22).
+ * The export carries no paint an SVG 1.1 tool rejects, and no frame over a view.
+ */
+describe('the frame of a viewport picked in the editor', () => {
+  const picked: ProjectSheet = {
+    ...base,
+    viewports: [{ id: 'v', viewId: 'none', x: 100, y: 100, width: 120, height: 80, scale: 100, center: null }],
+  };
+  const paper = (selectedViewportId: string | null) => render(
+    <SheetPaper sheet={picked} projectName="House" content={() => ({ view: undefined, drawing: null, drafts: [] })} layers={[]} extraPatterns={[]} selectedViewportId={selectedViewportId} pxPerMm={1} />,
+  );
+
+  it('keeps its outline while picked, painted with values every SVG renderer reads', () => {
+    const frame = paper('v').querySelector('[data-viewport-id="v"] > rect');
+    assert.ok(frame, 'the picked viewport is marked');
+    assert.deepEqual(
+      ['fill', 'stroke', 'data-export-ignore'].map((a) => frame.getAttribute(a)),
+      ['none', '#2563eb', 'true'],
+    );
+  });
+
+  it('is not exported: a transparent frame over every view paints black in Inkscape', () => {
+    const { doc, text } = exported(picked);
+    assert.doesNotMatch(text, /(?:fill|stroke)="transparent"/, 'no paint an SVG 1.1 tool rejects');
+    assert.equal(doc.querySelector('[data-viewport-id="v"] > rect'), null, 'the mark does not travel in the drawing');
+  });
+});

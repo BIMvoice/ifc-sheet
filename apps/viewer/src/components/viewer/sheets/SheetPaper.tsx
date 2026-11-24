@@ -234,11 +234,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, con
         })}
       </g>
       {marks ? <ViewportMarks shapes={marks} /> : null}
-      <rect
-        x={left} y={top} width={box.width} height={box.height} fill="transparent"
-        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined}
-        data-export-ignore={selected ? 'true' : undefined}
-      />
+      {selected ? (
+        <rect x={left} y={top} width={box.width} height={box.height} fill="none" stroke="#2563eb"
+          strokeWidth={0.4} strokeDasharray="3 2" data-export-ignore="true" />
+      ) : null}
       {title.number ? <TitleNumber number={title.number} size={standard.type.viewTitle} /> : null}
       <text {...penTags('VIEWPORT-LABELS', 0.25)} x={title.textX} y={title.baseline} fontSize={standard.type.viewTitle} fontFamily="ui-sans-serif, system-ui, sans-serif" fill="#000">
         {titleText}
@@ -254,8 +253,10 @@ function CivilViewport({ vp, layout, selected }: { vp: SheetViewport; layout: Ci
   return (
     <g data-viewport-id={vp.id}>
       <CivilDrawingGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
-      <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
-        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
+      {selected ? (
+        <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="none" stroke="#2563eb"
+          strokeWidth={0.4} strokeDasharray="3 2" data-export-ignore="true" />
+      ) : null}
     </g>
   );
 }
@@ -271,8 +272,10 @@ function ScheduleViewport({ vp, layout, selected }: { vp: SheetViewport; layout:
     <g data-viewport-id={vp.id}>
       {layout.fit ? <clipPath id={clipId}><rect x={box.x} y={box.y} width={box.w} height={box.h} /></clipPath> : null}
       <g clipPath={layout.fit ? `url(#${clipId})` : undefined}><ScheduleGraphic layout={layout} x={box.x} y={box.y} /><CellMarks layout={layout} scheduleId={vp.viewId} x={box.x} y={box.y} /></g>
-      <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="transparent"
-        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
+      {selected ? (
+        <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="none" stroke="#2563eb"
+          strokeWidth={0.4} strokeDasharray="3 2" data-export-ignore="true" />
+      ) : null}
     </g>
   );
 }
@@ -283,8 +286,10 @@ function LegendViewport({ vp, layout, selected }: { vp: SheetViewport; layout: L
   return (
     <g data-viewport-id={vp.id}>
       <LegendGraphic layout={layout} x={vp.x - width / 2} y={vp.y - height / 2} />
-      <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="transparent"
-        stroke={selected ? '#2563eb' : 'transparent'} strokeWidth={0.4} strokeDasharray={selected ? '3 2' : undefined} data-export-ignore={selected ? 'true' : undefined} />
+      {selected ? (
+        <rect x={vp.x - width / 2} y={vp.y - height / 2} width={width} height={height} fill="none" stroke="#2563eb"
+          strokeWidth={0.4} strokeDasharray="3 2" data-export-ignore="true" />
+      ) : null}
     </g>
   );
 }
