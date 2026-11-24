@@ -1,6 +1,6 @@
 # Publishing the CLI and the MCP server to npm
 
-Status: prepared, not published (#422). Nothing here publishes; the owner decides. Measured on `origin/main` with `pnpm pack` and a scratch install.
+Status: installable, not published. Decision 1 is settled (2026-11-24): our `@ifc-lite/*` copies travel inside the one `@bimvoice/ifcsheet` tarball, see "The one tarball" below. Nothing here publishes; the owner starts the release workflow. Measured on `origin/main` with `pnpm pack` and a scratch install.
 
 ## Audit
 
@@ -24,16 +24,26 @@ Status: prepared, not published (#422). Nothing here publishes; the owner decide
 - With the 10 direct dependencies overridden to this repo's packed copies it fails next on `@ifc-lite/ifcx` (no `IFCX_LENGTH_UNIT_SCALE`).
 - With all 18 overridden to this repo's packed copies, `ifcsheet --help` and `ifcsheet build FZK-v2.ifc --out x.pdf` work (4 sheets, 268 KB PDF), wasm included.
 
+## The one tarball
+
+`node scripts/pack-ifcsheet.mjs --out <dir>` writes `bimvoice-ifcsheet-<version>.tgz` (9.3 MB). It carries the engine's `dist/`, the font, and under `node_modules/` this repository's built copies of the 18 `@ifc-lite/*` packages the engine reaches, the wasm geometry engine among them, as npm bundled dependencies. Nothing is published under a name that is not ours. What those packages need from the registry (`fflate`, `jspdf`, `decimal.js`, `jszip`, `@noble/hashes`, `@xmldom/xmldom`, `apache-arrow`, `parquet-wasm`, `laz-perf`, `commander`) becomes a plain dependency of the package; `@tauri-apps/api` is left out, as it is wanted only inside a third party's desktop shell.
+
+Why bundled dependencies and not a single bundled file: the package has over fifty entry points with type declarations that name `@ifc-lite/*` types. Carrying the packages as they are keeps every entry point and every type working without a second build to maintain.
+
+`scripts/pack-ifcsheet.install.test.mjs` packs, installs the tarball in an empty folder with `npm install`, and builds AC20-FZK-Haus into a PDF and DXFs with the `ifcsheet` command and through the library entry points. CI runs it in the Package tests job, and the release workflow runs it before it publishes that same tarball. `packages/ifcsheet/package.json` stays `"private": true`; only the staged manifest inside the tarball is not, so `changeset publish` and `pnpm -r publish` still cannot send it.
+
+Known cost: the install is about 140 MB on disk, most of it `apache-arrow` and `parquet-wasm`, which only the Parquet export uses. Making those optional is the next saving.
+
 ## Decisions for the owner
 
-1. How the vendored `@ifc-lite/*` code reaches users (the blocker). Options: publish the 18 closure packages under our own scope (rename, new versions); bundle them into `@bimvoice/ifcsheet` (esbuild, copy the wasm next to it); upstream the fork's changes and depend on their releases; or keep the CLI private and distribute a bundled binary or Docker image instead.
+1. Settled: bundled into the one tarball (above). The options that were weighed: How the vendored `@ifc-lite/*` code reaches users (the blocker). Options: publish the 18 closure packages under our own scope (rename, new versions); bundle them into `@bimvoice/ifcsheet` (esbuild, copy the wasm next to it); upstream the fork's changes and depend on their releases; or keep the CLI private and distribute a bundled binary or Docker image instead.
 2. The MCP server name. `@ifc-lite/mcp` is ifc-lite's and we do not own that scope. Options: a new package `@bimvoice/ifcsheet-mcp` (own name, `author`, `repository`, `engines`; same dependency question as 1); fold the MCP bin into `@bimvoice/ifcsheet`; or leave it unpublished.
 3. The `@bimvoice` npm scope and the `NPM_TOKEN` secret (the scope must exist and the token be an automation token with publish rights).
 4. Guard against `changeset publish` / `pnpm -r publish` trying the `@ifc-lite/*` names: done (#422). Every vendored package is `"private": true` and `scripts/check-publish-allowlist.mjs` (allowlist: `@bimvoice/ifcsheet`) runs first in `release:npm`, `publish:npm`, `publish:dry`, the release workflow and CI. It refuses any non-private package off the allowlist and never accepts an `@ifc-lite/*` name. Side effect: `check-changeset-required` no longer asks for changesets on the vendored packages, since it skips private ones.
 
 ## The remaining step
 
-After decisions 1 to 3: set `"private": false` in `packages/ifcsheet/package.json` (a bundled build also changes `dependencies`), add the `NPM_TOKEN` secret (as an environment secret, see below), then run the "Release npm (manual)" workflow (`workflow_dispatch`, `confirm` = `publish`, `dry_run` first).
+After decision 3 (the `@bimvoice` npm scope and its token; decision 2, the MCP server's name, does not block the engine): add the `NPM_TOKEN` secret (as an environment secret, see below), then run the "Release npm (manual)" workflow (`workflow_dispatch`, `confirm` = `publish`, `dry_run` first).
 
 ## Release hardening
 
