@@ -10,6 +10,7 @@ import { annotateAllRo } from '../catalogues/annotate-all.ro';
 import { annotateRunRo } from '../catalogues/annotate-run.ro';
 import { annotateSetRo } from '../catalogues/annotate-set.ro';
 import { annotatedIfcRo } from '../catalogues/annotated-ifc.ro';
+import { annotationLabelGapRo } from '../catalogues/annotation-label-gap.ro';
 import { annotationLeaderEndRo } from '../catalogues/annotation-leader-end.ro';
 import { anonymizedExportRo } from '../catalogues/anonymized-export.ro';
 import { appearancePickersRo } from '../catalogues/appearance-pickers.ro';
@@ -74,6 +75,7 @@ export const roAL = {
   ...annotateRunRo,
   ...annotateSetRo,
   ...annotatedIfcRo,
+  ...annotationLabelGapRo,
   ...annotationLeaderEndRo,
   ...anonymizedExportRo,
   ...appearancePickersRo,

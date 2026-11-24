@@ -2,6 +2,7 @@ ATTRIBUTE_FIELDS: value
 AttributeField: type (type-only)
 FieldRef: type (type-only)
 LABEL_CLEAR_MM: value
+LABEL_GAP_MAX_MM: value
 LABEL_GAP_MM: value
 LayoutElement: type (type-only)
 ParsedTemplate: type (type-only)
@@ -18,6 +19,7 @@ parseFieldRef: value
 parseFormatSpec: value
 parseTemplate: value
 pointInRing: value
+readLabelSpec: value
 rectAround: value
 rectHitsRing: value
 rectInsideRing: value

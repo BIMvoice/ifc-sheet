@@ -25,6 +25,10 @@ describe('label annotation type', () => {
     assert.deepEqual(readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', leaderEnd: 'dot' } }, '/t').label, { template: 'x', missing: 'empty', leaderEnd: 'dot' });
     assert.deepEqual(readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', leaderEnd: 'star' } }, '/t').label, { template: 'x', missing: 'empty' });
   });
+  it('reads the gap round its labels, paper millimetres from 0 to 20, and drops one out of range (#842)', () => {
+    assert.equal(readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', gap: 4 } }, '/t').label?.gap, 4);
+    assert.ok(!('gap' in (readAnnotationType({ ...base, label: { template: 'x', missing: 'empty', gap: 25 } }, '/t').label ?? {})));
+  });
   it('has no label when none is stored (an older type) and refuses nothing', () => {
     assert.equal(readAnnotationType({ ...base }, '/t').label, undefined);
     assert.equal(readAnnotationType({ ...base, label: { frame: 'box' } }, '/t').label, undefined);

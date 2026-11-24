@@ -13,6 +13,7 @@
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { QuantityType, type QuantitySet } from '@ifc-lite/data';
 import { extractAllEntityAttributes } from '@ifc-lite/parser';
+import type { AnnotationType } from '../annotation-type.js';
 import type { DefaultSet } from '../default-set.js';
 import { annotationRects } from '../dimall/annotation-rects.js';
 import { openingObstacles, type ObstacleBox } from '../dimall/plan-obstacles.js';
@@ -64,6 +65,8 @@ export interface HeadlessAnnotateInput {
   choices: AnnotateChoices;
   /** Which labels TAGALL places; absent: every kind. */
   tagParts?: TagParts;
+  /** The label types TAGALL draws with, a project's own (`projectTagAllTypes`, #842: its gap); absent: the standard ones. */
+  tagAllTypes?: { mark: AnnotationType; room: AnnotationType };
   /** The set's drafts before the run; a command adds only what is missing from them. */
   existing?: readonly DraftEntity[];
   /** Only these views (by id); absent: every plan, elevation and section the choices give a command. */
@@ -130,7 +133,7 @@ function elementReader(dataStore: NonNullable<AnnotateModel['dataStore']>, rende
 }
 
 /** What the commands read from a view of `model`: its drawing's parts and elements, the plan's rooms, the labels of the elements. */
-export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[], joinery: HeadlessAnnotateInput['joinery']): AnnotateReaders<HeadlessView, Drawing2D> {
+export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document' | 'levels'>, existing: readonly DraftEntity[], joinery: HeadlessAnnotateInput['joinery'], tagAllTypes?: HeadlessAnnotateInput['tagAllTypes']): AnnotateReaders<HeadlessView, Drawing2D> {
   const book = styleBookOf(undefined, undefined);
   const current = { textStyle: DEFAULT_TEXT_STYLE.id, dimStyle: DEFAULT_DIM_STYLE.id };
   const ds = model.dataStore;
@@ -198,7 +201,7 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
       });
       const rooms = tagRoomsOf(c);
       for (const r of rooms) byGuid.set(r.guid, r.renderId);
-      const [mark, room] = TAGALL_TYPES;
+      const [mark, room] = tagAllTypes ? [tagAllTypes.mark, tagAllTypes.room] : TAGALL_TYPES;
       return {
         onPlan, elements, targets, rooms, existing: c.placed, obstacles: onPlan ? obstaclesOf(c) : [], placement: { ...placement(c), locale: c.locale }, types: { mark, room },
         // A detail tags only what its crop shows, as the app passes the view's own.
@@ -229,7 +232,7 @@ export async function annotateSetHeadless(input: HeadlessAnnotateInput): Promise
     ? await generateViewDrawings(all, model.buildingMeshes, set.levels, model.extent, undefined, undefined, storeyFloorsOf(model.buildingMeshes, model.dataStore?.spatialHierarchy), terrainMeshesOf(model.meshes, model.dataStore))
     : new Map<string, Drawing2D>();
   const result = await annotateViews<HeadlessView, Drawing2D>({
-    views, choices, ...(input.tagParts ? { presets: { tagParts: input.tagParts } } : {}), readers: readersOf(model, set, existing, input.joinery),
+    views, choices, ...(input.tagParts ? { presets: { tagParts: input.tagParts } } : {}), readers: readersOf(model, set, existing, input.joinery, input.tagAllTypes),
     drawingOf: async (view) => {
       const drawing = drawings.get(view.id);
       return drawing ? { drawing } : { drawing: null, error: 'the view has nothing to draw' };

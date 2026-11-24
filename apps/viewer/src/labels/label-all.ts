@@ -47,7 +47,7 @@ export function labelSize(type: AnnotationType, guid: string, textHeight: number
   return engineLabelSize(labelEnv(read), type, guid, textHeight, locale, extras);
 }
 
-/** Where a label of `type` for `target` goes beside the element, clear of `others` (the view's elements), the annotations on the view and the labels placed before it. */
+/** Where a label of `type` for `target` goes beside the element, clear of `others` (the view's elements), the annotations on the view and the labels placed before it, by the type's gap. */
 export function defaultCentres(type: AnnotationType, targets: readonly LabelTarget[], elements: readonly ViewElement[], existing: readonly DraftEntity[], at: LabelPlacement): Map<string, Pt> {
   const items = targets.flatMap((t) => {
     const size = labelSize(type, t.guid, at.textHeight, at.locale);
@@ -57,6 +57,8 @@ export function defaultCentres(type: AnnotationType, targets: readonly LabelTarg
     elements: elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })),
     annotations: rectsOf(existing),
     paperUnit: at.paperUnit,
+    // The type's own clear space round its labels (#842); absent, the standard one, as the engine's TAGALL reads it.
+    ...(type.label?.gap === undefined ? {} : { gapMm: type.label.gap }),
   };
   const placed = layoutLabels(items, scene);
   return new Map(targets.flatMap((t) => {

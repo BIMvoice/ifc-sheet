@@ -11,6 +11,7 @@ import { annotateAllEn } from '../catalogues/annotate-all.en';
 import { annotateRunEn } from '../catalogues/annotate-run.en';
 import { annotateSetEn } from '../catalogues/annotate-set.en';
 import { annotatedIfcEn } from '../catalogues/annotated-ifc.en';
+import { annotationLabelGapEn } from '../catalogues/annotation-label-gap.en';
 import { annotationLeaderEndEn } from '../catalogues/annotation-leader-end.en';
 import { annotationsEn } from '../catalogues/annotations.en';
 import { anonymizedExportEn } from '../catalogues/anonymized-export.en';
@@ -97,6 +98,7 @@ export const enAE = {
   ...annotateRunEn,
   ...annotateSetEn,
   ...annotatedIfcEn,
+  ...annotationLabelGapEn,
   ...annotationLeaderEndEn,
   ...annotationsEn,
   ...anonymizedExportEn,

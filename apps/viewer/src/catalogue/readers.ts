@@ -13,12 +13,10 @@ import { readSymbol } from '@bimvoice/ifcsheet';
 export { readSymbol };
 import type { AxisShape } from '@/drafting/types';
 import {
-  ANNOTATION_TOOLS, DEFAULT_LABEL, DEFAULT_LEGEND, LEGEND_CATEGORIES, TAG_FIELDS,
+  ANNOTATION_TOOLS, DEFAULT_LEGEND, LEGEND_CATEGORIES, TAG_FIELDS,
   type AnnotationTool, type AnnotationType, type LegendCategory, type ProjectLegend, type TagFieldName,
 } from './types';
-import { asTextFrame } from '@/drafting/text-block';
-import { asLeaderEnd, asLeaderMode } from '@bimvoice/ifcsheet';
-import { MISSING_MODES } from '@bimvoice/ifcsheet';
+import { readLabelSpec } from '@bimvoice/ifcsheet';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -52,12 +50,9 @@ export function readAnnotationType(v: unknown, path: string, what?: string): Ann
   }
   const field = oneOf<TagFieldName>(v.tagField, TAG_FIELDS);
   if (field) out.tagField = field;
-  if (isObject(v.label) && isString(v.label.template)) {
-    const frame = asTextFrame(v.label.frame);
-    const leader = asLeaderMode(v.label.leader);
-    const leaderEnd = asLeaderEnd(v.label.leaderEnd);
-    out.label = { template: v.label.template, missing: oneOf(v.label.missing, MISSING_MODES) ?? DEFAULT_LABEL.missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}), ...(leaderEnd ? { leaderEnd } : {}) };
-  }
+  // The engine reads a label the same way (`ifcsheet build --project`, #842).
+  const label = readLabelSpec(v.label);
+  if (label) out.label = label;
   return out;
 }
 

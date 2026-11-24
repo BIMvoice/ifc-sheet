@@ -13,6 +13,7 @@ import { dxfName } from '../sheet-file-name.js';
 import { buildHandoverZip, type HandoverPart } from '../handover.js';
 import { annotateSetHeadless, annotationsOf, exportPdf, openModel, projectSheetOptionsWithViews, readProjectFile, sheetGraphics, sheetGraphicToDxf, type ProjectFacts } from '../headless.js';
 import { readAnnotateSpec, readAnnotationPresets, type AnnotateSpec } from '../exports/annotate.js';
+import { projectTagAllTypes } from '../labels/label-spec-read.js';
 import { withTypedProjectName } from '../title-block-fields.js';
 import { projectSetOf } from '../project-set.js';
 import { listSchedulesOn, listTableText } from '../cli-list.js';
@@ -72,13 +73,20 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   // The project is read first: its graphic standard and title block layout are what the sheets are drawn with.
   let project: ProjectFacts | undefined;
   let presets: ReturnType<typeof readAnnotationPresets> = [];
+  let tagAllTypes: ReturnType<typeof projectTagAllTypes> | undefined;
   if (args.project !== undefined) {
     let projectText: string;
     try { projectText = await readFile(args.project, 'utf8'); } catch (error) {
       io.stderr(`ifcsheet: cannot read ${args.project}: ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'no such file' : (error as Error).message}\n`);
       return EXIT.failed;
     }
-    try { project = readProjectFile(projectText); presets = readAnnotationPresets((JSON.parse(projectText) as { annotationPresets?: unknown }).annotationPresets); } catch (error) {
+    try {
+      project = readProjectFile(projectText);
+      const json = JSON.parse(projectText) as { annotationPresets?: unknown; annotationTypes?: unknown };
+      presets = readAnnotationPresets(json.annotationPresets);
+      // TAGALL draws with the project's own door and window mark and room tag, as the app does (#842: their gap).
+      tagAllTypes = projectTagAllTypes(json.annotationTypes);
+    } catch (error) {
       io.stderr(`ifcsheet: ${args.project} cannot be used as a project: ${(error as Error).message}\n`);
       return EXIT.failed;
     }
@@ -134,7 +142,7 @@ async function build(args: BuildArgs, io: CliIo): Promise<number> {
   const format = sheetFormat(language, standard.unitsAndNumbers);
   let annotations = extras.annotations;
   if (annotate) {
-    const done = await annotateSetHeadless({ model, set: { document, levels: set.levels }, choices: annotate.choices, ...(annotate.tagParts ? { tagParts: annotate.tagParts } : {}), existing: annotations?.drafts ?? [], locale: format });
+    const done = await annotateSetHeadless({ model, set: { document, levels: set.levels }, choices: annotate.choices, ...(annotate.tagParts ? { tagParts: annotate.tagParts } : {}), ...(tagAllTypes ? { tagAllTypes } : {}), existing: annotations?.drafts ?? [], locale: format });
     annotations = annotations ? { ...annotations, drafts: done.all } : annotationsOf(done.all, format);
     for (const view of done.summary.views) io.stderr(`ifcsheet: annotated ${view.name}: ${view.skipped ? 'left out, the view has no drawing' : view.results.map((r) => `${r.command} ${r.outcome === 'added' ? `+${r.added}` : r.outcome === 'already' ? 'complete' : 'nothing to do'}`).join(', ')}\n`);
   }

@@ -22,7 +22,7 @@ import { clipLoop } from '../clip-loop.js';
 import { labelDraft, labelSize, type ElementReader, type LabelEnv, type LabelPlacement } from '../labels/label-draft.js';
 import type { LabelExtras } from '../labels/label-extras.js';
 import { growRect, rectAround, ringBounds, type Rect } from '../labels/label-geometry.js';
-import { LABEL_CLEAR_MM, LABEL_GAP_MM, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
+import { labelSpacing, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
 import type { LabelTarget } from '../labels/label-place.js';
 import { readFieldValue } from '../labels/label-resolve.js';
 import { RectIndex } from '../labels/rect-index.js';
@@ -96,7 +96,8 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   });
   const summary: TagAllSummary = { marks: 0, numbered: 0, rooms: 0, areaFromModel: 0, areaFromFootprint: 0, roomsTooSmall: 0, already: 0, noRooms: parts.rooms && rooms.length === 0, roomsOverLines: 0, roomsOutside: 0 };
   const drafts: DraftEntity[] = [];
-  const clear = LABEL_CLEAR_MM * at.paperUnit;
+  // The room tags keep their type's clear space from what they avoid (#842); absent, the standard one.
+  const clear = labelSpacing(input.types.room.label?.gap).clear * at.paperUnit;
 
   // Doors and windows.
   const marked = labelledBy(input.existing, MARK_TYPE_ID);
@@ -112,7 +113,9 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     // Numbered only when the mark reads nothing (the office's sources for it included): never the Name, never a class word.
     if (!hasValue(readFieldValue(MARK_REF, el).value)) extrasOf.set(t.guid, { numbered: ++counter });
   }
-  const gap = LABEL_GAP_MM * at.paperUnit;
+  // The marks stand their type's gap from their door or window (#842), and keep it from each other and what they avoid.
+  const markGap = input.types.mark.label?.gap;
+  const gap = labelSpacing(markGap).gap * at.paperUnit;
   const items = todo.flatMap((t) => {
     const size = labelSize(env, input.types.mark, t.guid, at.textHeight, at.locale, extrasOf.get(t.guid));
     return size ? [{ id: String(t.renderId), ring: t.ring, ...size, ...(/^ifcdoor/i.test(t.className) ? { preferred: beyondSwing(t.ring, size.w, size.h, gap) } : { fallback: beyondSwing(t.ring, size.w, size.h, gap).slice(2) }) }] : [];
@@ -125,7 +128,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const base = [...placed, ...sections];
   const index = new RectIndex(4 * at.textHeight);
   for (const r of base) index.add(r);
-  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: index, paperUnit: at.paperUnit };
+  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: index, paperUnit: at.paperUnit, ...(markGap === undefined ? {} : { gapMm: markGap }) };
   const spots = layoutLabels(items, scene);
   // What the rooms keep clear of: the same boxes and the marks drawn (a mark that was placed but not drawn, outside a detail's crop, is not one).
   const roomIndex = new RectIndex(4 * at.textHeight);
