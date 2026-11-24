@@ -80,9 +80,9 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
         <span className="text-zinc-500" title={t('label.gap.hint')}>{t('label.gap')}</span>
         {/* The standard gap is the absence of the field (#842), so a type that never chose keeps its spacing. Taken on leaving the field. */}
         <input
-          type="number" aria-label={t('label.gap')} title={t('label.gap.hint')} className={INPUT} min={0} max={LABEL_GAP_MAX_MM} step={0.5}
+          type="number" aria-label={t('label.gap')} title={t('label.gap.hint')} className={`${INPUT} text-right tabular-nums`} min={0} max={LABEL_GAP_MAX_MM} step={0.5}
           key={label.gap ?? LABEL_GAP_MM} defaultValue={label.gap ?? LABEL_GAP_MM}
-          onBlur={(e) => { const next = gapOf(e.target.value, label.gap); if (next !== label.gap) { const { gap: _old, ...rest } = label; onChange(next === undefined ? rest : { ...rest, gap: next }); } }}
+          onBlur={(e) => { const next = gapOf(e.target.value, label.gap); e.target.value = String(next ?? LABEL_GAP_MM); if (next !== label.gap) { const { gap: _old, ...rest } = label; onChange(next === undefined ? rest : { ...rest, gap: next }); } }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         />
       </div>
