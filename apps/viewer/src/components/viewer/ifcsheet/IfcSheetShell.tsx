@@ -94,14 +94,15 @@ export function IfcSheetShell() {
       <div className="min-h-0 flex-1">
         <WallView />
       </div>
-      {/* The status bar's credit sits under this face, so the face says it itself. Screen chrome only: no sheet, print or export reads it. */}
-      <footer data-ifcsheet-credit className="flex h-6 shrink-0 items-center justify-end gap-4 border-t border-sky-300/10 px-4">
+      {/* The status bar's credit sits under this face, so the face says it itself. Screen chrome only: no sheet, print or export reads it.
+          The links sit at the top of a taller strip: a screen-sharing bar laid over the window's bottom edge covered them. */}
+      <footer data-ifcsheet-credit className="flex h-12 shrink-0 items-start justify-end gap-4 border-t border-sky-300/10 px-4 pt-1.5">
         <a
           href={STAR_URL}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t('star.linkAria')}
-          className="text-xs text-sky-200/60 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
+          className="text-xs text-sky-200/80 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
         >
           {t('star.link')}
         </a>
@@ -110,7 +111,7 @@ export function IfcSheetShell() {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t('shellChrome.statusBar.ifcliteAriaLabel')}
-          className="text-xs text-sky-200/60 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
+          className="text-xs text-sky-200/80 hover:text-sky-100 focus-visible:text-sky-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-300"
         >
           {t('shellChrome.statusBar.ifcliteLinkLabel')}
         </a>
