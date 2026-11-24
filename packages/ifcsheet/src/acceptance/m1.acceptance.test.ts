@@ -104,8 +104,8 @@ const WIDENED: Record<string, Case> = {
     name: 'ISSUE_034 HouseZ (Rhino ASIFC export)', file: models('ara3d/ISSUE_034_HouseZ.ifc'),
     storeys: ['Roof', 'Ground Floor', 'First Floor'], doors: 15, windows: 22, rooms: 5, sheets: SHEETS_2,
     emptyPlans: [], sections: 2, elevationDoorSymbols: 0, sectionCuts: ['IfcSlab', 'IfcWall'],
-    // The five are contained in the IfcSite, not in a storey (the exporter's), so they are not part of the building and have no mesh in the set.
-    notDrawn: ['0M9KrLWkn529SPpOcx$frM', '1K3nZJQ_r0BgmczZHJpALC', '1R1l_Ptm92jPIX_faq9iU4', '2lL91oE$j6mARYtSlbYVME', '0Vw_UM9Ib2z9oNgisD4Ilu'],
+    // Five doors and windows are contained in the IfcSite, not in a storey (the exporter's). Since #825 they stand on the building's footprint and are drawn with it, so none is left out.
+    notDrawn: [],
   },
 };
 
