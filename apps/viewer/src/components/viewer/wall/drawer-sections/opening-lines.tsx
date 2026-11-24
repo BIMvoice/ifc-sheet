@@ -18,7 +18,7 @@ function OpeningLines() {
     <section className="border-t border-sky-300/10 px-4 py-3">
       <label className="block">
         <span className="mb-1.5 block text-2xs font-medium uppercase tracking-widest text-cyan-400">{t('joinery.openingLines')}</span>
-        <select data-opening-lines className="h-7 w-full rounded-sm border border-sky-300/20 bg-transparent px-1 text-xs text-sky-100"
+        <select data-opening-lines aria-label={t('joinery.openingLines')} className="h-7 w-full rounded-sm border border-sky-300/20 bg-transparent px-1 text-xs text-sky-100"
           value={convention} onChange={(e) => setOpeningConvention(e.target.value as OpeningConvention)}>
           <option value="handle">{t('joinery.openingLines.handle')}</option>
           <option value="hinge">{t('joinery.openingLines.hinge')}</option>

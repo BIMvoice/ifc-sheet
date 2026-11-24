@@ -100,6 +100,8 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   // Door and window symbols follow the catalogue and the symbol mapping.
   const joineryTypes = useProjectStore((s) => s.joineryTypes);
   const joineryMapping = useProjectStore((s) => s.joineryMapping);
+  // And the direction of their opening lines (#870), which the symbols read from the project store.
+  const openingLines = useProjectStore((s) => s.openingLines);
   const materialsTable = useProjectStore((s) => s.materials);
   const phaseSource = useProjectStore((s) => s.phaseSource);
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
@@ -133,11 +135,11 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
         return { drawing, overlays };
       };
       out.set(vp.viewId, raw
-        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale], style)
+        ? memoOn(styledMemo, raw, [view, viewTemplates, vp.scale, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, openingLines, standard, sheetLocale], style)
         : style());
     }
     return out;
-  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, standard, sheetLocale]);
+  }, [sheet.viewports, views, viewTemplates, drawingOf, geometryResult, loadedModels, flips, mutationVersion, materialsTable, phaseSource, joineryTypes, joineryMapping, openingLines, standard, sheetLocale]);
   const placedSchedules = useSheetSchedules(sheet);
   const placedCivil = useSheetCivilDrawings(sheet);
   // A mark prints the number its reference reads now, not the one cached when the view was last open.

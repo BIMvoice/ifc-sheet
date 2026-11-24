@@ -51,6 +51,8 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
   // Symbols follow the catalogue and the symbol mapping too.
   const catalogue = useProjectStore((s) => s.joineryTypes);
   const mapping = useProjectStore((s) => s.joineryMapping);
+  // And the direction of the opening lines (#870).
+  const convention = useProjectStore((s) => s.openingLines);
   const symbols = useMemo(
     () => {
       if (!plane || !geometryResult?.meshes) return [];
@@ -58,8 +60,8 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
       if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail, level);
       return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail) : [];
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping are read through the project store
-    [plane, drawing, geometryResult, flips, hidden, phases, graphics, detail, level, catalogue, mapping],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping / convention are read through the project store
+    [plane, drawing, geometryResult, flips, hidden, phases, graphics, detail, level, catalogue, mapping, convention],
   );
   if (symbols.length === 0) return null;
   const path = (shapes: DraftShape[]) => shapes.map((s) => shapePath(s, transform, axis)).join('');
