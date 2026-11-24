@@ -44,6 +44,7 @@ import { PaperCard } from './PaperCard';
 import { ViewportCard } from './ViewportCard';
 import { DRAW_TOOLS, WALL_TOOLS, drawTarget, nudgeCutHeight, nudgeViewDepth, startWhenAttached } from './wall-actions';
 import { registerRailStart } from './repeat-tool';
+import { useSheetDrawingStart } from './sheet-drawing-start';
 import { steppedHandlers } from './stepped-keys';
 import { MIN_TO_ALIGN } from '@/project/viewport-align';
 import { arrangeActions, useSheetPicks } from './sheet-arrange';
@@ -228,16 +229,18 @@ export function SteppedSheet({ sheet, extent, proposals, initialFocus = null, on
   }, []);
 
   /** A tool's one-action twin: run it on the drawing in front (or the chosen one), its note appears in the drawing's command line. */
-  const runAll = (command: string): void => {
+  const runAll = (command: string): boolean => {
     cancelStart.current();
     ran.current = null;
     setAdding(false);
     const target = focusView ?? view;
-    if (!target || target.kind === '3d') return;
+    if (!target || target.kind === '3d') return false;
     setTool(null);
     setFocusId(target.id);
     cancelStart.current = startWhenAttached(target.id, command);
+    return true;
   };
+  useSheetDrawingStart(startTool, runAll);
 
   // Choosing a drawing brings its card back in place of the title block's.
   const choose = useCallback((viewportId: string | null): void => {
