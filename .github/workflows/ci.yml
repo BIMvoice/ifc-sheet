@@ -239,6 +239,11 @@ jobs:
       - name: The build produced the runtime and its types
         run: test -f packages/wasm/pkg/ifc-lite_bg.wasm && test -f packages/wasm/pkg/ifc-lite.d.ts
 
+      # build:wasm:fetch checks a downloaded runtime against this file, so a
+      # stale copy would let a runtime that is behind the Rust through (#856).
+      - name: The committed ifc-lite.d.ts matches what the Rust builds
+        run: git diff --exit-code -- packages/wasm/pkg/ifc-lite.d.ts
+
       - uses: actions/upload-artifact@v7
         with:
           name: wasm-pkg
@@ -776,6 +781,7 @@ jobs:
           q --test scripts/enforce-pipeline-labels.test.mjs
           q --test scripts/examples-current.test.mjs
           q --test scripts/fetch-prebuilt-wasm.test.mjs
+          q --test scripts/fetch-prebuilt-wasm.committed.test.mjs
           q --test scripts/fixtures/build-manifest.test.mjs
           q --test scripts/fixtures/download-url.test.mjs
           q --test scripts/fixtures/fetch-fixtures.test.mjs

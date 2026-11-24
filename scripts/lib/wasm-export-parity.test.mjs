@@ -95,3 +95,11 @@ test('multi-line js export lists and generators are read', () => {
   const js = `export function* gen() {}\nexport async function later() {}\nexport {\n  a,\n  b as c,\n};\n`;
   assert.deepEqual([...providedExports(js)].sort(), ['a', 'c', 'gen', 'later']);
 });
+
+test('#856 a class method the .d.ts declares and the runtime class lacks is named as Class.method', () => {
+  const dts = 'export class IfcAPI {\n    free(): void;\n    /** doc */\n    parse(a: string): void;\n    proposeScanElements(a: string): Uint8Array;\n    static make(): IfcAPI;\n}\n';
+  const js = 'export class IfcAPI {\n    free() {\n    }\n    parse(a) {\n    }\n    static make() {\n    }\n}\n';
+  assert.deepEqual(compareWasmExports(dts, js).missing, ['IfcAPI.proposeScanElements']);
+  const full = js.replace('    parse(a)', '    proposeScanElements(a) {\n    }\n    parse(a)');
+  assert.deepEqual(compareWasmExports(dts, full).missing, []);
+});
