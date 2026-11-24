@@ -296,10 +296,26 @@ export function corridorOf(store: IfcDataStore, elementId: number, view?: Mutabl
   return null;
 }
 
-/** Every corridor in the model. */
+/**
+ * Every corridor in the model. The property relations are read once to find the assemblies that carry the corridor's
+ * property set, and only those are read whole: reading every assembly whole read every relation once per assembly, which
+ * on a structural model of 76 assemblies and 5,440 relations took 3.5 s, on each plan of the set (#863).
+ */
 export function corridorsInStore(store: IfcDataStore, view?: MutablePropertyView | null): number[] {
   const r = new AnchorEntityReader(store, view);
-  return [...r.ids('IFCELEMENTASSEMBLY')].filter((id) => readCorridorRecord(store, id, view) !== null);
+  const assemblies = [...r.ids('IFCELEMENTASSEMBLY')];
+  if (assemblies.length === 0) return [];
+  const isAssembly = new Set(assemblies);
+  const carriesPset = new Set<number>();
+  for (const relId of r.ids('IFCRELDEFINESBYPROPERTIES')) {
+    const rel = r.entity(relId);
+    const related = rel && Array.isArray(rel.attributes[4]) ? rel.attributes[4] : [];
+    const hits = related.map(refId).filter((id): id is number => id !== null && isAssembly.has(id) && !carriesPset.has(id));
+    if (hits.length === 0) continue;
+    if (r.entity(refId(rel!.attributes[5]) ?? -1)?.attributes[2] !== CORRIDOR_PSET) continue;
+    for (const id of hits) carriesPset.add(id);
+  }
+  return assemblies.filter((id) => carriesPset.has(id) && readCorridorRecord(store, id, view) !== null);
 }
 
 export function regenerateCorridorInStore(store: IfcDataStore, editor: StoreEditor, anchor: SpatialAnchor, corridorId: number, spec: CorridorSpec, terrain: Tin | null): CorridorResult {
