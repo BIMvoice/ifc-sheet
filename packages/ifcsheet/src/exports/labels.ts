@@ -8,7 +8,8 @@ export {
   growRect, nearestOnRing, pointInRing, rectAround, rectHitsRing, rectInsideRing, rectRingGap, rectsOverlap, ringBounds, unionRect,
 } from '../labels/label-geometry.js';
 export { RectIndex } from '../labels/rect-index.js';
-export { LABEL_CLEAR_MM, LABEL_GAP_MM, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
+export { LABEL_CLEAR_MM, LABEL_GAP_MAX_MM, LABEL_GAP_MM, asLabelGap, labelSpacing, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
+export { projectTagAllTypes, readLabelSpec } from '../labels/label-spec-read.js';
 export {
   ATTRIBUTE_FIELDS, fieldPath, parseFieldRef, parseTemplate, templateFields as labelTemplateFields,
   type AttributeField, type FieldRef, type ParsedTemplate, type TemplateField,

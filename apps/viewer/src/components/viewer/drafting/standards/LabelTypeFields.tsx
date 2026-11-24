@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The fields of a parametric label type: the template, its frame, its leader and
- * the leader's end, and the placeholder for a missing value, with a picker that lists what the selected
+ * The fields of a parametric label type: the template, its frame, its leader,
+ * the leader's end and the clear space round it, and the placeholder for a missing value, with a picker that lists what the selected
  * model element actually has (attributes, property sets, quantity sets, its
  * type's) so nothing is typed from memory, and a preview of the result.
  */
@@ -14,13 +14,21 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import type { LabelSpec } from '@/catalogue/types';
 import { TEXT_FRAMES } from '@/drafting/text-block';
 import { listFields } from '@/labels/label-fields';
-import { DEFAULT_LEADER, LEADER_ENDS, LEADER_MODES, type LeaderEnd, type LeaderMode } from '@bimvoice/ifcsheet';
+import { DEFAULT_LEADER, LABEL_GAP_MAX_MM, LABEL_GAP_MM, LEADER_ENDS, LEADER_MODES, type LeaderEnd, type LeaderMode } from '@bimvoice/ifcsheet';
 import { labelElementOf } from '@/labels/label-element';
 import { MISSING_MODES, resolveTemplate } from '@bimvoice/ifcsheet';
 import { parseTemplate } from '@bimvoice/ifcsheet';
 import { useViewerStore } from '@/store';
 
 const INPUT = 'h-7 w-40 rounded-sm border border-zinc-300 dark:border-zinc-700 bg-transparent px-1 text-xs';
+
+/** The gap typed (paper millimetres), held between 0 and the largest; the standard one is none. Not a number keeps what was there. */
+function gapOf(typed: string, was: number | undefined): number | undefined {
+  const n = Number(typed.replace(',', '.'));
+  if (typed.trim() === '' || !Number.isFinite(n)) return was;
+  const gap = Math.min(LABEL_GAP_MAX_MM, Math.max(0, n));
+  return gap === LABEL_GAP_MM ? undefined : gap;
+}
 
 export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChange: (next: LabelSpec) => void }) {
   const { t, locale } = useTranslation();
@@ -67,6 +75,16 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
         <select aria-label={t('label.leaderEnd')} className={INPUT} value={label.leaderEnd ?? 'arrow'} onChange={(e) => { const { leaderEnd: _old, ...rest } = label; const end = e.target.value as LeaderEnd; onChange(end === 'arrow' ? rest : { ...rest, leaderEnd: end }); }}>
           {LEADER_ENDS.map((m) => <option key={m} value={m}>{t(`label.leaderEnd.${m}` as TranslationKey)}</option>)}
         </select>
+      </div>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <span className="text-zinc-500" title={t('label.gap.hint')}>{t('label.gap')}</span>
+        {/* The standard gap is the absence of the field (#842), so a type that never chose keeps its spacing. Taken on leaving the field. */}
+        <input
+          type="number" aria-label={t('label.gap')} title={t('label.gap.hint')} className={INPUT} min={0} max={LABEL_GAP_MAX_MM} step={0.5}
+          key={label.gap ?? LABEL_GAP_MM} defaultValue={label.gap ?? LABEL_GAP_MM}
+          onBlur={(e) => { const next = gapOf(e.target.value, label.gap); if (next !== label.gap) { const { gap: _old, ...rest } = label; onChange(next === undefined ? rest : { ...rest, gap: next }); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        />
       </div>
       <div className="flex min-h-8 items-center justify-between gap-3">
         <span className="text-zinc-500">{t('label.missing')}</span>

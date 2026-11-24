@@ -19,6 +19,20 @@ import { growRect, rectAround, rectHitsRing, ringBounds, unionRect, type Rect } 
 export const LABEL_GAP_MM = 1.5;
 /** Labels, and labels and annotations, keep at least this far apart, paper millimetres. */
 export const LABEL_CLEAR_MM = 0.75;
+/** The largest gap a label type may ask for, paper millimetres (#842). */
+export const LABEL_GAP_MAX_MM = 20;
+
+/** A label type's stored gap (#842): a number of paper millimetres from 0 to `LABEL_GAP_MAX_MM`, else none. */
+export const asLabelGap = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= LABEL_GAP_MAX_MM ? v : undefined);
+
+/**
+ * The clear space a label type's labels keep, paper millimetres (#842). Without a gap of its own (or with the standard
+ * one) a label stands `LABEL_GAP_MM` from its element and `LABEL_CLEAR_MM` from the other labels, the annotations and
+ * the other elements, as it always has; with one it keeps that gap from all of them.
+ */
+export function labelSpacing(gap?: number): { gap: number; clear: number } {
+  return gap === undefined || gap === LABEL_GAP_MM ? { gap: LABEL_GAP_MM, clear: LABEL_CLEAR_MM } : { gap, clear: gap };
+}
 
 export interface LayoutElement {
   id: string;
@@ -44,6 +58,8 @@ export interface LayoutScene {
   annotations: readonly Rect[] | RectIndex;
   /** Drawing units per paper millimetre. */
   paperUnit: number;
+  /** The label type's gap, paper millimetres (`LabelSpec.gap`, #842); absent: the standard spacing (`labelSpacing`). */
+  gapMm?: number;
 }
 
 export interface Placed {
@@ -56,7 +72,8 @@ export interface Placed {
 const BACKDROP_SHARE = 0.3;
 
 export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): Map<string, Placed> {
-  const gap = LABEL_GAP_MM * scene.paperUnit, clear = LABEL_CLEAR_MM * scene.paperUnit;
+  const spacing = labelSpacing(scene.gapMm);
+  const gap = spacing.gap * scene.paperUnit, clear = spacing.clear * scene.paperUnit;
   const bounds = scene.elements.map((e) => ({ e, b: ringBounds(e.ring) }));
   const all = unionRect(bounds.map((x) => x.b));
   const area = (r: Rect) => (r.x1 - r.x0) * (r.y1 - r.y0);

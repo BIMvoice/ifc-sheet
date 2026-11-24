@@ -29,6 +29,8 @@ export interface LabelSpec {
   leader?: LeaderMode;
   /** What the leader carries at its tip (#842): an arrow, a dot or nothing. Absent: an arrow. */
   leaderEnd?: LeaderEnd;
+  /** Clear space round each label, paper millimetres (#842): from its element, the other labels and what it keeps clear of. Absent: the standard spacing (`labelSpacing`). */
+  gap?: number;
 }
 
 export const DEFAULT_LABEL: LabelSpec = { template: '{Name}', missing: 'question' };
