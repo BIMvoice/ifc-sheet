@@ -96,7 +96,7 @@ export function planOpeningSymbols(
   const hosts = openingHostsOf(sources.live.dataStore);
   const curtainParts = curtainPartsOf(sources.live.dataStore);
   const own = level ? storeyMembersOf(sources.live.dataStore, level.storeyGlobalIds) : new Set<number>();
-  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []), hostWallMeshes(meshes, (id) => hosts.get(id)))
+  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []), hostWallMeshes(meshes, (id) => hosts.get(id)), (id) => hosts.has(id))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
 }
 

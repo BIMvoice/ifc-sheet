@@ -3,19 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * Plan symbols for doors and windows, as a floor plan shows them: a door
- * as its leaf drawn open at 90° with the swing arc, a window as its frame
- * with the glazing line. A plan cut through a door otherwise shows only
- * the gap in the wall (and whatever slice of the leaf the cut catches).
+ * Plan symbols for doors and windows, as a floor plan shows them: a door as its leaf drawn open at 90° with the swing arc, a window as
+ * its frame with the glazing line. A plan cut through a door otherwise shows only the gap in the wall (and whatever slice of the leaf the cut catches).
  *
- * Read from the geometry, so it works for any model, authored or loaded:
- * each door / window mesh the plan's cut passes through is projected onto
- * the drawing, and the minimum-area rectangle around that footprint gives
- * the opening — its long side the width, its short side the wall depth.
- * The swing side is not in the mesh: it comes from the door's stated operation
- * (`IfcDoor.OperationType`, else its type's: `door-operation.ts`) read against its
- * placement, and defaults to one side consistently (the drawing's +x / +y
- * normal) when the model states none; the per-door flips toggle from there.
+ * Read from the geometry, so it works for any model, authored or loaded: each door / window mesh the plan's cut passes through is projected
+ * onto the drawing, and the minimum-area rectangle around that footprint gives the opening — its long side the width, its short side the wall depth.
+ * The swing side is not in the mesh: it comes from the door's stated operation (`IfcDoor.OperationType`, else its type's: `door-operation.ts`)
+ * read against its placement, and defaults to one side consistently (the drawing's +x / +y normal) when the model states none; the per-door
+ * flips toggle from there.
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
@@ -25,6 +20,7 @@ import { doorSwingFlips, UNSTATED_DOOR_OPERATION, type DoorOperation } from './d
 import { typedPlanSymbol } from './joinery-plan-placement.js';
 import { drawingProjector, worldToDrawing } from './drawing-frame.js';
 import { fitToHostWall } from './opening-in-wall.js';
+import { doorPieces } from './door-pieces.js';
 import { fitWindowToHostWall } from './window-in-wall.js';
 import type { DraftShape, Pt } from './draft-types.js';
 
@@ -355,6 +351,7 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
  * world units): every door / window whose meshes the cut height passes
  * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together. `hostWallOf` gives the meshes of the wall
  * a door stands in (for a door the model hosts in none, the walls its footprint `read` stands in): its symbol is fitted to that wall's thickness and opening (`opening-in-wall.ts`).
+ * `hosted` says whether the model hosts a door (`openingHostsOf`): a door hosted in nothing that stands in a hosted door's gap is a piece of it, not drawn (`door-pieces.ts`).
  */
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
@@ -362,6 +359,7 @@ export function openingSymbols(
   operationOf: (id: number) => DoorOperation | null = () => null,
   hostedInCutWall: (id: number, cut: number) => boolean = () => false,
   hostWallOf: (id: number, read?: OpeningRect, plane?: SectionPlaneConfig) => readonly MeshData[] = () => [],
+  hosted: (id: number) => boolean = () => true,
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
@@ -374,15 +372,17 @@ export function openingSymbols(
     for (const mesh of el.meshes) l2w ??= mesh.localToWorld;
     byId.set(el.id, { kind: el.kind, meshes: el.meshes, l2w });
   }
-  const out: OpeningSymbol[] = [];
-  for (const [id, entry] of byId) {
+  const out: OpeningSymbol[] = [], reads = new Map<number, OpeningRect | null>();
+  const readOf = (id: number): OpeningRect | null => { if (!reads.has(id)) reads.set(id, footprintRect(byId.get(id)!.meshes, plane)); return reads.get(id) ?? null; };
+  const pieces = doorPieces([...byId].filter(([, e]) => e.kind === 'door').map(([id]) => id), readOf, hosted);
+  for (const [id, entry] of [...byId].filter(([id]) => !pieces.has(id))) {
     const configured = entry.l2w ? typedOf(id) : null;
     const typed = configured && entry.l2w ? typedPlanSymbol(configured.spec, worldPoints(entry.meshes), entry.l2w, plane, configured.flips, configured.source !== 'model') : null;
     if (typed) {
       out.push({ id, kind: entry.kind, shapes: typed.thin, heavy: typed.heavy, dashed: typed.dashed });
       continue;
     }
-    const read = footprintRect(entry.meshes, plane);
+    const read = readOf(id);
     if (!read) continue;
     // A door's or window's symbol stands in the wall's opening, not on its frame's footprint (`opening-in-wall.ts` #678, `window-in-wall.ts` #651).
     const hostMeshes = hostWallOf(id, entry.kind === 'door' ? read : undefined, plane);

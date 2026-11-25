@@ -78,7 +78,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId))
+  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId), (id) => hostWallRenderId(id) !== undefined)
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }
