@@ -24,13 +24,14 @@ import type { ScheduleData } from '@/joinery/schedule-data';
 import { scheduleDataOf } from '@/joinery/schedule-split';
 import { proposalInputForLevel } from './model-rooms';
 import { nextNumber, numberSheets } from './numbering';
-import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore } from './project-store';
+import { addProjectView, EMPTY_PROJECT, numberingScheme, updateProjectView, useProjectStore, withDefaultTemplates } from './project-store';
+import { forgetStartingSet, hasNewModel, isUntouched, rememberStartingSet, startingSet } from './starting-set';
 import { elevationDepth, elevationPlaneOffset, proposalDepth } from './set-defaults';
 import { seedProjectTitleBlock } from './sheets';
 import { ensureViewTemplates } from './view-template-start';
 import { getLocale, resolve, resolveName } from '@/i18n/registry';
 import { nameLanguageOf } from '@bimvoice/ifcsheet/names';
-import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, elevationName, freshProjectId, sameElevation } from './view-defaults';
+import { ELEVATION_DIRECTIONS, defaultPlanCutHeight, defaultViews, elevationName, freshProjectId, sameElevation } from './view-defaults';
 import { proposeSections, type SectionProposal } from './section-proposals';
 import type { PlanProjectView, ProjectLevel, ProjectSchedule, ProjectSheet, SectionProjectView, SheetTemplate, TemplateSeries } from './types';
 
@@ -97,12 +98,34 @@ export function startDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | 
   if (useProjectStore.getState().language === undefined) useProjectStore.setState({ language: nameLanguageOf(getLocale()) ?? 'en' });
   // The set a model opens with is the project's starting state, not something the person did: it is no undo step (#293).
   let added = 0;
+  const fresh = useProjectStore.getState().sheets.length === 0;
   runAsStartingState(() => {
     const report = ensureDrawingSet(meshes, bounds, { onOpen: true, ...(template ? { setTemplate: template.rules } : {}) });
     added = report.sheetsAdded;
     template?.extras(report);
   });
+  // The automatic set on an empty project is remembered, so a model that arrives after it lays it out again (`starting-set.ts`).
+  if (added > 0 && fresh && !template) rememberStartingSet(useProjectStore.getState());
+  else forgetStartingSet();
   return added > 0;
+}
+
+/**
+ * A model arrived after the starting set was laid out (#863: several models open one after the other, and the set
+ * starts on the first): while the project is still that set, untouched, lay it out again for every loaded model, as
+ * if they had all been there at the start. Returns whether it did. A set the person has worked on is kept.
+ */
+export function restartDrawingSet(meshes: MeshData[] | null, bounds: AxisBounds | null): boolean {
+  const set = startingSet();
+  const now = useProjectStore.getState();
+  if (!set || !bounds || !meshes || meshes.length === 0 || !hasNewModel(set, now)) return false;
+  if (!isUntouched(set, now)) {
+    forgetStartingSet();
+    return false;
+  }
+  // The views a project starts with for these levels (`syncProjectWithModels` on an empty project), then the start itself.
+  runAsStartingState(() => useProjectStore.setState({ views: withDefaultTemplates([], defaultViews(now.levels), now.viewTemplates), sheets: [] }));
+  return startDrawingSet(meshes, bounds);
 }
 
 // ---- Make the set whole (the one planner behind the Wall's start and DRAFTSET) ----
