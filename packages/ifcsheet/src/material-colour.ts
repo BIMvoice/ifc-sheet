@@ -14,9 +14,12 @@
  */
 
 import type { SectionConfig } from '@ifc-lite/drawing-2d';
-import { extractMaterialsOnDemand, type IfcDataStore } from '@ifc-lite/parser';
+import { extractMaterialsOnDemand, type IfcDataStore, type MaterialInfo } from '@ifc-lite/parser';
 import type { MeshData } from '@ifc-lite/geometry';
+import { pieceMaterialOf, type MaterialMakeup, type PieceNaming } from './dominant-material.js';
 import type { MaterialSource } from './material-drawing.js';
+
+export { pieceMaterialOf, type MaterialMakeup, type PieceNaming } from './dominant-material.js';
 import { IFC_FILL, materialGraphics, type ProjectMaterial } from './materials.js';
 import { surfaceColourOf, surfaceFills, type SurfaceFill } from './surface-fills.js';
 
@@ -34,30 +37,35 @@ export function cutFillOf(fill: string | null | undefined, color?: readonly numb
   return (color && surfaceColourOf(color)) || undefined;
 }
 
-const soleNames = new WeakMap<object, Map<number, string | null>>();
+const makeups = new WeakMap<object, Map<number, MaterialMakeup | null>>();
+
+/** An element's material definition as read from the model (`extractMaterialsOnDemand`), null when it has none a cut is named by. */
+export function makeupOf(info: MaterialInfo | null): MaterialMakeup | null {
+  switch (info?.type) {
+    case 'Material': return { kind: 'material', name: info.name ?? null };
+    case 'MaterialLayerSet': return { kind: 'layers', layers: (info.layers ?? []).map((l) => ({ name: l.materialName ?? null, thickness: l.thickness, ventilated: l.isVentilated })) };
+    case 'MaterialConstituentSet': return { kind: 'constituents', constituents: (info.constituents ?? []).map((c) => ({ name: c.materialName ?? null, fraction: c.fraction })) };
+    case 'MaterialList': return { kind: 'list', names: (info.materials ?? []).map((m) => m.name) };
+    default: return null;
+  }
+}
+
+/** The element's material definition (the one associated with it or its type), read once per element. */
+export function materialMakeupOf(store: IfcDataStore, entityId: number): MaterialMakeup | null {
+  let byEntity = makeups.get(store);
+  if (!byEntity) makeups.set(store, (byEntity = new Map()));
+  if (!byEntity.has(entityId)) byEntity.set(entityId, makeupOf(extractMaterialsOnDemand(store, entityId)));
+  return byEntity.get(entityId) ?? null;
+}
 
 /**
  * The IfcMaterial name of an element made of ONE material (the material associated with it or its type; a layer set or constituent set
- * whose members are all the same material), `null` when it has none or several. Read once per element.
+ * whose members are all the same material), `null` when it has none or several.
  */
-export function soleMaterialName(store: IfcDataStore, entityId: number): string | null {
-  let byEntity = soleNames.get(store);
-  if (!byEntity) soleNames.set(store, (byEntity = new Map()));
-  const known = byEntity.get(entityId);
-  if (known !== undefined) return known;
-  const info = extractMaterialsOnDemand(store, entityId);
-  const names = new Set<string>();
-  if (info) {
-    if (info.type === 'Material' && info.name) names.add(info.name);
-    for (const l of info.layers ?? []) names.add(l.materialName ?? '');
-    for (const c of info.constituents ?? []) names.add(c.materialName ?? '');
-    for (const m of info.materials ?? []) names.add(m.name);
-  }
-  const only = names.size === 1 ? [...names][0] : null;
-  const name = only && only.trim() ? only : null;
-  byEntity.set(entityId, name);
-  return name;
-}
+export const soleMaterialName = (store: IfcDataStore, entityId: number): string | null => pieceMaterialOf(materialMakeupOf(store, entityId), 'sole');
+
+/** The IfcMaterial an element cut in one piece is drawn by, for `naming`: its one material, or its dominant one (`dominant-material.ts`). */
+export const pieceMaterialName = (store: IfcDataStore, entityId: number, naming: PieceNaming): string | null => pieceMaterialOf(materialMakeupOf(store, entityId), naming);
 
 /**
  * The IfcMaterial a mesh is painted by: the layer it slices (`materialId`, the name of that IfcMaterial), else its element's one material.
@@ -71,12 +79,12 @@ export function meshMaterialName(store: IfcDataStore, entityId: number, material
 
 /**
  * How the headless sheets name a cut face's IfcMaterial for `materialResolver` (the app names it through its loaded model): the layer a
- * band is (`materialId`), else the one material of an element cut in a piece. Layer sets are not read here yet, so a layer thinner than
- * 2 mm that the section does not cut draws no membrane line on a headless sheet; a material set as a membrane still does.
+ * band is (`materialId`), else the material of an element cut in a piece (`pieceMaterialName`). Layer sets are not read here yet, so a
+ * layer thinner than 2 mm that the section does not cut draws no membrane line on a headless sheet; a material set as a membrane still does.
  */
 export function headlessMaterialSource(store: IfcDataStore): MaterialSource {
   return {
-    nameOf: (p, soleToo) => (p.materialId !== undefined ? meshMaterialName(store, p.entityId, p.materialId) : soleToo ? soleMaterialName(store, p.entityId) : null),
+    nameOf: (p, naming) => (p.materialId !== undefined ? meshMaterialName(store, p.entityId, p.materialId) : pieceMaterialName(store, p.entityId, naming)),
     layers: () => null,
   };
 }

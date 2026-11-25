@@ -12,12 +12,12 @@
 
 import type { Drawing2D, DrawingPolygon } from '@ifc-lite/drawing-2d';
 import type { IfcDataStore } from '@ifc-lite/parser';
-import { meshMaterialName } from '@bimvoice/ifcsheet/material-colour';
+import { materialMakeupOf, meshMaterialName, pieceMaterialOf, type PieceNaming } from '@bimvoice/ifcsheet/material-colour';
 import { useViewerStore } from '@/store';
 import { layerSetOf, liveConforms, relationSnapshot, type LiveModel, type RelationReads } from '@/lib/commands/modeling/authored-kinds';
 import { idOf } from '@/joinery/object-id';
 import { useProjectStore } from './project-store';
-import { materialDrawing, materialResolver, type LayerRef, type MaterialDrawing } from '@bimvoice/ifcsheet/material-drawing';
+import { materialDrawing, materialResolver, pieceNaming, type LayerRef, type MaterialDrawing } from '@bimvoice/ifcsheet/material-drawing';
 import { ifcMaterialName } from './materials';
 
 export function modelOf(entityId: number) {
@@ -34,34 +34,36 @@ function materialName(m: NonNullable<ReturnType<typeof modelOf>>, materialId: nu
 type ModelRef = NonNullable<ReturnType<typeof modelOf>>;
 
 /**
- * The one IfcMaterial an element is made of, when the section generator cut it into no layer bands (it only does for an element of
- * several materials): its layer set when all the layers are one material, else the material associated with it directly.
+ * The IfcMaterial an element cut in one piece is drawn by, for `naming` (the engine's `pieceMaterialOf`, which the headless sheets ask
+ * too): its layer set read through the edit overlay, else the material associated with it directly, else a constituent set or a material
+ * list as the engine reads it (the app edits neither).
  */
-function soleMaterialName(m: ModelRef, relations: RelationReads): string | null {
+function pieceMaterialName(m: ModelRef, relations: RelationReads, naming: PieceNaming): string | null {
+  if (naming === 'none') return null;
   const live: LiveModel = { dataStore: m.dataStore, view: m.view, readOnly: true };
   const set = layerSetOf(live, m.expressId, relations);
   if (set) {
-    const ids = new Set(set.layers.map((l) => l.materialId));
-    const only = ids.size === 1 ? [...ids][0] : null;
-    return only === null ? null : materialName(m, only);
+    const layers = set.layers.map((l) => ({ name: l.materialId === null ? null : materialName(m, l.materialId), thickness: l.thickness, ventilated: l.ventilated }));
+    return pieceMaterialOf({ kind: 'layers', layers }, naming);
   }
   const direct = relations.relatingOf('IfcRelAssociatesMaterial', m.expressId);
-  return direct !== null && liveConforms(m, direct, 'IfcMaterial') ? materialName(m, direct) : null;
+  if (direct !== null && liveConforms(m, direct, 'IfcMaterial')) return materialName(m, direct);
+  const stored = materialMakeupOf(m.dataStore, m.expressId);
+  return stored?.kind === 'constituents' || stored?.kind === 'list' ? pieceMaterialOf(stored, naming) : null;
 }
 
-/**
- * The IfcMaterial a cut face is drawn by: its layer's, or (with `table` rows to apply) the one material of an element cut in a
- * single piece (`soleMaterialName`).
- */
-function polygonMaterialName(p: DrawingPolygon, soleToo: boolean): string | null {
+/** The IfcMaterial a cut face is drawn by: its layer's, else that of an element cut in a single piece, for `naming` (`pieceNaming`). */
+function polygonMaterialName(p: DrawingPolygon, naming: PieceNaming): string | null {
   const m = modelOf(p.entityId);
   if (!m) return null;
   if (p.materialId !== undefined) return materialName(m, p.materialId);
-  return soleToo ? soleMaterialName(m, relationsFor(m)) : null;
+  return pieceMaterialName(m, relationsFor(m), naming);
 }
 
-/** The IfcMaterial a cut face is made of, table or not: what `styledDrawing` joins like cut faces by (#349). */
-export const cutMaterialName = (p: DrawingPolygon): string | null => polygonMaterialName(p, true);
+const projectTable = () => useProjectStore.getState().materials ?? [];
+
+/** The IfcMaterial a cut face is made of, table or not: what `styledDrawing` joins like cut faces by (#349), as the engine's `materialResolver(...).nameOf`. */
+export const cutMaterialName = (p: DrawingPolygon): string | null => polygonMaterialName(p, pieceNaming(projectTable(), true));
 
 /** The IfcMaterial a mesh is painted by (`meshMaterialName`, the engine's, which the headless sheets name it with too); null for one with none. */
 export function meshMaterialOf(mesh: { expressId: number; materialId?: number }): string | null {
@@ -72,14 +74,14 @@ export function meshMaterialOf(mesh: { expressId: number; materialId?: number })
 /** The distinct IfcMaterial names cut in a drawing (empty when there is none). */
 export function drawingMaterialNames(drawing: Drawing2D | null): string[] {
   if (!drawing) return [];
-  const soleToo = (useProjectStore.getState().materials ?? []).length > 0;
+  const naming = pieceNaming(projectTable(), false);
   const names = new Map<string, string>();
   const seen = new Set<string>();
   for (const p of drawing.cutPolygons) {
     const key = `${p.entityId}:${p.materialId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const name = polygonMaterialName(p, soleToo);
+    const name = polygonMaterialName(p, naming);
     if (name) names.set(name.trim().toLowerCase(), name);
   }
   return [...names.values()];
