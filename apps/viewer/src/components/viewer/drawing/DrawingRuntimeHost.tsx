@@ -28,6 +28,7 @@ import { useDrawing2DPersistence } from '@/hooks/useDrawing2DPersistence';
 import { useDrawingMarkupRestoreOnLoad } from '@/hooks/useDrawingMarkupRestoreOnLoad';
 import { placedViewGeometry } from '@/lib/model-placement/view-geometry';
 import { publishDrawingRuntime } from '@/lib/drawing/drawing-runtime';
+import { useMainThreadDrawingNotice } from './useMainThreadDrawingNotice';
 
 interface DrawingRuntimeHostProps {
   mergedGeometry?: GeometryResult | null;
@@ -39,6 +40,8 @@ export function DrawingRuntimeHost({ mergedGeometry, computedIsolatedIds }: Draw
   // `useDrawingMarkupRestoreOnLoad`'s module doc (#4153 vs #4159).
   useDrawing2DPersistence();
   useDrawingMarkupRestoreOnLoad();
+  // Every view's drawing, sheets included, goes through the one generation client: one notice for all of them (#863).
+  useMainThreadDrawingNotice();
 
   // A drawing view is on screen when the panel is docked in the bottom strip,
   // floating, or popped out (#5493). Opening another bottom panel clears the

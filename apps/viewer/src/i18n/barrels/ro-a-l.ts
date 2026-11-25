@@ -29,6 +29,7 @@ import { cutawayAxoRo } from '../catalogues/cutaway-axo.ro';
 import { documentRo } from '../catalogues/document.ro';
 import { draftingRo } from '../catalogues/drafting.ro';
 import { drawOrderRo } from '../catalogues/draw-order.ro';
+import { drawingMainThreadRo } from '../catalogues/drawing-main-thread.ro';
 import { draftingStandardsRo } from '../catalogues/drafting-standards.ro';
 import { dxfViewRo } from '../catalogues/dxf-view.ro';
 import { dxfWorkingFileRo } from '../catalogues/dxf-working-file.ro';
@@ -95,6 +96,7 @@ export const roAL = {
   ...documentRo,
   ...draftingRo,
   ...drawOrderRo,
+  ...drawingMainThreadRo,
   ...draftingStandardsRo,
   ...dxfViewRo,
   ...dxfWorkingFileRo,
