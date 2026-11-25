@@ -5,7 +5,9 @@
 /**
  * On every sheet of the starting set, each drawing lies inside the frame of its viewport: the box `fitViewportBox`
  * gives an auto-fit viewport about its `center`, which the app's sheet clips the drawing to, the drawing placed as
- * the sheet places it (`placer`: `center`, else the middle of its bounds). Before, a plan of a storey smaller than the
+ * the sheet places it (`placer`: `center`, else the middle of its bounds). A plan the layout centred is framed on
+ * the part of it inside its room (`boundsInRoom`, the engine's rule): skolebygg's survey marker, 161 m away and left
+ * out of the extent, is clipped, and no plan's frame is larger than its room and the margin. Before, a plan of a storey smaller than the
  * building ran past its frame: skolebygg A-102 Plan 03 by 36 mm, A-103 Plan 04 by 66 mm, schependomlaan A-103 by
  * 30 mm. A drawing that fitted keeps the box it had, and no drawing moves (the placement is not changed).
  *
@@ -18,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { generateDefaultSet } from './index.js';
 import { generateViewDrawings, openModel } from './headless.js';
+import { boundsInRoom } from './bounds-in-room.js';
+import { viewExtent } from './drawing-set.js';
 import { placer } from './sheet-graphic.js';
 import { fitViewportBox } from './viewport-fit.js';
 import { terrainMeshesOf } from './view-drawings.js';
@@ -46,16 +50,25 @@ for (const [name, path] of Object.entries(MODELS)) {
       for (const sheet of set.document.sheets) {
         for (const vp of sheet.viewports ?? []) {
           const d = drawings.get(vp.viewId);
-          if (!d || !Number.isFinite(d.bounds.min.x) || (vp.width > 0 && vp.height > 0)) continue;
+          const view = set.document.views.find((v) => v.id === vp.viewId);
+          if (!d || !view || !Number.isFinite(d.bounds.min.x) || (vp.width > 0 && vp.height > 0)) continue;
+          // What the sheet frames: a plan the layout centred, on the part inside its room (an element the framing left out is clipped).
+          const framed = vp.center ? boundsInRoom(view, vp.center, d.bounds, model.extent) : d.bounds;
           const at = placer(d, vp);
-          const corners = [d.bounds.min, d.bounds.max, { x: d.bounds.min.x, y: d.bounds.max.y }, { x: d.bounds.max.x, y: d.bounds.min.y }].map(at);
-          const box = fitViewportBox(d.bounds, vp.scale, vp.center);
+          const corners = [framed.min, framed.max, { x: framed.min.x, y: framed.max.y }, { x: framed.max.x, y: framed.min.y }].map(at);
+          const box = fitViewportBox(framed, vp.scale, vp.center);
           const past = Math.max(0, ...corners.flatMap((p) => [vp.x - box.width / 2 - p.x, p.x - vp.x - box.width / 2, vp.y - box.height / 2 - p.y, p.y - vp.y - box.height / 2]));
-          expect(past, `${sheet.number} ${vp.viewId}: paper mm of the drawing past its frame`).toBeLessThan(1e-6);
-          // Centred on its bounds within the margin, it fitted before: its box is the one it had.
+          expect(past, `${sheet.number} ${view.name}: paper mm of the building's drawing past its frame`).toBeLessThan(1e-6);
           const k = 1000 / vp.scale;
+          if (vp.center && view.kind === 'plan') {
+            // Never larger than the room the layout made and its margin: a far element does not grow it (skolebygg's survey marker grew it 315 mm).
+            const room = viewExtent(view, model.extent);
+            expect(box.width, `${sheet.number} ${view.name}: frame width`).toBeLessThanOrEqual(room.w * k + 20 + 1e-6);
+            expect(box.height, `${sheet.number} ${view.name}: frame height`).toBeLessThanOrEqual(room.h * k + 20 + 1e-6);
+          }
+          // Centred on its bounds within the margin, with nothing left out, it fitted before: its box is the one it had.
           const off = vp.center ? Math.max(Math.abs((d.bounds.min.x + d.bounds.max.x) / 2 - vp.center.x), Math.abs((d.bounds.min.y + d.bounds.max.y) / 2 - vp.center.y)) * k : 0;
-          if (off <= 10) expect(box, `${sheet.number} ${vp.viewId}: the box of a drawing that fitted`).toEqual(fitViewportBox(d.bounds, vp.scale));
+          if (off <= 10 && framed === d.bounds) expect(box, `${sheet.number} ${view.name}: the box of a drawing that fitted`).toEqual(fitViewportBox(d.bounds, vp.scale));
           checked++;
         }
       }

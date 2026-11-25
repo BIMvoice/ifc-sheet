@@ -75,6 +75,7 @@ allTemplates: value
 automaticDepthOfSpan: value
 boundedProjectionBands: value
 boundsFromIndex: value
+boundsInRoom: value
 boxGap: value
 buildDrawingSet: value
 buildingElementIds: value

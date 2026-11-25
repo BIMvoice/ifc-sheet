@@ -32,6 +32,7 @@ export {
   groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetSeries, viewCentre, viewExtent,
   withViewHung, type Arrangement, type ModelExtent, type SetGroup, type SetInput, type SheetLayout,
 } from '../drawing-set.js';
+export { boundsInRoom } from '../bounds-in-room.js';
 export { sheetScaleReason, type Reason } from '../scale-reason.js';
 export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from '../storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from '../entity-bounds.js';
