@@ -163,7 +163,8 @@ export function sheetsShowing(viewId: string, sheets: readonly ProjectSheet[] = 
 /** The viewport's box on the paper: its own size, or the drawing's extent when it fits automatically. */
 export function viewportBox(vp: SheetViewport, bounds: { min: { x: number; y: number }; max: { x: number; y: number } } | null): { width: number; height: number } {
   if (vp.width > 0 && vp.height > 0) return { width: vp.width, height: vp.height };
-  return bounds ? fitViewportBox(bounds, vp.scale) : { width: 120, height: 80 };
+  // About `vp.center` when it has one: `viewportTransform` puts that point, not the middle of the bounds, at the viewport's position.
+  return bounds ? fitViewportBox(bounds, vp.scale, vp.center) : { width: 120, height: 80 };
 }
 
 /** Whether the viewport fits its content by itself (no manual size). A manual size is a crop, and a crop clips. */

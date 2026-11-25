@@ -24,12 +24,27 @@ export function mmPerMetre(viewport: Pick<SheetViewport, 'scale'>): number {
   return 1000 / viewport.scale;
 }
 
-/** A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm. */
-export function fitViewportBox(bounds: { min: { x: number; y: number }; max: { x: number; y: number } }, scale: number): { width: number; height: number } {
+/**
+ * A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm, centred on the viewport's position.
+ *
+ * With `centre` (the viewport's `center`: the drawing point put at that position), the drawing lands off the box's
+ * middle when `centre` is not the middle of `bounds`: a plan of the set is centred on the model's extent (`viewCentre`),
+ * and a storey smaller than the building sits to one side of it. The box then widens on both sides by that offset,
+ * keeping the margin past it, so it holds the drawing where it lands; before, the frame cut the drawing off
+ * (skolebygg A-102, 36 mm). A drawing off-centre by no more than the margin keeps the box it had.
+ */
+export function fitViewportBox(
+  bounds: { min: { x: number; y: number }; max: { x: number; y: number } }, scale: number, centre: { x: number; y: number } | null = null,
+): { width: number; height: number } {
   const k = 1000 / scale;
   const margin = 10;
+  // How far past the drawing's half-size the box reaches on each side, paper mm: the margin, or the offset and the margin.
+  const reach = (lo: number, hi: number, c: number | undefined): number => {
+    const off = c === undefined ? 0 : Math.abs((lo + hi) / 2 - c) * k;
+    return off > margin ? off + margin : margin;
+  };
   return {
-    width: Math.max(40, (bounds.max.x - bounds.min.x) * k + margin * 2),
-    height: Math.max(30, (bounds.max.y - bounds.min.y) * k + margin * 2),
+    width: Math.max(40, (bounds.max.x - bounds.min.x) * k + reach(bounds.min.x, bounds.max.x, centre?.x) * 2),
+    height: Math.max(30, (bounds.max.y - bounds.min.y) * k + reach(bounds.min.y, bounds.max.y, centre?.y) * 2),
   };
 }
