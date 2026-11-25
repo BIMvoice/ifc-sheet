@@ -43,7 +43,7 @@ const DEFAULT_OPTIONS: LineMergerOptions = {
  */
 export function mergeDrawingLines(
   lines: DrawingLine[],
-  options: Partial<LineMergerOptions> = {}
+  options: Partial<LineMergerOptions> = {}, tick?: () => void, // tick: per group merged, the drawing worker's heartbeat (#863)
 ): DrawingLine[] {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
@@ -62,8 +62,8 @@ export function mergeDrawingLines(
   const result: DrawingLine[] = [];
 
   for (const groupLines of groups.values()) {
-    const merged = mergeLineGroup(groupLines, opts);
-    result.push(...merged);
+    tick?.();
+    result.push(...mergeLineGroup(groupLines, opts));
   }
 
   return result;

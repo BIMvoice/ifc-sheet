@@ -57,6 +57,8 @@ export async function runGenerateJob(
   job: GenerateJob,
   outlineFn: MeshOutline2dFn | undefined,
   onProgress?: ProgressFn,
+  /** Called often while the drawing is made (`GeneratorOptions.onTick`): the worker's heartbeat (#863). */
+  onTick?: () => void,
 ): Promise<Drawing2D> {
   if (job.axonometric) return drawAxonometricView(job.meshes, job.axonometric.view, job.axonometric.levels, onProgress);
   const { includeHiddenLines, includeProjection, includeEdges, mergeLines, outline } = job.options;
@@ -70,6 +72,7 @@ export async function runGenerateJob(
       mergeLines,
       outlineProvider: outline && outlineFn ? createMeshOutlineProvider(outlineFn) : undefined,
       onProgress,
+      onTick,
     }, job.profiles);
   } finally {
     generator.dispose();

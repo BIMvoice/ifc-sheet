@@ -16,7 +16,7 @@ import { createSectionConfig } from '@ifc-lite/drawing-2d';
 import type { MeshData } from '@ifc-lite/geometry';
 import {
   __setGenerationWorkerFactoryForTest, generateDrawing, silenceLimitMs,
-  SILENCE_BASE_MS, SILENCE_MAX_MS, SILENCE_PER_MESH_MS, type DrawingRequest, type GenerationWorker,
+  SILENCE_BASE_MS, SILENCE_MAX_MS, SILENCE_PER_VERTEX_MS, type DrawingRequest, type GenerationWorker,
 } from './client';
 import type { GenerationRequest } from './drawing-generation.worker';
 
@@ -151,71 +151,55 @@ describe('the packs a worker holds (#154)', () => {
   });
 });
 
-describe('a silent worker is given up on in proportion to its job (#154)', () => {
-  it('the limit grows with the meshes drawn and is capped', () => {
+
+describe('a silent worker is given up on (#154, #863)', () => {
+  it('the limit grows with the largest mesh of the job and is capped', () => {
     assert.equal(silenceLimitMs(0), SILENCE_BASE_MS);
-    assert.equal(silenceLimitMs(1_000), SILENCE_BASE_MS + 1_000 * SILENCE_PER_MESH_MS);
-    assert.equal(silenceLimitMs(10_000_000), SILENCE_MAX_MS);
-    assert.ok(SILENCE_BASE_MS < 60_000, 'a small view whose worker died does not wait minutes');
+    assert.equal(silenceLimitMs(100_000), SILENCE_BASE_MS + 100_000 * SILENCE_PER_VERTEX_MS);
+    assert.equal(silenceLimitMs(1e12), SILENCE_MAX_MS);
   });
 
-  /** Start a one-mesh view on a worker that never answers, with the clock under test's control. */
+  /** Start a one-mesh view on workers that never answer, with the clock under test's control. */
   async function silentView() {
     const stub = install(() => {});
     mock.timers.enable({ apis: ['setTimeout'] });
     let settled = false;
     const result = generateDrawing(request([ALL[0]]), undefined).then((d) => { settled = true; return d; });
     await until(() => stub.generates() === 1);
-    return { stub, result, settled: () => settled, limit: silenceLimitMs(1) };
+    return { stub, result, settled: () => settled, limit: silenceLimitMs(3) };
   }
   const turn = () => new Promise((r) => setImmediate(r));
 
-  it('a small view falls back to the main thread when its worker says nothing for the limit, and not before', async () => {
+  it('a view whose worker says nothing for the limit is tried once on a fresh worker, then drawn on the main thread', async () => {
     const warn = mock.method(console, 'warn', () => {});
-    const { result, settled, limit } = await silentView();
+    const { stub, result, settled, limit } = await silentView();
     mock.timers.tick(limit - 1);
     await turn();
     assert.equal(settled(), false, 'still waiting one millisecond before the limit');
     mock.timers.tick(1);
+    await until(() => stub.generates() === 2);
+    assert.equal(stub.workers.length, 2, 'the silent worker was replaced by a fresh one, which got the view');
+    assert.equal(settled(), false);
+    mock.timers.tick(limit);
     mock.timers.reset();
     const drawing = await result;
-    assert.ok(drawing, 'the view is drawn in this realm');
-    assert.match(String(warn.mock.calls.at(-1)?.arguments.join(' ')), /silent for [\d.]+ s/);
+    assert.ok(drawing, 'silent on the fresh worker too: the view is drawn in this realm');
+    assert.match(String(warn.mock.calls.at(-1)?.arguments[0]), /silent for [\d.]+ s \(job \d+\), the second time/);
     warn.mock.restore();
   });
 
   it('a word from the worker restarts the wait', async () => {
     const warn = mock.method(console, 'warn', () => {});
-    const { stub, result, settled, limit } = await silentView();
+    const { stub, settled, limit } = await silentView();
     mock.timers.tick(limit - 1);
     stub.workers[0].onmessage?.({ data: { type: 'progress', id: stub.jobs[0].id, stage: 'cut', progress: 0.5 } });
     mock.timers.tick(limit - 1);
     await turn();
     assert.equal(settled(), false, 'the progress message restarted the wait');
-    mock.timers.tick(1);
+    assert.equal(stub.workers.length, 1, 'and the worker was kept');
+    assert.equal(warn.mock.calls.length, 0);
+    stub.workers[0].onmessage?.({ data: { type: 'done', id: stub.jobs[0].id, drawing: { lines: [], cutPolygons: [], projectionPolygons: [] } as never } });
     mock.timers.reset();
-    await result;
-    warn.mock.restore();
-  });
-
-  it('a word about one job keeps the jobs queued behind it alive', async () => {
-    const warn = mock.method(console, 'warn', () => {});
-    const stub = install(() => {});
-    mock.timers.enable({ apis: ['setTimeout'] });
-    const settled = [false, false];
-    const results = [[ALL[0]], [ALL[1]]].map((m, i) => generateDrawing(request(m), undefined).then((d) => { settled[i] = true; return d; }));
-    await until(() => stub.generates() === 2);
-    const limit = silenceLimitMs(1);
-    mock.timers.tick(limit - 1);
-    // The worker is busy with the first job and reports on it; the second waits its turn.
-    stub.workers[0].onmessage?.({ data: { type: 'progress', id: stub.jobs[0].id, stage: 'cut', progress: 0.5 } });
-    mock.timers.tick(limit - 1);
-    await new Promise((r) => setImmediate(r));
-    assert.deepEqual(settled, [false, false], 'the queued job was not given up on while its worker was talking');
-    assert.equal(warn.mock.calls.length, 0, 'neither job fell back to the main thread');
-    mock.timers.tick(1);
-    mock.timers.reset();
-    await Promise.all(results);
     warn.mock.restore();
   });
 });

@@ -19,7 +19,7 @@ import {
   __setGenerationWorkerFactoryForTest, generateDrawing, silenceLimitMs, IDLE_TERMINATE_MS,
   type DrawingRequest, type GenerationWorker,
 } from './client';
-import { withHeartbeat } from './drawing-generation.worker';
+import { heartbeat, withHeartbeat } from './drawing-generation.worker';
 import type { GenerationRequest } from './drawing-generation.worker';
 
 const mesh = (expressId: number): MeshData => ({
@@ -65,7 +65,7 @@ describe('a busy worker that sends heartbeats is not declared dead', () => {
     let settled = false;
     const result = generateDrawing(request(SMALL, SMALL), undefined).then((d) => { settled = true; return d; });
     await until(() => stub.sent().length === 1);
-    const limit = silenceLimitMs(1);
+    const limit = silenceLimitMs(3);
     const id = stub.sent()[0].id;
     for (let i = 0; i < 5; i++) {
       mock.timers.tick(limit - 1);
@@ -88,7 +88,7 @@ describe('a busy worker that sends heartbeats is not declared dead', () => {
     const all = [mesh(1), mesh(2)];
     const results = [[all[0]], [all[1]]].map((m, i) => generateDrawing(request(all, m), undefined).then((d) => { settled[i] = true; return d; }));
     await until(() => stub.sent().length === 2);
-    const limit = silenceLimitMs(1);
+    const limit = silenceLimitMs(3);
     for (let i = 0; i < 3; i++) {
       mock.timers.tick(limit - 1);
       stub.worker().onmessage?.({ data: { type: 'alive', id: stub.sent()[0].id } });
@@ -104,13 +104,15 @@ describe('a busy worker that sends heartbeats is not declared dead', () => {
 });
 
 describe('a worker that truly goes silent is still given up on', () => {
-  it('a small view is drawn on the main thread after the limit with no heartbeat', async () => {
+  it('a small view is drawn on the main thread after the limit with no heartbeat, on its worker and on a fresh one', async () => {
     const warn = mock.method(console, 'warn', () => {});
     const stub = silentWorker();
     mock.timers.enable({ apis: ['setTimeout'] });
     const result = generateDrawing(request(SMALL, SMALL), undefined);
     await until(() => stub.sent().length === 1);
-    mock.timers.tick(silenceLimitMs(1));
+    mock.timers.tick(silenceLimitMs(3));
+    await until(() => stub.sent().length === 2);
+    mock.timers.tick(silenceLimitMs(3));
     mock.timers.reset();
     assert.ok(await result, 'drawn in this realm');
     assert.match(String(warn.mock.calls.at(-1)?.arguments.join(' ')), /silent for [\d.]+ s/);
@@ -118,16 +120,21 @@ describe('a worker that truly goes silent is still given up on', () => {
   });
 });
 
-describe('withHeartbeat', () => {
-  it('beats at most once per interval, and every call still reaches the binding', () => {
+describe('heartbeat and withHeartbeat', () => {
+  it('beats at most once per interval, however often it is called', () => {
     let clock = 0;
     let beats = 0;
-    let calls = 0;
-    const fn = withHeartbeat((() => { calls++; return undefined; }) as unknown as MeshOutline2dFn, () => { beats++; }, 1_000, () => clock);
-    assert.ok(fn);
-    for (let i = 0; i < 10; i++) { clock += 300; (fn as (...a: unknown[]) => unknown)(); }
-    assert.equal(calls, 10);
+    const tick = heartbeat(() => { beats++; }, 1_000, () => clock);
+    for (let i = 0; i < 10; i++) { clock += 300; tick(); }
     assert.equal(beats, 2, 'ten calls over 3000 ms beat at 1200 and 2400 ms: one per full interval, not one per call');
+  });
+
+  it('every call still reaches the binding, after a tick', () => {
+    const order: string[] = [];
+    const fn = withHeartbeat((() => { order.push('call'); return undefined; }) as unknown as MeshOutline2dFn, () => { order.push('tick'); });
+    assert.ok(fn);
+    for (let i = 0; i < 2; i++) (fn as (...a: unknown[]) => unknown)();
+    assert.deepEqual(order, ['tick', 'call', 'tick', 'call']);
   });
 
   it('leaves a missing binding missing', () => {

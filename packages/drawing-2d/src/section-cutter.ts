@@ -76,7 +76,7 @@ export class SectionCutter {
   /**
    * Cut all meshes with the section plane
    */
-  cutMeshes(meshes: MeshData[]): SectionCutResult {
+  cutMeshes(meshes: MeshData[], tick?: () => void): SectionCutResult {
     const startTime = performance.now();
 
     const segmentArrays: CutSegment[][] = [];
@@ -86,6 +86,7 @@ export class SectionCutter {
 
     // Process each mesh - collect segment arrays for efficient flattening
     for (const mesh of meshes) {
+      tick?.();
       const result = this.cutSingleMesh(mesh, epsilons.get(makeEntityKey(mesh.modelIndex ?? 0, mesh.expressId)));
       segmentArrays.push(result.segments);
       totalTriangles += result.trianglesProcessed;
@@ -97,7 +98,7 @@ export class SectionCutter {
 
     // Reconstruct closed polygons from segments
     const polygonBuilder = new PolygonBuilder();
-    const polygons = polygonBuilder.buildPolygons(allSegments);
+    const polygons = polygonBuilder.buildPolygons(allSegments, tick);
 
     const processingTimeMs = performance.now() - startTime;
 

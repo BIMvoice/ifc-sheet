@@ -18,6 +18,11 @@ describe('viewElements', () => {
     assert.deepEqual(e.anchor, { x: 2, y: 0.5 });
     assert.deepEqual(e.ring, [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 1 }, { x: 0, y: 1 }], 'with the outline it has');
   });
+  it('keeps every cut piece of an element the cut shows in several, the biggest among them, so a label keeps off all of them', () => {
+    const [wall, column] = viewElements({ cutPolygons: [rect(7, 0, 0, 4, 1), rect(7, 10, 10, 11, 11), rect(8, 20, 20, 21, 21)], projectionPolygons: [], lines: [] });
+    assert.deepEqual(wall.pieces, [wall.ring, [{ x: 10, y: 10 }, { x: 11, y: 10 }, { x: 11, y: 11 }, { x: 10, y: 11 }]]);
+    assert.equal(column.pieces, undefined, 'one piece is the ring alone');
+  });
   it('takes an L-shaped outline at its area centroid, not at its bounding box', () => {
     const l = poly(1, [[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4]]);
     const [e] = viewElements({ cutPolygons: [l], projectionPolygons: [], lines: [] });

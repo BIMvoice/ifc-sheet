@@ -14,6 +14,7 @@ import type { Pt } from '../draft-types.js';
 import { candidateCentres, orientedBox } from './label-candidates.js';
 import { RectIndex } from './rect-index.js';
 import { growRect, rectAround, rectHitsRing, ringBounds, unionRect, type Rect } from './label-geometry.js';
+import type { ViewElement } from './view-elements.js';
 
 /** Clear space between a label and its element, paper millimetres. */
 export const LABEL_GAP_MM = 1.5;
@@ -37,7 +38,12 @@ export function labelSpacing(gap?: number): { gap: number; clear: number } {
 export interface LayoutElement {
   id: string;
   ring: readonly Pt[];
+  /** Every cut piece of the element, `ring` itself (the same array) among them (`ViewElement.pieces`): a label keeps off each one. Absent: `ring` alone. */
+  pieces?: readonly (readonly Pt[])[];
 }
+
+/** A view's element as a label keeps clear of it: its outline and every cut piece of it. */
+export const layoutElementOf = (e: ViewElement): LayoutElement => ({ id: String(e.renderId), ring: e.ring, ...(e.pieces ? { pieces: e.pieces } : {}) });
 
 export interface LayoutItem {
   id: string;
@@ -83,7 +89,11 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
     const l = Math.hypot(d.x, d.y);
     return l < 1e-9 ? { x: 0, y: 0 } : { x: d.x / l, y: d.y / l };
   };
-  const solid = bounds.filter((x) => !all || area(x.b) <= BACKDROP_SHARE * area(all));
+  // An element's outline is kept its clear space from; its other cut pieces (a wall its openings cut in four, a window's frame beside its glass) are
+  // kept off: a label never lies over one. Measured on FZK at a 6 mm gap: two window marks sat on the wall piece beside their window, the biggest
+  // piece being the only one looked at. Off, not the clear space from them, so a label that already lay clear of the cut stays where it was.
+  const solid = bounds.filter((x) => !all || area(x.b) <= BACKDROP_SHARE * area(all))
+    .flatMap(({ e }) => (e.pieces ?? [e.ring]).map((ring) => ({ id: e.id, ring, b: ringBounds(ring), piece: ring !== e.ring })));
   // What a place is tested against sits on a grid as coarse as the biggest label: a place meets the few boxes near it, not all of them.
   const cell = Math.max(1e-6, ...items.map((i) => Math.max(i.w, i.h)));
   const taken = scene.annotations instanceof RectIndex ? scene.annotations : new RectIndex(cell);
@@ -94,18 +104,26 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
   for (const item of items) {
     const box = orientedBox(item.ring);
     const centres = [...(item.preferred ?? []), ...candidateCentres({ box, w: item.w, h: item.h, gap, away: away(box.c) }), ...(item.fallback ?? [])];
-    const hits = (c: Pt): number => {
-      const r = growRect(rectAround(c, item.w, item.h), clear);
-      let n = taken.count(r);
-      solidIndex.query(r, (_, o) => { if (o.e.id !== item.id && rectHitsRing(r, o.e.ring)) n++; });
-      return n;
+    // How many things the place comes nearer than the clear space, and whether the label would lie over a cut piece (`over`).
+    const hits = (c: Pt): { n: number; over: boolean } => {
+      const bare = rectAround(c, item.w, item.h);
+      const r = growRect(bare, clear);
+      let n = taken.count(r), over = false;
+      solidIndex.query(r, (_, o) => {
+        // A piece, its own element's included: kept off. Its own outline: the label stands its gap from it already.
+        if (o.piece) {
+          if (rectHitsRing(bare, o.ring)) { n++; over = true; }
+        } else if (o.id !== item.id && rectHitsRing(r, o.ring)) n++;
+      });
+      return { n, over };
     };
     let pick: Placed | null = null;
-    let least = { c: centres[0] ?? box.c, n: Infinity };
+    // With no free place, the least bad: one off every cut piece before one over it, then the fewest things too near.
+    let least = { c: centres[0] ?? box.c, over: true, n: Infinity };
     for (const c of centres) {
-      const n = hits(c);
+      const { n, over } = hits(c);
       if (n === 0) { pick = { centre: c, free: true }; break; }
-      if (n < least.n) least = { c, n };
+      if ((least.over && !over) || (least.over === over && n < least.n)) least = { c, over, n };
     }
     const placed = pick ?? { centre: least.c, free: false };
     out.set(item.id, placed);

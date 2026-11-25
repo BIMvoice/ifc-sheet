@@ -141,7 +141,7 @@ describe('views that fall back are drawn one at a time, the page turning between
     });
     await Promise.all(ALL.slice(2).map((m) => generateDrawing(request([m]), undefined)));
     assert.equal(most, 1);
-    const said = loggedText(warn).filter((line) => /drawn on the main thread, one at a time/.test(line));
+    const said = loggedText(warn).filter((line) => /draws small views on the main thread, one at a time/.test(line));
     assert.equal(said.length, 1, 'giving up on the worker is said once, not for every view');
     warn.mock.restore();
   });

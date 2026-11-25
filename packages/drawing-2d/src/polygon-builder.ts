@@ -107,7 +107,7 @@ export class PolygonBuilder {
    * Build polygons from cut segments
    * Groups segments by entity and reconstructs closed loops
    */
-  buildPolygons(segments: CutSegment[]): DrawingPolygon[] {
+  buildPolygons(segments: CutSegment[], tick?: () => void): DrawingPolygon[] {
     // Group segments by entity
     const byEntity = new Map<EntityKey, CutSegment[]>();
 
@@ -123,9 +123,8 @@ export class PolygonBuilder {
     const polygonArrays: DrawingPolygon[][] = [];
 
     for (const [key, entitySegments] of byEntity) {
-      const entityPolygons = this.withScaleAwareTolerance(entitySegments, () =>
-        this.buildEntityPolygons(entitySegments),
-      );
+      tick?.(); // the drawing worker's heartbeat (#863)
+      const entityPolygons = this.withScaleAwareTolerance(entitySegments, () => this.buildEntityPolygons(entitySegments));
       polygonArrays.push(entityPolygons);
     }
 
@@ -145,7 +144,7 @@ export class PolygonBuilder {
    * hollow even where the per-layer reconstruction has to fall back. Single-
    * material entities are skipped — their normal `cutPolygons` already fill solid.
    */
-  buildBasePolygons(segments: CutSegment[]): DrawingPolygon[] {
+  buildBasePolygons(segments: CutSegment[], tick?: () => void): DrawingPolygon[] {
     const byEntity = new Map<EntityKey, CutSegment[]>();
     for (const seg of segments) {
       const key = makeEntityKey(seg.modelIndex, seg.entityId);
@@ -156,6 +155,7 @@ export class PolygonBuilder {
 
     const out: DrawingPolygon[][] = [];
     for (const entitySegments of byEntity.values()) {
+      tick?.();
       // Only entities that cut into >1 material get per-layer fills (hence a base).
       const colors = new Set(entitySegments.map((s) => colorKey(s.color)));
       if (colors.size < 2) continue;

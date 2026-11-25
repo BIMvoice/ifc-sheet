@@ -159,6 +159,7 @@ export class HiddenLineClassifier {
     occluderDepth: number,
     bounds?: Bounds2D,
     edgeTolerancePx = this.options.edgeTolerancePx,
+    tick?: () => void,
   ): void {
     this.edgeTolerancePx = edgeTolerancePx;
     this.raster = buildDepthRaster(
@@ -168,6 +169,7 @@ export class HiddenLineClassifier {
       this.options.resolution,
       this.options.depthBias,
       bounds,
+      tick,
     );
     this.built = true;
   }
@@ -180,7 +182,7 @@ export class HiddenLineClassifier {
   /**
    * Classify lines as visible or hidden based on depth buffer
    */
-  classifyLines(lines: DrawingLine[]): VisibilityResult[] {
+  classifyLines(lines: DrawingLine[], tick?: () => void): VisibilityResult[] {
     if (!this.built) {
       throw new Error('Depth buffer not built. Call buildDepthBuffer first.');
     }
@@ -188,6 +190,7 @@ export class HiddenLineClassifier {
     const results: VisibilityResult[] = [];
 
     for (const line of lines) {
+      tick?.();
       const result = this.classifySingleLine(line);
       results.push(result);
     }
@@ -199,8 +202,8 @@ export class HiddenLineClassifier {
    * Update lines with visibility classification
    * Returns new array with visibility set
    */
-  applyVisibility(lines: DrawingLine[]): DrawingLine[] {
-    const results = this.classifyLines(lines);
+  applyVisibility(lines: DrawingLine[], tick?: () => void): DrawingLine[] {
+    const results = this.classifyLines(lines, tick);
 
     const output: DrawingLine[] = [];
 

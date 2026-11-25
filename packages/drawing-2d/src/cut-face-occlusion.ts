@@ -45,6 +45,71 @@ function occludingFaces(polygons: readonly DrawingPolygon[]): Face[] {
   return faces;
 }
 
+/**
+ * The faces whose boxes may meet a line's box, found by a grid over the faces' boxes built once per drawing (#863). Each
+ * line used to test every face of the drawing: lines times faces, which on a storey of a large model (233,874 lines and
+ * 4,016 cut faces of skolebygg) was the largest part of the hidden-line stage. `near` returns a superset of the faces the
+ * exact box test keeps, in the faces' own order, so the test after it keeps the same faces in the same order as before.
+ */
+class FaceBoxGrid {
+  private readonly cells: number[][];
+  private readonly nx: number;
+  private readonly ny: number;
+  private readonly minX: number;
+  private readonly minY: number;
+  private readonly sizeX: number;
+  private readonly sizeY: number;
+  private readonly seen: Int32Array;
+  private stamp = 0;
+
+  constructor(private readonly faces: readonly Face[], private readonly tolerance: number) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const f of faces) {
+      minX = Math.min(minX, f.min.x); minY = Math.min(minY, f.min.y);
+      maxX = Math.max(maxX, f.max.x); maxY = Math.max(maxY, f.max.y);
+    }
+    // About one face a cell, the cells square whatever the drawing's proportions (a row of columns is one row of cells),
+    // and never more than two cells a face along either side, so a drawing a hair high does not get a million cells.
+    const w = maxX - minX + 2 * tolerance, h = maxY - minY + 2 * tolerance;
+    const count = Math.max(1, faces.length);
+    const cell = Math.max(Math.sqrt((w * h) / count), Math.max(w, h) / (2 * count), 1e-9);
+    this.nx = Math.max(1, Math.min(2 * count, Math.ceil(w / cell)));
+    this.ny = Math.max(1, Math.min(2 * count, Math.ceil(h / cell)));
+    this.minX = minX - tolerance;
+    this.minY = minY - tolerance;
+    this.sizeX = Math.max(w / this.nx, 1e-9);
+    this.sizeY = Math.max(h / this.ny, 1e-9);
+    this.cells = Array.from({ length: this.nx * this.ny }, () => []);
+    this.seen = new Int32Array(faces.length);
+    faces.forEach((f, i) => {
+      for (let y = this.cellY(f.min.y - tolerance); y <= this.cellY(f.max.y + tolerance); y++) {
+        for (let x = this.cellX(f.min.x - tolerance); x <= this.cellX(f.max.x + tolerance); x++) this.cells[y * this.nx + x].push(i);
+      }
+    });
+  }
+
+  private cellX(x: number): number { return Math.max(0, Math.min(this.nx - 1, Math.floor((x - this.minX) / this.sizeX))); }
+  private cellY(y: number): number { return Math.max(0, Math.min(this.ny - 1, Math.floor((y - this.minY) / this.sizeY))); }
+
+  /** The faces filed in the cells the box `lo`..`hi` (grown by the tolerance) meets, in the faces' order. */
+  near(lo: Point2D, hi: Point2D): Face[] {
+    const stamp = ++this.stamp;
+    const found: number[] = [];
+    const t = this.tolerance;
+    for (let y = this.cellY(lo.y - t); y <= this.cellY(hi.y + t); y++) {
+      for (let x = this.cellX(lo.x - t); x <= this.cellX(hi.x + t); x++) {
+        for (const i of this.cells[y * this.nx + x]) {
+          if (this.seen[i] === stamp) continue;
+          this.seen[i] = stamp;
+          found.push(i);
+        }
+      }
+    }
+    found.sort((a, b) => a - b);
+    return found.map((i) => this.faces[i]);
+  }
+}
+
 /** Distance from `p` to the segment `a`-`b`. */
 function segmentDistance(p: Point2D, a: Point2D, b: Point2D): number {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -115,17 +180,19 @@ function crossings(face: Face, s: Point2D, e: Point2D, tolerance: number, out: n
  * its own depth, interpolated along the parent the way the hidden-line classifier splits (`hidden-line.ts`), and the parent's
  * visibility.
  */
-export function dropInsideCutFaces(lines: readonly DrawingLine[], polygons: readonly DrawingPolygon[], tolerance = CUT_FACE_EDGE_TOLERANCE): DrawingLine[] {
+export function dropInsideCutFaces(lines: readonly DrawingLine[], polygons: readonly DrawingPolygon[], tolerance = CUT_FACE_EDGE_TOLERANCE, tick?: () => void): DrawingLine[] {
   const faces = occludingFaces(polygons);
   if (faces.length === 0) return [...lines];
+  const grid = new FaceBoxGrid(faces, tolerance);
   const out: DrawingLine[] = [];
   for (const line of lines) {
+    tick?.();
     const { start: s, end: e } = line.line;
     const depthEnd = line.depthEnd ?? line.depth;
     if (line.category === 'cut' || Math.max(line.depth, depthEnd) <= 0) { out.push(line); continue; }
     const lo = { x: Math.min(s.x, e.x), y: Math.min(s.y, e.y) }, hi = { x: Math.max(s.x, e.x), y: Math.max(s.y, e.y) };
     // Faces within the tolerance of the line, so the face on the far side of a seam the line runs on is one of them.
-    const near = faces.filter((f) => f.max.x >= lo.x - tolerance && f.min.x <= hi.x + tolerance && f.max.y >= lo.y - tolerance && f.min.y <= hi.y + tolerance);
+    const near = grid.near(lo, hi).filter((f) => f.max.x >= lo.x - tolerance && f.min.x <= hi.x + tolerance && f.max.y >= lo.y - tolerance && f.min.y <= hi.y + tolerance);
     if (near.length === 0) { out.push(line); continue; }
     const ts = [0, 1];
     for (const f of near) crossings(f, s, e, tolerance, ts);
