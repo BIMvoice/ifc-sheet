@@ -94,8 +94,11 @@ describe.skipIf(missing !== null)('annotateSetHeadless matches the app on AC20-F
     const again = await annotateSetHeadless({ model, set, choices: ALL_CHOICES, existing: [obstacle], viewIds: new Set([tag.viewId]) });
     const rectsOf = annotationRects(tableMeasure);
     const [taken] = rectsOf([obstacle]);
+    // The text's box, not its leader: the tag here is W2 on the west wall, and "NOTE", wider than "W2", lies over the wall. The tag
+    // once moved onto the wall piece beside its window (labels kept off only an element's biggest cut piece); now it stands inside,
+    // its box 2.25 mm clear of the NOTE, and its leader to the window passes under the end of the NOTE that lies over the wall.
     const hits = again.all.filter((d) => d.id !== 'obstacle' && d.viewId === tag.viewId && d.shape.type === 'text').filter((d) => {
-      const r = rectsOf([d])[0]!;
+      const r = rectsOf([{ ...d, shape: { ...d.shape, leader: undefined } as DraftEntity['shape'] }])[0]!;
       return Math.min(r.x1, taken!.x1) - Math.max(r.x0, taken!.x0) > 1e-6 && Math.min(r.y1, taken!.y1) - Math.max(r.y0, taken!.y0) > 1e-6;
     });
     expect(again.all.some((d) => d.id !== 'obstacle' && d.shape.type === 'text'), 'the run still tags the view').toBe(true);
