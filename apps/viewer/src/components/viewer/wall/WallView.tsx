@@ -17,6 +17,7 @@ import { isSetSheet } from '@/project/drawing-set';
 import { sectionProposals } from '@/project/drawing-set-actions';
 import { startSet } from '@/set-template/start';
 import { wallExtent } from '@/project/wall-extent';
+import { publishSetExtent } from '@/project/set-extent';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
@@ -48,6 +49,8 @@ export function WallView() {
   const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy }), [levels, meshes, models, legacy]));
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
   const extent = useMemo(() => wallExtent(settled), [settled]);
+  // The sheets frame a plan on the part of its drawing inside the room this extent gives it (`boundsInRoom`), as the engine's sheet does.
+  useEffect(() => publishSetExtent(extent), [extent]);
   const settledMeshes = settled.meshes;
   // A model that has finished loading and brought no geometry never gets a set laid out (#603): say so instead of waiting.
   // A model whose geometry failed stays in `models` with `loadState: 'error'`: that is a failure to report, not an absence of geometry.

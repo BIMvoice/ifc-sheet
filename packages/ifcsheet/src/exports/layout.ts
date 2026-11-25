@@ -15,7 +15,7 @@ export {
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from '../numbering.js';
 export { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from '../project-version.js';
-export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from '../viewport-fit.js';
+export { SHEET_SCALES, boundsAbout, fitViewportBox, mmPerMetre, paperOf } from '../viewport-fit.js';
 export { paperSigns, placer } from '../sheet-graphic.js';
 export { SHEET_NOTE_SIZE, sheetNoteLines, steppedUpNote, rescaledNote, isRescaledNote, type SheetNoteLine } from '../sheet-notes.js';
 export {
@@ -32,6 +32,7 @@ export {
   groundPlan, groupOfView, groupsThatDoNotFit, isSetSheet, overrun, placeViewports, scaleOn, sheetGroup, sheetSeries, viewCentre, viewExtent,
   withViewHung, type Arrangement, type ModelExtent, type SetGroup, type SetInput, type SheetLayout,
 } from '../drawing-set.js';
+export { boundsInRoom } from '../bounds-in-room.js';
 export { sheetScaleReason, type Reason } from '../scale-reason.js';
 export { resolveStoreyOriginMeters, storeyFloorY, type Point3 } from '../storey-origin.js';
 export { boundsFromIndex, createEntityBoundsLookup, getEntityBounds, indexMeshesByEntity, isValidCoord, unionEntityBounds, type BoundingBox3D, type Point3D } from '../entity-bounds.js';

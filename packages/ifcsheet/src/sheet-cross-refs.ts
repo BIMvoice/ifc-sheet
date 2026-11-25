@@ -21,6 +21,8 @@ import type { OpeningSymbol } from './opening-symbols.js';
 import type { SheetAnnotations } from './sheet-annotations.js';
 import type { SheetLocale } from './units-and-numbers.js';
 import { turnOf, type DrawingPlane } from './drawing-frame.js';
+import { boundsInRoom } from './bounds-in-room.js';
+import type { ModelExtent } from './drawing-set.js';
 
 /**
  * The marks of `vp`'s view as annotations to print: the project's layers and styles (a set that carries none gets the standard layer and
@@ -30,14 +32,19 @@ import { turnOf, type DrawingPlane } from './drawing-frame.js';
  */
 export function crossRefAnnotations(
   annotations: SheetAnnotations | undefined,
-  input: { doc: Pick<ProjectDocument, 'views' | 'sheets'>; vp: SheetViewport; drawing: Pick<Drawing2D, 'bounds'> & { config?: { plane: DrawingPlane } }; symbols: readonly OpeningSymbol[] | undefined; locale: SheetLocale },
+  input: {
+    doc: Pick<ProjectDocument, 'views' | 'sheets'>; vp: SheetViewport; drawing: Pick<Drawing2D, 'bounds'> & { config?: { plane: DrawingPlane } }; symbols: readonly OpeningSymbol[] | undefined; locale: SheetLocale;
+    /** The extent the set was laid out on: a plan the layout centred has its marks placed round the part of it in its room (`boundsInRoom`), not round a far element. */
+    extent?: ModelExtent | null;
+  },
 ): SheetAnnotations | null {
-  const { doc, vp, drawing } = input;
+  const { doc, vp, drawing, extent } = input;
   const view = doc.views.find((v) => v.id === vp.viewId);
   if (!view || view.kind !== 'plan' || vp.keyPlanOf !== undefined) return null;
   const own = inDrawOrder((annotations?.drafts ?? []).filter((d) => d.viewId === view.id), annotations?.layers ?? [DEFAULT_DRAFT_LAYER]);
+  const bounds = vp.center && extent ? boundsInRoom(view, vp.center, drawing.bounds, extent) : drawing.bounds;
   const marks = crossReferenceMarks({
-    drafts: own, view, views: doc.views, sheets: doc.sheets, groundPlanId: elevationMarkPlan(doc.views)?.id, bounds: drawing.bounds,
+    drafts: own, view, views: doc.views, sheets: doc.sheets, groundPlanId: elevationMarkPlan(doc.views)?.id, bounds,
     viewportScale: vp.scale, symbols: input.symbols ? openingObstacles(input.symbols) : [], measure: tableMeasure,
     turn: drawing.config ? turnOf(drawing.config.plane) : 0,
   });

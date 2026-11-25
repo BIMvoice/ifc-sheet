@@ -15,11 +15,12 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics, turnOf } from '@bimvoice/ifcsheet';
+import { atDetailLevel, boundsAbout, boundsInRoom, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics, turnOf } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
-import { viewportBox } from '@/project/sheets';
+import { useSetExtent } from '@/project/set-extent';
+import { autoFits, viewportBox } from '@/project/sheets';
 import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
@@ -161,6 +162,14 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const ground = useMemo(() => elevationMarkPlan(views), [views]);
   // Section and elevation marks are headed as the project's graphic standard says (#447).
   const markStyle = markStyleOf(standard);
+  // A plan's drawing counts only inside the room the layout made for it (the engine's `boundsInRoom`): a survey marker the framing left out
+  // of the extent is clipped, as in the engine's PDF, not framed, and the elevation marks stand round the building, not round the marker.
+  const extent = useSetExtent((s) => s.extent);
+  const inRoom = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => {
+    const view = extent ? views.find((v) => v.id === vp.viewId) : undefined;
+    // Only a viewport the layout centred (`center`): one centred on its drawing would move with its bounds.
+    return view && extent && vp.center ? boundsInRoom(view, vp.center, bounds, extent) : bounds;
+  }, [extent, views]);
   // One input per view and scale while nothing it reads changes, so `withCrossReferences` places a viewport's marks once,
   // not once each for what is drawn, the fitted extent and the box (#154). The input is shared between sheets mounted at
   // different times (`crossRefMemo`): marks are in paper millimetres and do not depend on the zoom, so a sheet that
@@ -171,16 +180,21 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
       const view = views.find((v) => v.id === vp.viewId);
       const overlays = styled.get(vp.viewId)?.overlays;
       const screenUp = viewScreenUp(vp.viewId);
-      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle], () => ({
+      const bounds = raw ? inRoom(vp, raw.bounds) : undefined;
+      return memoOn(crossRefMemo, raw ?? view ?? views, [vp.viewId, vp.scale, screenUp, view, views, sheets, ground?.id, drafts, levels, raw, overlays, markStyle, bounds?.min.x, bounds?.min.y, bounds?.max.x, bounds?.max.y], () => ({
         drafts: settledDrafts(vp.viewId), view, views, sheets, groundPlanId: ground?.id,
-        bounds: raw?.bounds, viewportScale: vp.scale, overlays, screenUp, markStyle, turn: raw ? turnOf(raw.config.plane) : 0,
+        bounds, viewportScale: vp.scale, overlays, screenUp, markStyle, turn: raw ? turnOf(raw.config.plane) : 0,
       }));
     };
-  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle]);
+  }, [settledDrafts, views, sheets, drawingOf, ground, styled, drafts, levels, markStyle, inRoom]);
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
-  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(bounds, sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput]);
+  // A plan centred on the model (`center`) lands off its own middle: its bounds are made even about that point (`boundsAbout`), so the box,
+  // centred on the viewport's position, holds the whole building where it lands (skolebygg A-102 was cut off at its frame).
+  // Only an auto-fit viewport: a box sized by hand is a crop, and its drawing stays framed as the person left it.
+  const held = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => (vp.center && autoFits(vp) ? boundsAbout(inRoom(vp, bounds), vp.center, vp.scale) : inRoom(vp, bounds)), [inRoom]);
+  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(held(vp, bounds), sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput, held]);
   // The same refitted drawing object while its bounds are the same, so a viewport's pens (memoised on it) are kept.
   const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
     const drawing = styled.get(vp.viewId)?.drawing ?? null;

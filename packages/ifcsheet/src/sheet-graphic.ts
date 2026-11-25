@@ -329,7 +329,7 @@ export function sheetGraphic(
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
     const markBoxes: PaperBox[] = [];
-    const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale }) : null;
+    const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale, extent }) : null;
     if (drawing && (noted || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
       const frame = paperSigns(drawing.config.plane.axis);
