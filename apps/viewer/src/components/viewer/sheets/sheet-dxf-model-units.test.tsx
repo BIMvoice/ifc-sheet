@@ -3,8 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * #831: the sheet's DXF in model units. A viewport (`data-dxf-frame`: where its drawing's origin is on the paper, paper millimetres per metre,
- * the signs of the cut) is written at its model coordinates in metres, and what stands outside a viewport (the frame, the title block) is left out.
+ * #831: the sheet's DXF in model units. A viewport (`data-dxf-frame`: where its drawing's origin is on the paper, paper millimetres per metre)
+ * is written at its model coordinates in metres, as it reads on the sheet and never mirrored, and what stands outside a viewport (the frame,
+ * the title block) is left out.
  * The element layer standard names a wall's layer from its class and IsExternal.
  */
 
@@ -18,16 +19,16 @@ import { svgToDxf } from './sheet-dxf';
 const NS = 'http://www.w3.org/2000/svg';
 const text = (svg: SVGSVGElement, model: boolean, cad: Parameters<typeof svgToDxf>[4] = []) => new TextDecoder('latin1').decode(svgToDxf(svg, 297, 'm', 1, cad, model));
 
-/** A 1:50 viewport whose origin is at paper (100, 100): a 200 mm line, a 10 m wall; and a frame line outside it. */
-function sheet(wall: Record<string, string>): SVGSVGElement {
+/** A 1:50 viewport whose origin is at paper (100, 100): a 200 mm line, a 10 m wall; and a frame line outside it. `to` moves the line's end. */
+function sheet(wall: Record<string, string>, to = { x2: '300', y2: '100' }): SVGSVGElement {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', '0 0 420 297');
   const outside = document.createElementNS(NS, 'line');
   for (const [k, v] of Object.entries({ x1: '0', y1: '0', x2: '420', y2: '0', style: 'stroke:#000000', 'data-dxf-layer': 'FRAME' })) outside.setAttribute(k, v);
   const g = document.createElementNS(NS, 'g');
-  g.setAttribute('data-dxf-frame', '100 100 20 1 -1');
+  g.setAttribute('data-dxf-frame', '100 100 20');
   const line = document.createElementNS(NS, 'line');
-  for (const [k, v] of Object.entries({ x1: '100', y1: '100', x2: '300', y2: '100', style: 'stroke:#000000', 'data-dxf-layer': 'CUT', ...wall })) line.setAttribute(k, v);
+  for (const [k, v] of Object.entries({ x1: '100', y1: '100', ...to, style: 'stroke:#000000', 'data-dxf-layer': 'CUT', ...wall })) line.setAttribute(k, v);
   g.appendChild(line);
   svg.append(outside, g);
   document.body.appendChild(svg);
@@ -37,6 +38,7 @@ function sheet(wall: Record<string, string>): SVGSVGElement {
 /** The x values of group code 10 and 11 in a DXF text. */
 const entities = (dxf: string) => { const a = dxf.indexOf('\nENTITIES\n'); return dxf.slice(a, dxf.indexOf('ENDSEC', a)); };
 const xs = (dxf: string) => { const l = entities(dxf).split(/\r?\n/); return l.flatMap((v, i) => (['10', '11'].includes(v.trim()) && i % 2 === 0 ? [Number(l[i + 1])] : [])); };
+const ys = (dxf: string) => { const l = entities(dxf).split(/\r?\n/); return l.flatMap((v, i) => (['20', '21'].includes(v.trim()) && i % 2 === 0 ? [Number(l[i + 1])] : [])); };
 const layers = (dxf: string) => { const l = dxf.split(/\r?\n/); return l.flatMap((v, i) => (v.trim() === '8' && i % 2 === 0 ? [l[i + 1]] : [])); };
 
 describe('a sheet exported as DXF in model units (#831)', () => {
@@ -56,6 +58,13 @@ describe('a sheet exported as DXF in model units (#831)', () => {
     assert.deepEqual([Math.min(...x), Math.max(...x)], [0, 10]);
     assert.ok(!layers(file).includes('FRAME'));
     assert.match(file, /\$INSUNITS\s+70\s+6\b/);
+  });
+
+  it('writes up the paper as north, as the sheet reads: a plan is not mirrored about X (#831)', () => {
+    // 40 mm up the paper at 1:50 is 2 m north; the mirrored file wrote it 2 m south.
+    const file = text(sheet({}, { x2: '100', y2: '60' }), true);
+    assert.deepEqual(ys(file), [0, 2]);
+    assert.deepEqual(xs(file), [0, 0]);
   });
 
   it('writes the same sheet in paper millimetres by default', () => {

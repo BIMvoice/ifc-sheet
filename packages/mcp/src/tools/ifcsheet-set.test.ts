@@ -279,6 +279,16 @@ describe.skipIf(missing !== null)('ifcsheet set tools over stdio on AC20-FZK-Hau
     const working = await readFile(join(toolWork, 'A-101.dxf'), 'utf8');
     expect(working).toContain('A-WALL-EXTR');
     expect(working).toBe(await readFile(join(cliWork, 'dxf', 'A-101.dxf'), 'utf8'));
+    // At the IFC's own x and y, not mirrored about X (#831): FZK's outer walls stand at y 0..10, where the mirrored file had -10..0.
+    const wallYs = working.split(/\r?\n/).reduce<{ on: boolean; ys: number[] }>((s, line, i, all) => {
+      if (i % 2) return s;
+      if (line.trim() === '0') s.on = false;
+      if (line.trim() === '8') s.on = all[i + 1] === 'A-WALL-EXTR';
+      if (s.on && line.trim() === '20') s.ys.push(Number(all[i + 1]));
+      return s;
+    }, { on: false, ys: [] }).ys;
+    expect(Math.min(...wallYs)).toBeCloseTo(0, 2);
+    expect(Math.max(...wallYs)).toBeCloseTo(10, 2);
     // One sheet only.
     const one = await ok('ifcsheet_export_dxf', { document_id, directory: join(tmp, 'tool-one'), sheet: 'a-301' });
     expect(one.files).toHaveLength(1);

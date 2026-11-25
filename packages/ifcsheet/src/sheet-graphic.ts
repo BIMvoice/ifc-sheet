@@ -320,7 +320,7 @@ export function sheetGraphic(
       }
       out.pens.push(...materialPens(faces, styler, at, box, pens, patterns));
       if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
-      if (dxf.modelFrames) for (const p of out.pens.slice(firstPen)) p.frame = { ...at({ x: 0, y: 0 }), s: 1000 / vp.scale, ...paperSigns(drawing.config.plane.axis) };
+      if (dxf.modelFrames) for (const p of out.pens.slice(firstPen)) p.frame = { ...at({ x: 0, y: 0 }), s: 1000 / vp.scale };
       for (const label of contoured?.texts ?? []) {
         const p = at(label.at);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) out.texts.push(contourSheetText(label, p));
