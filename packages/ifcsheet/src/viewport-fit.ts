@@ -24,27 +24,34 @@ export function mmPerMetre(viewport: Pick<SheetViewport, 'scale'>): number {
   return 1000 / viewport.scale;
 }
 
-/**
- * A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm, centred on the viewport's position.
- *
- * With `centre` (the viewport's `center`: the drawing point put at that position), the drawing lands off the box's
- * middle when `centre` is not the middle of `bounds`: a plan of the set is centred on the model's extent (`viewCentre`),
- * and a storey smaller than the building sits to one side of it. The box then widens on both sides by that offset,
- * keeping the margin past it, so it holds the drawing where it lands; before, the frame cut the drawing off
- * (skolebygg A-102, 36 mm). A drawing off-centre by no more than the margin keeps the box it had.
- */
-export function fitViewportBox(
-  bounds: { min: { x: number; y: number }; max: { x: number; y: number } }, scale: number, centre: { x: number; y: number } | null = null,
-): { width: number; height: number } {
+/** The margin, paper mm, a fitted viewport box keeps round its drawing. */
+const FIT_MARGIN_MM = 10;
+
+/** A viewport box that fits a drawing's extent at its scale (plus a margin), in paper mm. */
+export function fitViewportBox(bounds: { min: { x: number; y: number }; max: { x: number; y: number } }, scale: number): { width: number; height: number } {
   const k = 1000 / scale;
-  const margin = 10;
-  // How far past the drawing's half-size the box reaches on each side, paper mm: the margin, or the offset and the margin.
-  const reach = (lo: number, hi: number, c: number | undefined): number => {
-    const off = c === undefined ? 0 : Math.abs((lo + hi) / 2 - c) * k;
-    return off > margin ? off + margin : margin;
-  };
   return {
-    width: Math.max(40, (bounds.max.x - bounds.min.x) * k + reach(bounds.min.x, bounds.max.x, centre?.x) * 2),
-    height: Math.max(30, (bounds.max.y - bounds.min.y) * k + reach(bounds.min.y, bounds.max.y, centre?.y) * 2),
+    width: Math.max(40, (bounds.max.x - bounds.min.x) * k + FIT_MARGIN_MM * 2),
+    height: Math.max(30, (bounds.max.y - bounds.min.y) * k + FIT_MARGIN_MM * 2),
   };
+}
+
+/**
+ * A drawing's `bounds` (drawing metres) made even about `centre`, the point its viewport puts at the viewport's
+ * position, for a box fitted to them (`fitViewportBox`, which centres the box on that position) to hold the drawing
+ * where it lands. A plan of the set is centred on the model's extent (`viewCentre`), not on its own bounds, so a storey
+ * smaller than the building lies to one side of it, and a box fitted to its bounds cut it off at the frame (skolebygg
+ * A-102, 36 mm). Bounds off `centre` by no more than the box's margin are returned as they are: their box held them.
+ */
+export function boundsAbout<B extends { min: { x: number; y: number }; max: { x: number; y: number } }>(bounds: B, centre: { x: number; y: number }, scale: number): B {
+  const k = 1000 / scale;
+  const even = (lo: number, hi: number, c: number): [number, number] => {
+    if (Math.abs((lo + hi) / 2 - c) * k <= FIT_MARGIN_MM) return [lo, hi];
+    const half = Math.max(c - lo, hi - c);
+    return [c - half, c + half];
+  };
+  const [x0, x1] = even(bounds.min.x, bounds.max.x, centre.x);
+  const [y0, y1] = even(bounds.min.y, bounds.max.y, centre.y);
+  if (x0 === bounds.min.x && x1 === bounds.max.x && y0 === bounds.min.y && y1 === bounds.max.y) return bounds;
+  return { ...bounds, min: { x: x0, y: y0 }, max: { x: x1, y: y1 } };
 }

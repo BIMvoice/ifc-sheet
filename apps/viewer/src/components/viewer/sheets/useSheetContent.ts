@@ -15,12 +15,12 @@
 import { useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
-import { atDetailLevel, boundsInRoom, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics, turnOf } from '@bimvoice/ifcsheet';
+import { atDetailLevel, boundsAbout, boundsInRoom, drawingNumbers, elevationMarkPlan, markStyleOf, resolveDetailLevel, resolveViewGraphics, turnOf } from '@bimvoice/ifcsheet';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { registerViewportBoxes } from '@/project/sheet-viewport-boxes';
 import { useSetExtent } from '@/project/set-extent';
-import { viewportBox } from '@/project/sheets';
+import { autoFits, viewportBox } from '@/project/sheets';
 import { useViewDrawings } from '@/project/view-drawings';
 import { draftsOfView } from '@/drafting/draft-store';
 import { settleLevelDrafts } from '@/drafting/level-sync';
@@ -190,7 +190,11 @@ export function useSheetContent(sheet: ProjectSheet, { deferDrawings = false }: 
   const draftsFor = useCallback((vp: SheetViewport) => withCrossReferences(crossRefInput(vp)), [crossRefInput]);
   // What an auto-fit viewport frames: the drawing, the plot of a site plan and the drafts the sheet draws, the cross-references included (#140, #243).
   // `content` (what is drawn and centred) and `boxOf` (the crop) both read it, so they cannot disagree.
-  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(inRoom(vp, bounds), sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput, inRoom]);
+  // A plan centred on the model (`center`) lands off its own middle: its bounds are made even about that point (`boundsAbout`), so the box,
+  // centred on the viewport's position, holds the whole building where it lands (skolebygg A-102 was cut off at its frame).
+  // Only an auto-fit viewport: a box sized by hand is a crop, and its drawing stays framed as the person left it.
+  const held = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => (vp.center && autoFits(vp) ? boundsAbout(inRoom(vp, bounds), vp.center, vp.scale) : inRoom(vp, bounds)), [inRoom]);
+  const fittedBounds = useCallback((vp: SheetViewport, bounds: Drawing2D['bounds']) => fitWithCrossReferences(vp, siteBounds(held(vp, bounds), sites.get(vp.viewId)), crossRefInput(vp)), [sites, crossRefInput, held]);
   // The same refitted drawing object while its bounds are the same, so a viewport's pens (memoised on it) are kept.
   const siteDrawing = useCallback((vp: SheetViewport): Drawing2D | null => {
     const drawing = styled.get(vp.viewId)?.drawing ?? null;

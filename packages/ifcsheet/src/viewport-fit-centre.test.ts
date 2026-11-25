@@ -6,24 +6,24 @@
  * The frame of an auto-fit viewport holds its drawing where the drawing lands.
  * A plan of the set is centred on the model's extent (`viewCentre`), not on its
  * own bounds, so a storey smaller than the building lies to one side of the
- * viewport's position. The box was sized from the bounds around that position,
+ * viewport's position. The box was fitted to the bounds around that position,
  * and the frame cut the plan off: skolebygg A-102, Plan 03, 36 mm on the right
- * and 34 mm at the top.
+ * and 34 mm at the top. `boundsAbout` makes the bounds even about the centre.
  */
 
 import { describe, expect, it } from 'vitest';
 import type { SheetViewport } from './document.js';
 import { placer } from './sheet-graphic.js';
-import { fitViewportBox } from './viewport-fit.js';
+import { boundsAbout, fitViewportBox } from './viewport-fit.js';
 
 type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
 const plan = (bounds: Bounds) => ({ bounds, config: { plane: { axis: 'y' as const, position: 1.2, flipped: false } } });
 
-/** The drawing's corners on the paper, as the sheet places them, and the box around the viewport's position. */
+/** The drawing's corners on the paper, as the sheet places them, and the box fitted about the viewport's position. */
 function measure(bounds: Bounds, vp: SheetViewport) {
   const at = placer(plan(bounds), vp);
   const corners = [bounds.min, bounds.max, { x: bounds.min.x, y: bounds.max.y }, { x: bounds.max.x, y: bounds.min.y }].map(at);
-  const box = fitViewportBox(bounds, vp.scale, vp.center);
+  const box = fitViewportBox(vp.center ? boundsAbout(bounds, vp.center, vp.scale) : bounds, vp.scale);
   const frame = { x0: vp.x - box.width / 2, x1: vp.x + box.width / 2, y0: vp.y - box.height / 2, y1: vp.y + box.height / 2 };
   const past = Math.max(0, ...corners.flatMap((p) => [frame.x0 - p.x, p.x - frame.x1, frame.y0 - p.y, p.y - frame.y1]));
   return { box, past };
@@ -52,6 +52,7 @@ describe('the frame of a drawing centred off its own bounds (skolebygg A-102)', 
     const plain = fitViewportBox(storey, 200);
     expect(measure(storey, vp(null)).box).toEqual(plain);
     // 1 m at 1:200 is 5 mm, inside the 10 mm margin: nothing changes and the drawing still fits.
+    expect(boundsAbout(storey, { x: 8, y: -5 }, 200)).toBe(storey);
     const near = measure(storey, vp({ x: 8, y: -5 }));
     expect(near.box).toEqual(plain);
     expect(near.past).toBe(0);

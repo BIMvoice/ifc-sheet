@@ -15,7 +15,7 @@ export {
   readNumberingScheme, registerNumberIn, registerSlot, renumbered, typedBeforeSchemes, type OverrideMode, type RenumberRow,
 } from '../numbering.js';
 export { PROJECT_FILE_FORMAT, PROJECT_FILE_VERSION, declaredVersion } from '../project-version.js';
-export { SHEET_SCALES, fitViewportBox, mmPerMetre, paperOf } from '../viewport-fit.js';
+export { SHEET_SCALES, boundsAbout, fitViewportBox, mmPerMetre, paperOf } from '../viewport-fit.js';
 export { paperSigns, placer } from '../sheet-graphic.js';
 export { SHEET_NOTE_SIZE, sheetNoteLines, steppedUpNote, rescaledNote, isRescaledNote, type SheetNoteLine } from '../sheet-notes.js';
 export {

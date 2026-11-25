@@ -15,7 +15,7 @@ import type { ProjectView } from './document.js';
 import { boundsInRoom } from './bounds-in-room.js';
 import { viewCentre, viewExtent, type ModelExtent } from './drawing-set.js';
 import { placer } from './sheet-graphic.js';
-import { fitViewportBox } from './viewport-fit.js';
+import { boundsAbout, fitViewportBox } from './viewport-fit.js';
 
 // A building 90 x 84 m, a storey 70 x 69 m to one side of it, and a marker 161 m south-west.
 const extent: ModelExtent = { min: { x: -45, y: 0, z: -42 }, max: { x: 45, y: 30, z: 42 } };
@@ -42,7 +42,7 @@ describe('a plan framed on the building, not on a far element (skolebygg survey 
   it('gives a frame no larger than the room and its margin, which still holds the building where it lands', () => {
     if (!centre) throw new Error('no centre');
     const vp = { id: 'vp', viewId: 'p', x: 400, y: 300, scale, width: 0, height: 0, center: centre };
-    const box = fitViewportBox(boundsInRoom(plan, centre, withMarker, extent), scale, centre);
+    const box = fitViewportBox(boundsAbout(boundsInRoom(plan, centre, withMarker, extent), centre, scale), scale);
     expect(box.width).toBeLessThanOrEqual(room.w * k + 20 + 1e-9);
     expect(box.height).toBeLessThanOrEqual(room.h * k + 20 + 1e-9);
     const at = placer({ bounds: storey, config: { plane: { axis: 'y', position: 1.2, flipped: false } } }, vp);

@@ -4,7 +4,7 @@
 
 /**
  * On every sheet of the starting set, each drawing lies inside the frame of its viewport: the box `fitViewportBox`
- * gives an auto-fit viewport about its `center`, which the app's sheet clips the drawing to, the drawing placed as
+ * fits to its bounds made even about its `center` (`boundsAbout`), which the app's sheet clips the drawing to, placed as
  * the sheet places it (`placer`: `center`, else the middle of its bounds). A plan the layout centred is framed on
  * the part of it inside its room (`boundsInRoom`, the engine's rule): skolebygg's survey marker, 161 m away and left
  * out of the extent, is clipped, and no plan's frame is larger than its room and the margin. Before, a plan of a storey smaller than the
@@ -23,7 +23,7 @@ import { generateViewDrawings, openModel } from './headless.js';
 import { boundsInRoom } from './bounds-in-room.js';
 import { viewExtent } from './drawing-set.js';
 import { placer } from './sheet-graphic.js';
-import { fitViewportBox } from './viewport-fit.js';
+import { boundsAbout, fitViewportBox } from './viewport-fit.js';
 import { terrainMeshesOf } from './view-drawings.js';
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
@@ -56,7 +56,7 @@ for (const [name, path] of Object.entries(MODELS)) {
           const framed = vp.center ? boundsInRoom(view, vp.center, d.bounds, model.extent) : d.bounds;
           const at = placer(d, vp);
           const corners = [framed.min, framed.max, { x: framed.min.x, y: framed.max.y }, { x: framed.max.x, y: framed.min.y }].map(at);
-          const box = fitViewportBox(framed, vp.scale, vp.center);
+          const box = fitViewportBox(vp.center ? boundsAbout(framed, vp.center, vp.scale) : framed, vp.scale);
           const past = Math.max(0, ...corners.flatMap((p) => [vp.x - box.width / 2 - p.x, p.x - vp.x - box.width / 2, vp.y - box.height / 2 - p.y, p.y - vp.y - box.height / 2]));
           expect(past, `${sheet.number} ${view.name}: paper mm of the building's drawing past its frame`).toBeLessThan(1e-6);
           const k = 1000 / vp.scale;
