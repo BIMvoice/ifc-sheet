@@ -54,7 +54,7 @@ describe('the app draws the doors\' and windows\' own plan representations as th
   it('draws three from their representations and the same as the engine', () => {
     const a = app(true), e = eng(true);
     assert.equal(a.length, 4, 'two doors and two windows');
-    assert.equal(a.filter((s) => !s.heavy && s.shapes.every((x) => x.type === 'polyline')).length, 3, 'three drawn from the model, the broken one generated');
+    assert.equal(a.filter((s) => [...s.shapes, ...(s.heavy ?? [])].every((x) => x.type === 'polyline')).length, 3, 'three drawn from the model, the broken one generated');
     assert.deepEqual(sorted(a), sorted(e));
   });
 

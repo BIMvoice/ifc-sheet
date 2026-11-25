@@ -40,8 +40,8 @@ beforeAll(async () => {
     new Map(planOpeningSymbols(model.buildingMeshes, plane, sources, graphics, plan.level).map((s) => [model.dataStore.entities.getName(s.id) ?? '', s]));
 }, 200_000);
 
-/** Every polyline of a symbol in IFC X and Y (the drawing's y is minus IFC Y). */
-const linesOf = (s: OpeningSymbol): Pt[][] => s.shapes.map((x) => {
+/** Every polyline of a symbol, whatever its pen, in IFC X and Y (the drawing's y is minus IFC Y). */
+const linesOf = (s: OpeningSymbol): Pt[][] => [...s.shapes, ...(s.heavy ?? [])].map((x) => {
   if (x.type !== 'polyline') throw new Error(`a ${x.type} in a symbol drawn from the model's representation`);
   return x.pts.map((p) => ({ x: p.x, y: -p.y }));
 });
@@ -50,7 +50,6 @@ const near = (lines: Pt[][], q: Pt) => Math.min(...lines.flat().map((p) => Math.
 describe('a door or window with its own plan representation is drawn from it (#831)', () => {
   it('draws D01 from its symbol: the leaf and the swing, a trimmed IfcEllipse about the hinge', () => {
     const s = symbolsWith().get('Entrance door')!;
-    expect(s.heavy, 'nothing of the generated symbol').toBeUndefined();
     const lines = linesOf(s);
     // The door's frame is the opening's: the south wall's, moved 2.0 m along it. Local (x, y) is IFC (2 + x, y).
     expect(near(lines, { x: 2.06, y: 0.9 }), 'the open leaf\'s tip, where the swing starts').toBeLessThan(0.001);
@@ -61,7 +60,6 @@ describe('a door or window with its own plan representation is drawn from it (#8
 
   it('draws D02 from its composite curve: the leaf\'s line and a trimmed IfcCircle, in the partition\'s frame', () => {
     const s = symbolsWith().get('Inner door')!;
-    expect(s.heavy).toBeUndefined();
     const lines = linesOf(s);
     // The partition runs along IFC +Y from (5.05, 0.3), its local +Y to IFC -X; the opening is 3.0 m along it. Local (x, y) is IFC (5.05 - y, 3.3 + x).
     const hinge = { x: 5.0, y: 4.04 }, r = 0.715;
