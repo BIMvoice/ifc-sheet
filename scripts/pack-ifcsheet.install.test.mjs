@@ -73,9 +73,9 @@ describe('the packed engine in an empty folder', { skip: missing ?? false }, () 
   });
 
   it('leaves out what only the Parquet export loads, and names it as an optional peer', () => {
-    const installed = Object.keys(JSON.parse(readFileSync(join(app, 'package-lock.json'), 'utf8')).packages);
+    // npm's own view of the installed tree, at any depth: where each copy of the package was put.
     for (const name of NOT_INSTALLED) {
-      assert.deepEqual(installed.filter((path) => path.endsWith(`node_modules/${name}`)), [], `${name} was installed`);
+      assert.deepEqual(JSON.parse(run('npm', ['query', `#${name}`], app)).map((node) => node.location), [], `${name} was installed`);
     }
     const manifest = JSON.parse(readFileSync(join(app, 'node_modules/@bimvoice/ifcsheet/package.json'), 'utf8'));
     for (const name of NOT_INSTALLED) assert.equal(manifest.peerDependenciesMeta?.[name]?.optional, true, `${name} is not an optional peer`);
