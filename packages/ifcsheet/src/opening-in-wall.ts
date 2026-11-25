@@ -132,24 +132,46 @@ const PARALLEL = Math.cos((5 * Math.PI) / 180);
  * footprint reaches the door's width. A wall longer than twice its thickness must also run along the door's width; a shorter piece (a
  * 0.1 m stub at a jamb) has no direction to read, so its footprint is taken in the door's own frame. Two pieces of a wall split at the
  * door are both taken, so the fit reads a jamb on each.
+ *
+ * A thin piece that closes a wall's end at the jamb runs across the wall, not along the door: in a large Dutch housing model each such
+ * jamb is an IfcWall 0.1 m long (the wall's thickness) and 20 to 30 mm wide, so it is longer than twice its thickness and runs the wrong
+ * way, and the door was drawn on its frame, 25 mm wider than the gap. A wall that runs another way is still taken when its footprint lies
+ * inside the band of the walls taken (along the door, or a stub): it is a piece of that wall, not a cross wall (which reaches out of it).
  */
 function wallsAround(bands: readonly WallBand[], rect: OpeningRect): MeshData[] {
   const half = rect.width / 2 + CLUSTER;
-  return bands.filter((w) => {
-    if (w.t1 - w.t0 > MAX_THICKNESS) return false;
-    if (w.s1 - w.s0 > 2 * (w.t1 - w.t0)) {
-      if (Math.abs(w.a.x * rect.u.x + w.a.y * rect.u.y) < PARALLEL) return false;
-      const s = rect.c.x * w.a.x + rect.c.y * w.a.y, t = rect.c.y * w.a.x - rect.c.x * w.a.y;
-      return t >= w.t0 - EPS && t <= w.t1 + EPS && w.s0 <= s + half && w.s1 >= s - half;
-    }
-    // The corners of the piece's footprint, in the door's frame (along its width, across it).
+  // The footprint's extent in the door's frame: along its width (s) and across it (t).
+  const inDoorFrame = (w: WallBand) => {
     const corners = [[w.s0, w.t0], [w.s1, w.t0], [w.s1, w.t1], [w.s0, w.t1]].map(([s, t]) => {
       const x = w.a.x * s - w.a.y * t - rect.c.x, y = w.a.y * s + w.a.x * t - rect.c.y;
       return { s: x * rect.u.x + y * rect.u.y, t: x * rect.n.x + y * rect.n.y };
     });
     const ss = corners.map((p) => p.s), ts = corners.map((p) => p.t);
-    return Math.min(...ts) <= EPS && Math.max(...ts) >= -EPS && Math.min(...ss) <= half && Math.max(...ss) >= -half;
-  }).flatMap((w) => w.meshes);
+    return { s0: Math.min(...ss), s1: Math.max(...ss), t0: Math.min(...ts), t1: Math.max(...ts) };
+  };
+  const reaches = (f: { s0: number; s1: number }) => f.s0 <= half && f.s1 >= -half;
+  const along: WallBand[] = [], across: WallBand[] = [], taken: WallBand[] = [];
+  for (const w of bands) {
+    if (w.t1 - w.t0 > MAX_THICKNESS) continue;
+    if (w.s1 - w.s0 > 2 * (w.t1 - w.t0)) {
+      if (Math.abs(w.a.x * rect.u.x + w.a.y * rect.u.y) < PARALLEL) { across.push(w); continue; }
+      const s = rect.c.x * w.a.x + rect.c.y * w.a.y, t = rect.c.y * w.a.x - rect.c.x * w.a.y;
+      if (t >= w.t0 - EPS && t <= w.t1 + EPS && w.s0 <= s + half && w.s1 >= s - half) along.push(w);
+      continue;
+    }
+    const f = inDoorFrame(w);
+    if (f.t0 <= EPS && f.t1 >= -EPS && reaches(f)) taken.push(w);
+  }
+  const held = [...along, ...taken].map(inDoorFrame);
+  if (held.length > 0) {
+    const t0 = Math.min(...held.map((f) => f.t0)), t1 = Math.max(...held.map((f) => f.t1));
+    for (const w of across) {
+      const f = inDoorFrame(w);
+      if (f.t0 >= t0 - EPS && f.t1 <= t1 + EPS && reaches(f)) taken.push(w);
+    }
+  }
+  const keep = new Set([...along, ...taken]);
+  return bands.filter((w) => keep.has(w)).flatMap((w) => w.meshes);
 }
 
 /**
