@@ -83,7 +83,8 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
 
   it('tags every room the section cuts, with the name and area of the plan\'s tag, inside the room\'s cut outline', () => {
     for (const plan of plans) runCommandOnView(plan, drawings.get(plan.id)!, 'tagall');
-    const onPlan = new Map(plans.flatMap((plan) => roomTags(plan.id)).map((d) => [String(d.params.labelOf), textOf(d)]));
+    // A plan's tag cut down to fit its room (`compact`: FZK's Galerie on the attic plan) leaves the name out; a section has room for the whole tag.
+    const onPlan = new Map(plans.flatMap((plan) => roomTags(plan.id)).map((d) => [String(d.params.labelOf), { text: textOf(d), compact: d.params.compact !== undefined }]));
     assert.ok(onPlan.size >= 4, 'the plan tags its rooms');
     useProjectStore.setState({ drafts: [] });
     for (const section of sections) {
@@ -96,7 +97,9 @@ describe('room tags on sections (#677), on AC20-FZK-Haus', { skip: planModelMiss
       assert.deepEqual(new Set(tags.map((d) => String(d.params.labelOf))), cut, `${section.name}: a tag for each room it cuts`);
       for (const tag of tags) {
         const guid = String(tag.params.labelOf);
-        assert.equal(textOf(tag), onPlan.get(guid), `${section.name}: the tag of ${guid} reads as it does on the plan`);
+        const planTag = onPlan.get(guid);
+        if (planTag?.compact) assert.ok(planTag.text.split('\n').every((line) => textOf(tag).split('\n').includes(line)), `${section.name}: the tag of ${guid} says what the plan's compact tag says, and its name`);
+        else assert.equal(textOf(tag), planTag?.text, `${section.name}: the tag of ${guid} reads as it does on the plan`);
         const ring = drawing.cutPolygons.filter((p) => p.ifcType === 'IfcSpace' && renderIdGlobalId(p.entityId) === guid).map((p) => p.polygon.outer).sort((a, b) => ringBounds(b).x1 - ringBounds(b).x0 - (ringBounds(a).x1 - ringBounds(a).x0))[0];
         // Inside the room's cut outline, or, with no clear place there, outside it with a leader that ends inside it.
         const led = tag.shape.type === 'text' ? tag.shape.leader : undefined;
