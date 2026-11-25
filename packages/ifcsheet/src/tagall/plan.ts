@@ -21,8 +21,8 @@ import type { DraftEntity, Pt } from '../draft-types.js';
 import { clipLoop } from '../clip-loop.js';
 import { labelDraft, labelSize, type ElementReader, type LabelEnv, type LabelPlacement } from '../labels/label-draft.js';
 import type { LabelExtras } from '../labels/label-extras.js';
-import { growRect, rectAround, ringBounds, type Rect } from '../labels/label-geometry.js';
-import { labelSpacing, layoutElementOf, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
+import { growRect, rectAround, rectHitsRing, ringBounds, type Rect } from '../labels/label-geometry.js';
+import { labelSpacing, layoutElementOf, layoutLabels, solidPieces, type LayoutElement } from '../labels/label-layout.js';
 import type { LabelTarget } from '../labels/label-place.js';
 import { readFieldValue } from '../labels/label-resolve.js';
 import { RectIndex } from '../labels/rect-index.js';
@@ -159,6 +159,24 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const rings = [...input.elements.map((e) => e.ring), ...swings.map((s) => s.ring)];
   const ringIndex = new RectIndex<readonly Pt[]>(4 * at.textHeight);
   for (const ring of rings) ringIndex.add(ringBounds(ring), ring);
+  // What a room tag keeps its text off (#897's rule for the marks): every piece the plan cuts, not only each element's biggest
+  // (`solidPieces`); the door swings and what is seen beyond the cut too when it looks for a place.
+  const pieces = solidPieces(input.elements.filter((e) => e.cut).map(layoutElementOf));
+  const ringsOn = (list: readonly { b: Rect; ring: readonly Pt[] }[]) => {
+    const index = new RectIndex<readonly Pt[]>(4 * at.textHeight);
+    for (const r of list) index.add(r.b, r.ring);
+    return index;
+  };
+  const swingRings = swings.map((s) => ({ b: ringBounds(s.ring), ring: s.ring }));
+  const cut = ringsOn(pieces);
+  // Where an off-the-cut tag may go: clear of everything drawn, else clear of the cut and the swings only.
+  const offCut = [ringsOn([...solidPieces(input.elements.map(layoutElementOf)), ...swingRings]), ringsOn([...pieces, ...swingRings])];
+  const overCut = (c: Pt, w: number, h: number): boolean => {
+    const tag = rectAround(c, w, h);
+    let over = false;
+    cut.query(tag, (_, ring) => (over = rectHitsRing(tag, ring)));
+    return over;
+  };
   const seen = new Set<string>();
   for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
@@ -192,6 +210,15 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     if (!spot.fits && !tip) {
       const spill = roomLabelSpill(shown, size.w, size.h, spot.centre, textIndex, Math.max(clear, SPILL_GAP * at.textHeight), { crop: input.crop, walls });
       if (spill) { spot = { centre: spill.centre, fits: false }; tip = spill.tip; }
+    }
+    // Over a cut piece (measured on FZK's ground floor: the living room's tag on a flight of the stair, the floor slab below
+    // having left it no place "clear" in the room): the deepest place inside the room off every piece and clear of the rest,
+    // with no leader. With none, it keeps its place. A tag off the cut is never moved.
+    if (overCut(spot.centre, size.w, size.h)) {
+      for (const ringIndex of offCut) {
+        const off = roomLabelPoint(shown, size.w, size.h, { rects: [], rings: [], rectIndex: roomIndex, ringIndex }, clear);
+        if (off.fits) { spot = off; tip = undefined; break; }
+      }
     }
     const placed = labelDraft(env, input.types.room, room.guid, spot.centre, at, undefined, extras);
     // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).

@@ -77,12 +77,31 @@ export interface Placed {
 /** The elements whose bounds cover more than this share of the view's are a backdrop (a floor slab): a label may lie over them. */
 const BACKDROP_SHARE = 0.3;
 
+/** One outline a label keeps clear of: an element's outline (`piece` false) or another of its cut pieces (`piece` true). */
+export interface SolidPiece {
+  id: string;
+  ring: readonly Pt[];
+  b: Rect;
+  piece: boolean;
+}
+
+/**
+ * What a label keeps clear of among a view's elements: every cut piece of each (`LayoutElement.pieces`), its outline among them,
+ * leaving out a backdrop (an element whose bounds cover more than `BACKDROP_SHARE` of all of theirs: a floor slab seen below the
+ * cut), which a label may lie over. Door and window marks (`layoutLabels`) and room tags (`tagall/plan.ts`) both read it.
+ */
+export function solidPieces(elements: readonly LayoutElement[]): SolidPiece[] {
+  const bounds = elements.map((e) => ({ e, b: ringBounds(e.ring) }));
+  const all = unionRect(bounds.map((x) => x.b));
+  const area = (r: Rect) => (r.x1 - r.x0) * (r.y1 - r.y0);
+  return bounds.filter((x) => !all || area(x.b) <= BACKDROP_SHARE * area(all))
+    .flatMap(({ e }) => (e.pieces ?? [e.ring]).map((ring) => ({ id: e.id, ring, b: ringBounds(ring), piece: ring !== e.ring })));
+}
+
 export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): Map<string, Placed> {
   const spacing = labelSpacing(scene.gapMm);
   const gap = spacing.gap * scene.paperUnit, clear = spacing.clear * scene.paperUnit;
-  const bounds = scene.elements.map((e) => ({ e, b: ringBounds(e.ring) }));
-  const all = unionRect(bounds.map((x) => x.b));
-  const area = (r: Rect) => (r.x1 - r.x0) * (r.y1 - r.y0);
+  const all = unionRect(scene.elements.map((e) => ringBounds(e.ring)));
   const away = (c: Pt): Pt => {
     if (!all) return { x: 0, y: 0 };
     const d = { x: c.x - (all.x0 + all.x1) / 2, y: c.y - (all.y0 + all.y1) / 2 };
@@ -92,8 +111,7 @@ export function layoutLabels(items: readonly LayoutItem[], scene: LayoutScene): 
   // An element's outline is kept its clear space from; its other cut pieces (a wall its openings cut in four, a window's frame beside its glass) are
   // kept off: a label never lies over one. Measured on FZK at a 6 mm gap: two window marks sat on the wall piece beside their window, the biggest
   // piece being the only one looked at. Off, not the clear space from them, so a label that already lay clear of the cut stays where it was.
-  const solid = bounds.filter((x) => !all || area(x.b) <= BACKDROP_SHARE * area(all))
-    .flatMap(({ e }) => (e.pieces ?? [e.ring]).map((ring) => ({ id: e.id, ring, b: ringBounds(ring), piece: ring !== e.ring })));
+  const solid = solidPieces(scene.elements);
   // What a place is tested against sits on a grid as coarse as the biggest label: a place meets the few boxes near it, not all of them.
   const cell = Math.max(1e-6, ...items.map((i) => Math.max(i.w, i.h)));
   const taken = scene.annotations instanceof RectIndex ? scene.annotations : new RectIndex(cell);

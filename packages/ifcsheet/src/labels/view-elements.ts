@@ -26,6 +26,8 @@ export interface ViewElement {
    * four is four pieces, and a label keeps off all of them, not only the biggest. Absent when `ring` is the only one.
    */
   pieces?: Pt[][];
+  /** The plan or section cuts it (its outline is a cut outline, not one seen beyond the cut): what a room tag keeps its text off. */
+  cut?: true;
 }
 
 interface Candidate {
@@ -85,7 +87,7 @@ export function viewElements(drawing: DrawingForLabels): ViewElement[] {
   return [
     ...[...cut].map(([renderId, c]): ViewElement => {
       const all = pieces.get(renderId) ?? [];
-      return { renderId, anchor: c.centre, ring: c.ring, ...(all.length > 1 ? { pieces: all } : {}) };
+      return { renderId, anchor: c.centre, ring: c.ring, ...(all.length > 1 ? { pieces: all } : {}), cut: true };
     }),
     ...[...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre, ring: c.ring })),
     ...[...box].map(([renderId, b]): ViewElement => ({
