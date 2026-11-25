@@ -72,7 +72,6 @@
   "bugs": "https://github.com/LTplus-AG/ifc-lite/issues",
   "files": [
     "dist",
-    "schemas",
     "README.md"
   ]
 }
