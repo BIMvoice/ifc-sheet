@@ -11,8 +11,10 @@ import type { TranslationValue } from '../types';
 export const joineryRo = {
   'joinery.open': 'Uși și ferestre',
   'joinery.openingLines': 'Simboluri de deschidere în fațadă',
-  'joinery.openingLines.handle': 'Vârful la mâner, baza la balamale; câmpurile fixe sunt marcate cu cruce',
+  'joinery.openingLines.handle': 'Vârful la mâner',
+  'joinery.openingLines.handle.hint': 'Vârful la mâner, baza la balamale; câmpurile fixe sunt marcate cu cruce',
   'joinery.openingLines.hinge': 'Vârful la balamale (DIN 1356)',
+  'joinery.openingLines.hinge.hint': 'Vârful la balamale, baza la mâner (DIN 1356)',
   'joinery.title': 'Uși și ferestre',
   'joinery.newWindow': 'Fereastră nouă',
   'joinery.newDoor': 'Ușă nouă',
