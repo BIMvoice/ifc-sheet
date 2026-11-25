@@ -13,6 +13,7 @@ import { useAuthoredGridOverlay } from './useAuthoredGridOverlay';
 import { ingestDxfFiles, splitDxfFiles } from '@/hooks/ingest/dxfIngest';
 import { Viewport } from './Viewport';
 import { useWindowFileDrop } from './useWindowFileDrop';
+import { useOpenModelFiles } from './useOpenModelFiles';
 import { ViewportOverlays } from './ViewportOverlays';
 import { WebGpuTroubleshootingDetails, webGpuBannerBlurb } from './WebGpuTroubleshooting';
 import { ViewportWelcomeCard } from './ViewportWelcomeCard';
@@ -478,27 +479,15 @@ export function ViewportContainer() {
   // this flag) is what shows the load-error card when unsupported (#5851).
   const isDragging = useWindowFileDrop(handleDrop, webgpu.supported);
 
+  // The picker below and `ifc-lite:load-files` (the start page's several IFC files, #863) open files the same way.
+  const openFiles = useOpenModelFiles(prepareAndRoute, guardWebGpu);
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     // Reset while the event still owns this input; Retry uses the captured Files.
     e.target.value = '';
-    const attempt = () => {
-      if (!guardWebGpu(attempt)) return;
-
-      // DXF reference underlays split off before model routing (issue #1782).
-      const { dxfFiles, modelFiles } = splitDxfFiles(files);
-      if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
-
-      // Filter to supported files (IFC, IFCX, GLB). The <input> path yields no
-      // live handle, so these models are not refreshable.
-      const supportedFiles = modelFiles.filter(file => isSupportedFile(file) || isModelSidecarFile(file));
-
-      if (supportedFiles.length > 0) void prepareAndRoute(supportedFiles);
-      else reportFileOpenRejected(modelFiles);
-    };
-    attempt();
-  }, [prepareAndRoute, isSupportedFile, guardWebGpu]);
+    openFiles(files);
+  }, [openFiles]);
 
   // Preferred open path: the File System Access picker (Chromium) captures a
   // live handle per file so the model can be refreshed from disk. Falls back to

@@ -21,6 +21,7 @@ import { EVENT_LOAD_FILE } from '@/lib/tours/events';
 import { MODEL_FILE_EXTENSIONS } from '@/services/supported-model-files';
 import { useSetTemplates } from '@/set-template/store';
 import { openDemoModel } from '../ifcsheet/demo-model';
+import { EVENT_LOAD_FILES } from '../open-model-files-event';
 import { NewFromTemplate } from './SetTemplate';
 import { WALL_EYEBROW } from './wall-type';
 
@@ -40,15 +41,20 @@ export function WallStart() {
   const [refused, setRefused] = useState<string | null>(null);
   const [templates, setTemplates] = useState(false);
 
-  /** Open the file when it is IFC; say why not when it is something else. */
-  const open = (file: File | undefined): void => {
-    if (!file) return;
-    if (!isIfcFile(file)) {
-      setRefused(file.name);
+  /**
+   * Open every IFC file among these; say why not when none is IFC. Several IFC files (an architectural and a
+   * structural model, say) open together as one set (#863): taking only the first lost the others.
+   */
+  const open = (files: readonly File[]): void => {
+    if (files.length === 0) return;
+    const ifc = files.filter(isIfcFile);
+    if (ifc.length === 0) {
+      setRefused(files[0].name);
       return;
     }
     setRefused(null);
-    window.dispatchEvent(new CustomEvent(EVENT_LOAD_FILE, { detail: file }));
+    if (ifc.length === 1) window.dispatchEvent(new CustomEvent(EVENT_LOAD_FILE, { detail: ifc[0] }));
+    else window.dispatchEvent(new CustomEvent(EVENT_LOAD_FILES, { detail: ifc }));
   };
 
   return (
@@ -68,8 +74,7 @@ export function WallStart() {
         if (!carriesFiles(e)) return;
         e.preventDefault();
         setOver(false);
-        const files = [...e.dataTransfer.files];
-        open(files.find(isIfcFile) ?? files[0]);
+        open([...e.dataTransfer.files]);
       }}
     >
       <div className="mx-auto grid min-h-full max-w-7xl items-center gap-x-14 gap-y-10 px-6 py-10 sm:px-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
@@ -94,11 +99,12 @@ export function WallStart() {
             <input
               type="file"
               accept={IFC_FILE_EXTENSIONS.join(',')}
+              multiple
               className="sr-only"
               onChange={(e) => {
-                const file = e.target.files?.[0];
+                const files = [...(e.target.files ?? [])];
                 e.target.value = '';
-                open(file);
+                open(files);
               }}
             />
           </label>
