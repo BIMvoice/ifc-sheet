@@ -64,7 +64,7 @@ function theSet(): unknown {
   const { views, sheets } = useProjectStore.getState();
   const nameOf = (id: string) => views.find((v) => v.id === id)?.name ?? `missing ${id}`;
   const round = (n: unknown) => (typeof n === 'number' ? Math.round(n * 1000) / 1000 : n);
-  const plain = (o: object) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'id' || k === 'createdAt' || k === 'viewTemplateId' ? undefined : k === 'storeyGlobalIds' ? [...v].sort() : round(v))));
+  const plain = (o: object) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'id' || k === 'createdAt' || k === 'templateId' ? undefined : k === 'storeyGlobalIds' ? [...v].sort() : round(v))));
   return {
     views: views.map(plain).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     sheets: sheets.filter(isSetSheet).map((s) => ({ ...plain({ ...s, viewports: undefined }), viewports: (s.viewports ?? []).map((vp) => ({ ...plain({ ...vp, viewId: undefined }), view: nameOf(vp.viewId) })) })),
