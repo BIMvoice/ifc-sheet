@@ -164,7 +164,7 @@ export function readersOf(model: AnnotateModel, set: Pick<DefaultSet, 'document'
     if (known) return known;
     const plan = plans.get(c.view.id);
     if (!plan || !ds) return [];
-    const sources = { live: { dataStore: ds, view: null }, project: { joineryTypes: joinery?.joineryTypes ?? [], joineryMapping: joinery?.joineryMapping ?? DEFAULT_JOINERY_MAPPING } };
+    const sources = { live: { dataStore: ds, view: null }, project: { joineryTypes: joinery?.joineryTypes ?? [], joineryMapping: joinery?.joineryMapping ?? DEFAULT_JOINERY_MAPPING }, frame: model.coordinateInfo };
     const graphics = resolveViewGraphics(plan, set.document.viewTemplates);
     const boxes = openingObstacles(planOpeningSymbols(model.buildingMeshes, c.drawing.config.plane, sources, graphics, plan.level));
     // The grid, as the app's `gridOverlays` draws it: on unless the view hides it, its bubbles at the ends the view sets, at the view's scale.

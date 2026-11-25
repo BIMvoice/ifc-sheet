@@ -53,4 +53,5 @@ typedPlanSymbol: value
 viewOpeningSymbols: value
 visibleEntities: value
 windowSymbol: value
+withOwnPlanRepresentations: value
 withoutOpeningBodies: value

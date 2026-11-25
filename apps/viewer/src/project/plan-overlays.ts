@@ -25,6 +25,7 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { corridorOverlays } from '@/civil/civil-plan';
 import type { LineType } from '@/drafting/styles';
 import { gridOverlays } from './grid-overlay';
+import { planSymbolsOn } from '@bimvoice/ifcsheet/plan-symbols';
 
 export interface PlanOverlay {
   /** The DXF layer. */
@@ -81,10 +82,10 @@ export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidde
 
 /** The door and window symbols of a plan (or, given its drawing, an elevation / section) as overlays, by weight. */
 export function symbolOverlays(
-  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
+  meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>, planSymbols = true,
 ): PlanOverlay[] {
   const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
-  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail, level) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail);
+  const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail, level, planSymbols) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail);
   for (const s of symbols) {
     thin.push(...s.shapes);
     if (s.heavy) heavy.push(...s.heavy);
@@ -109,5 +110,5 @@ export function planOverlays(
 ): PlanOverlay[] {
   if (view.kind === 'elevation' || view.kind === 'section') return [...(meshes && drawing ? symbolOverlays(meshes, plane, flips, hidden, drawing, pens, detail) : []), ...gridOverlays(view, plane, drawing, scale)];
   if (view.kind !== 'plan') return [];
-  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden, undefined, pens, detail, view.level) : []), ...roofOverlays(view, plane, hidden, pens), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
+  return [...(meshes ? symbolOverlays(meshes, plane, flips, hidden, undefined, pens, detail, view.level, planSymbolsOn(view.graphics)) : []), ...roofOverlays(view, plane, hidden, pens), ...corridorOverlays(view, plane, hidden), ...gridOverlays(view, plane, drawing, scale)];
 }
