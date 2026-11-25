@@ -1,0 +1,76 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('ViewDefinition[DesignTransferView]'),'2;1');
+FILE_NAME('door-unhosted.ifc','2026-11-25T00:00:00',('IfcSheet'),('IfcSheet'),'hand-written','hand-written','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+/* Level 0 holds a 0.1 m wall split at a door: one piece from x 0 to 2, the other from x 2.9 to 6 (y 0 to 0.1, 3 m high), and a */
+/* 0.1 m wall at right angles to them from x 3.1 to 3.2, y 0.1 to 1.1, 0.2 m past the door's jamb. The door stands in the 0.9 m gap */
+/* with no IfcOpeningElement and no IfcRelFillsElement: the model hosts it in no wall, as many exports leave their doors. Its body is */
+/* a leaf (0.04 m, mid-wall) and a frame 0.925 m wide (12.5 mm past each jamb) and 0.12 m deep (10 mm proud of each face). It is */
+/* placed at the x = 2 jamb with local +Y to +y and states SINGLE_SWING_LEFT: hinged on local -X (x = 2), opening to local +Y. */
+#1=IFCPROJECT('3doorUnhostedProject01',$,'Door hosted in no wall',$,$,$,$,(#14),#9);
+#2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#6=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#9=IFCUNITASSIGNMENT((#2,#6));
+#10=IFCCARTESIANPOINT((0.,0.,0.));
+#11=IFCDIRECTION((0.,0.,1.));
+#12=IFCDIRECTION((1.,0.,0.));
+#13=IFCAXIS2PLACEMENT3D(#10,#11,#12);
+#14=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,$);
+#15=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#14,$,.MODEL_VIEW.,$);
+#22=IFCLOCALPLACEMENT($,#13);
+#23=IFCLOCALPLACEMENT(#22,#13);
+#24=IFCLOCALPLACEMENT(#23,#13);
+#30=IFCSITE('3doorUnhostedSite00001',$,'Site',$,$,#22,$,$,.ELEMENT.,$,$,$,$,$);
+#31=IFCBUILDING('3doorUnhostedBuilding1',$,'Building',$,$,#23,$,$,.ELEMENT.,$,$,$);
+#32=IFCBUILDINGSTOREY('3doorUnhostedLevel0001',$,'Level 0',$,$,#24,$,$,.ELEMENT.,0.);
+#34=IFCRELAGGREGATES('3doorUnhostedAggProj01',$,$,$,#1,(#30));
+#35=IFCRELAGGREGATES('3doorUnhostedAggSite01',$,$,$,#30,(#31));
+#36=IFCRELAGGREGATES('3doorUnhostedAggBldg01',$,$,$,#31,(#32));
+#40=IFCDIRECTION((1.,0.));
+#41=IFCCARTESIANPOINT((1.,0.05));
+#42=IFCAXIS2PLACEMENT2D(#41,#40);
+#43=IFCRECTANGLEPROFILEDEF(.AREA.,'Wall A',#42,2.,0.1);
+#44=IFCEXTRUDEDAREASOLID(#43,#13,#11,3.);
+#45=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#44));
+#46=IFCPRODUCTDEFINITIONSHAPE($,$,(#45));
+#47=IFCLOCALPLACEMENT(#24,#13);
+#48=IFCWALL('3doorUnhostedWallA0001',$,'Wall A',$,$,#47,#46,$,.STANDARD.);
+#50=IFCCARTESIANPOINT((4.45,0.05));
+#51=IFCAXIS2PLACEMENT2D(#50,#40);
+#52=IFCRECTANGLEPROFILEDEF(.AREA.,'Wall B',#51,3.1,0.1);
+#53=IFCEXTRUDEDAREASOLID(#52,#13,#11,3.);
+#54=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#53));
+#55=IFCPRODUCTDEFINITIONSHAPE($,$,(#54));
+#56=IFCWALL('3doorUnhostedWallB0001',$,'Wall B',$,$,#47,#55,$,.STANDARD.);
+#60=IFCCARTESIANPOINT((3.15,0.6));
+#61=IFCAXIS2PLACEMENT2D(#60,#40);
+#62=IFCRECTANGLEPROFILEDEF(.AREA.,'Wall C',#61,0.1,1.);
+#63=IFCEXTRUDEDAREASOLID(#62,#13,#11,3.);
+#64=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#63));
+#65=IFCPRODUCTDEFINITIONSHAPE($,$,(#64));
+#66=IFCWALL('3doorUnhostedWallC0001',$,'Wall C',$,$,#47,#65,$,.STANDARD.);
+/* The door's body, in its own placement (origin at the x = 2 jamb on the y = 0 face). */
+#70=IFCCARTESIANPOINT((0.45,0.05));
+#71=IFCAXIS2PLACEMENT2D(#70,#40);
+#72=IFCRECTANGLEPROFILEDEF(.AREA.,'Leaf',#71,0.9,0.04);
+#73=IFCEXTRUDEDAREASOLID(#72,#13,#11,2.1);
+#74=IFCCARTESIANPOINT((0.0125,0.05));
+#75=IFCAXIS2PLACEMENT2D(#74,#40);
+#76=IFCRECTANGLEPROFILEDEF(.AREA.,'Frame',#75,0.05,0.12);
+#77=IFCEXTRUDEDAREASOLID(#76,#13,#11,2.15);
+#78=IFCCARTESIANPOINT((0.8875,0.05));
+#79=IFCAXIS2PLACEMENT2D(#78,#40);
+#80=IFCRECTANGLEPROFILEDEF(.AREA.,'Frame',#79,0.05,0.12);
+#81=IFCEXTRUDEDAREASOLID(#80,#13,#11,2.15);
+#90=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#73,#77,#81));
+#91=IFCPRODUCTDEFINITIONSHAPE($,$,(#90));
+#92=IFCCARTESIANPOINT((2.,0.,0.));
+#93=IFCAXIS2PLACEMENT3D(#92,#11,#12);
+#94=IFCLOCALPLACEMENT(#24,#93);
+#95=IFCDOOR('3doorUnhostedDoor00001',$,'Door',$,$,#94,#91,$,2.1,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
+#99=IFCRELCONTAINEDINSPATIALSTRUCTURE('3doorUnhostedContain01',$,$,$,(#48,#56,#66,#95),#32);
+ENDSEC;
+END-ISO-10303-21;
