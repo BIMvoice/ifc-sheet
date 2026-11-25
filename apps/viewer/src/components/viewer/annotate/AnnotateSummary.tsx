@@ -44,7 +44,7 @@ export function AnnotateSummary({ summary }: { summary: SetSummary }) {
   return (
     <section aria-live="polite" data-testid="annotate-summary">
       <p className="m-0 text-sm text-white">{t('wall.annotate.result.total', { added: summary.added, views: done, total: summary.views.length })}</p>
-      {summary.cancelled ? <p className="m-0 mt-1 text-xs text-amber-300">{t('wall.annotate.result.stopped')}</p> : null}
+      {summary.cancelled ? <p className="m-0 mt-1 text-xs text-amber-300">{t('wall.annotateWait.stopped', { done: summary.views.length, total: summary.total })}</p> : null}
       <ul className="m-0 mt-2 list-none divide-y divide-sky-300/10 p-0">
         {summary.views.map((v) => <ViewBlock key={v.viewId} view={v} />)}
       </ul>

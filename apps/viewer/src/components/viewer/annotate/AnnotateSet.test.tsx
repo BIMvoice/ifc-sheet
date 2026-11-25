@@ -89,7 +89,7 @@ describe('Annotate the set', () => {
   });
 
   it('says on the page a template\'s set arrives on that the commands it records are running, and what they did', () => {
-    const summary = { views: [{ viewId: 'a', name: 'Ground Floor', kind: 'plan' as const, results: [] }, { viewId: 'b', name: 'North', kind: 'elevation' as const, results: [], skipped: { key: 'wall.annotate.reason.noDrawing' as const, params: { error: 'timeout' } } }], added: 7, cancelled: false };
+    const summary = { views: [{ viewId: 'a', name: 'Ground Floor', kind: 'plan' as const, results: [] }, { viewId: 'b', name: 'North', kind: 'elevation' as const, results: [], skipped: { key: 'wall.annotate.reason.noDrawing' as const, params: { error: 'timeout' } } }], total: 2, added: 7, cancelled: false };
     useSetTemplates.setState({ report: { template: 'Office', notes: [], annotated: 'running' } });
     const ui = render(<TemplateReport />);
     assert.match(ui.textContent ?? '', /are running on the new set/);

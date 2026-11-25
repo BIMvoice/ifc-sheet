@@ -19,7 +19,8 @@ interface AnnotatePanelState {
   on: Record<AnnotateCommand, boolean>;
   /** Which labels TAGALL places (#497); defaults all. */
   tagParts: TagParts;
-  running: AnnotateProgress | null;
+  /** The run in progress; `waiting`: its view's drawing has been waited for a while, and the panel says it is being made (#869). */
+  running: (AnnotateProgress & { waiting?: boolean }) | null;
   summary: SetSummary | null;
   /** Why the last click did not annotate, or what stopped the run (#869); cleared by the next run or a change of commands. */
   problem: AnnotateProblem | null;
@@ -29,7 +30,7 @@ export type AnnotateProblem = { kind: 'nothingOn' } | { kind: 'noModel' } | { ki
 
 /**
  * The set has views to annotate but no model is loaded to draw them from (a project file opened before its IFC): no
- * view's drawing can come, and the run would sit on its first view until the drawing wait gives up, five minutes a view.
+ * view's drawing can come, and the run would sit on its first view until the drawing wait gives up (`DRAWING_WAIT_MS`), a view at a time.
  */
 export const missingModel = (views: number): boolean => views > 0 && useViewerStore.getState().models.size === 0;
 
@@ -77,7 +78,11 @@ export async function runAnnotateSet(): Promise<void> {
       useAnnotatePanel.setState({ problem: { kind: 'noModel' } });
       return;
     }
-    const summary = await annotateSet({ choices, tagParts, mode: 'undoable', signal: abort.signal, onProgress: (running) => useAnnotatePanel.setState({ running }) });
+    const summary = await annotateSet({
+      choices, tagParts, mode: 'undoable', signal: abort.signal,
+      onProgress: (running) => useAnnotatePanel.setState({ running }),
+      onDrawingWait: (waiting) => useAnnotatePanel.setState((s) => (s.running ? { running: { ...s.running, waiting } } : s)),
+    });
     useAnnotatePanel.setState({ summary });
   } catch (error) {
     // What was drafted before the error stays as one undo step; the user is told, not left with a button that did nothing.
@@ -89,7 +94,7 @@ export async function runAnnotateSet(): Promise<void> {
   }
 }
 
-/** Stop after the view being annotated; what was done stays, as one undo step. */
+/** Stop the run now, a wait for a view's drawing included (#869); what was done stays, as one undo step. */
 export function stopAnnotateSet(): void {
   abort?.abort();
 }

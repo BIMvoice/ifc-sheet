@@ -27,7 +27,6 @@ export const annotateSetRo = {
   'wall.annotate.noViews': 'Setul nu are nicio vedere pe care să ruleze aceste comenzi.',
   'wall.annotate.progress': 'Se adnotează vederea {done} din {total}: {name}',
   'wall.annotate.result.total': 'Adăugate: {added}, pe {views} din {total} vederi.',
-  'wall.annotate.result.stopped': 'Oprit înainte de ultimele vederi.',
   'wall.annotate.status.added': 'Adăugate: {count}',
   'wall.annotate.status.already': 'Deja adnotat',
   'wall.annotate.status.skipped': 'Omis',

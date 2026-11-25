@@ -26,7 +26,6 @@ export const annotateSetEn = {
   'wall.annotate.noViews': 'The set has no view these commands run on.',
   'wall.annotate.progress': 'Annotating view {done} of {total}: {name}',
   'wall.annotate.result.total': 'Added {added} on {views} of {total} views.',
-  'wall.annotate.result.stopped': 'Stopped before the last views.',
   'wall.annotate.status.added': 'Added {count}',
   'wall.annotate.status.already': 'Already annotated',
   'wall.annotate.status.skipped': 'Skipped',

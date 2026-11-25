@@ -89,7 +89,12 @@ function AnnotatePanel() {
           </div>
         </section>
         <LabelPresets />
-        {running ? <output className="m-0 block text-xs text-sky-200" data-testid="annotate-progress">{t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName })}</output> : null}
+        {running ? (
+          <output className="m-0 block text-xs text-sky-200" data-testid="annotate-progress">
+            {t('wall.annotate.progress', { done: Math.min(running.done + 1, running.total), total: running.total, name: running.viewName })}
+            {running.waiting ? <span className="mt-1 block text-sky-100/80">{t('wall.annotateWait.making', { name: running.viewName })}</span> : null}
+          </output>
+        ) : null}
         {problem?.kind === 'failed' ? <AnnotateProblem problem={problem} /> : null}
         {summary ? <AnnotateSummary summary={summary} /> : null}
       </div>

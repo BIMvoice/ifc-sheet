@@ -15,6 +15,7 @@
 
 import { create } from 'zustand';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
+import type { DrawingResult as EngineDrawingResult } from '@bimvoice/ifcsheet';
 import { useViewDrawings } from '@/project/view-drawings';
 
 /** Views whose drawing the batch is waiting for, with how many askers each has. */
@@ -43,25 +44,33 @@ export function demandDrawings(viewIds: readonly string[]): () => void {
   };
 }
 
-/** How the wait for a drawing ended. */
-export type DrawingResult = { drawing: Drawing2D; error?: undefined } | { drawing: null; error: string };
+/** How the wait for a drawing ended: the engine's own result, `timedOutMs` set when the drawing did not come in time. */
+export type DrawingResult = EngineDrawingResult<Drawing2D>;
 
-/** The drawing is not coming: no host made it in this long. A drawing that is slow to make is waited for; one that never starts is not. */
-export const DRAWING_WAIT_MS = 5 * 60_000;
+/**
+ * The drawing is not coming: no host made it in this long, so the view is skipped and named in the summary instead of
+ * holding up the rest of the set (#869). Measured from asked to ready with every view of the set generating at once:
+ * the slowest view took 10 s on the demo project, 21 s on the school building (ISSUE_068 skolebygg, 56 MB) and 7 s on
+ * the largest fixture (342 MB, 25 views); two minutes leaves room for a machine several times slower.
+ */
+export const DRAWING_WAIT_MS = 2 * 60_000;
 
 /**
  * The drawing of `viewId` once its host has made it: at once if it is there. A generation that fails, a view that
- * cannot resolve, or no host within {@link DRAWING_WAIT_MS} ends the wait with the reason.
+ * cannot resolve, or no host within `waitMs` ends the wait with the reason; `signal` (Stop) ends it at once.
  */
-export function waitForDrawing(viewId: string, waitMs = DRAWING_WAIT_MS): Promise<DrawingResult> {
+export function waitForDrawing(viewId: string, { waitMs = DRAWING_WAIT_MS, signal }: { waitMs?: number; signal?: AbortSignal } = {}): Promise<DrawingResult> {
   return new Promise((resolve) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe = () => {};
+    const stopped = () => settle({ drawing: null, error: 'stopped' });
     const settle = (result: DrawingResult) => {
       if (timer) clearTimeout(timer);
       unsubscribe();
+      signal?.removeEventListener('abort', stopped);
       resolve(result);
     };
+    if (signal?.aborted) { stopped(); return; }
     const look = (): boolean => {
       const entry = useViewDrawings.getState().byView[viewId];
       if (entry?.status === 'ready' && entry.drawing) settle({ drawing: entry.drawing });
@@ -71,6 +80,7 @@ export function waitForDrawing(viewId: string, waitMs = DRAWING_WAIT_MS): Promis
     };
     if (look()) return;
     unsubscribe = useViewDrawings.subscribe(() => { look(); });
-    timer = setTimeout(() => settle({ drawing: null, error: 'timeout' }), waitMs);
+    signal?.addEventListener('abort', stopped, { once: true });
+    timer = setTimeout(() => settle({ drawing: null, error: 'timeout', timedOutMs: waitMs }), waitMs);
   });
 }
