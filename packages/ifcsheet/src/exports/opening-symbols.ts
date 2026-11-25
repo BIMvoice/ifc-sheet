@@ -28,6 +28,8 @@ export {
   drawnBySymbol, openingPens, openingReads, openingSheetPens, planOpeningSymbols, simplifyOpeningSymbol, viewOpeningSymbols, withoutOpeningBodies,
   type OpeningPen, type OpeningSources,
 } from '../plan-openings.js';
+// A door's or window's own plan representation in place of its generated symbol (#831)
+export { withOwnPlanRepresentations } from '../opening-plan-representation.js';
 // Which loaded model draws a door's or window's symbol when several are loaded: the architectural one, and one copy (#830)
 export { symbolMeshes, type OpeningSource } from '../opening-owners.js';
 export { modelDisciplineOf, type ModelDiscipline } from '../model-discipline.js';

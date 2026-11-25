@@ -33,8 +33,9 @@ describe('doors and windows that fill a wall but no storey contains are drawn as
     const model = await openModel(new Uint8Array(readFileSync(FIXTURE)));
     const set = generateDefaultSet(model)!;
     const [plan] = set.document.views.filter((v) => v.kind === 'plan');
+    // The generated symbols: the fixture's types also carry their own plan symbols, which a plan draws in their place (`door-plan-representation.test.ts`).
     const drawing = (await generateViewDrawings([plan], model.buildingMeshes, set.levels, model.extent!)).get(plan.id)!;
-    const symbols = planOpeningSymbols(model.buildingMeshes, drawing.config.plane, { live: { dataStore: model.dataStore, view: null }, project: { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } }, resolveViewGraphics(plan, set.document.viewTemplates), plan.level);
+    const symbols = planOpeningSymbols(model.buildingMeshes, drawing.config.plane, { live: { dataStore: model.dataStore, view: null }, project: { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } }, { ...resolveViewGraphics(plan, set.document.viewTemplates), usePlanSymbols: false }, plan.level);
     const byName = new Map(symbols.map((s) => [model.dataStore.entities.getName(s.id), s]));
     expect([...byName.keys()].sort()).toEqual(['Entrance door', 'Inner door', 'North window', 'Oblique window']);
 

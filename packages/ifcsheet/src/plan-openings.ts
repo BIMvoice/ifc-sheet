@@ -29,6 +29,9 @@ import { doorStatedOf } from './door-stated.js';
 import { curtainPartsOf, hostedInCutWall, openingHostsOf, storeyMembersOf } from './opening-hosts.js';
 import { elevationOpeningSymbols, visibleEntities } from './elevation-openings.js';
 import { hiddenClassesOf } from './view-templates.js';
+import { planSymbolsOn } from './plan-symbols.js';
+import { openingPlanSymbolsOf, withOwnPlanRepresentations } from './opening-plan-representation.js';
+import type { RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
 import type { ViewGraphics } from './view-graphics-types.js';
 
 /** Whether a plan draws an element from its symbol, not its cut: every door and window. */
@@ -51,6 +54,8 @@ export function simplifyOpeningSymbol(s: OpeningSymbol, detail: DetailLevel): Op
 export interface OpeningSources {
   live: Live;
   project: JoineryProject;
+  /** The render frame the model's meshes are in (`OpenedModel.coordinateInfo`): a door's or window's own plan representation is read in it (#831). */
+  frame?: RenderFrameInfo | null;
 }
 
 /** The configured joinery and the stated swing of an opening, by the express id its mesh carries; each model's types are read once. */
@@ -97,8 +102,12 @@ export function planOpeningSymbols(
   const hosts = openingHostsOf(sources.live.dataStore);
   const curtainParts = curtainPartsOf(sources.live.dataStore);
   const own = level ? storeyMembersOf(sources.live.dataStore, level.storeyGlobalIds) : new Set<number>();
-  return openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []), hostWallMeshes(meshes, (id) => hosts.get(id)), (id) => hosts.has(id), doorStatedOf(sources.live.dataStore))
+  const made = openingSymbols(shown, plane, reads.flipsOf, reads.typedOf, reads.operationOf, hostedInCutWall(meshes, (id) => hosts.get(id), (id) => own.has(id), (host) => curtainParts.get(host) ?? []), hostWallMeshes(meshes, (id) => hosts.get(id)), (id) => hosts.has(id), doorStatedOf(sources.live.dataStore))
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
+  // A door or window with its own plan representation is drawn from it, unless a configured type draws it or the view says not to (#831).
+  if (!planSymbolsOn(graphics)) return made;
+  const representations = openingPlanSymbolsOf(sources.live.dataStore, sources.frame ?? null);
+  return withOwnPlanRepresentations(made, plane, (id) => representations.get(id), (id) => reads.typedOf(id) !== null).symbols;
 }
 
 /**

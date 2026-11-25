@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { curtainPartsOf, doorStatedOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, modelDisciplineOf, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, symbolMeshes, visibleEntities, type DetailLevel, type DoorStated, type ModelDiscipline, type OpeningSource, type ProjectLevel } from '@bimvoice/ifcsheet';
+import { curtainPartsOf, doorStatedOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, modelDisciplineOf, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, symbolMeshes, visibleEntities, withOwnPlanRepresentations, type DetailLevel, type DoorStated, type ModelDiscipline, type OpeningSource, type ProjectLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
@@ -18,6 +18,7 @@ import { drawnJoineryOfRenderId } from '@/joinery/mapped-joinery';
 import { renderIdGlobalId } from './element-guid';
 import { doorOperationOfRenderId } from '@/joinery/door-operation-read';
 import { openingConvention } from '@/joinery/opening-convention';
+import { loadedPlanSymbols } from './plan-symbols';
 
 export { simplifyOpeningSymbol };
 
@@ -80,17 +81,24 @@ function ownSymbolMeshes(meshes: readonly MeshData[]): readonly MeshData[] {
   return symbolMeshes(meshes, sourceOf, disciplines);
 }
 
-/** The opening symbols of a plan at `plane`; `level` is the plan's own storey, the only one whose doors and windows the host-wall rule (#586) draws. */
+/**
+ * The opening symbols of a plan at `plane`; `level` is the plan's own storey, the only one whose doors and windows the host-wall rule (#586) draws.
+ * A door or window with its own plan representation is drawn from it (`withOwnPlanRepresentations`, #831) unless `planSymbols` is false
+ * (the view's "Use plan symbols from the model", `planSymbolsOn`) or a configured type draws it.
+ */
 export function viewOpeningSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>,
+  planSymbols = true,
 ): OpeningSymbol[] {
   const flipsOf = (id: number) => {
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId), (id) => hostWallRenderId(id) !== undefined, doorStatedRenderId)
-    .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
-    .map((s) => simplifyOpeningSymbol(s, detail));
+  const made = openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId), (id) => hostWallRenderId(id) !== undefined, doorStatedRenderId)
+    .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'));
+  const own = planSymbols ? loadedPlanSymbols('openings') : null;
+  const drawn = own && own.size > 0 ? withOwnPlanRepresentations(made, plane, (id) => own.get(id), (id) => drawnJoineryOfRenderId(id) !== null).symbols : made;
+  return drawn.map((s) => simplifyOpeningSymbol(s, detail));
 }
 
 /**

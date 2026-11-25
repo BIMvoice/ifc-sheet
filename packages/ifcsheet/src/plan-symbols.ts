@@ -16,7 +16,9 @@
  * writes the Annotation / PLAN_VIEW representation of a sliding door) and offers `FootPrint` as a subcontext identifier
  * (`bim/module/context/prop.py`). It also writes the 2D symbol of furniture and sanitaryware as `Body` (Curve2D, mapped from
  * the type) in a `Plan` / PLAN_VIEW subcontext (#680), so `Body` is read too, in a Plan context only.
- * Doors and windows are left to their own opening symbols (`packages/ifcsheet/src/opening-symbols.ts`).
+ * Doors and windows are read apart (`which: 'openings'`, #831): a plan draws one's own representation in place of the symbol
+ * generated for it (`opening-plan-representation.ts`), and their bodies go through `withoutOpeningBodies`, not `withPlanSymbols`.
+ * Revit writes theirs as `Plan` (GeometricSet) in a Plan context, so `Plan` counts too for them.
  *
  * `readPlanSymbols` reads them off the parsed entities, in the render frame; `withPlanSymbols` puts them into a plan's
  * drawing, replacing the lines and faces of the elements that have one. The web app and the headless engine both call
@@ -53,7 +55,9 @@ export interface PlanSymbolRead {
 const EMPTY: PlanSymbolRead = { symbols: new Map(), skipped: [] };
 /** `Body` counts here because Bonsai writes a type's plan symbol as `Body` in a Plan / PLAN_VIEW subcontext (#680); a 3D Body is never in a Plan context. */
 const SYMBOL_IDENTIFIERS = new Set(['FOOTPRINT', 'ANNOTATION', 'BODY']);
-/** Doors and windows draw from their own opening symbols. */
+/** A door's or window's: Revit's `Plan` besides the others. */
+const OPENING_IDENTIFIERS = new Set([...SYMBOL_IDENTIFIERS, 'PLAN']);
+/** Doors and windows: read only when asked for (`which: 'openings'`). */
 const OPENING = /^IFC(DOOR|WINDOW)/i;
 
 const text = (v: unknown): string => (typeof v === 'string' ? v.replace(/^\.|\.$/g, '').toUpperCase() : '');
@@ -80,12 +84,12 @@ function lengthUnitScaleOf(store: IfcDataStore): number {
 }
 
 /** The plan symbol representations of the model: the shape representations whose identifier and context say so. */
-function planRepresentations(store: IfcDataStore): Set<number> {
+function planRepresentations(store: IfcDataStore, identifiers: ReadonlySet<string>): Set<number> {
   const out = new Set<number>();
   const contexts = new Map<number, boolean>();
   for (const id of store.entityIndex.byType.get('IFCSHAPEREPRESENTATION') ?? []) {
     const a = store.getEntity(id)?.attributes ?? [];
-    if (SYMBOL_IDENTIFIERS.has(text(a[1])) && isPlanContext(store, ref(a[0]), contexts)) out.add(id);
+    if (identifiers.has(text(a[1])) && isPlanContext(store, ref(a[0]), contexts)) out.add(id);
   }
   return out;
 }
@@ -115,11 +119,12 @@ function mappingTargetOf(store: IfcDataStore, shape: number | null, typeMaps: Re
  * Every element's plan symbol, in the render frame `frame` describes (`CoordinateInfo`): through the element's
  * placement, and for a symbol on the type through the type's RepresentationMap origin. An element with a symbol on the
  * occurrence itself takes it over the type's. Empty for a model without a plan representation (one pass over its
- * shape representations).
+ * shape representations). `which`: every element but the doors and windows (the default), or only those.
  */
-export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | null): PlanSymbolRead {
+export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | null, which: 'elements' | 'openings' = 'elements'): PlanSymbolRead {
   if (!store.entityIndex?.byType || typeof store.getEntity !== 'function') return EMPTY;
-  const plan = planRepresentations(store);
+  const openings = which === 'openings';
+  const plan = planRepresentations(store, openings ? OPENING_IDENTIFIERS : SYMBOL_IDENTIFIERS);
   if (plan.size === 0) return EMPTY;
   // The product definition shapes and representation maps that hold one.
   const shapes = new Map<number, number[]>();
@@ -141,7 +146,7 @@ export function readPlanSymbols(store: IfcDataStore, frame?: RenderFrameInfo | n
     const id = entities.expressId[i];
     const name = entities.getTypeName(id);
     if (isPhysicalElement(name)) {
-      if (!OPENING.test(name)) occurrences.push(id);
+      if (OPENING.test(name) === openings) occurrences.push(id);
     } else if (maps.size > 0 && getInheritanceChainAcrossSchemas(name).includes('IfcTypeProduct')) {
       const all = refsOf(store.getEntity(id), 6);
       const own = all.filter((m) => maps.has(m));
