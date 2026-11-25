@@ -68,11 +68,13 @@ class FaceBoxGrid {
       minX = Math.min(minX, f.min.x); minY = Math.min(minY, f.min.y);
       maxX = Math.max(maxX, f.max.x); maxY = Math.max(maxY, f.max.y);
     }
-    // About one face a cell, the cells square whatever the drawing's proportions (a row of columns is one row of cells).
+    // About one face a cell, the cells square whatever the drawing's proportions (a row of columns is one row of cells),
+    // and never more than two cells a face along either side, so a drawing a hair high does not get a million cells.
     const w = maxX - minX + 2 * tolerance, h = maxY - minY + 2 * tolerance;
-    const cell = Math.max(Math.sqrt((w * h) / Math.max(1, faces.length)), Math.max(w, h) / 1024, 1e-9);
-    this.nx = Math.max(1, Math.min(1024, Math.ceil(w / cell)));
-    this.ny = Math.max(1, Math.min(1024, Math.ceil(h / cell)));
+    const count = Math.max(1, faces.length);
+    const cell = Math.max(Math.sqrt((w * h) / count), Math.max(w, h) / (2 * count), 1e-9);
+    this.nx = Math.max(1, Math.min(2 * count, Math.ceil(w / cell)));
+    this.ny = Math.max(1, Math.min(2 * count, Math.ceil(h / cell)));
     this.minX = minX - tolerance;
     this.minY = minY - tolerance;
     this.sizeX = Math.max(w / this.nx, 1e-9);

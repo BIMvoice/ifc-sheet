@@ -7,9 +7,10 @@
  *
  * It used to: lines times faces. On a storey of skolebygg (233,874 lines, 4,016 cut faces) that was the largest part
  * of the hidden-line stage, and a storey of a larger model, or a second model adding its cut faces to the same plan,
- * made it worse in proportion. With the faces in a grid, a line looks only at the faces near it, so sixteen times the
- * faces, none of them near the lines, cost about the same. The time is compared within this test, on one machine, and
- * the bound is wide: the old way took over ten times as long.
+ * made it worse in proportion. With the faces in a grid, a line looks only at the faces near it, so thirty-two times the
+ * faces, none of them near the lines, cost about the same. The time is compared within this test, on one machine: the
+ * best of three runs each, with enough lines that building the grid is a small part of it. Measured: the old way took
+ * 35 times as long, the grid 2.1 times; the bound is 8.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -32,23 +33,28 @@ function lines(count: number): DrawingLine[] {
   } as DrawingLine));
 }
 
+/** The best of three runs: a single run on a shared runner can be slowed by anything. */
 function timed(faces: number, ls: DrawingLine[]): { ms: number; kept: number } {
   const polygons = columns(faces);
-  const t = performance.now();
-  const kept = dropInsideCutFaces(ls, polygons).length;
-  return { ms: performance.now() - t, kept };
+  let ms = Infinity;
+  let kept = 0;
+  for (let run = 0; run < 3; run++) {
+    const t = performance.now();
+    kept = dropInsideCutFaces(ls, polygons).length;
+    ms = Math.min(ms, performance.now() - t);
+  }
+  return { ms, kept };
 }
 
 describe('dropInsideCutFaces with many cut faces (#863)', () => {
-  it('sixteen times the faces away from the lines does not cost sixteen times as much', () => {
-    const ls = lines(20_000);
-    timed(500, ls); // warm up
+  it('thirty-two times the faces away from the lines does not cost thirty-two times as much', () => {
+    const ls = lines(60_000);
     const few = timed(500, ls);
-    const many = timed(8_000, ls);
+    const many = timed(16_000, ls);
     expect(few.kept).toBe(ls.length);
     expect(many.kept).toBe(ls.length);
-    expect(many.ms / Math.max(few.ms, 1)).toBeLessThan(4);
-  });
+    expect(many.ms / Math.max(few.ms, 1)).toBeLessThan(8);
+  }, 120_000);
 
   it('a line over a cut face is still cut back there, among thousands of faces', () => {
     const polygons = columns(8_000);
