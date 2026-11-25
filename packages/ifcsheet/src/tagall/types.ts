@@ -64,6 +64,10 @@ export interface TagAllSummary {
   roomsTooSmall: number;
   /** Rooms of a section whose label stands outside the room with a leader into it, having no place inside clear of the lines. */
   roomsOutside: number;
+  /** Rooms of a plan too small for their tag, tagged compact (without the name, else the number alone) inside. */
+  roomsCompact?: number;
+  /** Rooms of a plan too small for their tag, even compact, tagged just outside with a leader into the room. */
+  roomsLeader?: number;
   /** Rooms of a section whose label has no place clear of the lines, inside or outside, so it lies over one. */
   roomsOverLines: number;
   /** Doors, windows and rooms that already had theirs. */

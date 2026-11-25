@@ -16,10 +16,13 @@ import { resolveTemplate, type LabelElement } from './label-resolve.js';
 import type { ParsedTemplate } from './label-template.js';
 import type { MissingMode } from './label-resolve.js';
 import type { SheetLocale } from '../names.js';
+import { asCompactMode, compactTemplate, type CompactMode } from './label-compact.js';
 
 export interface LabelExtras {
   numbered?: number;
   computedArea?: number;
+  /** A room tag cut down to fit its room (`label-compact.ts`): the template's lines without the name, or its number alone. */
+  compact?: CompactMode;
 }
 
 export const COMPUTED_SET = 'Computed';
@@ -29,6 +32,7 @@ export function extrasOf(params: Readonly<Record<string, DraftParamValue>>): Lab
   return {
     ...(typeof params.numbered === 'number' ? { numbered: params.numbered } : {}),
     ...(typeof params.computedArea === 'number' ? { computedArea: params.computedArea } : {}),
+    ...(asCompactMode(params.compact) ? { compact: asCompactMode(params.compact) } : {}),
   };
 }
 
@@ -38,7 +42,8 @@ function withComputedArea(el: LabelElement, area: number): LabelElement {
 
 /** The text of a label for `el`: the template read from the element, else (where it comes out empty) the running number. */
 export function resolveWithExtras(template: ParsedTemplate, el: LabelElement, locale: SheetLocale, missing: MissingMode, extras: LabelExtras = {}): string {
-  const text = resolveTemplate(template, extras.computedArea === undefined ? el : withComputedArea(el, extras.computedArea), locale, missing);
+  const shownTemplate = (extras.compact && compactTemplate(template, extras.compact)) || template;
+  const text = resolveTemplate(shownTemplate, extras.computedArea === undefined ? el : withComputedArea(el, extras.computedArea), locale, missing);
   // A room without a number leaves its first line empty: a label does not start with a blank line.
   const shown = text.replace(/^\s*\n/, '');
   return shown === '' && extras.numbered !== undefined ? String(extras.numbered) : shown;

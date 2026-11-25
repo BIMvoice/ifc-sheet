@@ -19,6 +19,7 @@ import { pieceRects, symbolPieces } from '../dimall/avoid.js';
 import type { DraftReader, RectsOf } from '../dimall/measure.js';
 import type { DraftEntity, Pt } from '../draft-types.js';
 import { clipLoop } from '../clip-loop.js';
+import { textBoxOf } from '../text-leader.js';
 import { labelDraft, labelSize, type ElementReader, type LabelEnv, type LabelPlacement } from '../labels/label-draft.js';
 import type { LabelExtras } from '../labels/label-extras.js';
 import { growRect, rectAround, rectHitsRing, ringBounds, type Rect } from '../labels/label-geometry.js';
@@ -30,6 +31,7 @@ import { parseFieldRef } from '../labels/label-template.js';
 import type { ViewElement } from '../labels/view-elements.js';
 
 import { ringArea, type RoomOfPlan } from './footprint.js';
+import { fitRoomTags, type PlacedRoomTag } from './room-fit.js';
 import { roomLabelPoint } from './room-point.js';
 import { roomLabelPointLeast } from './room-point-least.js';
 import { roomLabelOutside } from './room-outside.js';
@@ -134,9 +136,9 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const roomIndex = new RectIndex(4 * at.textHeight);
   // A room tag keeps half its text height clear of what is already on the view, wherever it goes, as one that does not fit does
   // (`SPILL_GAP`, #796); the label clearance alone let FZK's Galerie tag sit 1.1 mm beside a note put where it goes.
-  for (const r of placed) roomIndex.add(growRect(r, Math.max(0, SPILL_GAP * at.textHeight - clear)));
-  for (const r of sections) roomIndex.add(r);
-  for (const r of input.obstacles ?? []) roomIndex.add(r);
+  // The same boxes as a list, the room tags' own left out: what a tag made to fit keeps clear of (`room-fit.ts`).
+  const roomObstacles: Rect[] = [...placed.map((r) => growRect(r, Math.max(0, SPILL_GAP * at.textHeight - clear))), ...sections, ...(input.obstacles ?? [])];
+  for (const r of roomObstacles) roomIndex.add(r);
   // What a room tag that does not fit moves clear of: real texts only (the notes, tags and labels drawn, never a door swing or a frame), and not over a cut wall.
   const textIndex = new RectIndex(4 * at.textHeight);
   for (const r of base) textIndex.add(r);
@@ -149,6 +151,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     if (!draft || !spot || !within(input.crop, spot.centre)) continue;
     drafts.push(draft);
     roomIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
+    roomObstacles.push(rectAround(spot.centre, ...sizeOf(items, t)));
     textIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
     if (extras.numbered !== undefined) summary.numbered++;
@@ -168,15 +171,23 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     return index;
   };
   const swingRings = swings.map((s) => ({ b: ringBounds(s.ring), ring: s.ring }));
-  const cut = ringsOn(pieces);
+  // Whether a tag lies over the cut is read from the cut as drawn (`cutOutlines`), not from the hulls the search keeps clear of.
+  const cut = ringsOn(input.elements.flatMap((e) => (e.cut ? (e.cutOutlines ?? e.pieces ?? [e.ring]) : [])).map((ring) => ({ b: ringBounds(ring), ring })));
   // Where an off-the-cut tag may go: clear of everything drawn, else clear of the cut and the swings only.
   const offCut = [ringsOn([...solidPieces(input.elements.map(layoutElementOf)), ...swingRings]), ringsOn([...pieces, ...swingRings])];
-  const overCut = (c: Pt, w: number, h: number): boolean => {
-    const tag = rectAround(c, w, h);
+  const overCut = (c: Pt, w: number, h: number): boolean => boxOverCut(rectAround(c, w, h));
+  const boxOverCut = (tag: Rect): boolean => {
     let over = false;
     cut.query(tag, (_, ring) => (over = rectHitsRing(tag, ring)));
     return over;
   };
+  // The box the tag's text is drawn in, which is what lies over the cut or not.
+  const drawnOverCut = (d: DraftEntity): boolean => {
+    if (d.shape.type !== 'text') return false;
+    const pts = textBoxOf(d.shape.p, d.shape.text, d.shape.height, d.shape.rotation, d.shape.frame, env.up, env.widthOf);
+    return boxOverCut({ x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) });
+  };
+  const roomTags: PlacedRoomTag[] = [];
   const seen = new Set<string>();
   for (const { room, shown } of rooms) {
     if (seen.has(room.guid)) continue;
@@ -224,12 +235,19 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).
     const draft = placed && tip && placed.shape.type === 'text' ? { ...placed, shape: { ...placed.shape, leader: tip }, params: { ...placed.params, leaderFixed: true } } : placed;
     if (!draft) continue;
-    drafts.push(draft);
+    roomTags.push({ guid: room.guid, shown, extras, centre: spot.centre, ...size, draft, over: drawnOverCut(draft), fits: spot.fits });
     roomIndex.add(growRect(rectAround(spot.centre, size.w, size.h), 0));
     textIndex.add(rectAround(spot.centre, size.w, size.h));
     summary.rooms++;
     if (fromModel) summary.areaFromModel++; else summary.areaFromFootprint++;
-    if (!spot.fits) summary.roomsTooSmall++;
+  }
+  // A tag still over the cut, its room too small for it: compact inside, else beside the room with a leader, else as it is (`room-fit.ts`).
+  const fitted = fitRoomTags(roomTags, { env, type: input.types.room, at, clear, obstacles: roomObstacles, solid: offCut, crop: input.crop });
+  if (fitted.compact) summary.roomsCompact = fitted.compact;
+  if (fitted.leader) summary.roomsLeader = fitted.leader;
+  for (const t of roomTags) {
+    drafts.push(t.draft);
+    if (!t.fits) summary.roomsTooSmall++;
   }
   return { drafts, summary };
 }

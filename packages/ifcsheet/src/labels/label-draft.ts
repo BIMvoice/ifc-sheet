@@ -49,7 +49,8 @@ export interface LabelEnv {
   newId(): string;
 }
 
-function labelText(env: LabelEnv, type: AnnotationType, guid: string, locale: SheetLocale, extras: LabelExtras): string | null {
+/** The text a label of `type` shows for `guid`; null when the element is not loaded or the type is no label type. */
+export function labelText(env: LabelEnv, type: AnnotationType, guid: string, locale: SheetLocale, extras: LabelExtras): string | null {
   const spec = type.label;
   const element = env.read(guid);
   return spec && element ? resolveWithExtras(parseTemplate(spec.template), element, locale, spec.missing, extras) : null;
