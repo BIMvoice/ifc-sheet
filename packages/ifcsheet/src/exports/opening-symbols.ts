@@ -12,6 +12,8 @@ export {
 // The host-wall rule: a door or window whose host wall the plan cuts is drawn on it (#586)
 export { curtainPartsOf, hostedInCutWall, openingHostsOf, storeyMembersOf } from '../opening-hosts.js';
 export { hostWallMeshes } from '../opening-in-wall.js';
+export { doorStatedOf } from '../door-stated.js';
+export type { DoorStated } from '../door-loose-pieces.js';
 // A configured type's strokes in plan, elevation and section, and its plan symbol put where the element is
 export {
   elevationSymbol, openingMarks, planSymbol, sectionSymbol, strokeBounds,
