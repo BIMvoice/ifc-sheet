@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "commit": "cd70fa93198912d1948b7f0a5dbec0be6b42765e",
+  "dtsSha256": "54c9d0a52eb515e517d76726fefe5f6a63e553a81c1b10331a597965d14620f6",
+  "files": {
+    "ifc-lite.js": "0a281479eb65141ae75aeef987d331d44439741a0cae855f122e53e800311a39",
+    "ifc-lite_bg.wasm": "49ad06a83516ce80c49d8e502938c65567ef93f6e2161ab73b8a7b2e819fb80c"
+  }
+}
