@@ -14,9 +14,17 @@
  * Falls back to Arrow IPC when `parquet-wasm` cannot load, which is still a
  * binary format most tools read, and says so on the console rather than
  * failing the export.
+ *
+ * `apache-arrow` and `parquet-wasm` are OPTIONAL peer dependencies of this
+ * package: the engine's drawing path never writes Parquet, so an install of
+ * `@bimvoice/ifcsheet` does not fetch them (about 30 MB). Whoever calls this
+ * installs them; without `apache-arrow` the call fails naming both.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** What to install, said where the missing package is found missing. */
+const PARQUET_INSTALL_HINT = 'Parquet export needs the optional packages apache-arrow and parquet-wasm: npm install apache-arrow parquet-wasm';
 
 /**
  * @param columns column name to values, all arrays the same length
@@ -132,12 +140,12 @@ export async function columnsToParquet(
         } catch (parquetError) {
             // Fallback: If parquet-wasm fails, return Arrow IPC format instead
             // This is still a valid binary format that can be read by many tools
-            console.warn('[columnsToParquet] parquet-wasm conversion failed, returning Arrow IPC format:', parquetError);
+            console.warn(`[columnsToParquet] parquet-wasm conversion failed, returning Arrow IPC format (${PARQUET_INSTALL_HINT}):`, parquetError);
             return new Uint8Array(ipcBuffer);
         }
     } catch (error) {
         // If all else fails, throw a descriptive error
-        throw new Error(`Failed to convert to Parquet format: ${error}. Ensure apache-arrow and parquet-wasm are installed.`);
+        throw new Error(`Failed to convert to Parquet format: ${error}. ${PARQUET_INSTALL_HINT}.`);
     }
 }
 
