@@ -28,6 +28,12 @@ export interface ViewElement {
   pieces?: Pt[][];
   /** The plan or section cuts it (its outline is a cut outline, not one seen beyond the cut): what a room tag keeps its text off. */
   cut?: true;
+  /**
+   * Its cut outlines as the drawing has them, every piece, not stood in for by a hull (`ring` and `pieces` are, past
+   * `MAX_RING` points): whether a room tag lies over the cut is read from these, so an L-shaped wall's hull does not
+   * count as the wall. Present when `cut` is.
+   */
+  cutOutlines?: Pt[][];
 }
 
 interface Candidate {
@@ -65,8 +71,10 @@ function biggest(into: Map<number, Candidate>, id: number, c: Candidate | null):
 export function viewElements(drawing: DrawingForLabels): ViewElement[] {
   const cut = new Map<number, Candidate>();
   const pieces = new Map<number, Pt[][]>();
+  const outlines = new Map<number, Pt[][]>();
   for (const p of drawing.cutPolygons) {
     const c = ringCentre(p.polygon.outer);
+    if (c) outlines.set(p.entityId, [...(outlines.get(p.entityId) ?? []), p.polygon.outer]);
     biggest(cut, p.entityId, c);
     if (!c) continue;
     const list = pieces.get(p.entityId);
@@ -87,7 +95,7 @@ export function viewElements(drawing: DrawingForLabels): ViewElement[] {
   return [
     ...[...cut].map(([renderId, c]): ViewElement => {
       const all = pieces.get(renderId) ?? [];
-      return { renderId, anchor: c.centre, ring: c.ring, ...(all.length > 1 ? { pieces: all } : {}), cut: true };
+      return { renderId, anchor: c.centre, ring: c.ring, ...(all.length > 1 ? { pieces: all } : {}), cut: true, cutOutlines: outlines.get(renderId) ?? [c.ring] };
     }),
     ...[...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre, ring: c.ring })),
     ...[...box].map(([renderId, b]): ViewElement => ({
