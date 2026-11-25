@@ -24,6 +24,14 @@ npx ifcsheet build model.ifc --out set.pdf
 
 Node 22.13 or newer. The geometry engine (WebAssembly) is inside the package; nothing is downloaded at run time.
 
+A smaller install: about 114 MB on disk by default, about 89 MB with `--omit=optional` (measured with npm 11 in an empty folder). The difference is the optional dependencies of `jspdf`, the PDF writer (`html2canvas`, `canvg`, `dompurify`, `core-js` and what they bring), which `jspdf` uses only to render HTML and SVG. IfcSheet never asks it to, so the drawing set and its PDF come out the same without them:
+
+```sh
+npm install --omit=optional @bimvoice/ifcsheet
+```
+
+`--omit=optional` applies to the whole install, so leave it off if something else in your project needs its optional dependencies.
+
 ## Use from an AI assistant (MCP)
 
 The Model Context Protocol server with the IfcSheet tools (open a model, build a set, place views, issue) is `packages/mcp`. It is not published under an IfcSheet name yet (the package name is undecided, see `docs/architecture/npm-publishing.md`). From a clone, after `pnpm turbo run build --filter=@ifc-lite/mcp...`, Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json`) take the same entry:
