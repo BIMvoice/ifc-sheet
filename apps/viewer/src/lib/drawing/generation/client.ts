@@ -30,7 +30,7 @@ import type { GenerationReply, GenerationRequest } from './drawing-generation.wo
 import { packCovers, packMeshes, packSourceOf, packTransferables, type PackedMeshes, type PackSource } from './mesh-pack';
 import { runGenerateJob, type GenerateJob, type ProgressFn } from './generate-job';
 import { describeWorkerFailure, type WorkerFailureEvent } from './failure-text';
-import { drawOnMainThread } from './main-thread-fallback';
+import { drawOnMainThreadIfSmall } from './main-thread-fallback';
 
 /** The worker as the client uses it; a test installs an in-process one. */
 export interface GenerationWorker {
@@ -330,9 +330,9 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
   if (failures >= MAX_FAILURES) {
     if (!gaveUpLogged) {
       gaveUpLogged = true;
-      console.warn(`[drawing-generation] the worker failed ${failures} times in a row; the views of this session are drawn on the main thread, one at a time`);
+      console.warn(`[drawing-generation] the worker failed ${failures} times in a row; this session draws small views on the main thread, one at a time, and says a larger one could not be drawn`);
     }
-    return drawOnMainThread(job, outlineFn, onProgress);
+    return drawOnMainThreadIfSmall(job, outlineFn, onProgress, `the drawing worker failed ${failures} times in a row`);
   }
   try {
     clearTimeout(idleTimer);
@@ -376,7 +376,7 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
     if (!(error instanceof WorkerCrash)) failures++;
     // The cause goes into the text: a copied console log keeps the text and may drop the object after it (#863).
     console.warn(`[drawing-generation] worker unavailable, generating on the main thread: ${describeWorkerFailure(error)}`, error);
-    return drawOnMainThread(job, outlineFn, onProgress);
+    return drawOnMainThreadIfSmall(job, outlineFn, onProgress, `the drawing worker failed (${describeWorkerFailure(error)})`);
   }
 }
 
