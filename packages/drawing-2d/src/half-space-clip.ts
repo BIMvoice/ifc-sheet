@@ -256,10 +256,13 @@ export function clipMeshesToHalfSpace(
   meshes: readonly MeshData[],
   normal: Vec3,
   offset: number,
+  /** Called once per mesh: the drawing worker's heartbeat (#863). */
+  tick?: () => void,
 ): HalfSpaceClipBatchResult {
   const kept: MeshData[] = [];
   const rimSegments: WorldSegment[] = [];
   for (const mesh of meshes) {
+    tick?.();
     const result = clipMeshToHalfSpace(mesh, normal, offset);
     if (result.mesh) kept.push(result.mesh);
     // Appended one at a time, NOT `push(...result.rimSegments)`: a whole-model

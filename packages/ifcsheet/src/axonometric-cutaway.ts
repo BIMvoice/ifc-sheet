@@ -58,6 +58,8 @@ export interface CutawayDrawingInput {
   /** Pixels of tolerance for an edge on its occluder's outline. */
   hiddenLineEdgeTolerancePx: number;
   onProgress?: (stage: string, progress: number) => void;
+  /** Called often while the drawing is made: the drawing worker's heartbeat (#863). */
+  onTick?: () => void;
 }
 
 /** The clip planes of `clip`: the storey cut (the box's top when lower), then the box's other sides. */
@@ -114,7 +116,7 @@ export async function generateCutawayDrawing(input: CutawayDrawingInput): Promis
   let rim: { seg: WorldSegment; plane: number }[] = [];
   planes.forEach((plane, i) => {
     const half = halfSpace(plane);
-    const result = clipMeshesToHalfSpace(kept, half.normal, half.offset);
+    const result = clipMeshesToHalfSpace(kept, half.normal, half.offset, input.onTick);
     kept = result.meshes;
     const trimmed: typeof rim = [];
     for (const r of rim) {
@@ -132,7 +134,7 @@ export async function generateCutawayDrawing(input: CutawayDrawingInput): Promis
   const occluders: MeshData[] = [];
   planes.forEach((plane, i) => {
     if (!facing[i]) return;
-    const rings = planeFaces(input.meshes, plane, box);
+    const rings = planeFaces(input.meshes, plane, box, input.onTick);
     faces.push({ plane, rings });
     const cap = capMesh(rings, plane);
     if (cap) occluders.push(cap);
@@ -149,6 +151,7 @@ export async function generateCutawayDrawing(input: CutawayDrawingInput): Promis
     hiddenLineEdgeTolerancePx: input.hiddenLineEdgeTolerancePx,
     includeFeatureEdges: true,
     onProgress: input.onProgress,
+    onTick: input.onTick,
   });
 
   // 4. The faces, filled: each ring lifted back into the world and projected through the camera's plane.

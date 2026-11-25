@@ -174,18 +174,49 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   // Numeric order; no t is NaN, and +0 and -0 give the same point.
   const sorted = ts.subarray(0, nt).sort();
   const points: Array<[number, number]> = [];
+  // The depth at each t is the nearest of the spans over it. The t are read in order, so the spans are swept: each joins
+  // the spans over t when t reaches its start and leaves when t passes its end, and a t reads only the spans over it, not
+  // every span of the line (#863: a long outline over a finely meshed element met thousands, for each of thousands of t).
+  // The nearest of the same spans is the same number in any order, so the depths are those of reading every span.
+  const sweep = spanSweep(spans, ns);
+  let next = 0, nActive = 0;
+  const active = sweep.active;
   for (let i = 0; i < nt; i++) {
     const t = sorted[i];
     if (t < 0 || t > 1 || (points.length > 0 && t - points[points.length - 1][0] < T_EPS)) continue;
+    while (next < sweep.count && !(t < sweep.start[next])) active[nActive++] = sweep.order[next++];
     let depth = Infinity;
-    for (let s = 0; s < ns; s += 5) {
-      if (t < spans[s] - T_EPS || t > spans[s + 1] + T_EPS) continue;
+    let kept = 0;
+    for (let a = 0; a < nActive; a++) {
+      const s = active[a];
+      if (t > spans[s + 1] + T_EPS) continue; // past its end, and so past it for every later t
+      active[kept++] = s;
       depth = Math.min(depth, Math.max(spans[s + 2] + spans[s + 3] * t, spans[s + 4]));
     }
+    nActive = kept;
     points.push([t, Number.isFinite(depth) ? depth : fallback]);
   }
   if (points[points.length - 1][0] < 1) points[points.length - 1][0] = 1;
   return simplify(clampToCut(points));
+}
+
+let sweepStart = new Float64Array(256);
+let sweepOrder = new Int32Array(256);
+let sweepActive = new Int32Array(256);
+
+/**
+ * The spans (`[t0, t1, alpha, beta, floor]` each) by where they start to count, `t0 - T_EPS`, as offsets into `spans`. A
+ * span whose start is NaN counts from the first t, as the test `t < NaN` that it replaces never skipped it.
+ */
+function spanSweep(spans: Float64Array, ns: number): { start: Float64Array; order: Int32Array; active: Int32Array; count: number } {
+  const count = ns / 5;
+  if (sweepOrder.length < count) { sweepStart = new Float64Array(count * 2); sweepOrder = new Int32Array(count * 2); sweepActive = new Int32Array(count * 2); }
+  const order = sweepOrder.subarray(0, count);
+  for (let k = 0; k < count; k++) order[k] = k * 5;
+  const from = (s: number): number => { const v = spans[s] - T_EPS; return Number.isNaN(v) ? -Infinity : v; };
+  order.sort((a, b) => from(a) - from(b));
+  for (let k = 0; k < count; k++) sweepStart[k] = from(order[k]);
+  return { start: sweepStart, order: sweepOrder, active: sweepActive, count };
 }
 
 let partBuf = new Float64Array(2 * 256);
@@ -236,18 +267,44 @@ function clampToCut(points: Array<[number, number]>): Array<[number, number]> {
   return out;
 }
 
-/** Drop breakpoints while the longer chord stays at or in front of every point it skips. */
+/**
+ * Drop breakpoints while the longer chord stays at or in front of every point it skips.
+ *
+ * The chord from point i may take any slope that keeps each point it skips: at most `(dk + slack - di) / (tk - ti)` for
+ * each, and with a `tolerance` at least `(dk - tolerance - di) / (tk - ti)`. Those bounds grow by one point per longer
+ * chord, so a chord whose slope is inside them, by more than the rounding of {@link chordKeeps}, keeps every point
+ * without reading them again; only a chord at or past a bound is read point by point, by `chordKeeps` as before. The
+ * same points are dropped, and a run of n points costs n steps, not n² (#863: a long outline's depth has thousands).
+ */
 function simplify(points: Array<[number, number]>, tolerance?: number): Array<[number, number]> {
   const out: Array<[number, number]> = [points[0]];
+  let most = 0;
+  for (const p of points) most = Math.max(most, Math.abs(p[1]));
+  // More than `chordKeeps` and the bounds below can round by, between them, on depths of this size.
+  const rounding = 64 * Number.EPSILON * (most + 1);
+  const slack = tolerance ?? CHORD_SLACK;
   let i = 0;
   while (i < points.length - 1) {
+    const [ti, di] = points[i];
     let j = i + 1;
-    while (j + 1 < points.length && chordKeeps(points, i, j + 1, tolerance)) j++;
+    let below = Infinity, above = -Infinity;
+    while (j + 1 < points.length) {
+      const [tk, dk] = points[j];
+      below = Math.min(below, (dk + slack - di - rounding) / (tk - ti));
+      if (tolerance !== undefined) above = Math.max(above, (dk - tolerance - di + rounding) / (tk - ti));
+      const [tj, dj] = points[j + 1];
+      const slope = (dj - di) / (tj - ti);
+      if (!((slope <= below && slope >= above) || chordKeeps(points, i, j + 1, tolerance))) break;
+      j++;
+    }
     out.push(points[j]);
     i = j;
   }
   return out;
 }
+
+/** How far behind a point a chord may pass and still keep it, without a tolerance. */
+const CHORD_SLACK = 1e-9;
 
 /** Whether the chord from point i to point j stays in front of every point between, or with `tolerance` within it either way. */
 function chordKeeps(points: Array<[number, number]>, i: number, j: number, tolerance?: number): boolean {
@@ -256,7 +313,7 @@ function chordKeeps(points: Array<[number, number]>, i: number, j: number, toler
   for (let k = i + 1; k < j; k++) {
     const [tk, dk] = points[k];
     const chord = di + (dj - di) * ((tk - ti) / (tj - ti));
-    if (tolerance === undefined ? chord > dk + 1e-9 : Math.abs(chord - dk) > tolerance) return false;
+    if (tolerance === undefined ? chord > dk + CHORD_SLACK : Math.abs(chord - dk) > tolerance) return false;
   }
   return true;
 }

@@ -181,8 +181,10 @@ function crossings(face: Face, s: Point2D, e: Point2D, tolerance: number, out: n
  * visibility.
  */
 export function dropInsideCutFaces(lines: readonly DrawingLine[], polygons: readonly DrawingPolygon[], tolerance = CUT_FACE_EDGE_TOLERANCE, tick?: () => void): DrawingLine[] {
+  tick?.();
   const faces = occludingFaces(polygons);
   if (faces.length === 0) return [...lines];
+  tick?.();
   const grid = new FaceBoxGrid(faces, tolerance);
   const out: DrawingLine[] = [];
   for (const line of lines) {

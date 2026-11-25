@@ -97,13 +97,14 @@ function ringArea(ring: readonly Point2D[]): number {
  * plane (outer first, then holes) with their source polygon. A ring the box
  * trims to nothing is dropped; an outer ring trimmed to nothing drops the face.
  */
-export function planeFaces(meshes: readonly MeshData[], plane: CardinalPlane, box: { min: Vec3; max: Vec3 } | null): { rings: Point2D[][]; source: DrawingPolygon }[] {
+export function planeFaces(meshes: readonly MeshData[], plane: CardinalPlane, box: { min: Vec3; max: Vec3 } | null, tick?: () => void): { rings: Point2D[][]; source: DrawingPolygon }[] {
   const cutter = new SectionCutter({ axis: plane.axis, position: plane.position, flipped: false });
-  const { segments } = cutter.cutMeshes([...meshes]);
-  const polygons = new PolygonBuilder().buildPolygons(segments);
+  const { segments } = cutter.cutMeshes([...meshes], tick);
+  const polygons = new PolygonBuilder().buildPolygons(segments, tick);
   const rect = trimRect(plane, box);
   const out: { rings: Point2D[][]; source: DrawingPolygon }[] = [];
   for (const source of polygons) {
+    tick?.();
     const rings = [source.polygon.outer, ...source.polygon.holes].map((ring) => (rect ? clipRing(ring, rect) : [...ring]));
     if (rings[0].length < 3 || Math.abs(ringArea(rings[0])) < 1e-12) continue;
     out.push({ rings: [rings[0], ...rings.slice(1).filter((r) => r.length >= 3 && Math.abs(ringArea(r)) >= 1e-12)], source });

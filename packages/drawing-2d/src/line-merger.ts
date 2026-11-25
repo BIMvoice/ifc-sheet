@@ -63,7 +63,7 @@ export function mergeDrawingLines(
 
   for (const groupLines of groups.values()) {
     tick?.();
-    result.push(...mergeLineGroup(groupLines, opts));
+    result.push(...mergeLineGroup(groupLines, opts, tick));
   }
 
   return result;
@@ -72,12 +72,12 @@ export function mergeDrawingLines(
 /**
  * Merge lines within a single group (same entity, category, visibility)
  */
-function mergeLineGroup(lines: DrawingLine[], opts: LineMergerOptions): DrawingLine[] {
+function mergeLineGroup(lines: DrawingLine[], opts: LineMergerOptions, tick?: () => void): DrawingLine[] {
   if (lines.length <= 1) return lines;
 
   // Extract just the Line2D parts for merging
   const line2Ds = lines.map((l) => l.line);
-  const mergedSegments = mergeCollinearSegments(line2Ds, opts);
+  const mergedSegments = mergeCollinearSegments(line2Ds, opts, tick);
 
   // Map merged lines back to DrawingLines. The non-depth properties are
   // uniform across the group (the grouping key covers model, entity,
@@ -139,7 +139,7 @@ interface MergedSegment {
  * Merge collinear segments, tracking which source endpoint became each
  * merged endpoint so callers can carry endpoint metadata (view depth) over.
  */
-function mergeCollinearSegments(lines: Line2D[], opts: LineMergerOptions): MergedSegment[] {
+function mergeCollinearSegments(lines: Line2D[], opts: LineMergerOptions, tick?: () => void): MergedSegment[] {
   // Group lines by direction (using angle buckets)
   const buckets = groupByDirection(lines, opts.angleTolerance);
 
@@ -148,7 +148,7 @@ function mergeCollinearSegments(lines: Line2D[], opts: LineMergerOptions): Merge
   // Process each direction bucket
   for (const bucket of buckets.values()) {
     // Further group by actual line (same direction, same line equation)
-    const lineGroups = groupByLine(lines, bucket, opts.distanceTolerance);
+    const lineGroups = groupByLine(lines, bucket, opts.distanceTolerance, tick);
 
     for (const group of lineGroups) {
       // Merge segments on the same line
@@ -194,14 +194,14 @@ function groupByDirection(
 function groupByLine(
   lines: Line2D[],
   indices: number[],
-  distanceTolerance: number
+  distanceTolerance: number, tick?: () => void, // tick: per group begun, as one element's lines in a direction are compared pairwise (#863)
 ): number[][] {
   const groups: number[][] = [];
   const assigned = new Set<number>();
 
   for (let i = 0; i < indices.length; i++) {
     if (assigned.has(i)) continue;
-
+    tick?.();
     const group: number[] = [indices[i]];
     assigned.add(i);
 

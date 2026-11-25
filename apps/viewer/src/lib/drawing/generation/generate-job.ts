@@ -60,7 +60,7 @@ export async function runGenerateJob(
   /** Called often while the drawing is made (`GeneratorOptions.onTick`): the worker's heartbeat (#863). */
   onTick?: () => void,
 ): Promise<Drawing2D> {
-  if (job.axonometric) return drawAxonometricView(job.meshes, job.axonometric.view, job.axonometric.levels, onProgress);
+  if (job.axonometric) return drawAxonometricView(job.meshes, job.axonometric.view, job.axonometric.levels, onProgress, onTick);
   const { includeHiddenLines, includeProjection, includeEdges, mergeLines, outline } = job.options;
   const generator = new Drawing2DGenerator();
   try {

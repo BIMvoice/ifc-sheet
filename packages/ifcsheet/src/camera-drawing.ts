@@ -62,6 +62,8 @@ export interface CameraDrawingInput {
   /** The half-spaces `meshes` were clipped to, whose open rim `rimSeeds` already draws (`GeneratorOptions.clipPlanes`). */
   clipPlanes?: readonly { normal: Vec3; offset: number }[];
   onProgress?: (stage: string, progress: number) => void;
+  /** Called often while the drawing is made (`GeneratorOptions.onTick`): the drawing worker's heartbeat (#863). */
+  onTick?: () => void;
 }
 
 export interface CameraDrawing {
@@ -112,6 +114,7 @@ export async function generateCameraDrawing(input: CameraDrawingInput): Promise<
       extraOccluders: input.occluders?.length ? [...input.occluders] : undefined,
       clipPlanes: input.clipPlanes?.length ? input.clipPlanes : undefined,
       onProgress: input.onProgress,
+      onTick: input.onTick,
     });
     return { drawing, plane, viewDepth, worldBounds };
   } finally {

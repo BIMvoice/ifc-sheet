@@ -208,6 +208,7 @@ export class HiddenLineClassifier {
     const output: DrawingLine[] = [];
 
     for (const result of results) {
+      tick?.(); // the split lines are built here, as many as were classified (#863)
       if (result.overallVisibility === 'visible') {
         output.push({ ...result.line, visibility: 'visible' });
       } else if (result.overallVisibility === 'hidden') {
