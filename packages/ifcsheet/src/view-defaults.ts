@@ -99,7 +99,8 @@ export function levelsFromStoreys(storeys: readonly StoreyInput[]): ProjectLevel
     const match = levels.find((l) => sameElevation(l.elevation, storey.elevation));
     if (match) {
       if (storey.globalId && !match.storeyGlobalIds.includes(storey.globalId)) match.storeyGlobalIds.push(storey.globalId);
-      if (storey.name.length < match.name.length) match.name = storey.name;
+      // The shortest name, and of two as short the first in alphabetical order: the same level whichever model lists it first (#863).
+      if (storey.name.length < match.name.length || (storey.name.length === match.name.length && storey.name < match.name)) match.name = storey.name;
       if (match.floorY === undefined && storey.floorY !== undefined) match.floorY = storey.floorY;
       continue;
     }
