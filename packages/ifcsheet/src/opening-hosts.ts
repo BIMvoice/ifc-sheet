@@ -59,6 +59,23 @@ export function openingHostsOf(store: IfcDataStore): ReadonlyMap<number, number>
   return hosts;
 }
 
+const fillingsByStore = new WeakMap<object, Map<number, number[]>>();
+
+/**
+ * The doors and windows of `store` that fill an opening in each wall (`openingHostsOf` read the other way), by the wall's express id:
+ * `storeyElementIds` puts one that no storey contains on its wall's storey (#831).
+ */
+export function openingFillingsOf(store: IfcDataStore): (host: number) => readonly number[] {
+  let byHost = fillingsByStore.get(store);
+  if (!byHost) {
+    byHost = new Map();
+    for (const [id, host] of openingHostsOf(store)) byHost.set(host, [...(byHost.get(host) ?? []), id]);
+    fillingsByStore.set(store, byHost);
+  }
+  const held = byHost;
+  return (host) => held.get(host) ?? [];
+}
+
 const partsByStore = new WeakMap<object, Map<number, readonly number[]>>();
 
 /**
@@ -92,7 +109,7 @@ export function storeyMembersOf(store: IfcDataStore, storeyGlobalIds: readonly s
   const wanted = new Set(storeyGlobalIds);
   const storeys = hierarchy ? new Set([...hierarchy.byStorey.keys(), ...hierarchy.elementToStorey.values()]) : new Set<number>();
   const found = [...storeys].filter((id) => wanted.has(store.entities.getGlobalId(id) ?? ''));
-  const members = new Set(hierarchy ? storeyElementIds(hierarchy, found, (id) => store.entities.getTypeEnum(id), predefinedTypeReader(store)) : []);
+  const members = new Set(hierarchy ? storeyElementIds(hierarchy, found, (id) => store.entities.getTypeEnum(id), predefinedTypeReader(store), openingFillingsOf(store)) : []);
   byKey.set(key, members);
   return members;
 }

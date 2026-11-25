@@ -17,6 +17,11 @@
  * A terrain (an IfcGeographicElement that `isTerrainPredefinedType` accepts; a tree or a boring point stays) is the ground the building stands on, not part of it, even
  * when the model contains it in a storey (Bonsai does): left in, it set the extent, was cut in every section as a block and
  * drawn in every elevation as a rectangle (#683). The engine contours it on its own.
+ *
+ * A door or window that fills an opening in one of those elements and is contained in no storey or space of its own is on its
+ * host's storey (`fillingsOf`, the IfcRelFillsElement / IfcRelVoidsElement chain `openingFillingsOf` reads). IfcOpenShell's
+ * `feature.add_filling` does not contain the filling anywhere, so a model scripted with it (#831) had doors and windows that no
+ * plan cut, framed or drew a symbol for: the plan showed an empty gap in the wall.
  */
 
 import { IfcTypeEnum, isSpatialStructureType, type SpatialHierarchy } from '@ifc-lite/data';
@@ -28,6 +33,8 @@ export function storeyElementIds(
   typeOf: (expressId: number) => IfcTypeEnum,
   /** The PredefinedType of an element (null: none). Without it a geographic element counts as one that states none, a terrain. */
   predefinedTypeOf: (expressId: number) => string | null = () => null,
+  /** The doors and windows filling the openings that void an element (none when absent). */
+  fillingsOf: (host: number) => readonly number[] = () => [],
 ): number[] {
   const wanted = new Set(storeys);
   const isBuilding = (id: number): boolean => typeOf(id) !== IfcTypeEnum.IfcGeographicElement || !isTerrainPredefinedType(predefinedTypeOf(id));
@@ -49,6 +56,14 @@ export function storeyElementIds(
     if (seen.has(id) || !wanted.has(storey) || isSpatialStructureType(typeOf(id)) || !isBuilding(id)) continue;
     seen.add(id);
     ids.push(id);
+  }
+  // A filling contained nowhere goes with its host; one a storey or a space contains is where it is contained (above, or on another storey).
+  let inSpaces: Set<number> | undefined;
+  const placed = (id: number) => hierarchy.elementToStorey.has(id) || (inSpaces ??= new Set([...(hierarchy.bySpace?.values() ?? [])].flat())).has(id);
+  for (const host of [...ids]) {
+    for (const id of fillingsOf(host)) {
+      if (!seen.has(id) && !placed(id)) { seen.add(id); ids.push(id); }
+    }
   }
   return ids;
 }
