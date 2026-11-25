@@ -6,10 +6,10 @@
  * Whether a point is strictly inside a cut face, without walking every edge of a large face for every point (#863).
  *
  * `dropInsideCutFaces` asks it at the middle of every run of every line near a face, and the plain test walks all the
- * face's edges: for the distance to each, and for the crossings of a ray to the right. On O-S1's South Elevation the plane
- * cuts faces of thousands of edges, the lines along them break at as many points, and that product was 380 s of a 427 s
- * drawing. A face with many edges files them once in a grid ({@link FaceEdgeIndex}), and a point reads only the edges in
- * its own cell (for the distance) and in the cells along one ray out of the face (for the crossings).
+ * face's edges: for the distance to each, and for the crossings of a ray to the right. On O-S1's South Elevation (395,130
+ * lines behind 394 cut faces of up to 840 edges) that was 323 s of a 427 s drawing. A face's edges are filed once in a grid
+ * ({@link FaceEdgeIndex}), and a point reads only the edges in its own cell (for the distance) and in the cells along one
+ * ray out of the face (for the crossings).
  */
 
 import type { Point2D } from './types.js';
@@ -36,8 +36,11 @@ function crossesToward(dir: number, p: Point2D, a: Point2D, b: Point2D): boolean
   return dir === 2 ? p.y < y : p.y > y;
 }
 
-/** A face with at least this many edges is tested through its index; a smaller one edge by edge. */
-export const INDEXED_EDGES = 64;
+/**
+ * A face with at least this many edges is tested through its index; a smaller one edge by edge. Measured on that elevation's
+ * lines and faces: 16 s at 8, 20 s at 16, 33 s at 32, 46 s at 64, the same at 3.
+ */
+export const INDEXED_EDGES = 8;
 /** Margin over the tolerance for filing an edge in a cell: more than the rounding of `segmentDistance`. */
 const MARGIN = 1e-9;
 
@@ -171,8 +174,11 @@ export class FaceEdgeIndex {
     const stamp = ++this.stamp;
     let inside = false;
     const steps = dir === 1 ? nCols - c : dir === -1 ? c + 1 : dir === 2 ? nRows - r : r + 1;
-    for (let i = 0; i < steps; i++) {
+    // `least` entries lie along the ray: once they are all read, the cells left are empty.
+    let unread = least;
+    for (let i = 0; i < steps && unread > 0; i++) {
       const cell = dir === 1 ? own + i : dir === -1 ? own - i : dir === 2 ? own + i * nCols : own - i * nCols;
+      unread -= start[cell + 1] - start[cell];
       for (let k = start[cell], end = start[cell + 1]; k < end; k++) {
         const e = items[k];
         if (this.seen[e] === stamp) continue;

@@ -7,7 +7,7 @@
  *
  * `dropInsideCutFaces` splits a line where it crosses a cut face and asks, at the middle of each piece, whether it is inside
  * the face. That test walked every edge of the face, so a line with as many crossings as the face has edges cost the square
- * of them: on O-S1's South Elevation, where the plane cuts faces of thousands of edges, it was 380 s of a 427 s drawing.
+ * of them, and on O-S1's South Elevation the inside tests were 323 s of a 427 s drawing (CPU profile).
  * The face's edges are now filed in a grid, and a point reads only those near it and along one ray out of the face. The
  * time is compared within the test, best of three: eight times the edges took 56 times as long before and 3.4 times now
  * (measured), and the bound is 24. The pieces kept are checked too, so a fast wrong answer fails.
