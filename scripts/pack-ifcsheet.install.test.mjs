@@ -37,6 +37,15 @@ const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding:
  */
 const NOT_INSTALLED = ['apache-arrow', 'parquet-wasm'];
 
+/** Every file under `dir`, at any depth. */
+const filesUnder = (dir) => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name));
+
+/** Where npm put each copy of `name` in the tree installed at `cwd`, at any depth. */
+const locations = (name, cwd) => JSON.parse(run('npm', ['query', `#${name}`], cwd)).map((node) => node.location);
+
+/** The PDF with its two time-dependent entries (creation date, file id) blanked, so two runs compare byte for byte. */
+const timeless = (file) => readFileSync(file, 'latin1').replace(/\/CreationDate \([^)]*\)/g, '').replace(/\/ID \[[^\]]*\]/g, '');
+
 describe('the closure the tarball carries', () => {
   it('bundles every workspace package the engine reaches, and asks the registry for none of them', () => {
     const { bundled, outside, byName } = closureOf();
@@ -74,11 +83,16 @@ describe('the packed engine in an empty folder', { skip: missing ?? false }, () 
 
   it('leaves out what only the Parquet export loads, and names it as an optional peer', () => {
     // npm's own view of the installed tree, at any depth: where each copy of the package was put.
-    for (const name of NOT_INSTALLED) {
-      assert.deepEqual(JSON.parse(run('npm', ['query', `#${name}`], app)).map((node) => node.location), [], `${name} was installed`);
-    }
+    for (const name of NOT_INSTALLED) assert.deepEqual(locations(name, app), [], `${name} was installed`);
     const manifest = JSON.parse(readFileSync(join(app, 'node_modules/@bimvoice/ifcsheet/package.json'), 'utf8'));
     for (const name of NOT_INSTALLED) assert.equal(manifest.peerDependenciesMeta?.[name]?.optional, true, `${name} is not an optional peer`);
+  });
+
+  it('carries no EXPRESS schema source: only the code generator reads those, never the engine', () => {
+    // 1.7 MB of the install: the IFC schemas (`.exp`) the generated `@ifc-lite/codegen` code was made from.
+    const shipped = filesUnder(join(app, 'node_modules/@bimvoice/ifcsheet'));
+    assert.ok(shipped.some((file) => file.includes('/@ifc-lite/codegen/dist/generated/')), 'the generated schema code the engine loads is there');
+    assert.deepEqual(shipped.filter((file) => file.endsWith('.exp')).map((file) => file.slice(app.length + 1)), []);
   });
 
   it('says what to install when Parquet is asked for without those packages', () => {
@@ -125,5 +139,21 @@ describe('the packed engine in an empty folder', { skip: missing ?? false }, () 
     const [sheets, dxfs] = run('node', ['one-call.mjs', FZK], app).trim().split('\n').at(-1).split(' ').map(Number);
     assert.ok(sheets >= 3 && dxfs === sheets, `${sheets} sheets, ${dxfs} DXFs`);
     assert.equal(readFileSync(join(app, 'one-call.pdf')).subarray(0, 5).toString('latin1'), '%PDF-');
+  });
+
+  it('installed with --omit=optional, without jspdf\'s HTML extras, writes the same PDF (the README promises this)', () => {
+    // jspdf's optional dependencies (html2canvas, canvg, dompurify, core-js, ~23 MB with theirs) serve its HTML and
+    // SVG rendering, which the drawing set never calls. Our manifest cannot leave them out; the installer can.
+    const extras = Object.keys(JSON.parse(run('npm', ['query', '#jspdf'], app))[0].optionalDependencies ?? {});
+    assert.ok(extras.length > 0, 'jspdf names optional dependencies');
+    for (const name of extras) assert.notDeepEqual(locations(name, app), [], `${name} is installed by default`);
+    const lean = join(work, 'lean');
+    mkdirSync(lean, { recursive: true });
+    writeFileSync(join(lean, 'package.json'), JSON.stringify({ name: 'stranger', private: true, type: 'module' }));
+    run('npm', ['install', '--omit=optional', '--no-audit', '--no-fund', '--ignore-scripts', tarball], lean);
+    for (const name of extras) assert.deepEqual(locations(name, lean), [], `${name} was installed with --omit=optional`);
+    writeFileSync(join(lean, 'one-call.mjs'), readFileSync(join(app, 'one-call.mjs')));
+    run('node', ['one-call.mjs', FZK], lean);
+    assert.ok(timeless(join(lean, 'one-call.pdf')) === timeless(join(app, 'one-call.pdf')), 'the PDF differs from the full install\'s');
   });
 });
