@@ -128,15 +128,27 @@ const PARALLEL = Math.cos((5 * Math.PI) / 180);
 
 /**
  * The walls a door read as `rect` stands in when the model names none (no IfcRelFillsElement to an opening that voids a wall: walls
- * drawn with a gap, or split at the door, in some exports): each wall cut by the plan that runs along the door's width, whose band holds
- * the door's middle line and whose footprint reaches the door's width. Two pieces of a wall split at the door are both taken, so the
- * fit reads a jamb on each.
+ * drawn with a gap, or split at the door, in some exports): each wall cut by the plan whose band holds the door's middle line and whose
+ * footprint reaches the door's width. A wall longer than twice its thickness must also run along the door's width; a shorter piece (a
+ * 0.1 m stub at a jamb) has no direction to read, so its footprint is taken in the door's own frame. Two pieces of a wall split at the
+ * door are both taken, so the fit reads a jamb on each.
  */
 function wallsAround(bands: readonly WallBand[], rect: OpeningRect): MeshData[] {
+  const half = rect.width / 2 + CLUSTER;
   return bands.filter((w) => {
-    if (Math.abs(w.a.x * rect.u.x + w.a.y * rect.u.y) < PARALLEL || w.t1 - w.t0 > MAX_THICKNESS) return false;
-    const s = rect.c.x * w.a.x + rect.c.y * w.a.y, t = rect.c.y * w.a.x - rect.c.x * w.a.y;
-    return t >= w.t0 - EPS && t <= w.t1 + EPS && w.s0 <= s + rect.width / 2 + CLUSTER && w.s1 >= s - rect.width / 2 - CLUSTER;
+    if (w.t1 - w.t0 > MAX_THICKNESS) return false;
+    if (w.s1 - w.s0 > 2 * (w.t1 - w.t0)) {
+      if (Math.abs(w.a.x * rect.u.x + w.a.y * rect.u.y) < PARALLEL) return false;
+      const s = rect.c.x * w.a.x + rect.c.y * w.a.y, t = rect.c.y * w.a.x - rect.c.x * w.a.y;
+      return t >= w.t0 - EPS && t <= w.t1 + EPS && w.s0 <= s + half && w.s1 >= s - half;
+    }
+    // The corners of the piece's footprint, in the door's frame (along its width, across it).
+    const corners = [[w.s0, w.t0], [w.s1, w.t0], [w.s1, w.t1], [w.s0, w.t1]].map(([s, t]) => {
+      const x = w.a.x * s - w.a.y * t - rect.c.x, y = w.a.y * s + w.a.x * t - rect.c.y;
+      return { s: x * rect.u.x + y * rect.u.y, t: x * rect.n.x + y * rect.n.y };
+    });
+    const ss = corners.map((p) => p.s), ts = corners.map((p) => p.t);
+    return Math.min(...ts) <= EPS && Math.max(...ts) >= -EPS && Math.min(...ss) <= half && Math.max(...ss) >= -half;
   }).flatMap((w) => w.meshes);
 }
 

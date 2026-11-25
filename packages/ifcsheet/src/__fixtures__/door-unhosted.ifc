@@ -5,11 +5,12 @@ FILE_NAME('door-unhosted.ifc','2026-11-25T00:00:00',('IfcSheet'),('IfcSheet'),'h
 FILE_SCHEMA(('IFC4'));
 ENDSEC;
 DATA;
-/* Level 0 holds a 0.1 m wall split at a door: one piece from x 0 to 2, the other from x 2.9 to 6 (y 0 to 0.1, 3 m high), and a */
-/* 0.1 m wall at right angles to them from x 3.1 to 3.2, y 0.1 to 1.1, 0.2 m past the door's jamb. The door stands in the 0.9 m gap */
-/* with no IfcOpeningElement and no IfcRelFillsElement: the model hosts it in no wall, as many exports leave their doors. Its body is */
-/* a leaf (0.04 m, mid-wall) and a frame 0.925 m wide (12.5 mm past each jamb) and 0.12 m deep (10 mm proud of each face). It is */
-/* placed at the x = 2 jamb with local +Y to +y and states SINGLE_SWING_LEFT: hinged on local -X (x = 2), opening to local +Y. */
+/* Level 0 holds a 0.1 m wall (y 0 to 0.1, 3 m high) split at two doors: pieces from x 0 to 2 and from x 2.9 to 5, and a 0.1 m by */
+/* 0.1 m stub from x 5.9 to 6; and a 0.1 m wall at right angles from x 3.1 to 3.2, y 0.1 to 1.1, 0.2 m past the first door's jamb. */
+/* Door stands in the 0.9 m gap from x 2 to 2.9, Door B in the gap from x 5 to 5.9 (its far jamb the stub), with no IfcOpeningElement */
+/* and no IfcRelFillsElement: the model hosts them in no wall, as many exports leave their doors. Each body is a leaf (0.04 m, */
+/* mid-wall) and a frame 0.925 m wide (12.5 mm past each jamb) and 0.12 m deep (10 mm proud of each face). Each is placed at its */
+/* left jamb with local +Y to +y and states SINGLE_SWING_LEFT: hinged on local -X, opening to local +Y. */
 #1=IFCPROJECT('3doorUnhostedProject01',$,'Door hosted in no wall',$,$,$,$,(#14),#9);
 #2=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
 #6=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
@@ -38,9 +39,9 @@ DATA;
 #46=IFCPRODUCTDEFINITIONSHAPE($,$,(#45));
 #47=IFCLOCALPLACEMENT(#24,#13);
 #48=IFCWALL('3doorUnhostedWallA0001',$,'Wall A',$,$,#47,#46,$,.STANDARD.);
-#50=IFCCARTESIANPOINT((4.45,0.05));
+#50=IFCCARTESIANPOINT((3.95,0.05));
 #51=IFCAXIS2PLACEMENT2D(#50,#40);
-#52=IFCRECTANGLEPROFILEDEF(.AREA.,'Wall B',#51,3.1,0.1);
+#52=IFCRECTANGLEPROFILEDEF(.AREA.,'Wall B',#51,2.1,0.1);
 #53=IFCEXTRUDEDAREASOLID(#52,#13,#11,3.);
 #54=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#53));
 #55=IFCPRODUCTDEFINITIONSHAPE($,$,(#54));
@@ -71,6 +72,17 @@ DATA;
 #93=IFCAXIS2PLACEMENT3D(#92,#11,#12);
 #94=IFCLOCALPLACEMENT(#24,#93);
 #95=IFCDOOR('3doorUnhostedDoor00001',$,'Door',$,$,#94,#91,$,2.1,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
-#99=IFCRELCONTAINEDINSPATIALSTRUCTURE('3doorUnhostedContain01',$,$,$,(#48,#56,#66,#95),#32);
+#100=IFCCARTESIANPOINT((5.95,0.05));
+#101=IFCAXIS2PLACEMENT2D(#100,#40);
+#102=IFCRECTANGLEPROFILEDEF(.AREA.,'Stub',#101,0.1,0.1);
+#103=IFCEXTRUDEDAREASOLID(#102,#13,#11,3.);
+#104=IFCSHAPEREPRESENTATION(#15,'Body','SweptSolid',(#103));
+#105=IFCPRODUCTDEFINITIONSHAPE($,$,(#104));
+#106=IFCWALL('3doorUnhostedWallE0001',$,'Stub',$,$,#47,#105,$,.STANDARD.);
+#110=IFCCARTESIANPOINT((5.,0.,0.));
+#111=IFCAXIS2PLACEMENT3D(#110,#11,#12);
+#112=IFCLOCALPLACEMENT(#24,#111);
+#113=IFCDOOR('3doorUnhostedDoor00002',$,'Door B',$,$,#112,#91,$,2.1,0.9,.DOOR.,.SINGLE_SWING_LEFT.,$);
+#99=IFCRELCONTAINEDINSPATIALSTRUCTURE('3doorUnhostedContain01',$,$,$,(#48,#56,#66,#106,#95,#113),#32);
 ENDSEC;
 END-ISO-10303-21;
