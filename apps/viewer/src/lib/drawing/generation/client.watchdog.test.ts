@@ -95,6 +95,7 @@ describe('only the job a worker is on is timed (#863)', () => {
       say(stub.workers[0], { type: 'alive', id: heavyJob.id });
     }
     await turn();
+    assert.equal(warn.mock.calls.length, 0, 'three minutes on the heavy view: no worker was taken for dead');
     say(stub.workers[0], { type: 'done', id: heavyJob.id, drawing: drawingOf(heavyJob.id) });
     say(stub.workers[0], { type: 'alive', id: smallJob.id });
     say(stub.workers[0], { type: 'done', id: smallJob.id, drawing: drawingOf(smallJob.id) });
