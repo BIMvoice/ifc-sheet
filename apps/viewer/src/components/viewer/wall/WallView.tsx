@@ -14,7 +14,7 @@ import { useTranslation } from '@/i18n';
 import { useNextTaskValue } from '@/hooks/useNextTaskValue';
 import { useDrawingRuntime } from '@/lib/drawing/drawing-runtime';
 import { isSetSheet } from '@/project/drawing-set';
-import { sectionProposals } from '@/project/drawing-set-actions';
+import { restartDrawingSet, sectionProposals } from '@/project/drawing-set-actions';
 import { startSet } from '@/set-template/start';
 import { wallExtent } from '@/project/wall-extent';
 import { useProjectStore } from '@/project/project-store';
@@ -61,9 +61,12 @@ export function WallView() {
 
   // A model on a project with no set sheets (interior elevations alone do not count): lay the set out as soon as the geometry is in.
   const hasSet = sheets.some(isSetSheet);
+  // Models opened together load one after the other (#863): once every one of them is in, a starting set still untouched is laid out again for them all.
+  const allIn = [...settled.models.values()].every((m) => !m.loadState || m.loadState === 'complete' || m.loadState === 'error');
   useEffect(() => {
     if (!hasSet && settledMeshes && settledMeshes.length > 0 && startSet(settledMeshes, extent)) setIntro(true);
-  }, [hasSet, settledMeshes, extent]);
+    else if (hasSet && allIn && restartDrawingSet(settledMeshes, extent)) setIntro(true);
+  }, [hasSet, allIn, settledMeshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(settledMeshes, extent), [settledMeshes, extent, views]);
