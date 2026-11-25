@@ -18,6 +18,7 @@
 
 import type { DrawingLine, DrawingPolygon, Point2D } from './types.js';
 import { isFeatureElementType } from './feature-elements.js';
+import { FaceEdgeIndex, INDEXED_EDGES, rayCrosses, segmentDistance } from './cut-face-edges.js';
 
 /** How close to a cut face's outline a piece of line counts as on it, drawing units (metres): 0.1 mm. */
 export const CUT_FACE_EDGE_TOLERANCE = 1e-4;
@@ -26,6 +27,8 @@ interface Face {
   rings: Point2D[][];
   min: Point2D;
   max: Point2D;
+  /** Its edges filed for `strictlyInside`, built on first use; null for a face of few edges. */
+  edges?: FaceEdgeIndex | null;
 }
 
 /** The faces that hide: every cut but a room's (a space is air, not a solid) and a void's (an opening is a boolean operand). */
@@ -110,23 +113,18 @@ class FaceBoxGrid {
   }
 }
 
-/** Distance from `p` to the segment `a`-`b`. */
-function segmentDistance(p: Point2D, a: Point2D, b: Point2D): number {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
 /** Whether `p` is inside the face, further than `tolerance` from every ring (even-odd, so a hole is outside). */
 function strictlyInside(face: Face, p: Point2D, tolerance: number): boolean {
   if (p.x < face.min.x || p.x > face.max.x || p.y < face.min.y || p.y > face.max.y) return false;
+  // A face of many edges answers from its edges near the point (`cut-face-edges.ts`, #863), the same answer.
+  if (face.edges === undefined) face.edges = face.rings.reduce((n, r) => n + r.length, 0) >= INDEXED_EDGES ? new FaceEdgeIndex(face.rings, Math.max(tolerance, CUT_FACE_EDGE_TOLERANCE)) : null;
+  if (face.edges && face.edges.usable && tolerance <= face.edges.reach) return face.edges.strictlyInside(p, tolerance);
   let inside = false;
   for (const ring of face.rings) {
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
       const a = ring[j], b = ring[i];
       if (segmentDistance(p, a, b) <= tolerance) return false;
-      if ((a.y > p.y) !== (b.y > p.y) && p.x < a.x + ((p.y - a.y) * (b.x - a.x)) / (b.y - a.y)) inside = !inside;
+      if (rayCrosses(p, a, b)) inside = !inside;
     }
   }
   return inside;
