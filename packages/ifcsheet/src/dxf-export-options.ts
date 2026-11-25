@@ -89,16 +89,22 @@ export function isExternalOf(properties: Record<string, Record<string, unknown>>
 
 /**
  * Where a viewport's drawing is on the sheet: `x`,`y` are the paper position of the drawing's origin, `s` paper millimetres per drawing
- * metre, `kx`,`ky` the signs of the cut (`paperSigns`). The inverse of the drawing-to-paper map: `modelPoint`.
+ * metre. The way back from the paper to the model: `modelPoint`.
  */
-export interface ModelFrame { x: number; y: number; s: number; kx: 1 | -1; ky: 1 | -1 }
+export interface ModelFrame { x: number; y: number; s: number }
 
 /** On a sheet pen, with the DXF options (`DxfSheetOptions`): the class and `IsExternal` of what the pen draws, and where its viewport's drawing is on the paper. */
 export interface DxfPenTags { ifcType?: string; external?: boolean; frame?: ModelFrame }
 
-/** A paper point (millimetres, y down as drawn) in its viewport's drawing coordinates, metres. */
+/**
+ * A paper point (millimetres, y down as drawn) in the model, metres, y up, as a CAD file reads it: the viewport as it reads on the sheet,
+ * at true size, about the drawing's origin. Only scaled and moved, never mirrored (#831): a plan's x and y are the IFC's east and north
+ * (the drawing's second axis is the viewer's Z, south, which the paper already draws downwards), an elevation's are along the view and
+ * the real height, and a text, an arc or a hatch keeps its sense. Taking the paper back through the cut's signs (`paperSigns`) gave the
+ * drawing's own axes instead, and wrote a plan as (x, -y).
+ */
 export function modelPoint(frame: ModelFrame, p: Point2D): Point2D {
-  return { x: (p.x - frame.x) / (frame.kx * frame.s), y: (p.y - frame.y) / (frame.ky * frame.s) };
+  return { x: (p.x - frame.x) / frame.s, y: (frame.y - p.y) / frame.s };
 }
 
 /** `$INSUNITS` of a DXF: 4 millimetres (paper), 6 metres (model). */

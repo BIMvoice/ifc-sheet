@@ -44,6 +44,31 @@ export function dxfLayerWeight(dxf: string, layer: string): number | undefined {
   return undefined;
 }
 
+/** The entities of a DXF text in order: type, layer and points (group codes 10/20 and 11/21 paired as they come). */
+export function dxfEntities(dxf: string): { type: string; layer: string; points: { x: number; y: number }[] }[] {
+  const lines = dxf.split(/\r?\n/);
+  const start = lines.findIndex((l, i) => l.trim() === 'ENTITIES' && lines[i - 1]?.trim() === '2');
+  const out: { type: string; layer: string; points: { x: number; y: number }[] }[] = [];
+  for (let i = start + 1; i + 1 < lines.length; i += 2) {
+    if (lines[i].trim() !== '0') continue;
+    const type = lines[i + 1].trim();
+    if (type === 'ENDSEC') break;
+    const entity = { type, layer: '', points: [] as { x: number; y: number }[] };
+    let x: number | null = null;
+    for (let j = i + 2; j + 1 < lines.length && lines[j].trim() !== '0'; j += 2) {
+      const code = lines[j].trim();
+      if (code === '8') entity.layer = lines[j + 1];
+      if (code === '10' || code === '11') x = Number(lines[j + 1]);
+      if ((code === '20' || code === '21') && x !== null) {
+        entity.points.push({ x, y: Number(lines[j + 1]) });
+        x = null;
+      }
+    }
+    out.push(entity);
+  }
+  return out;
+}
+
 /** The extent of the points (group codes 10/11 and 20/21) of the entities on one layer: x and y minima and maxima, in the file's units; undefined when the layer carries nothing. */
 export function dxfLayerExtent(dxf: string, layer: string): { x0: number; x1: number; y0: number; y1: number } | undefined {
   const lines = dxf.split(/\r?\n/);

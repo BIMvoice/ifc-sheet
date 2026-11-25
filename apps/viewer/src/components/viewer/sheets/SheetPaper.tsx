@@ -172,10 +172,10 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, con
   const left = vp.x - box.width / 2;
   const top = vp.y - box.height / 2;
   const clipId = `vp-${vp.id}`;
-  // Where the drawing's origin is on the paper, and its sign each way (`modelPoint`): a DXF at model size reads the viewport back through it (#831).
+  // Where the drawing's origin is on the paper, and paper millimetres per metre (`modelPoint`): a DXF at model size reads the viewport back through it (#831).
   const dxfFrame = (() => {
-    const o = drawingToScreen({ x: 0, y: 0 }, t, axis), ex = drawingToScreen({ x: 1, y: 0 }, t, axis), ey = drawingToScreen({ x: 0, y: 1 }, t, axis);
-    return `${o.x} ${o.y} ${Math.abs(ex.x - o.x)} ${ex.x < o.x ? -1 : 1} ${ey.y < o.y ? -1 : 1}`;
+    const o = drawingToScreen({ x: 0, y: 0 }, t, axis), ex = drawingToScreen({ x: 1, y: 0 }, t, axis);
+    return `${o.x} ${o.y} ${Math.abs(ex.x - o.x)}`;
   })();
   // A detail shows exactly its area (the drawing is centred on it); every other view, its box.
   const clip = view?.detail

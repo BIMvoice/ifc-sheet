@@ -176,10 +176,10 @@ export function sheetDxf(svg: SVGSVGElement, sheet: ProjectSheet): Uint8Array {
   return svgToDxf(svg, paperOf(sheet).h, `units: millimetres (paper), sheet ${sheet.number} ${sheet.name}`, 1, cad);
 }
 
-/** Where a viewport's drawing is on the sheet (`data-dxf-frame`: x y mm-per-metre kx ky), or null. */
+/** Where a viewport's drawing is on the sheet (`data-dxf-frame`: x y mm-per-metre), or null. */
 function frameOf(el: Element): ModelFrame | null {
   const v = el.closest('[data-dxf-frame]')?.getAttribute('data-dxf-frame')?.split(' ').map(Number);
-  return v && v.length === 5 && v.every(Number.isFinite) ? { x: v[0], y: v[1], s: v[2], kx: v[3] < 0 ? -1 : 1, ky: v[4] < 0 ? -1 : 1 } : null;
+  return v && v.length === 3 && v.every(Number.isFinite) && v[2] > 0 ? { x: v[0], y: v[1], s: v[2] } : null;
 }
 
 /**
@@ -189,7 +189,8 @@ function frameOf(el: Element): ModelFrame | null {
  * project's): the layer, colour, pen and line type an element goes on
  * (`layerAndPens`); empty, the layers its tags name. `model` (#831): only what
  * stands in a viewport (`data-dxf-frame`) is written, each point taken from
- * the paper to the viewport's drawing coordinates, metres (`modelPoint`).
+ * the paper to the model in metres, as the sheet reads it and never mirrored
+ * (`modelPoint`): a plan's x and y are the IFC's.
  */
 export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, patternScale = 1, cad: readonly CadLayerRule[] = useProjectStore.getState().cadLayers ?? [], model = false): Uint8Array {
   const root = svg.getScreenCTM()?.inverse();
