@@ -17,6 +17,7 @@
 
 import { IfcTypeEnum, type SpatialNode } from '@ifc-lite/data';
 import type { IfcDataStore } from '@ifc-lite/parser';
+import { openingFillingsOf } from './opening-hosts.js';
 import { siteElementsInBuilding, type BuildingGeometry } from './site-in-building.js';
 import { storeyElementIds } from './storey-elements.js';
 import { predefinedTypeReader } from './terrain.js';
@@ -37,6 +38,6 @@ export function buildingElementIds(store: IfcDataStore, only?: ReadonlySet<strin
   const storeys = storeysIn(hierarchy.project, (id) => !only || only.has(store.entities.getGlobalId(id) ?? ''));
   const typeOf = (id: number) => store.entities.getTypeEnum(id);
   const predefined = predefinedTypeReader(store);
-  const ids = storeyElementIds(hierarchy, storeys, typeOf, predefined);
+  const ids = storeyElementIds(hierarchy, storeys, typeOf, predefined, openingFillingsOf(store));
   return geometry ? [...ids, ...siteElementsInBuilding(hierarchy, ids, geometry, typeOf, predefined)] : ids;
 }
