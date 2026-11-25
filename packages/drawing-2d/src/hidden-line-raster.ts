@@ -78,6 +78,7 @@ export function buildDepthRaster(
   resolution: number,
   depthBias: number,
   bounds?: Bounds2D,
+  tick?: () => void,
 ): DepthRaster | null {
   const b = bounds ?? computeOccluderBounds(meshes, plane, occluderDepth);
   const boundsWidth = b.max.x - b.min.x;
@@ -110,6 +111,7 @@ export function buildDepthRaster(
   const raster: DepthRaster = { buffer, owners, width, height, bounds: b };
 
   for (const mesh of meshes) {
+    tick?.();
     rasterizeMesh(raster, mesh, plane, occluderDepth, depthBias);
   }
 

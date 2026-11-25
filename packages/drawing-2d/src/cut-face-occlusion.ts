@@ -115,11 +115,12 @@ function crossings(face: Face, s: Point2D, e: Point2D, tolerance: number, out: n
  * its own depth, interpolated along the parent the way the hidden-line classifier splits (`hidden-line.ts`), and the parent's
  * visibility.
  */
-export function dropInsideCutFaces(lines: readonly DrawingLine[], polygons: readonly DrawingPolygon[], tolerance = CUT_FACE_EDGE_TOLERANCE): DrawingLine[] {
+export function dropInsideCutFaces(lines: readonly DrawingLine[], polygons: readonly DrawingPolygon[], tolerance = CUT_FACE_EDGE_TOLERANCE, tick?: () => void): DrawingLine[] {
   const faces = occludingFaces(polygons);
   if (faces.length === 0) return [...lines];
   const out: DrawingLine[] = [];
   for (const line of lines) {
+    tick?.();
     const { start: s, end: e } = line.line;
     const depthEnd = line.depthEnd ?? line.depth;
     if (line.category === 'cut' || Math.max(line.depth, depthEnd) <= 0) { out.push(line); continue; }

@@ -60,21 +60,28 @@ function poolSize(): number {
   return Math.max(1, Math.min(3, cores - 2));
 }
 
+
 /**
- * A worker that has gone too long without a word (no progress, no heartbeat, no reply) is
- * taken for dead: one the OS killed for memory fires neither `message` nor
- * `error`, and its jobs would otherwise never settle. "Too long" follows the
- * job, so a small view whose worker has died falls back to the main thread
- * within the minute, while a heavy one is given time between two progress
- * messages: {@link SILENCE_BASE_MS}, plus {@link SILENCE_PER_MESH_MS} for each
- * mesh it draws, up to {@link SILENCE_MAX_MS}.
+ * A worker is taken for dead when the job it is working on goes this long
+ * without a word from it (#863). A worker at work says so: when it starts a
+ * job, at most every 2 s from inside the generator's loops (per mesh, per
+ * element, per line) and while it awaits. So silence means one call that does
+ * not come back to the loops for this long: the outline of one mesh in wasm,
+ * or one mesh rasterized. Measured in the production build with two models
+ * (the worker reports it with each drawing, `quietMs`): at most 0.07 s on the
+ * 343 MB O-S1 model, 0.5 s on skolebygg (56 MB), 1.4 s on Holter (177 MB),
+ * and 7.1 s on skolebygg with the machine loaded ten times over. The limit is
+ * 60 s, eight times the loaded figure, plus 0.1 ms per vertex of the job's
+ * largest mesh, whose one call is the longest. A job queued behind others is
+ * not timed: only the one the worker is on.
  */
-export const SILENCE_BASE_MS = 30_000;
-export const SILENCE_PER_MESH_MS = 5;
+export const SILENCE_BASE_MS = 60_000;
+/** Added per vertex of the job's largest mesh. */
+export const SILENCE_PER_VERTEX_MS = 0.1;
 export const SILENCE_MAX_MS = 300_000;
 
-export function silenceLimitMs(meshCount: number): number {
-  return Math.min(SILENCE_MAX_MS, SILENCE_BASE_MS + meshCount * SILENCE_PER_MESH_MS);
+export function silenceLimitMs(largestMeshVertices: number): number {
+  return Math.min(SILENCE_MAX_MS, SILENCE_BASE_MS + largestMeshVertices * SILENCE_PER_VERTEX_MS);
 }
 /** An idle pool is let go after this long, returning its memory to the OS. */
 export const IDLE_TERMINATE_MS = 60_000;
@@ -84,17 +91,23 @@ interface Slot {
   inFlight: number;
   /** The pack this worker holds, or is being sent. */
   loading: { record: PackRecord; done: Promise<void> } | null;
+  /** The jobs sent to this worker, in the order it works them; the first is the one it is on. */
+  jobs: number[];
+  /** Fires when the job the worker is on has heard nothing for its limit ({@link watch}). */
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 interface Pending {
   resolve: (drawing: Drawing2D) => void;
   reject: (error: Error) => void;
   onProgress?: ProgressFn;
-  /** Fires {@link failAll} when the worker stays silent; unset while the job's meshes are still being packed here. */
-  timer: ReturnType<typeof setTimeout> | undefined;
-  /** How long this job lets its worker stay silent ({@link silenceLimitMs}). */
+  /** How long this job lets its worker stay silent while it is the one being worked on ({@link silenceLimitMs}). */
   silenceMs: number;
   slot: Slot;
+  /** Pack the meshes for `slot`'s worker if it lacks them, then send it this job. */
+  send: (slot: Slot) => Promise<void>;
+  /** Sent again once already, to a fresh worker, after its first worker went silent on it. */
+  retried: boolean;
   /** The lists that arrived in `part` messages, by drawing key. */
   parts: Map<string, unknown[]>;
 }
@@ -115,13 +128,14 @@ const packs = new WeakMap<readonly MeshData[], PackRecord>();
 /** The pack the pool was last sent, so it can be let go with the pool. */
 let livePack: PackRecord | null = null;
 /**
- * Worker failures in a row; after {@link MAX_FAILURES} the session stops trying the workers. One
- * crash is one failure, however many jobs it took down with it (see {@link WorkerCrash}).
+ * Worker failures in a row, with no drawing made by a worker in between; after {@link MAX_FAILURES}
+ * the session stops trying the workers. One crash or one silent worker is one failure, however many
+ * jobs it held.
  */
 let failures = 0;
 const MAX_FAILURES = 2;
 
-/** The error every job in flight is rejected with when the pool goes down; the crash was counted once, in {@link failAll}. */
+/** The error a job is rejected with when its worker is gone; the failure was counted once, where it was found. */
 class WorkerCrash extends Error {
   override name = 'WorkerCrash';
 }
@@ -130,71 +144,117 @@ class WorkerCrash extends Error {
 let gaveUpLogged = false;
 
 function terminatePool(): void {
-  for (const slot of slots) slot.worker.terminate();
+  for (const slot of slots) {
+    clearTimeout(slot.timer);
+    slot.worker.terminate();
+  }
   slots = [];
   if (livePack) livePack.packed = null;
   livePack = null;
 }
 
-/** The pool is down: every job in flight is rejected, and the crash counts as one failure whatever the number of jobs. */
+/** A worker failed for good (an error event): every job in flight is rejected, and the crash counts as one failure whatever the number of jobs. */
 function failAll(message: string): void {
   const outstanding = [...pending.values()];
   pending.clear();
   terminatePool();
   failures++;
-  for (const job of outstanding) {
-    clearTimeout(job.timer);
-    job.reject(new WorkerCrash(message));
-  }
+  for (const job of outstanding) job.reject(new WorkerCrash(message));
 }
 
-function armSilence(id: number, silenceMs: number): ReturnType<typeof setTimeout> {
-  return setTimeout(
-    () => failAll(`drawing generation worker silent for ${silenceMs / 1000} s (job ${id}); taking it for dead, the view is drawn on the main thread`),
-    silenceMs,
-  );
+/**
+ * Time the job `slot`'s worker is on, from now. Called whenever the worker says anything and whenever
+ * the job it is on changes, so a job is timed only while it is the one being worked on.
+ */
+function watch(slot: Slot): void {
+  clearTimeout(slot.timer);
+  slot.timer = undefined;
+  const id = slot.jobs[0];
+  const head = id === undefined ? undefined : pending.get(id);
+  if (!head) return;
+  slot.timer = setTimeout(() => {
+    // Messages the worker sent while this page was busy may still be waiting to be read: they go first,
+    // and any of them re-arms the watch, which clears this verdict before it is given.
+    slot.timer = setTimeout(() => replaceSilent(slot, id, head.silenceMs), 0);
+  }, head.silenceMs);
+}
+
+/**
+ * `slot`'s worker said nothing for `silenceMs` while on job `id`: it is let go and a fresh worker takes
+ * its place and its jobs, in order. The job it went silent on is tried once more on the fresh worker;
+ * silent there too, it is drawn on the main thread. The other views stay with the workers (#863).
+ */
+function replaceSilent(slot: Slot, id: number, silenceMs: number): void {
+  const index = slots.indexOf(slot);
+  const factory = workerFactory;
+  if (index < 0 || !factory) return;
+  failures++;
+  clearTimeout(slot.timer);
+  slot.worker.terminate();
+  const fresh = newSlot(factory);
+  slots[index] = fresh;
+  // The jobs sent to the silent worker, then those still being packed for it.
+  const moving = [...slot.jobs, ...[...pending.entries()].filter(([jobId, job]) => job.slot === slot && !slot.jobs.includes(jobId)).map(([jobId]) => jobId)];
+  const message = `drawing generation worker silent for ${silenceMs / 1000} s (job ${id})`;
+  console.warn(`[drawing-generation] ${message}; it is replaced by a fresh worker, which takes its ${moving.length} job(s)`);
+  for (const jobId of moving) {
+    const job = pending.get(jobId);
+    if (!job) continue;
+    if (jobId === id && job.retried) {
+      pending.delete(jobId);
+      job.reject(new WorkerCrash(`${message}, the second time; the view is drawn on the main thread`));
+      continue;
+    }
+    if (jobId === id) job.retried = true;
+    job.slot = fresh;
+    fresh.inFlight++;
+    job.send(fresh).catch((error: unknown) => {
+      if (pending.get(jobId)?.slot !== fresh) return;
+      pending.delete(jobId);
+      fresh.inFlight--;
+      job.reject(error instanceof Error ? error : new Error(String(error)));
+    });
+  }
 }
 
 function onReply(slot: Slot, data: GenerationReply): void {
-  // Any word from a worker shows it alive, for the jobs queued behind the one it is on as well.
-  for (const [id, other] of pending) {
-    if (other.slot === slot && other.timer !== undefined) {
-      clearTimeout(other.timer);
-      other.timer = armSilence(id, other.silenceMs);
-    }
-  }
   const job = pending.get(data.id);
-  if (!job) return;
-  clearTimeout(job.timer);
-  if (data.type === 'progress' || data.type === 'part' || data.type === 'alive') {
-    job.timer = armSilence(data.id, job.silenceMs);
-    if (data.type === 'alive') return;
+  if (job && (data.type === 'progress' || data.type === 'part' || data.type === 'alive')) {
     if (data.type === 'progress') job.onProgress?.(data.stage, data.progress);
-    else {
+    else if (data.type === 'part') {
       const list = job.parts.get(data.key);
       if (list) for (const item of data.items) list.push(item);
       else job.parts.set(data.key, data.items);
     }
-    return;
+  } else if (job && (data.type === 'done' || data.type === 'error')) {
+    pending.delete(data.id);
+    job.slot.inFlight--;
+    // A worker that came near its limit is worth knowing about before it is passed (#863).
+    if (data.type === 'done' && (data.quietMs ?? 0) > job.silenceMs / 4) {
+      console.info(`[drawing-generation] job ${data.id}: the worker went ${(data.quietMs ?? 0) / 1000} s without a word (limit ${job.silenceMs / 1000} s)`);
+    }
+    if (data.type === 'done') job.resolve(job.parts.size ? { ...data.drawing, ...Object.fromEntries(job.parts) } : data.drawing);
+    else job.reject(new Error(data.error));
+    scheduleIdle();
   }
-  pending.delete(data.id);
-  job.slot.inFlight--;
-  if (data.type === 'done') job.resolve(job.parts.size ? { ...data.drawing, ...Object.fromEntries(job.parts) } : data.drawing);
-  else job.reject(new Error(data.error));
-  scheduleIdle();
+  if (data.type === 'done' || data.type === 'error') slot.jobs = slot.jobs.filter((jobId) => jobId !== data.id);
+  // Any word shows the worker alive; a finished job hands the watch to the next one.
+  watch(slot);
+}
+
+function newSlot(factory: WorkerFactory): Slot {
+  const worker = factory();
+  const slot: Slot = { worker, inFlight: 0, loading: null, jobs: [], timer: undefined };
+  worker.onmessage = ({ data }) => { if (slots.includes(slot)) onReply(slot, data); };
+  worker.onerror = (event) => failAll(`drawing generation worker failed: ${describeWorkerFailure(event)}`);
+  worker.onmessageerror = (event) => failAll(`a reply of the drawing generation worker could not be read: ${describeWorkerFailure(event)}`);
+  return slot;
 }
 
 function ensurePool(factory: WorkerFactory): Slot[] {
   if (slots.length) return slots;
   const size = poolSize();
-  for (let i = 0; i < size; i++) {
-    const worker = factory();
-    const slot: Slot = { worker, inFlight: 0, loading: null };
-    worker.onmessage = ({ data }) => onReply(slot, data);
-    worker.onerror = (event) => failAll(`drawing generation worker failed: ${describeWorkerFailure(event)}`);
-    worker.onmessageerror = (event) => failAll(`a reply of the drawing generation worker could not be read: ${describeWorkerFailure(event)}`);
-    slots.push(slot);
-  }
+  for (let i = 0; i < size; i++) slots.push(newSlot(factory));
   return slots;
 }
 
@@ -232,7 +292,7 @@ function loadPack(slot: Slot, record: PackRecord, all: readonly MeshData[]): Pro
     livePack = record;
     if (shareable) slot.worker.postMessage({ type: 'pack', packId: record.id, pack });
     else {
-      // Transferred: this realm's copy is gone, and the one worker holds the only one.
+      // Transferred: this realm's copy is gone, and the one worker holds the only one (a fresh worker gets a new pack).
       record.packed = null;
       slot.worker.postMessage({ type: 'pack', packId: record.id, pack }, packTransferables(pack));
     }
@@ -248,6 +308,13 @@ export interface DrawingRequest extends Omit<GenerateJob, 'meshes'> {
   /** The meshes this drawing draws: a subset of `allMeshes`, by identity. */
   meshes: MeshData[];
   onProgress?: ProgressFn;
+}
+
+/** Vertices of the largest of `meshes`: its one outline or raster call is the longest the worker cannot speak during. */
+function largestMeshVertices(meshes: readonly MeshData[]): number {
+  let most = 0;
+  for (const mesh of meshes) most = Math.max(most, mesh.positions.length / 3);
+  return most;
 }
 
 /**
@@ -275,28 +342,37 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
     // Counted before packing, so neither the idle timer nor the next request treats this worker as free.
     slot.inFlight++;
     const id = nextId++;
-    const silenceMs = silenceLimitMs(meshes.length);
+    const send = async (target: Slot): Promise<void> => {
+      try {
+        await loadPack(target, record, allMeshes);
+      } catch (error) {
+        // Moved to a fresh worker while packing for this one: the move sends it there.
+        if (pending.get(id)?.slot !== target) return;
+        throw error;
+      }
+      if (pending.get(id)?.slot !== target) return;
+      target.jobs.push(id);
+      // A copy each time: the indices cross by transfer, and a job may be sent again to a fresh worker.
+      const meshIndices = indices.slice();
+      target.worker.postMessage({ type: 'generate', id, packId: record.id, meshIndices, config, options, profiles, axonometric }, [meshIndices.buffer]);
+      if (target.jobs[0] === id) watch(target);
+    };
     const done = new Promise<Drawing2D>((resolve, reject) => {
-      pending.set(id, { resolve, reject, onProgress, timer: undefined, silenceMs, slot, parts: new Map() });
+      pending.set(id, { resolve, reject, onProgress, silenceMs: silenceLimitMs(largestMeshVertices(meshes)), slot, send, retried: false, parts: new Map() });
     });
     // If the pool goes down while this job is still packing, nothing awaits `done`: its rejection is the crash already counted.
     done.catch(() => {});
     try {
-      await loadPack(slot, record, allMeshes);
+      await send(slot);
     } catch (error) {
-      const held = pending.get(id);
-      if (held) { clearTimeout(held.timer); pending.delete(id); slot.inFlight--; }
+      if (pending.get(id)?.slot === slot) { pending.delete(id); slot.inFlight--; }
       throw error;
     }
-    // The worker's silence is timed from here: packing happens in this realm and says nothing about the worker.
-    const held = pending.get(id);
-    if (held) held.timer = armSilence(id, silenceMs);
-    slot.worker.postMessage({ type: 'generate', id, packId: record.id, meshIndices: indices, config, options, profiles, axonometric }, [indices.buffer]);
     const drawing = await done;
     failures = 0;
     return drawing;
   } catch (error) {
-    // A crash was counted once when the pool went down; a job that failed by itself counts here.
+    // A crash or a silent worker was counted once where it was found; a job that failed by itself counts here.
     if (!(error instanceof WorkerCrash)) failures++;
     // The cause goes into the text: a copied console log keeps the text and may drop the object after it (#863).
     console.warn(`[drawing-generation] worker unavailable, generating on the main thread: ${describeWorkerFailure(error)}`, error);
