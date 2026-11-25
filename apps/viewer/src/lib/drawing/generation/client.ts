@@ -15,9 +15,12 @@
  * small pool of workers cuts several views at once, so one heavy view does
  * not hold up the others. Elsewhere one worker gets the pack by transfer.
  *
- * Where no worker can run (Node, where the tests drive the hooks), or when
- * the workers fail, the same job runs in this realm (`runGenerateJob`), as it
- * always did: a drawing that is slow to make is better than none.
+ * Where no worker can run (Node, where the tests drive the hooks), the same
+ * job runs in this realm (`runGenerateJob`). When the workers fail, the views
+ * are drawn on the main thread one at a time, the page turning between two
+ * (`main-thread-fallback.ts`, #863), and the failure is logged as text that
+ * names it (`failure-text.ts`): a drawing that is slow to make is better than
+ * none, and a page that freezes on it is not.
  */
 
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
@@ -26,12 +29,16 @@ import type { MeshOutline2dFn } from '@/hooks/meshOutlineProvider';
 import type { GenerationReply, GenerationRequest } from './drawing-generation.worker';
 import { packCovers, packMeshes, packSourceOf, packTransferables, type PackedMeshes, type PackSource } from './mesh-pack';
 import { runGenerateJob, type GenerateJob, type ProgressFn } from './generate-job';
+import { describeWorkerFailure, type WorkerFailureEvent } from './failure-text';
+import { drawOnMainThread } from './main-thread-fallback';
 
 /** The worker as the client uses it; a test installs an in-process one. */
 export interface GenerationWorker {
   postMessage(message: GenerationRequest, transfer?: Transferable[]): void;
   onmessage: ((event: { data: GenerationReply }) => void) | null;
-  onerror: ((event: { message?: string }) => void) | null;
+  onerror: ((event: WorkerFailureEvent) => void) | null;
+  /** A reply that could not be read here (it never reaches `onmessage`, so its job would wait for the silence limit). */
+  onmessageerror?: ((event: WorkerFailureEvent) => void) | null;
   terminate(): void;
 }
 
@@ -115,7 +122,12 @@ let failures = 0;
 const MAX_FAILURES = 2;
 
 /** The error every job in flight is rejected with when the pool goes down; the crash was counted once, in {@link failAll}. */
-class WorkerCrash extends Error {}
+class WorkerCrash extends Error {
+  override name = 'WorkerCrash';
+}
+
+/** Whether the session's switch to the main thread has been logged; it is said once, not for every view after it. */
+let gaveUpLogged = false;
 
 function terminatePool(): void {
   for (const slot of slots) slot.worker.terminate();
@@ -179,7 +191,8 @@ function ensurePool(factory: WorkerFactory): Slot[] {
     const worker = factory();
     const slot: Slot = { worker, inFlight: 0, loading: null };
     worker.onmessage = ({ data }) => onReply(slot, data);
-    worker.onerror = (event) => failAll(event.message || 'drawing generation worker failed');
+    worker.onerror = (event) => failAll(`drawing generation worker failed: ${describeWorkerFailure(event)}`);
+    worker.onmessageerror = (event) => failAll(`a reply of the drawing generation worker could not be read: ${describeWorkerFailure(event)}`);
     slots.push(slot);
   }
   return slots;
@@ -246,7 +259,14 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
   const { allMeshes, meshes, config, options, profiles, axonometric, onProgress } = request;
   const job: GenerateJob = { meshes, config, options, profiles, axonometric };
   const factory = workerFactory;
-  if (!factory || failures >= MAX_FAILURES) return runGenerateJob(job, outlineFn, onProgress);
+  if (!factory) return runGenerateJob(job, outlineFn, onProgress);
+  if (failures >= MAX_FAILURES) {
+    if (!gaveUpLogged) {
+      gaveUpLogged = true;
+      console.warn(`[drawing-generation] the worker failed ${failures} times in a row; the views of this session are drawn on the main thread, one at a time`);
+    }
+    return drawOnMainThread(job, outlineFn, onProgress);
+  }
   try {
     clearTimeout(idleTimer);
     const pool = ensurePool(factory);
@@ -278,8 +298,9 @@ export async function generateDrawing(request: DrawingRequest, outlineFn: MeshOu
   } catch (error) {
     // A crash was counted once when the pool went down; a job that failed by itself counts here.
     if (!(error instanceof WorkerCrash)) failures++;
-    console.warn('[drawing-generation] worker unavailable, generating on the main thread:', error);
-    return runGenerateJob(job, outlineFn, onProgress);
+    // The cause goes into the text: a copied console log keeps the text and may drop the object after it (#863).
+    console.warn(`[drawing-generation] worker unavailable, generating on the main thread: ${describeWorkerFailure(error)}`, error);
+    return drawOnMainThread(job, outlineFn, onProgress);
   }
 }
 
@@ -293,6 +314,7 @@ export function __setGenerationWorkerFactoryForTest(factory: WorkerFactory | nul
   clearTimeout(idleTimer);
   failAll('worker factory replaced');
   failures = 0;
+  gaveUpLogged = false;
   workerFactory = factory ?? defaultWorkerFactory();
   shareable = factory ? shared : typeof SharedArrayBuffer !== 'undefined' && (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
   return previous;

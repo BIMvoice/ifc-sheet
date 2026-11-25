@@ -74,6 +74,7 @@ import { draftSetEn } from '../catalogues/draft-set.en';
 import { draftingStandardsEn } from '../catalogues/drafting-standards.en';
 import { draftingEn } from '../catalogues/drafting.en';
 import { drawOrderEn } from '../catalogues/draw-order.en';
+import { drawingMainThreadEn } from '../catalogues/drawing-main-thread.en';
 import { drawingUnderlayEn } from '../catalogues/drawing-underlay.en';
 import { dxfViewEn } from '../catalogues/dxf-view.en';
 import { dxfWorkingFileEn } from '../catalogues/dxf-working-file.en';
@@ -160,6 +161,7 @@ export const enAE = {
   ...draftingStandardsEn,
   ...draftingEn,
   ...drawOrderEn,
+  ...drawingMainThreadEn,
   ...drawingUnderlayEn,
   ...dxfViewEn,
   ...dxfWorkingFileEn,

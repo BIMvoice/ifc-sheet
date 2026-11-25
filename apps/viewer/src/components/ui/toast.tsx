@@ -103,6 +103,15 @@ export const toast = {
     const id = addToast('error', message, durationMs);
     return () => dismiss(id);
   },
+  /**
+   * A notice that lasts as long as a state does (#863): it stays until the
+   * returned function takes it away or the user dismisses it, its text is
+   * read at render, and a second call with the same `key` replaces it.
+   */
+  status: (key: string, message: () => string): (() => void) => {
+    const id = addToast('info', message, null, undefined, key);
+    return () => dismiss(id);
+  },
 };
 
 // ─── React Component ──────────────────────────────────────────────────────
