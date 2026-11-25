@@ -79,6 +79,7 @@ import { wallRelayoutEn } from '../catalogues/wall-relayout.en';
 import { wallReviewEn } from '../catalogues/wall-review.en';
 import { wallPhasesEn } from '../catalogues/wall-phases.en';
 import { sectionRoomTagsEn } from '../catalogues/section-room-tags.en';
+import { sectionTrayEn } from '../catalogues/section-tray.en';
 import { wallSectionsEn } from '../catalogues/wall-sections.en';
 import { wallIntroActionsEn } from '../catalogues/wall-intro-actions.en';
 import { wallIntroSheetsEn } from '../catalogues/wall-intro-sheets.en';
@@ -166,6 +167,7 @@ export const enSZ = {
   ...trackingEn,
   ...underlayEn,
   ...sectionRoomTagsEn,
+  ...sectionTrayEn,
   ...sectionCreatedDocsEn,
   ...wallSectionsEn,
   ...wallIntroActionsEn,
