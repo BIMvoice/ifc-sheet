@@ -21,6 +21,11 @@ export interface ViewElement {
   anchor: Pt;
   /** The outline labels keep clear of: the biggest cut or projected outline, else the box round its lines. */
   ring: Pt[];
+  /**
+   * Every cut outline of an element the cut shows in more than one piece, `ring` among them: a wall its openings cut in
+   * four is four pieces, and a label keeps off all of them, not only the biggest. Absent when `ring` is the only one.
+   */
+  pieces?: Pt[][];
 }
 
 interface Candidate {
@@ -57,7 +62,14 @@ function biggest(into: Map<number, Candidate>, id: number, c: Candidate | null):
 
 export function viewElements(drawing: DrawingForLabels): ViewElement[] {
   const cut = new Map<number, Candidate>();
-  for (const p of drawing.cutPolygons) biggest(cut, p.entityId, ringCentre(p.polygon.outer));
+  const pieces = new Map<number, Pt[][]>();
+  for (const p of drawing.cutPolygons) {
+    const c = ringCentre(p.polygon.outer);
+    biggest(cut, p.entityId, c);
+    if (!c) continue;
+    const list = pieces.get(p.entityId);
+    if (list) list.push(c.ring); else pieces.set(p.entityId, [c.ring]);
+  }
   const projected = new Map<number, Candidate>();
   for (const p of drawing.projectionPolygons) if (!cut.has(p.entityId)) biggest(projected, p.entityId, ringCentre(p.polygon.outer));
   const box = new Map<number, { min: Pt; max: Pt }>();
@@ -71,7 +83,11 @@ export function viewElements(drawing: DrawingForLabels): ViewElement[] {
     box.set(l.entityId, b);
   }
   return [
-    ...[...cut, ...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre, ring: c.ring })),
+    ...[...cut].map(([renderId, c]): ViewElement => {
+      const all = pieces.get(renderId) ?? [];
+      return { renderId, anchor: c.centre, ring: c.ring, ...(all.length > 1 ? { pieces: all } : {}) };
+    }),
+    ...[...projected].map(([renderId, c]): ViewElement => ({ renderId, anchor: c.centre, ring: c.ring })),
     ...[...box].map(([renderId, b]): ViewElement => ({
       renderId,
       anchor: { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 },

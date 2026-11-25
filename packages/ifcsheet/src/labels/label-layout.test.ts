@@ -120,6 +120,34 @@ describe('layoutLabels', () => {
     assert.ok(!rectHitsRing(rectOf(out.centre), col.ring), 'a column beside the wall is not covered');
   });
 
+  it('keeps off every cut piece of a wall, not only its biggest: a window\'s mark does not slide onto the wall beside it', () => {
+    // A window in a wall running along y; the wall its openings cut is two pieces, the long one below and a short one past the window's end.
+    const win: LayoutElement = { id: 'win', ring: box(0, 0, 0.02, 1) };
+    const below = box(-0.14, -10, 0.16, 0), past = box(-0.14, 1, 0.16, 3);
+    const wall: LayoutElement = { id: 'wall', ring: below, pieces: [below, past] };
+    // Something already drawn on both sides of the window, so its mark has to look past the window's ends.
+    const sides = [rectAround({ x: -1, y: 0.5 }, 1.8, 1), rectAround({ x: 1.02, y: 0.5 }, 1.8, 1)];
+    const p = layoutLabels([item(win, 0.6, 0.4)], scene([win, wall, wallAt('far', 20, 20, 21, 21)], sides)).get('win')!;
+    const r = rectOf(p.centre, 0.6, 0.4);
+    assert.ok(!rectHitsRing(r, past) && !rectHitsRing(r, below), `the mark at ${p.centre.x},${p.centre.y} lies on the wall`);
+  });
+
+  it('with nowhere free, stands too near other labels before it lies over a piece of a wall', () => {
+    const w = wallAt('1', 0, 0, 10, 0.2);
+    const first = layoutLabels([item(w)], scene([w])).get('1')!.centre;
+    // A piece of a wall where the label would go first, in a hole of what is already drawn; everywhere else is near two drawn labels.
+    const piece = box(first.x - 0.3, first.y - 0.1, first.x + 0.3, first.y + 0.1), biggest = box(50, 50, 60, 50.3);
+    const on: LayoutElement = { id: 'on', ring: biggest, pieces: [biggest, piece] };
+    const hole = rectAround(first, 2, 1.2), far = 400;
+    const frame = [
+      { x0: -far, y0: -far, x1: far, y1: hole.y0 }, { x0: -far, y0: hole.y1, x1: far, y1: far },
+      { x0: -far, y0: hole.y0, x1: hole.x0, y1: hole.y1 }, { x0: hole.x1, y0: hole.y0, x1: far, y1: hole.y1 },
+    ];
+    const p = layoutLabels([item(w)], scene([w, on], [...frame, ...frame])).get('1')!;
+    assert.equal(p.free, false);
+    assert.ok(!rectHitsRing(rectOf(p.centre), piece), 'not over the wall');
+  });
+
   it('lays out a plan of 200 000 elements: the extent is folded, not spread into one call (a RangeError at about 120 000)', () => {
     const w = wallAt('1', 0, 0, 10, 0.2);
     const filler = Array.from({ length: 200_000 }, (_, n) => wallAt(`f${n}`, 100 + (n % 500), 100 + Math.floor(n / 500), 100.5 + (n % 500), 100.2 + Math.floor(n / 500)));

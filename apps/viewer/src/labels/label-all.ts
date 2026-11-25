@@ -17,8 +17,8 @@ import { freshProjectId } from '@/project/view-defaults';
 import { labelElementByGlobalId } from './label-element';
 import { rectsOf } from './label-annotations';
 import {
-  labelDraft as engineLabelDraft, labelSize as engineLabelSize, layoutLabels,
-  type ElementReader, type LabelEnv, type LabelExtras, type LabelPlacement, type LabelTarget, type LayoutElement, type SheetLocale, type ViewElement,
+  labelDraft as engineLabelDraft, labelSize as engineLabelSize, layoutElementOf, layoutLabels,
+  type ElementReader, type LabelEnv, type LabelExtras, type LabelPlacement, type LabelTarget, type SheetLocale, type ViewElement,
 } from '@bimvoice/ifcsheet';
 
 export type { ElementReader, LabelPlacement };
@@ -54,7 +54,8 @@ export function defaultCentres(type: AnnotationType, targets: readonly LabelTarg
     return size ? [{ id: String(t.renderId), ring: t.ring, ...size }] : [];
   });
   const scene = {
-    elements: elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })),
+    // Every cut piece of an element is kept clear of, as the engine's TAGALL does: a label placed by the biggest alone sat on a wall piece beside its window.
+    elements: elements.map(layoutElementOf),
     annotations: rectsOf(existing),
     paperUnit: at.paperUnit,
     // The type's own clear space round its labels (#842); absent, the standard one, as the engine's TAGALL reads it.

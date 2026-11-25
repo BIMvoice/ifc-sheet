@@ -22,7 +22,7 @@ import { clipLoop } from '../clip-loop.js';
 import { labelDraft, labelSize, type ElementReader, type LabelEnv, type LabelPlacement } from '../labels/label-draft.js';
 import type { LabelExtras } from '../labels/label-extras.js';
 import { growRect, rectAround, ringBounds, type Rect } from '../labels/label-geometry.js';
-import { labelSpacing, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
+import { labelSpacing, layoutElementOf, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
 import type { LabelTarget } from '../labels/label-place.js';
 import { readFieldValue } from '../labels/label-resolve.js';
 import { RectIndex } from '../labels/rect-index.js';
@@ -128,7 +128,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   const base = [...placed, ...sections];
   const index = new RectIndex(4 * at.textHeight);
   for (const r of base) index.add(r);
-  const scene = { elements: [...input.elements.map((e): LayoutElement => ({ id: String(e.renderId), ring: e.ring })), ...swings], annotations: index, paperUnit: at.paperUnit, ...(markGap === undefined ? {} : { gapMm: markGap }) };
+  const scene = { elements: [...input.elements.map(layoutElementOf), ...swings], annotations: index, paperUnit: at.paperUnit, ...(markGap === undefined ? {} : { gapMm: markGap }) };
   const spots = layoutLabels(items, scene);
   // What the rooms keep clear of: the same boxes and the marks drawn (a mark that was placed but not drawn, outside a detail's crop, is not one).
   const roomIndex = new RectIndex(4 * at.textHeight);
