@@ -88,19 +88,88 @@ export function fitToHostWall(rect: OpeningRect, host: readonly MeshData[], plan
   return { ...rect, c: { x: rect.c.x + rect.u.x * ds + rect.n.x * dt, y: rect.c.y + rect.u.y * ds + rect.n.y * dt }, width: s1 - s0, depth: t1 - t0 };
 }
 
+/** A wall as a plan at one height sees it: its meshes, the axis its footprint runs along and the footprint's extent along and across it. */
+interface WallBand { meshes: MeshData[]; a: { x: number; y: number }; s0: number; s1: number; t0: number; t1: number }
+
+/** The walls of `byId` the plan `plane` cuts, each with its footprint's axis (the principal axis of its vertices) and extent. */
+function wallBands(byId: ReadonlyMap<number, MeshData[]>, plane: SectionPlaneConfig): WallBand[] {
+  const project = drawingProjector(plane);
+  const out: WallBand[] = [];
+  for (const meshes of byId.values()) {
+    const pts: { x: number; y: number }[] = [];
+    let h0 = Infinity, h1 = -Infinity;
+    for (const mesh of meshes) {
+      const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
+      const p = mesh.positions;
+      for (let i = 0; i + 2 < p.length; i += 3) {
+        pts.push(project(ox + p[i], oy + p[i + 1], oz + p[i + 2]));
+        h0 = Math.min(h0, oy + p[i + 1]); h1 = Math.max(h1, oy + p[i + 1]);
+      }
+    }
+    // Only a wall the cut passes through shows jambs on this plan: not a lintel piece over a door, nor a wall of another storey.
+    if (pts.length < 3 || plane.position < h0 || plane.position > h1) continue;
+    const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length, my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    let xx = 0, xy = 0, yy = 0;
+    for (const p of pts) { xx += (p.x - mx) ** 2; xy += (p.x - mx) * (p.y - my); yy += (p.y - my) ** 2; }
+    const angle = Math.atan2(2 * xy, xx - yy) / 2;
+    const a = { x: Math.cos(angle), y: Math.sin(angle) };
+    const band: WallBand = { meshes, a, s0: Infinity, s1: -Infinity, t0: Infinity, t1: -Infinity };
+    for (const p of pts) {
+      const s = p.x * a.x + p.y * a.y, t = p.y * a.x - p.x * a.y;
+      band.s0 = Math.min(band.s0, s); band.s1 = Math.max(band.s1, s); band.t0 = Math.min(band.t0, t); band.t1 = Math.max(band.t1, t);
+    }
+    out.push(band);
+  }
+  return out;
+}
+
+/** How far a wall's axis may turn from a door's width and still be the wall the door stands in: 5°. */
+const PARALLEL = Math.cos((5 * Math.PI) / 180);
+
+/**
+ * The walls a door read as `rect` stands in when the model names none (no IfcRelFillsElement to an opening that voids a wall: walls
+ * drawn with a gap, or split at the door, in some exports): each wall cut by the plan whose band holds the door's middle line and whose
+ * footprint reaches the door's width. A wall longer than twice its thickness must also run along the door's width; a shorter piece (a
+ * 0.1 m stub at a jamb) has no direction to read, so its footprint is taken in the door's own frame. Two pieces of a wall split at the
+ * door are both taken, so the fit reads a jamb on each.
+ */
+function wallsAround(bands: readonly WallBand[], rect: OpeningRect): MeshData[] {
+  const half = rect.width / 2 + CLUSTER;
+  return bands.filter((w) => {
+    if (w.t1 - w.t0 > MAX_THICKNESS) return false;
+    if (w.s1 - w.s0 > 2 * (w.t1 - w.t0)) {
+      if (Math.abs(w.a.x * rect.u.x + w.a.y * rect.u.y) < PARALLEL) return false;
+      const s = rect.c.x * w.a.x + rect.c.y * w.a.y, t = rect.c.y * w.a.x - rect.c.x * w.a.y;
+      return t >= w.t0 - EPS && t <= w.t1 + EPS && w.s0 <= s + half && w.s1 >= s - half;
+    }
+    // The corners of the piece's footprint, in the door's frame (along its width, across it).
+    const corners = [[w.s0, w.t0], [w.s1, w.t0], [w.s1, w.t1], [w.s0, w.t1]].map(([s, t]) => {
+      const x = w.a.x * s - w.a.y * t - rect.c.x, y = w.a.y * s + w.a.x * t - rect.c.y;
+      return { s: x * rect.u.x + y * rect.u.y, t: x * rect.n.x + y * rect.n.y };
+    });
+    const ss = corners.map((p) => p.s), ts = corners.map((p) => p.t);
+    return Math.min(...ts) <= EPS && Math.max(...ts) >= -EPS && Math.min(...ss) <= half && Math.max(...ss) >= -half;
+  }).flatMap((w) => w.meshes);
+}
+
 /**
  * The meshes of the wall each door stands in, for `openingSymbols`: `hostOf` names the wall (`openingHostsOf`) and `all` is every mesh
- * of the model, the walls among them (a plan's symbols are made from the doors' and windows' meshes alone, which hold no wall).
+ * of the model, the walls among them (a plan's symbols are made from the doors' and windows' meshes alone, which hold no wall). For a
+ * door the model hosts in no wall, `read` (its footprint on the plan cut at `plane`) finds the walls it stands in (`wallsAround`).
  */
-export function hostWallMeshes(all: readonly MeshData[], hostOf: (id: number) => number | undefined): (id: number) => readonly MeshData[] {
+export function hostWallMeshes(all: readonly MeshData[], hostOf: (id: number) => number | undefined): (id: number, read?: OpeningRect, plane?: SectionPlaneConfig) => readonly MeshData[] {
   let byId: Map<number, MeshData[]> | undefined;
-  return (id) => {
-    const host = hostOf(id);
-    if (host === undefined) return [];
+  const bands = new Map<SectionPlaneConfig, WallBand[]>();
+  return (id, read, plane) => {
     if (!byId) {
       byId = new Map();
       for (const m of all) if (/^IFCWALL/i.test(m.ifcType ?? '') && (m.geometryClass ?? 0) !== 2) byId.set(m.expressId, [...(byId.get(m.expressId) ?? []), m]);
     }
-    return byId.get(host) ?? [];
+    const host = hostOf(id);
+    if (host !== undefined) return byId.get(host) ?? [];
+    if (!read || !plane) return [];
+    let cut = bands.get(plane);
+    if (!cut) bands.set(plane, (cut = wallBands(byId, plane)));
+    return wallsAround(cut, read);
   };
 }

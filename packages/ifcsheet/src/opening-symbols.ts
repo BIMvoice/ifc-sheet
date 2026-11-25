@@ -354,14 +354,14 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
  * The door and window symbols of a plan cut at `plane` (a horizontal plane,
  * world units): every door / window whose meshes the cut height passes
  * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together. `hostWallOf` gives the meshes of the wall
- * a door stands in: its symbol is fitted to that wall's thickness and opening (`opening-in-wall.ts`).
+ * a door stands in (for a door the model hosts in none, the walls its footprint `read` stands in): its symbol is fitted to that wall's thickness and opening (`opening-in-wall.ts`).
  */
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
   typedOf: (id: number) => { spec: JoinerySpec; flips: number; source?: string } | null = () => null,
   operationOf: (id: number) => DoorOperation | null = () => null,
   hostedInCutWall: (id: number, cut: number) => boolean = () => false,
-  hostWallOf: (id: number) => readonly MeshData[] = () => [],
+  hostWallOf: (id: number, read?: OpeningRect, plane?: SectionPlaneConfig) => readonly MeshData[] = () => [],
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
@@ -385,7 +385,7 @@ export function openingSymbols(
     const read = footprintRect(entry.meshes, plane);
     if (!read) continue;
     // A door's or window's symbol stands in the wall's opening, not on its frame's footprint (`opening-in-wall.ts` #678, `window-in-wall.ts` #651).
-    const hostMeshes = hostWallOf(id);
+    const hostMeshes = hostWallOf(id, entry.kind === 'door' ? read : undefined, plane);
     const rect = hostMeshes.length === 0 ? read : entry.kind === 'door' ? fitToHostWall(read, hostMeshes, plane) : fitWindowToHostWall(read, footprintRect(hostMeshes, plane), hostMeshes, plane);
     if (entry.kind === 'door') {
       const stated = operationOf(id);
