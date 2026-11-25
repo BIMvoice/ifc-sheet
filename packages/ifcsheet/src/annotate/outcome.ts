@@ -9,8 +9,8 @@ import type { LevelAllKey } from '../levelall/levelall.js';
 import type { TagAllKey } from '../tagall/tagall.js';
 import type { AnnotateCommand } from './choices.js';
 
-/** The keys the run itself says things with; the app's catalogue has them (`wall.annotate.reason.*`). */
-export type ReasonKey = 'wall.annotate.reason.noDrawing' | 'wall.annotate.reason.failed' | 'wall.annotate.reason.nothing';
+/** The keys the run itself says things with; the app's catalogue has them (`wall.annotate.reason.*`, `wall.annotateWait.timedOut`). */
+export type ReasonKey = 'wall.annotate.reason.noDrawing' | 'wall.annotate.reason.failed' | 'wall.annotate.reason.nothing' | 'wall.annotateWait.timedOut';
 
 /** Every key a run can say: a command's own, or the run's reason. */
 export type AnnotateKey = DimAllKey | TagAllKey | LevelAllKey | ReasonKey | 'drafting.msg.dimAllPlanOnly' | 'drafting.msg.dimAllNotOnDetail' | 'drafting.msg.tagAllNeedsTypes';

@@ -10,6 +10,7 @@ import { analysisPanelEn } from '../catalogues/analysis-panel.en';
 import { annotateAllEn } from '../catalogues/annotate-all.en';
 import { annotateRunEn } from '../catalogues/annotate-run.en';
 import { annotateSetEn } from '../catalogues/annotate-set.en';
+import { annotateWaitEn } from '../catalogues/annotate-wait.en';
 import { annotatedIfcEn } from '../catalogues/annotated-ifc.en';
 import { annotationLabelGapEn } from '../catalogues/annotation-label-gap.en';
 import { annotationLeaderEndEn } from '../catalogues/annotation-leader-end.en';
@@ -97,6 +98,7 @@ export const enAE = {
   ...annotateAllEn,
   ...annotateRunEn,
   ...annotateSetEn,
+  ...annotateWaitEn,
   ...annotatedIfcEn,
   ...annotationLabelGapEn,
   ...annotationLeaderEndEn,

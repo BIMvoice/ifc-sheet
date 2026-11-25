@@ -37,13 +37,34 @@ export interface AnnotateRun {
   /** Only these views (a preset applied to one plan); absent: every view of the right kind. */
   viewIds?: ReadonlySet<string>;
   onProgress?: (progress: AnnotateProgress) => void;
+  /** Called with true once the view's drawing has been waited for {@link WAIT_NOTICE_MS}, and with false when the wait ends (#869). */
+  onDrawingWait?: (waiting: boolean) => void;
+  /** Stop: ends the run at once, the wait for a drawing included; what was drafted stays. */
   signal?: AbortSignal;
-  /** Where the drawing of a view comes from; by default the views' own generators (`drawing-demand.ts`). */
-  drawingOf?: (view: AnnotatableView) => Promise<DrawingResult>;
+  /** Where the drawing of a view comes from; by default the views' own generators (`drawing-demand.ts`). Ends its wait on `signal`. */
+  drawingOf?: (view: AnnotatableView, signal?: AbortSignal) => Promise<DrawingResult>;
 }
 
 /** Drawings asked for ahead of the view being annotated, so the worker makes the next ones while this one is drafted. */
 const LOOKAHEAD = 2;
+
+/** How long a view's drawing is waited for before the panel says that it is being made (#869). */
+export const WAIT_NOTICE_MS = 3_000;
+
+/** `drawingOf`, telling `onWaiting` when the wait has gone on for {@link WAIT_NOTICE_MS}, and when it ends. */
+function noticingWait(drawingOf: NonNullable<AnnotateRun['drawingOf']>, onWaiting: AnnotateRun['onDrawingWait']): NonNullable<AnnotateRun['drawingOf']> {
+  if (!onWaiting) return drawingOf;
+  return async (view, signal) => {
+    let said = false;
+    const notice = setTimeout(() => { said = true; onWaiting(true); }, WAIT_NOTICE_MS);
+    try {
+      return await drawingOf(view, signal);
+    } finally {
+      clearTimeout(notice);
+      if (said) onWaiting(false);
+    }
+  };
+}
 
 /** Let the page paint and answer input between two views. */
 export const yieldToPage = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -56,7 +77,7 @@ export function targetViews(choices: AnnotateChoices, only?: ReadonlySet<string>
 }
 
 export async function annotateSet(run: AnnotateRun): Promise<SetSummary> {
-  const drawingOf = run.drawingOf ?? ((view: AnnotatableView) => waitForDrawing(view.id));
+  const drawingOf = noticingWait(run.drawingOf ?? ((view, signal) => waitForDrawing(view.id, { signal })), run.onDrawingWait);
   const span = run.mode === 'undoable' ? openUndoSpan() : null;
   const draft = (change: () => void) => (span ? span.run(change) : runAsStartingState(change));
   const releases = new Map<string, () => void>();

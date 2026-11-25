@@ -31,8 +31,11 @@ export interface AnnotateView {
   detail?: unknown;
 }
 
-/** How the wait for a drawing ended. */
-export type DrawingResult<D> = { drawing: D; error?: undefined } | { drawing: null; error: string };
+/**
+ * How the wait for a drawing ended. `timedOutMs`: the drawing did not come within that many milliseconds, and the view
+ * is skipped with that said (#869) rather than with the bare error.
+ */
+export type DrawingResult<D> = { drawing: D; error?: undefined; timedOutMs?: undefined } | { drawing: null; error: string; timedOutMs?: number };
 
 /** What a reader is told: the view, its drawing, the drafts it has now, and where new ids and labels come from. */
 export interface ReadCall<V, D> {
@@ -75,6 +78,8 @@ export interface ViewSummary {
 
 export interface SetSummary {
   views: ViewSummary[];
+  /** How many views the run set out to annotate; with `cancelled`, `views.length` of them were done (#869). */
+  total: number;
   /** Drafted entities added over the whole set. */
   added: number;
   /** The run was stopped before every view was done. */
@@ -93,8 +98,8 @@ export interface AnnotateViewsInput<V extends AnnotateView, D> {
   /** Which labels TAGALL places (an annotation preset, #497); absent: every kind. */
   presets?: { tagParts?: TagParts };
   readers: AnnotateReaders<V, D>;
-  /** The drawing of a view; it may take a while. */
-  drawingOf(view: V): Promise<DrawingResult<D>>;
+  /** The drawing of a view; it may take a while. Given the run's `signal`, so Stop ends the wait at once (#869). */
+  drawingOf(view: V, signal?: AbortSignal): Promise<DrawingResult<D>>;
   newId: () => string;
   locale: SheetLocale;
   signal?: AbortSignal;
@@ -173,7 +178,7 @@ function applied(list: readonly DraftEntity[], change: DraftChange): DraftEntity
 export async function annotateViews<V extends AnnotateView, D>(input: AnnotateViewsInput<V, D>): Promise<AnnotateViewsResult> {
   const { readers, choices } = input;
   const targets = input.views.filter((v) => commandsFor(v, choices).length > 0);
-  const summary: SetSummary = { views: [], added: 0, cancelled: false };
+  const summary: SetSummary = { views: [], total: targets.length, added: 0, cancelled: false };
   const drafts = new Map<string, ViewDrafts>();
   for (const [i, planned] of targets.entries()) {
     if (input.signal?.aborted) { summary.cancelled = true; break; }
@@ -181,7 +186,9 @@ export async function annotateViews<V extends AnnotateView, D>(input: AnnotateVi
     if (!view) continue;
     input.onProgress?.({ done: i, total: targets.length, viewName: view.name });
     input.beforeView?.(view, i, targets);
-    const got = await input.drawingOf(view);
+    const got = await input.drawingOf(view, input.signal);
+    // Stopped while the drawing was awaited: the view is not done, and the run ends now, not after the wait (#869).
+    if (input.signal?.aborted) { summary.cancelled = true; break; }
     const entry: ViewSummary = { viewId: view.id, name: view.name, kind: view.kind, results: [] };
     if (got.drawing !== null) {
       const drawing = got.drawing;
@@ -200,6 +207,8 @@ export async function annotateViews<V extends AnnotateView, D>(input: AnnotateVi
           entry.results.push({ command, outcome: 'skipped', added: 0, ms: 0, messages: [{ key: 'wall.annotate.reason.failed', params: { error: reasonOf(error) } }] });
         }
         await input.pause?.();
+        // Stopped between two commands: what ran on this view is kept and said, the rest of the set is not started.
+        if (input.signal?.aborted) { summary.cancelled = true; break; }
       }
       summary.added += entry.results.reduce((n, r) => n + r.added, 0);
       drafts.set(view.id, {
@@ -207,7 +216,9 @@ export async function annotateViews<V extends AnnotateView, D>(input: AnnotateVi
         update: new Map(placed.filter((d) => before.has(d.id) && before.get(d.id) !== d.shape).map((d) => [d.id, d.shape])),
       });
     } else {
-      entry.skipped = { key: 'wall.annotate.reason.noDrawing', params: { error: got.error ?? 'error' } };
+      entry.skipped = got.timedOutMs !== undefined
+        ? { key: 'wall.annotateWait.timedOut', params: { seconds: Math.round(got.timedOutMs / 1000) } }
+        : { key: 'wall.annotate.reason.noDrawing', params: { error: got.error ?? 'error' } };
     }
     summary.views.push(entry);
     input.afterView?.(view);
