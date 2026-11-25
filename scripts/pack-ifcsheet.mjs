@@ -11,7 +11,9 @@
  * names installs and then fails on load. This script puts our copies INSIDE the tarball, as npm's bundled dependencies:
  * they travel in `node_modules/` of the package, nothing is published under a name that is not ours, and the wasm
  * geometry engine comes with them. Their own outside dependencies (fflate, jspdf, decimal.js...) become plain
- * dependencies of the package and are installed from the registry as usual.
+ * dependencies of the package and are installed from the registry as usual. What one of them loads only on request
+ * and marks as an optional peer (the Parquet export's apache-arrow and parquet-wasm) stays an optional peer of the
+ * package and is not installed.
  *
  * It reads built output only: build first (`pnpm turbo run build --filter="@bimvoice/ifcsheet..."`, and the wasm with
  * `pnpm build:wasm` or `pnpm build:wasm:fetch`). It writes nothing into the repository and never contacts a registry.
@@ -44,10 +46,23 @@ function workspace(root) {
   return byName;
 }
 
+/** A package's peers, split by whether `peerDependenciesMeta` marks them optional. */
+function peersOf(manifest) {
+  const required = {};
+  const optional = {};
+  for (const [dep, range] of Object.entries(manifest.peerDependencies ?? {})) {
+    (manifest.peerDependenciesMeta?.[dep]?.optional ? optional : required)[dep] = range;
+  }
+  return { required, optional };
+}
+
 /**
  * What the tarball must carry and ask for: the workspace packages the engine reaches (`bundled`, in dependency order
- * of discovery) and the registry packages any of them needs (`outside`, name to range). Two ranges for one outside
- * package are refused: one install cannot satisfy both without nesting, and nothing here nests.
+ * of discovery), the registry packages any of them needs (`outside`, name to range), and the registry packages one of
+ * them loads only on request (`optionalPeers`: an optional peer dependency, such as the Parquet export's
+ * `apache-arrow`). An optional peer is not installed with the engine; the tarball names it as an optional peer of its
+ * own, so whoever wants that feature installs it at a range that fits. Two ranges for one outside package are refused:
+ * one install cannot satisfy both without nesting, and nothing here nests.
  */
 export function closureOf(root = ROOT) {
   const byName = workspace(root);
@@ -55,24 +70,36 @@ export function closureOf(root = ROOT) {
   if (!top) throw new Error(`${PACKAGE} is not a package of this workspace.`);
   const bundled = [];
   const outside = new Map();
+  const optionalPeers = new Map();
   const seen = new Set([PACKAGE]);
+  const ask = (into, dep, range, by) => {
+    const had = into.get(dep);
+    if (had !== undefined && had !== range) throw new Error(`${dep} is asked for as ${had} and as ${range} (by ${by}): align the two ranges.`);
+    into.set(dep, range);
+  };
   const walk = (name) => {
     const { manifest } = byName.get(name);
-    for (const [dep, range] of Object.entries({ ...manifest.optionalDependencies, ...manifest.dependencies })) {
+    const peers = peersOf(manifest);
+    for (const [dep, range] of Object.entries({ ...manifest.optionalDependencies, ...manifest.dependencies, ...peers.required })) {
       if (byName.has(dep)) {
         if (seen.has(dep)) continue;
         seen.add(dep);
         bundled.push(dep);
         walk(dep);
       } else if (!LEFT_OUT.has(dep)) {
-        const had = outside.get(dep);
-        if (had !== undefined && had !== range) throw new Error(`${dep} is asked for as ${had} and as ${range} (by ${name}): align the two ranges.`);
-        outside.set(dep, range);
+        ask(outside, dep, range, name);
       }
+    }
+    for (const [dep, range] of Object.entries(peers.optional)) {
+      if (byName.has(dep)) throw new Error(`${name} has the workspace package ${dep} as an optional peer: the tarball can only bundle it or leave it out.`);
+      ask(optionalPeers, dep, range, name);
     }
   };
   walk(PACKAGE);
-  return { byName, bundled: bundled.sort(), outside: new Map([...outside].sort(([a], [b]) => a.localeCompare(b))) };
+  // A package another bundled package needs outright is installed anyway: it is a plain dependency, not an optional peer.
+  for (const dep of outside.keys()) optionalPeers.delete(dep);
+  const sorted = (map) => new Map([...map].sort(([a], [b]) => a.localeCompare(b)));
+  return { byName, bundled: bundled.sort(), outside: sorted(outside), optionalPeers: sorted(optionalPeers) };
 }
 
 /** The manifest a bundled package travels with: its entry points and metadata, its dependencies as plain versions, no scripts. */
@@ -96,7 +123,7 @@ function copyShipped(from, files, to) {
 
 /** Stage the package in `stage` and return the manifest written there. */
 export function stage(stageDir, root = ROOT) {
-  const { byName, bundled, outside } = closureOf(root);
+  const { byName, bundled, outside, optionalPeers } = closureOf(root);
   const top = byName.get(PACKAGE);
   copyShipped(top.dir, ['dist', 'fonts', 'README.md'], stageDir);
   for (const legal of ['LICENSE', 'NOTICE']) cpSync(join(root, legal), join(stageDir, legal));
@@ -112,6 +139,10 @@ export function stage(stageDir, root = ROOT) {
     ...kept,
     dependencies: { ...Object.fromEntries(bundled.map((name) => [name, byName.get(name).manifest.version])), ...Object.fromEntries(outside) },
     bundleDependencies: bundled,
+    ...(optionalPeers.size > 0 && {
+      peerDependencies: { ...kept.peerDependencies, ...Object.fromEntries(optionalPeers) },
+      peerDependenciesMeta: { ...kept.peerDependenciesMeta, ...Object.fromEntries([...optionalPeers.keys()].map((name) => [name, { optional: true }])) },
+    }),
     files: ['dist', 'fonts', 'README.md', 'LICENSE', 'NOTICE'],
   };
   writeFileSync(join(stageDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
