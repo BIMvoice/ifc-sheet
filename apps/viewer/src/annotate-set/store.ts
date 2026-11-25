@@ -8,7 +8,8 @@
  */
 
 import { create } from 'zustand';
-import { annotateSet, type AnnotateProgress, type SetSummary } from './annotate-set';
+import { useViewerStore } from '@/store';
+import { annotateSet, targetViews, type AnnotateProgress, type SetSummary } from './annotate-set';
 import { ALL_TAG_PARTS, type TagParts } from '@bimvoice/ifcsheet';
 import { choicesFrom, hasChoices, type AnnotateCommand } from './choices';
 import { effectiveOptions, presetsOfProject } from './presets';
@@ -24,7 +25,13 @@ interface AnnotatePanelState {
   problem: AnnotateProblem | null;
 }
 
-export type AnnotateProblem = { kind: 'nothingOn' } | { kind: 'failed'; message: string };
+export type AnnotateProblem = { kind: 'nothingOn' } | { kind: 'noModel' } | { kind: 'failed'; message: string };
+
+/**
+ * The set has views to annotate but no model is loaded to draw them from (a project file opened before its IFC): no
+ * view's drawing can come, and the run would sit on its first view until the drawing wait gives up, five minutes a view.
+ */
+export const missingModel = (views: number): boolean => views > 0 && useViewerStore.getState().models.size === 0;
 
 export const useAnnotatePanel = create<AnnotatePanelState>()(() => ({
   on: { tagall: true, dimall: true, levelall: true },
@@ -66,6 +73,10 @@ export async function runAnnotateSet(): Promise<void> {
   abort = new AbortController();
   useAnnotatePanel.setState({ running: { done: 0, total: 0, viewName: '' }, summary: null, problem: null });
   try {
+    if (missingModel(targetViews(choices).length)) {
+      useAnnotatePanel.setState({ problem: { kind: 'noModel' } });
+      return;
+    }
     const summary = await annotateSet({ choices, tagParts, mode: 'undoable', signal: abort.signal, onProgress: (running) => useAnnotatePanel.setState({ running }) });
     useAnnotatePanel.setState({ summary });
   } catch (error) {

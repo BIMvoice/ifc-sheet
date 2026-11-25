@@ -11,8 +11,9 @@ import { choicesFrom, hasChoices, type AnnotateCommand } from '@/annotate-set/ch
 import { deleteAnnotationPreset, effectiveOptions, saveAnnotationPreset } from '@/annotate-set/presets';
 import type { TagParts } from '@bimvoice/ifcsheet';
 import { targetViews } from '@/annotate-set/annotate-set';
-import { applyAnnotationPreset, runAnnotateSet, stopAnnotateSet, switchCommand, switchTagPart, useAnnotatePanel } from '@/annotate-set/store';
+import { applyAnnotationPreset, missingModel, runAnnotateSet, stopAnnotateSet, switchCommand, switchTagPart, useAnnotatePanel } from '@/annotate-set/store';
 import { useProjectStore } from '@/project/project-store';
+import { useViewerStore } from '@/store';
 import { closeFrontPanel, setPanel, useWallNav } from '../wall/wall-nav';
 import { WALL_PILL } from '../wall/wall-type';
 import { AnnotateProblem } from './AnnotateProblem';
@@ -42,6 +43,9 @@ function AnnotatePanel() {
   useProjectStore((s) => s.views);
   const choices = choicesFrom(effectiveOptions({ on, tagParts }).on);
   const views = targetViews(choices).length;
+  // Read again when a model loads or goes: with none, no view can be drawn to annotate.
+  useViewerStore((s) => s.models);
+  const noModel = missingModel(views);
   return (
     <aside aria-label={t('wall.annotate.title')} className={frame}>
       <header className="flex items-center gap-2 px-4 pb-2 pt-4">
@@ -66,9 +70,9 @@ function AnnotatePanel() {
             </div>
           ))}
         </fieldset>
-        {!hasChoices(choices) ? <p className="m-0 text-xs text-amber-300">{t('wall.annotate.nothingChosen')}</p> : views === 0 ? <p className="m-0 text-xs text-amber-300">{t('wall.annotate.noViews')}</p> : null}
+        {!hasChoices(choices) ? <p className="m-0 text-xs text-amber-300">{t('wall.annotate.nothingChosen')}</p> : views === 0 ? <p className="m-0 text-xs text-amber-300">{t('wall.annotate.noViews')}</p> : noModel ? <p className="m-0 text-xs text-amber-300">{t('wall.annotateRun.noModel')}</p> : null}
         <div className="flex items-center gap-2">
-          <button type="button" className="rounded-md bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-500 disabled:opacity-50" disabled={running !== null || views === 0} onClick={() => void runAnnotateSet()}>{t('wall.annotate.run')}</button>
+          <button type="button" className="rounded-md bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-500 disabled:opacity-50" disabled={running !== null || views === 0 || noModel} onClick={() => void runAnnotateSet()}>{t('wall.annotate.run')}</button>
           {running ? <button type="button" className={WALL_PILL} onClick={stopAnnotateSet}>{t('wall.annotate.stop')}</button> : null}
         </div>
         <section aria-label={t('wall.annotate.presets')} className="flex flex-col gap-1.5 border-t border-sky-300/20 pt-3" data-testid="annotate-presets">
