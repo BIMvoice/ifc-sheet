@@ -100,11 +100,12 @@ export function rasterPixelSize(bounds: Bounds2D, resolution = HIDDEN_LINE_RESOL
  * and so does a curved line that `coveredByItself` says its own element
  * nowhere covers (`HiddenLineClassifier.coveredByItself`).
  */
-export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, coveredByItself?: (line: DrawingLine) => boolean): DrawingLine[] {
+export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, coveredByItself?: (line: DrawingLine) => boolean, tick?: () => void): DrawingLine[] {
   const reach = rasterPixelSize(bounds);
   if (!(reach > 0)) return lines;
   const out: DrawingLine[] = [];
   for (const line of lines) {
+    tick?.();
     const source = sources.get(line);
     if (!source || (source.near && coveredByItself && !coveredByItself(line))) { out.push(line); continue; }
     const pieces = depthAlong(source, reach, line);

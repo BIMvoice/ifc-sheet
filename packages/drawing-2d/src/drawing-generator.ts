@@ -16,7 +16,6 @@
 import type { MeshData } from '@ifc-lite/geometry';
 import type {
   SectionConfig,
-  SectionAxis,
   Drawing2D,
   DrawingLine,
   CutSegment,
@@ -24,14 +23,14 @@ import type {
   LineCategory,
   ProfileEntry,
   EntityKey,
-  MeshOutline2D,
 } from './types.js';
 import { DEFAULT_SECTION_CONFIG, makeEntityKey } from './types.js';
 import { SectionCutter } from './section-cutter.js';
 import { PolygonBuilder } from './polygon-builder.js';
 import { EdgeExtractor } from './edge-extractor.js';
-import { HiddenLineClassifier, type ExteriorViewOptions } from './hidden-line.js';
+import { HiddenLineClassifier } from './hidden-line.js';
 import { mergeDrawingLines } from './line-merger.js';
+import type { GeneratorOptions } from './generator-options.js';
 import { HatchGenerator } from './hatch-generator.js';
 import { SVGExporter } from './svg-exporter.js';
 import type { SVGExportOptions } from './svg-exporter.js';
@@ -48,49 +47,7 @@ import { dropInsideCutFaces } from './cut-face-occlusion.js';
 import { dropOutlierProjectionLines } from './projection-outliers.js';
 import { boundsEmpty, boundsExtendLine } from './math.js';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════════════════════
-
-export interface GeneratorOptions extends ExteriorViewOptions {
-  /** Use GPU acceleration if available */
-  useGPU: boolean;
-  /** Include hidden lines in output */
-  includeHiddenLines: boolean;
-  /** Include projection lines (visible geometry beyond cut) */
-  includeProjection: boolean;
-  /** Include silhouettes and feature edges */
-  includeEdges: boolean;
-  /** Merge collinear line segments */
-  mergeLines: boolean;
-  /**
-   * Optional winding-robust outline provider (the Rust `meshOutline2d` WASM
-   * binding, issue #979). When supplied, non-extruded geometry projects via
-   * this footprint outline instead of the normal-based mesh silhouette (which
-   * ifc-lite's unreliable winding can break). Return `null` to fall back to
-   * silhouette extraction for that mesh.
-   *
-   * CARDINAL planes only: the callback receives just (axis, flipped) and its
-   * output is in cardinal projection space, so on a custom (face-picked)
-   * plane the generator bypasses it and uses the plane-aware silhouette path
-   * instead (PR #2644 review).
-   */
-  outlineProvider?: (mesh: MeshData, axis: SectionAxis, flipped: boolean) => MeshOutline2D | null;
-  /**
-   * Pre-projected lines merged in BEFORE the hidden-line stage (issue #2042):
-   * the section RIM of a CPU half-space clip. Build them with
-   * `projectWorldLineSeeds`, never a hand-rolled projection — they must share
-   * this config's plane basis and view-depth convention.
-   *
-   * They are classified alongside the projection lines even though they carry
-   * `category: 'cut'`: cutter-produced cut lines sit in the plane at view
-   * depth 0 and can never be occluded, but on an oblique 3D view a rim edge
-   * can sit behind other geometry and must print dashed.
-   */
-  extraLines?: DrawingLine[];
-  /** Progress callback */
-  onProgress?: (stage: string, progress: number) => void;
-}
+export type { GeneratorOptions, GeneratorProgress } from './generator-options.js';
 
 const DEFAULT_OPTIONS: GeneratorOptions = {
   useGPU: true,
@@ -99,12 +56,6 @@ const DEFAULT_OPTIONS: GeneratorOptions = {
   includeEdges: true,
   mergeLines: true,
 };
-
-export interface GeneratorProgress {
-  stage: 'cutting' | 'polygons' | 'edges' | 'hidden' | 'merging' | 'complete';
-  progress: number;
-  message: string;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAWING GENERATOR CLASS
@@ -149,6 +100,7 @@ export class Drawing2DGenerator {
     const report = (stage: string, progress: number) => {
       opts.onProgress?.(stage, progress);
     };
+    const tick = opts.onTick;
 
     // ─────────────────────────────────────────────────────────────────────────
     // STAGE 1: Section Cutting
@@ -171,7 +123,7 @@ export class Drawing2DGenerator {
       // existence, as the previous code did, would silently apply the
       // first config used for the lifetime of the generator.
       this.cpuCutter = new SectionCutter(config.plane);
-      const cutResult = this.cpuCutter.cutMeshes(meshes);
+      const cutResult = this.cpuCutter.cutMeshes(meshes, tick);
       cutSegments = cutResult.segments;
     }
 
@@ -182,11 +134,11 @@ export class Drawing2DGenerator {
     // ─────────────────────────────────────────────────────────────────────────
     report('polygons', 0);
 
-    const cutPolygons = this.polygonBuilder.buildPolygons(cutSegments);
+    const cutPolygons = this.polygonBuilder.buildPolygons(cutSegments, tick);
     // Opaque base cross-section per multi-material entity, for the 3D overlay to
     // draw behind the per-layer fills (never see-through). Kept out of
     // `cutPolygons` so the flat 2D drawing / export / measure paths are untouched.
-    const layerBaseCutPolygons = this.polygonBuilder.buildBasePolygons(cutSegments);
+    const layerBaseCutPolygons = this.polygonBuilder.buildBasePolygons(cutSegments, tick);
 
     report('polygons', 1);
 
@@ -273,6 +225,7 @@ export class Drawing2DGenerator {
         const outlineProvider = config.plane.customPlane ? undefined : opts.outlineProvider;
 
         for (const source of meshesForSilhouette) {
+          tick?.();
           const reach = roofBands(source, config.plane, bands); // a roof the plan sees is drawn to its eaves (#490)
           const clipped = config.clipProjectionBands ? projectionBandMeshes(source, config.plane, reach.below, reach.above) : [source];
           for (const mesh of clipped) {
@@ -324,10 +277,10 @@ export class Drawing2DGenerator {
         : Math.max(config.projectionDepth, config.projectionBelowDepth ?? config.projectionDepth,
           config.projectionAboveDepth ?? config.projectionDepth);
       const occluders = config.clipProjectionBands
-        ? meshes.map(mesh => clipMeshToProjectionWindow(mesh, config.plane, 0, occluderDepth))
+        ? meshes.map((mesh) => { tick?.(); return clipMeshToProjectionWindow(mesh, config.plane, 0, occluderDepth); })
           .filter((mesh): mesh is MeshData => mesh !== null)
         : meshes;
-      this.hiddenLineClassifier.buildDepthBuffer(opts.extraOccluders?.length ? [...occluders, ...opts.extraOccluders] : occluders, config.plane, occluderDepth, bounds, opts.hiddenLineEdgeTolerancePx ?? 0);
+      this.hiddenLineClassifier.buildDepthBuffer(opts.extraOccluders?.length ? [...occluders, ...opts.extraOccluders] : occluders, config.plane, occluderDepth, bounds, opts.hiddenLineEdgeTolerancePx ?? 0, tick);
 
       // Occlusion only DOWNGRADES visible → hidden; it can never reveal an
       // already-dashed OVERHEAD line. So classify the visible (below-cut)
@@ -341,7 +294,7 @@ export class Drawing2DGenerator {
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
       // A cut face hides what lies behind it, though it is not in the depth buffer: the pieces inside one are left out (#749).
-      const classified = dropInsideCutFaces(this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l))), cutPolygons);
+      const classified = dropInsideCutFaces(this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l), tick), tick), cutPolygons, undefined, tick);
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines
@@ -358,7 +311,7 @@ export class Drawing2DGenerator {
     // ─────────────────────────────────────────────────────────────────────────
     if (opts.mergeLines) {
       report('merging', 0);
-      allLines = mergeDrawingLines(allLines);
+      allLines = mergeDrawingLines(allLines, {}, tick);
       report('merging', 1);
     }
 

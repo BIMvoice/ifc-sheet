@@ -39,11 +39,16 @@ export type GenerationRequest =
 
 export type GenerationReply =
   | { type: 'progress'; id: number; stage: string; progress: number }
-  /** Sent from inside a long stage ({@link withHeartbeat}): the worker is busy, not dead. */
+  /**
+   * The worker is at work on this job: sent when it starts it, and then at most every {@link HEARTBEAT_MS} from inside
+   * the generator ({@link heartbeat}) and while it awaits (the outline binding's wasm, for one). The client times a
+   * job's silence from the start of the job, not from when it was queued (#863).
+   */
   | { type: 'alive'; id: number }
   /** A slice of one of the drawing's long lists, sent ahead of `done` (see {@link postDrawing}). */
   | { type: 'part'; id: number; key: string; items: unknown[] }
-  | { type: 'done'; id: number; drawing: Drawing2D }
+  /** `quietMs`: the longest the worker went without reaching a point where it could speak, while on this job. */
+  | { type: 'done'; id: number; drawing: Drawing2D; quietMs?: number }
   | { type: 'error'; id: number; error: string };
 
 const packs = new Map<number, MeshData[]>();
@@ -80,20 +85,27 @@ export const HEARTBEAT_MS = 2_000;
 /**
  * `Drawing2DGenerator.generate` is one synchronous call and reports progress only at the start and end of a
  * stage, so a stage of tens of seconds on a large model says nothing, and a timer in the worker cannot tick
- * while it computes. The one place the call comes back to this module between meshes is the outline binding it
- * is given, once per mesh drawn: wrapping that is the heartbeat. `beat` fires at most every `intervalMs`.
+ * while it computes. The generator calls back between meshes, elements and lines (`onTick`), and so does the
+ * outline binding it is given, once per mesh drawn ({@link withHeartbeat}): this turns those calls into a
+ * heartbeat. `beat` fires at most every `intervalMs`, and each call costs one clock read.
  */
-export function withHeartbeat(
-  fn: MeshOutline2dFn | undefined,
+export function heartbeat(
   beat: () => void,
   intervalMs: number = HEARTBEAT_MS,
   now: () => number = Date.now,
-): MeshOutline2dFn | undefined {
-  if (!fn) return fn;
+): () => void {
   let last = now();
-  return ((...args: Parameters<MeshOutline2dFn>) => {
+  return () => {
     const t = now();
     if (t - last >= intervalMs) { last = t; beat(); }
+  };
+}
+
+/** `fn` with `tick` called before each call: the outline binding runs once per mesh drawn, in wasm. */
+export function withHeartbeat(fn: MeshOutline2dFn | undefined, tick: () => void): MeshOutline2dFn | undefined {
+  if (!fn) return fn;
+  return ((...args: Parameters<MeshOutline2dFn>) => {
+    tick();
     return fn(...args);
   }) as MeshOutline2dFn;
 }
@@ -108,14 +120,14 @@ export const PART_SIZE = 5_000;
  * top-level list longer than one slice goes ahead in `part` messages, in
  * order, and `done` carries the rest of the drawing with those lists empty.
  */
-export function postDrawing(id: number, drawing: Drawing2D, post: Post): void {
+export function postDrawing(id: number, drawing: Drawing2D, post: Post, quietMs?: number): void {
   const rest: Record<string, unknown> = { ...drawing };
   for (const [key, value] of Object.entries(drawing)) {
     if (!Array.isArray(value) || value.length <= PART_SIZE) continue;
     for (let i = 0; i < value.length; i += PART_SIZE) post({ type: 'part', id, key, items: value.slice(i, i + PART_SIZE) });
     rest[key] = [];
   }
-  post({ type: 'done', id, drawing: rest as unknown as Drawing2D });
+  post({ type: 'done', id, drawing: rest as unknown as Drawing2D, ...(quietMs === undefined ? {} : { quietMs }) });
 }
 
 /** Serialises jobs: one drawing at a time, in the order they were asked for. */
@@ -138,6 +150,20 @@ async function run(request: GenerationRequest, post: Post): Promise<void> {
     return;
   }
   const { id, packId, meshIndices, config, options, profiles, axonometric } = request;
+  // The client times this job's silence from here: the time it waited behind other jobs is not held against it.
+  post({ type: 'alive', id });
+  const beat = heartbeat(() => post({ type: 'alive', id }));
+  // The longest stretch between two points where the worker could have spoken: what the client's silence limit must cover.
+  let lastPoint = performance.now();
+  let quietMs = 0;
+  const point = () => {
+    const t = performance.now();
+    quietMs = Math.max(quietMs, t - lastPoint);
+    lastPoint = t;
+  };
+  const tick = () => { point(); beat(); };
+  // While the job awaits (loading the outline binding's wasm), the worker's own timer says it is alive.
+  const awaiting = setInterval(() => { point(); post({ type: 'alive', id }); }, HEARTBEAT_MS);
   try {
     const all = packs.get(packId);
     if (!all) throw new Error(`drawing generation: mesh pack ${packId} is not loaded`);
@@ -151,11 +177,15 @@ async function run(request: GenerationRequest, post: Post): Promise<void> {
       if (!outline) throw new Error('drawing generation: the meshOutline2d binding is not available in the worker');
     }
     const drawing = await runGenerateJob({ meshes, config, options, profiles, axonometric },
-      withHeartbeat(outline, () => post({ type: 'alive', id })),
-      (stage, progress) => post({ type: 'progress', id, stage, progress }));
-    postDrawing(id, drawing, post);
+      withHeartbeat(outline, tick),
+      (stage, progress) => { point(); post({ type: 'progress', id, stage, progress }); },
+      tick);
+    point();
+    postDrawing(id, drawing, post, Math.round(quietMs));
   } catch (error) {
     post({ type: 'error', id, error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    clearInterval(awaiting);
   }
 }
 

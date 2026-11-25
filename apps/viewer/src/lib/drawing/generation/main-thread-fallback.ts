@@ -52,6 +52,37 @@ export function subscribeMainThreadDrawings(listener: (waiting: number) => void)
   return () => { listeners.delete(listener); };
 }
 
+/**
+ * The most vertices a view may draw on the main thread. One view is one
+ * synchronous cut that the page cannot interrupt, and a large one froze the
+ * reporter's page for more than five minutes (#863): a frozen page is worse
+ * than a view that says it could not be drawn. Measured in the production
+ * build, the main thread cut about 230,000 vertices a second (skolebygg, 1.65 M
+ * vertices, 7.3 s for its largest view), so this keeps a view to about a
+ * second and a half.
+ */
+export const MAIN_THREAD_MAX_VERTICES = 350_000;
+
+/** Vertices `meshes` hold. */
+export function verticesOf(meshes: readonly { positions: ArrayLike<number> }[]): number {
+  let total = 0;
+  for (const mesh of meshes) total += mesh.positions.length / 3;
+  return total;
+}
+
+/**
+ * Draw `job` here when it is small enough not to freeze the page
+ * ({@link MAIN_THREAD_MAX_VERTICES}); a larger one is refused with an error
+ * that says why, and the view shows that it could not be drawn.
+ */
+export function drawOnMainThreadIfSmall(job: GenerateJob, outlineFn: MeshOutline2dFn | undefined, onProgress: ProgressFn | undefined, why: string): Promise<Drawing2D> {
+  const vertices = verticesOf(job.meshes);
+  if (vertices > MAIN_THREAD_MAX_VERTICES) {
+    return Promise.reject(new Error(`This view could not be drawn: ${why}, and at ${vertices.toLocaleString('en')} vertices it is too large to draw on the page without freezing it.`));
+  }
+  return drawOnMainThread(job, outlineFn, onProgress);
+}
+
 /** Draw `job` on this thread after the views queued before it, with a turn of the event loop first. */
 export function drawOnMainThread(job: GenerateJob, outlineFn: MeshOutline2dFn | undefined, onProgress?: ProgressFn): Promise<Drawing2D> {
   setWaiting(waiting + 1);
