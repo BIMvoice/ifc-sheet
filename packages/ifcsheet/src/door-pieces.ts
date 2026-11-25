@@ -12,9 +12,15 @@
  * gap of a hosted door is a piece of it and is not drawn. Two hosted doors in one gap are both kept (the model states both), and so
  * are doors hosted in nothing that share a gap only with each other (nothing says which is the door). The two leaves of a double
  * door lie side by side, not in one gap, so neither is ever taken for the other's piece.
+ *
+ * When no door in the gap is hosted, the door among them is read from what else the model states, and only then from the geometry
+ * (`door-loose-pieces.ts`).
  */
 
 import type { OpeningRect } from './opening-symbols.js';
+import { loosePieces, type DoorStated } from './door-loose-pieces.js';
+
+export type { DoorStated };
 
 /** How far two footprints' widths may turn from each other and still be one gap: 10°. */
 const PARALLEL = Math.cos(Math.PI / 18);
@@ -35,10 +41,14 @@ export function inSameGap(piece: OpeningRect, door: OpeningRect): boolean {
 }
 
 /**
- * The doors of `ids` that are pieces of another: hosted in nothing (`hosted` false), with a footprint (`readOf`) in the gap of a hosted door's.
+ * The doors of `ids` that are pieces of another: hosted in nothing (`hosted` false), with a footprint (`readOf`) in the gap of a hosted door's;
+ * or, among the doors hosted in nothing left, the pieces `loosePieces` reads from what the model states (`stated`) and their heights (`heightOf`).
  * Footprints are read only when some door is hosted in nothing.
  */
-export function doorPieces(ids: readonly number[], readOf: (id: number) => OpeningRect | null, hosted: (id: number) => boolean): Set<number> {
+export function doorPieces(
+  ids: readonly number[], readOf: (id: number) => OpeningRect | null, hosted: (id: number) => boolean,
+  heightOf: (id: number) => number = () => 0, stated: (id: number) => DoorStated = () => ({ statesSize: false }),
+): Set<number> {
   const pieces = new Set<number>();
   const loose = ids.filter((id) => !hosted(id));
   if (loose.length === 0) return pieces;
@@ -47,5 +57,6 @@ export function doorPieces(ids: readonly number[], readOf: (id: number) => Openi
     const read = readOf(id);
     if (read && doors.some((door) => inSameGap(read, door))) pieces.add(id);
   }
+  for (const id of loosePieces(loose.filter((id) => !pieces.has(id)), readOf, heightOf, stated)) pieces.add(id);
   return pieces;
 }

@@ -10,7 +10,7 @@
  */
 
 import type { MeshData } from '@ifc-lite/geometry';
-import { curtainPartsOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, modelDisciplineOf, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, symbolMeshes, visibleEntities, type DetailLevel, type ModelDiscipline, type OpeningSource, type ProjectLevel } from '@bimvoice/ifcsheet';
+import { curtainPartsOf, doorStatedOf, drawnBySymbol as drawnByOpeningSymbol, elevationOpeningSymbols, hostedInCutWall, hostWallMeshes, modelDisciplineOf, openingHostsOf, simplifyOpeningSymbol, storeyMembersOf, symbolMeshes, visibleEntities, type DetailLevel, type DoorStated, type ModelDiscipline, type OpeningSource, type ProjectLevel } from '@bimvoice/ifcsheet';
 import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import { useViewerStore } from '@/store';
 import { openingSymbols, type OpeningSymbol } from '@/drafting/opening-symbols';
@@ -38,6 +38,16 @@ function curtainPartRenderIds(id: number): readonly number[] {
   const model = ref ? s.models.get(ref.modelId) : undefined;
   if (!ref || !model?.ifcDataStore) return [];
   return (curtainPartsOf(model.ifcDataStore).get(ref.expressId) ?? []).map((part) => part + model.idOffset);
+}
+
+/** What the model states of a door (by renderer id) that tells it from its pieces (`doorStatedOf`, the engine's read), the element it is a part of as a renderer id. */
+function doorStatedRenderId(id: number): DoorStated {
+  const s = useViewerStore.getState();
+  const ref = s.resolveGlobalIdFromModels(id);
+  const model = ref ? s.models.get(ref.modelId) : undefined;
+  if (!ref || !model?.ifcDataStore) return { statesSize: false };
+  const read = doorStatedOf(model.ifcDataStore)(ref.expressId);
+  return read.partOf === undefined ? read : { ...read, partOf: read.partOf + model.idOffset };
 }
 
 /** Whether a door or window (by renderer id) is on the plan's own storey (`storeyMembersOf`, the engine's membership); without a level, none is. */
@@ -78,7 +88,7 @@ export function viewOpeningSymbols(
     const guid = flips && Object.keys(flips).length > 0 ? renderIdGlobalId(id) : null;
     return guid ? flips?.[guid] ?? 0 : 0;
   };
-  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId), (id) => hostWallRenderId(id) !== undefined)
+  return openingSymbols(ownSymbolMeshes(meshes), plane, flipsOf, drawnJoineryOfRenderId, doorOperationOfRenderId, hostedInCutWall(meshes, hostWallRenderId, onPlanStorey(level), curtainPartRenderIds), hostWallMeshes(meshes, hostWallRenderId), (id) => hostWallRenderId(id) !== undefined, doorStatedRenderId)
     .filter((s) => !hidden.has(s.kind === 'door' ? 'IFCDOOR' : 'IFCWINDOW'))
     .map((s) => simplifyOpeningSymbol(s, detail));
 }

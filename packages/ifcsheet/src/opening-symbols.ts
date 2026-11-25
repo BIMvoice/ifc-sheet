@@ -20,7 +20,7 @@ import { doorSwingFlips, UNSTATED_DOOR_OPERATION, type DoorOperation } from './d
 import { typedPlanSymbol } from './joinery-plan-placement.js';
 import { drawingProjector, worldToDrawing } from './drawing-frame.js';
 import { fitToHostWall } from './opening-in-wall.js';
-import { doorPieces } from './door-pieces.js';
+import { doorPieces, type DoorStated } from './door-pieces.js';
 import { fitWindowToHostWall } from './window-in-wall.js';
 import type { DraftShape, Pt } from './draft-types.js';
 
@@ -351,7 +351,7 @@ function footprintRect(meshes: readonly MeshData[], plane: SectionPlaneConfig): 
  * world units): every door / window whose meshes the cut height passes
  * through, or through the wall it is hosted in (`hostedInCutWall`). Meshes of one element are taken together. `hostWallOf` gives the meshes of the wall
  * a door stands in (for a door the model hosts in none, the walls its footprint `read` stands in): its symbol is fitted to that wall's thickness and opening (`opening-in-wall.ts`).
- * `hosted` says whether the model hosts a door (`openingHostsOf`): a door hosted in nothing that stands in a hosted door's gap is a piece of it, not drawn (`door-pieces.ts`).
+ * `hosted` says whether the model hosts a door (`openingHostsOf`): a door hosted in nothing that stands in a hosted door's gap is a piece of it, not drawn (`door-pieces.ts`); among doors hosted in nothing, `stated` (`doorStatedOf`) helps tell the door from its pieces (`door-loose-pieces.ts`).
  */
 export function openingSymbols(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flipsOf: (id: number) => number = () => 0,
@@ -359,22 +359,22 @@ export function openingSymbols(
   operationOf: (id: number) => DoorOperation | null = () => null,
   hostedInCutWall: (id: number, cut: number) => boolean = () => false,
   hostWallOf: (id: number, read?: OpeningRect, plane?: SectionPlaneConfig) => readonly MeshData[] = () => [],
-  hosted: (id: number) => boolean = () => true,
+  hosted: (id: number) => boolean = () => true, stated: (id: number) => DoorStated = () => ({ statesSize: false }),
 ): OpeningSymbol[] {
   if (plane.axis !== 'y' || plane.customPlane) return [];
   const cut = plane.position;
-  const byId = new Map<number, { kind: 'door' | 'window'; meshes: readonly MeshData[]; l2w?: number[] }>();
+  const byId = new Map<number, { kind: 'door' | 'window'; meshes: readonly MeshData[]; l2w?: number[]; height: number }>();
   // Only the elements the cut passes through are projected, not every door and window of every storey (#154).
   for (const el of joineryElements(meshes)) {
     // The cut passes through it, or through the wall it is hosted in (`opening-hosts.ts`, #586).
     if ((cut < el.minY || cut > el.maxY) && !hostedInCutWall(el.id, cut)) continue;
     let l2w: number[] | undefined;
     for (const mesh of el.meshes) l2w ??= mesh.localToWorld;
-    byId.set(el.id, { kind: el.kind, meshes: el.meshes, l2w });
+    byId.set(el.id, { kind: el.kind, meshes: el.meshes, l2w, height: el.maxY - el.minY });
   }
   const out: OpeningSymbol[] = [], reads = new Map<number, OpeningRect | null>();
   const readOf = (id: number): OpeningRect | null => { if (!reads.has(id)) reads.set(id, footprintRect(byId.get(id)!.meshes, plane)); return reads.get(id) ?? null; };
-  const pieces = doorPieces([...byId].filter(([, e]) => e.kind === 'door').map(([id]) => id), readOf, hosted);
+  const pieces = doorPieces([...byId].filter(([, e]) => e.kind === 'door').map(([id]) => id), readOf, hosted, (id) => byId.get(id)!.height, stated);
   for (const [id, entry] of [...byId].filter(([id]) => !pieces.has(id))) {
     const configured = entry.l2w ? typedOf(id) : null;
     const typed = configured && entry.l2w ? typedPlanSymbol(configured.spec, worldPoints(entry.meshes), entry.l2w, plane, configured.flips, configured.source !== 'model') : null;

@@ -1,6 +1,7 @@
 BarClip: type (type-only)
 DEFAULT_SEGMENTAL_RISE: value
 DOUBLE_LEAF_WIDTH: value
+DoorStated: type (type-only)
 ElevationOptions: type (type-only)
 ElevationPlacementOptions: type (type-only)
 ElevationReads: type (type-only)
@@ -20,6 +21,7 @@ StrokeWeight: type (type-only)
 TypedPlanSymbol: type (type-only)
 archPoints: value
 curtainPartsOf: value
+doorStatedOf: value
 doorSymbol: value
 drawnBySymbol: value
 elevationOpeningSymbols: value
