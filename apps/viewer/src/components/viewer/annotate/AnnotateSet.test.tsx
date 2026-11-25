@@ -13,7 +13,9 @@ import { annotateSetRo } from '@/i18n/catalogues/annotate-set.ro';
 import { registerLocale, setLocale } from '@/i18n/registry';
 import ro from '@/i18n/locales/ro';
 import { checkCatalogue } from '@/i18n/catalogue-problems';
-import { useAnnotatePanel } from '@/annotate-set/store';
+import { runAnnotateSet, useAnnotatePanel } from '@/annotate-set/store';
+import { useDrawingDemand } from '@/annotate-set/drawing-demand';
+import { useViewerStore } from '@/store';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import { defaultViews } from '@/project/view-defaults';
 import { useViewDrawings } from '@/project/view-drawings';
@@ -30,13 +32,16 @@ const box = (ui: HTMLElement, text: string) => [...ui.querySelectorAll('label')]
 beforeEach(() => {
   resetProject();
   act(() => setLocale('en'));
-  useAnnotatePanel.setState({ on: { tagall: true, dimall: true, levelall: true }, running: null, summary: null });
+  useAnnotatePanel.setState({ on: { tagall: true, dimall: true, levelall: true }, running: null, summary: null, problem: null });
+  // A model is loaded: the views' drawings come from it.
+  useViewerStore.setState({ models: new Map([['m', {} as never]]) });
   useWallNav.setState({ stepped: null, focus: null, visit: 0, panel: null });
   const views = [...defaultViews(LEVELS, 1)];
   useProjectStore.setState({ levels: LEVELS, views, sheets: [{ id: 's', name: 'S', number: 'A-1', series: 'plans', viewports: [] } as never] });
 });
 afterEach(() => { cleanup(); useViewDrawings.setState({ byView: {} }); act(() => setLocale('en')); });
 
+const runButton = (ui: HTMLElement) => [...ui.querySelectorAll('button')].find((b) => b.textContent === 'Annotate the set' && b.getAttribute('aria-pressed') === null)!;
 const open = (ui: HTMLElement) => click([...ui.querySelectorAll('button')].find((b) => b.getAttribute('aria-pressed') !== null)!);
 
 describe('Annotate the set', () => {
@@ -66,6 +71,21 @@ describe('Annotate the set', () => {
     const listed = [...ui.querySelectorAll('[data-testid="annotate-view"]')];
     assert.equal(listed.length, views.length);
     assert.match(listed[0].textContent ?? '', /no drawing to annotate \(no geometry\)/);
+  });
+
+  it('with no model loaded, says to open it first and starts no run that could only wait for drawings (#869)', async () => {
+    // A project file opened before its IFC: the set has views, but nothing to draw them from.
+    useViewerStore.setState({ models: new Map() });
+    const ui = render(<AnnotateSet />);
+    open(ui);
+    assert.match(ui.textContent ?? '', /Open the IFC model of this project first/);
+    assert.equal(runButton(ui).disabled, true, 'the panel will not run');
+    // The intro's button and a preset start the run without the panel's button.
+    void runAnnotateSet();
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    assert.equal(useAnnotatePanel.getState().running, null, 'no run sits on its first view waiting for a drawing');
+    assert.deepEqual(useDrawingDemand.getState().counts, {}, 'no drawing is asked for');
+    assert.equal(useAnnotatePanel.getState().problem?.kind, 'noModel', 'and the reason is kept for the intro to say');
   });
 
   it('says on the page a template\'s set arrives on that the commands it records are running, and what they did', () => {

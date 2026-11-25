@@ -8,4 +8,5 @@ import type { TranslationValue } from '../types';
 export const annotateRunEn = {
   'wall.annotateRun.failed': 'Annotating the set stopped on an error: {message}',
   'wall.annotateRun.nothingOn': 'No annotation is switched on. Switch on tags, dimensions or level marks under Annotate the set in the top bar.',
+  'wall.annotateRun.noModel': 'Open the IFC model of this project first: the views are drawn from it, and annotating reads their drawings.',
 } as const satisfies Record<string, TranslationValue>;
