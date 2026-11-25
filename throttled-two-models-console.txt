@@ -1,0 +1,33 @@
+Production build of fix/863-worker-watchdog, served with COOP same-origin + COEP credentialless (crossOriginIsolated=true, pool of 3 drawing workers).
+Models dropped together on the start page: Building-Structural.ifc (0.3 MB) + ISSUE_068_ARK_NUS_skolebygg.ifc (56 MB).
+Throttle: the page spawned 120 busy-loop workers on a 12-core Mac for the whole run.
+
+Console lines starting "[drawing-generation]": none (no fallback, no worker replaced, no near-limit info).
+Drawing workers terminated: 0. Jobs sent: 21. Jobs done by a worker: 21.
+
+Per job (times in ms since the files were dropped; quietMs = the longest the worker went without a point where it could speak):
+worker job meshes queuedAt startedAt doneAt workMs quietMs
+2 4 17 26087 34891 43180 8289 2006
+1 3 17 26087 33388 43277 9889 2003
+1 6 17 26087 43277 43461 184 47
+2 7 17 26087 43180 43585 405 136
+0 2 17 26087 34178 43842 9664 2003
+0 5 17 26087 43842 44141 299 162
+0 8 17 26087 44142 44469 327 161
+1 10 11399 42201 43461 45986 2525 146
+1 13 11399 42201 45989 48644 2655 127
+2 11 11399 42201 43657 49387 5730 150
+0 12 11399 42201 44474 49512 5038 139
+1 16 11399 42201 48647 51386 2739 104
+0 15 11399 42201 49515 54034 4519 157
+1 18 11399 48647 51393 54095 2702 187
+0 17 11399 45989 54037 56222 2185 193
+1 21 11399 51388 54104 56258 2154 110
+0 20 11399 49515 56231 61090 4859 225
+0 22 11399 54037 61094 65872 4778 316
+2 14 11399 42201 49390 118968 69578 6887
+2 19 11399 49390 118971 124512 5541 196
+0 23 11399 118971 118974 187601 68627 7087
+
+Job 19 waited 69.6 s in its worker's queue behind job 14 (69.6 s of work): only the job a worker is on is timed now.
+The 2 s quiet spans of the first jobs are the outline binding's wasm loading, covered by the worker's own timer.
