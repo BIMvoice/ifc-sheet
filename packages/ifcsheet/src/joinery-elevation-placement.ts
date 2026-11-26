@@ -90,14 +90,14 @@ export function typedElevationSymbol(
  * on the door as the view sees it: the same marks a configured door gets (`openingMarks`), in the drawing's own frame, so the hinge side
  * is where the door's placement puts it as the viewer sees it, a mirrored placement included. Swing marks are solid where the leaf opens
  * towards the viewer (a leaf opens to the placement's +Y) and dashed where it opens away; `flips` (bit 1 the hand, bit 2 the swing side)
- * turn them as they turn the plan symbol. A pair of leaves is a mark in each half, hinged (or sliding or folding) outwards; a revolving door
+ * turn them as they turn the plan symbol. A pair of leaves is a mark in each half, hinged (or sliding or folding) outwards; a revolving or pivoting door
  * has no opening lines. Which way the lines point is the project's opening-line convention.
  */
 export function statedDoorElevationSymbol(
   op: DoorOperation, world: readonly number[], localToWorld: readonly number[], plane: SectionPlaneConfig, flips = 0,
   options: ElevationPlacementOptions = {},
 ): { thin: DraftShape[]; dashed: DraftShape[] } | null {
-  if (op.motion === 'revolving' || op.motion === 'overhead') return null;
+  if (op.motion === 'revolving' || op.motion === 'pivot' || op.motion === 'overhead') return null;
   const toViewer = towardViewer(plane);
   const m = localToWorld;
   const ex = unit([m[0], m[4], m[8]]);

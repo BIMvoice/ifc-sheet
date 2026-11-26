@@ -25,8 +25,11 @@ import { predefinedTypeText } from './schedule-filter.js';
 import { attributes, type Live } from './joinery-schedule.js';
 
 export interface DoorOperation {
-  /** How the leaf moves: swings on hinges, slides along the wall, folds, turns about a centre, or lifts / rolls up overhead. */
-  motion: 'swing' | 'sliding' | 'folding' | 'revolving' | 'overhead';
+  /**
+   * How the leaf moves: swings on hinges, slides along the wall, folds, turns as the four leaves of a revolving drum (REVOLVING), turns as one
+   * leaf about a vertical axis in its middle (`pivot`, REVOLVING_VERTICAL), or lifts / rolls up overhead.
+   */
+  motion: 'swing' | 'sliding' | 'folding' | 'revolving' | 'pivot' | 'overhead';
   /** The hinged side seen along the opening direction (+Y) of a swinging door; null for a pair of leaves, which has none, and for the other motions. */
   hinge: 'left' | 'right' | null;
   /** The side a single sliding leaf slides to, or a single folding leaf stacks at, seen along +Y; null for a pair and for the other motions. */
@@ -40,6 +43,8 @@ export interface DoorOperation {
    * swings to +Y. Absent for every other operation.
    */
   oppositeLeaf?: 'left' | 'right';
+  /** SWING_FIXED_*: the swinging leaf takes one half of the opening, on its hinge side, and a fixed panel the other half. Absent otherwise. */
+  fixedPanel?: true;
 }
 
 /**
@@ -52,14 +57,18 @@ export interface DoorOperation {
  * - DOUBLE_DOOR_SLIDING: two leaves sliding apart, one to each side;
  * - FOLDING_TO_LEFT / RIGHT: one folding leaf stacking on that side;
  * - DOUBLE_DOOR_FOLDING: two folding leaves, one stacking on each jamb;
- * - REVOLVING / REVOLVING_VERTICAL: leaves turning about a vertical axis in the middle of the opening;
+ * - REVOLVING: four leaves set as a cross, turning about a vertical axis in the middle of the opening (the revolving drum);
+ * - REVOLVING_VERTICAL: one panel, revolving about a vertical axis (`pivot`). IFC4.3 defines it only as "Revolving vertical", with no figure;
+ *   it is read as one leaf because the enum marks a second panel with DOUBLE_DOOR_ and the four-leaf drum is REVOLVING, and its axis is put
+ *   in the middle of the leaf as `IfcWindowPanelOperationEnum.PIVOTVERTICAL` puts it ("hinges are in the middle");
  * - LIFTING_HORIZONTAL / LIFTING_VERTICAL_* / DOUBLE_DOOR_LIFTING_VERTICAL / ROLLINGUP: a panel that lifts or rolls up overhead: it swings nowhere, so no arc.
- * - SWING_FIXED_* : a swing leaf beside a fixed panel, drawn as SINGLE_SWING_*;
- * - DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT / RIGHT: a pair of leaves, "one panel swings in one direction and the other panel swings in the
- *   opposite direction". The hand is read as the leaf that opens to +Y, as SINGLE_SWING_* names the side of a leaf opening to +Y, so the
- *   other leaf swings to -Y (`oppositeLeaf`). That reading of the hand is inferred, not quoted from the enum's page.
- * Left and right are read in the view the swing values name: along the placement's +Y. (The enum's own page could not be fetched
- * when the sliding and folding values were added, so that reading for them follows the swing values, not a quoted definition.)
+ * - SWING_FIXED_*: one swinging leaf hinged on that side and one fixed panel (`fixedPanel`); the enum's figure shows each taking half the opening;
+ * - DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT / RIGHT: a pair of leaves, one swinging to each side. The enum's figures settle the hand: in
+ *   OPPOSITE_LEFT the leaf on the placement's -X jamb swings to -Y and the one on the +X jamb to +Y; OPPOSITE_RIGHT the other way round.
+ *   `oppositeLeaf` names the leaf, seen along +Y, that swings to -Y.
+ * Left and right are read in the view the swing values name: along the placement's +Y.
+ * Source: the IFC4.3 documentation of `IfcDoorTypeOperationEnum` (https://ifc43-docs.standards.buildingsmart.org/, built from
+ * github.com/buildingSMART/IFC4.3.x-development `docs/schemas/shared/IfcSharedBldgElements/Types/IfcDoorTypeOperationEnum.md`).
  */
 export function parseDoorOperation(value: unknown): DoorOperation | null {
   const v = predefinedTypeText(value);
@@ -72,11 +81,11 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
     case 'DOUBLE_SWING_LEFT': return swing('left', 1, true);
     case 'DOUBLE_SWING_RIGHT': return swing('right', 1, true);
     // A swing leaf beside a fixed panel: the hand names the leaf's hinge, as SINGLE_SWING_* does and as this repo's writer emits it (joinery-ifc.ts `doorOperation`).
-    case 'SWING_FIXED_LEFT': return swing('left', 1, false);
-    case 'SWING_FIXED_RIGHT': return swing('right', 1, false);
-    // Two leaves swinging opposite ways: the named leaf opens to +Y, the other to -Y.
-    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT': return { ...swing(null, 2, false), oppositeLeaf: 'right' };
-    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT': return { ...swing(null, 2, false), oppositeLeaf: 'left' };
+    case 'SWING_FIXED_LEFT': return { ...swing('left', 1, false), fixedPanel: true };
+    case 'SWING_FIXED_RIGHT': return { ...swing('right', 1, false), fixedPanel: true };
+    // Two leaves swinging opposite ways, as the enum's figures draw them: OPPOSITE_LEFT's left leaf swings to -Y, OPPOSITE_RIGHT's right one.
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT': return { ...swing(null, 2, false), oppositeLeaf: 'left' };
+    case 'DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT': return { ...swing(null, 2, false), oppositeLeaf: 'right' };
     case 'DOUBLE_DOOR_SINGLE_SWING': return swing(null, 2, false);
     case 'DOUBLE_DOOR_DOUBLE_SWING': return swing(null, 2, true);
     case 'SLIDING_TO_LEFT': return moving('sliding', 'left');
@@ -90,7 +99,7 @@ export function parseDoorOperation(value: unknown): DoorOperation | null {
     case 'LIFTING_VERTICAL_RIGHT':
     case 'ROLLINGUP': return overhead(1);
     case 'DOUBLE_DOOR_LIFTING_VERTICAL': return overhead(2);
-    case 'REVOLVING_VERTICAL':
+    case 'REVOLVING_VERTICAL': return { motion: 'pivot', hinge: null, towards: null, leaves: 1, doubleActing: false };
     case 'REVOLVING': return { motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false };
     default: return null;
   }

@@ -151,9 +151,9 @@ describe('openingSymbols with a stated operation', () => {
     assert.equal(door.heavy?.length, 2);
   });
 
-  // Review of #505: DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* drew both leaves to one side. IFC4.3: "one panel swings in one direction and the
-  // other panel swings in the opposite direction". The hand names the leaf that opens to +Y.
-  it('swings the two leaves of DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* to opposite sides, the named one to the placement\'s +Y', () => {
+  // Review of #505: DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* drew both leaves to one side. IFC4.3: one panel swings each way; the enum's figures
+  // put OPPOSITE_LEFT's -X leaf to -Y and its +X leaf to +Y, OPPOSITE_RIGHT the other way round (IFC4.3 audit).
+  it('swings the two leaves of DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* to opposite sides, as the enum\'s figures draw them', () => {
     const leaves = (value: string) => {
       const [door] = openingSymbols([placed()], plan, () => 0, () => null, () => parseDoorOperation(value));
       return (door.heavy ?? []).map((leaf) => {
@@ -164,9 +164,9 @@ describe('openingSymbols with a stated operation', () => {
     // IFC +Y is the drawing's -y here; the placement's -X jamb is at x = 4.55.
     const oppositeLeft = leaves('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT');
     assert.equal(oppositeLeft.length, 2);
-    assert.ok(oppositeLeft[0].tipY < 0 && oppositeLeft[1].tipY > 0, 'LEFT: the left leaf opens to +Y, the right one to -Y');
+    assert.ok(oppositeLeft[0].tipY > 0 && oppositeLeft[1].tipY < 0, 'LEFT: the left leaf opens to -Y, the right one to +Y');
     const oppositeRight = leaves('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT');
-    assert.ok(oppositeRight[0].tipY > 0 && oppositeRight[1].tipY < 0, 'RIGHT: the right leaf opens to +Y, the left one to -Y');
+    assert.ok(oppositeRight[0].tipY < 0 && oppositeRight[1].tipY > 0, 'RIGHT: the left leaf opens to +Y, the right one to -Y');
     const same = leaves('DOUBLE_DOOR_SINGLE_SWING');
     assert.ok(same.every((leaf) => leaf.tipY < 0), 'DOUBLE_DOOR_SINGLE_SWING still swings both leaves one way');
   });

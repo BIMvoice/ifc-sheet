@@ -53,11 +53,11 @@ describe('parseDoorOperation', () => {
     expect(parseDoorOperation('DOUBLE_SWING_LEFT')).toEqual(swing('left', 1, true));
     expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).toEqual(swing(null, 2, false));
     expect(parseDoorOperation('DOUBLE_DOOR_DOUBLE_SWING')).toEqual(swing(null, 2, true));
-    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual(swing('left', 1, false));
-    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual(swing('right', 1, false));
-    // A pair swinging opposite ways: the named leaf opens to +Y, the other to -Y (review of #505).
-    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'right' });
-    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'left' });
+    expect(parseDoorOperation('SWING_FIXED_LEFT')).toEqual({ ...swing('left', 1, false), fixedPanel: true });
+    expect(parseDoorOperation('.SWING_FIXED_RIGHT.')).toEqual({ ...swing('right', 1, false), fixedPanel: true });
+    // A pair swinging opposite ways, as the IFC4.3 enum's figures draw it: OPPOSITE_LEFT's left leaf swings to -Y, OPPOSITE_RIGHT's right one.
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_LEFT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'left' });
+    expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_RIGHT')).toEqual({ ...swing(null, 2, false), oppositeLeaf: 'right' });
     expect(parseDoorOperation('DOUBLE_DOOR_SINGLE_SWING')).not.toHaveProperty('oppositeLeaf');
   });
 
@@ -70,7 +70,8 @@ describe('parseDoorOperation', () => {
     expect(parseDoorOperation('FOLDING_TO_RIGHT')).toEqual(moving('folding', 'right'));
     expect(parseDoorOperation('DOUBLE_DOOR_FOLDING')).toEqual(moving('folding', null));
     expect(parseDoorOperation('REVOLVING')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
-    expect(parseDoorOperation('REVOLVING_VERTICAL')).toEqual({ motion: 'revolving', hinge: null, towards: null, leaves: 1, doubleActing: false });
+    // One leaf pivoting about a vertical axis, not the four-leaf drum REVOLVING names (IFC4.3 audit).
+    expect(parseDoorOperation('REVOLVING_VERTICAL')).toEqual({ motion: 'pivot', hinge: null, towards: null, leaves: 1, doubleActing: false });
   });
 
   it('reads the lifting and rolling-up values as an overhead door, which swings nowhere (#486)', () => {
@@ -149,10 +150,10 @@ describe('doorSwingFlips', () => {
   });
 
   it('puts the leaf of an opposite-swinging pair that opens to +Y on its hand\'s jamb (review of #505)', () => {
-    const oppositeLeft = { ...left, hinge: null, leaves: 2 as const, oppositeLeaf: 'right' as const };
-    expect(doorSwingFlips(oppositeLeft, X, Y, X, Y)).toBe(0);
-    expect(doorSwingFlips({ ...oppositeLeft, oppositeLeaf: 'left' }, X, Y, X, Y)).toBe(1);
-    expect(doorSwingFlips(oppositeLeft, neg(X), Y, X, Y), 'a mirrored placement flips the side').toBe(1);
+    const pair = { ...left, hinge: null, leaves: 2 as const, oppositeLeaf: 'right' as const };
+    expect(doorSwingFlips(pair, X, Y, X, Y)).toBe(0);
+    expect(doorSwingFlips({ ...pair, oppositeLeaf: 'left' }, X, Y, X, Y)).toBe(1);
+    expect(doorSwingFlips(pair, neg(X), Y, X, Y), 'a mirrored placement flips the side').toBe(1);
   });
 
   it('leaves a placement not running along the opening alone', () => {

@@ -8,7 +8,7 @@ Issues are for users: bugs and requests that people report. Our own planned and 
 - **Milestone 1: IFC in, drawings out** (#557). The order of work is done except joined cut faces (#349) and plans above and below the cut (#490). Left: the acceptance set has 4 models of the planned ten (`docs/guide/acceptance-set.md`), and the milestone's outcome (correct PDF and DXF across the set) has not been checked as a whole. Open product decisions:
   - A window whose IFC states no size: a measured size marked `≈` (#524), or `—` once its type is configured (#481)?
   - A schedule cell typed before sizes were measured: applies to every measured row of its kind (built), or reported as orphaned (#524)?
-  - REVOLVING_VERTICAL is drawn as a four-leaf revolving door (#522); the IFC4.3 text probably means a single pivoting leaf.
+  - Decided 2026-11-26: door operations follow the IFC4.3 specification. REVOLVING_VERTICAL (#522) is drawn as one leaf pivoting about a vertical axis in its middle; REVOLVING keeps the four-leaf drum; SWING_FIXED_* and DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_* follow the enum's figures (see the pull request's audit table).
   - Printed captions and number formats: the project's language (engine today) or the interface language (app today) (#534)?
   - Door handedness in Bonsai models.
 - **Every written rule enforced by a check, or rewritten** (#563). Done: the ruleset, the house-rules ratchet, the wired gates, one PR per area, the licence header, unique ids, fixture skips. Left: see the last comment on #563.
