@@ -34,7 +34,7 @@ function placement(crs: string, conversion: Partial<MapConversion>, verticalDatu
 }
 
 /** The BIMcollab pair's conversion, in metres: 60° grid rotation, 1.3 m height. */
-const BIMCOLLAB = { eastings: 729013.3488297004, northings: 9063992.684697363, orthogonalHeight: 1.3, xAxisAbscissa: 0.5, xAxisOrdinate: 0.8660254037844387 };
+const BIMCOLLAB = { eastings: 729013.3488297004, northings: 9063992.684697364, orthogonalHeight: 1.3, xAxisAbscissa: 0.5, xAxisOrdinate: 0.8660254037844387 };
 
 const SOURCE_POINTS: Array<[number, number, number]> = [[0, 0, 0], [12, 3, -7.5], [-4, 0.2, 9]];
 
