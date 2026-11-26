@@ -141,10 +141,17 @@ describe('door symbols from the operation the model states (#486)', () => {
       assert.equal(heavy.filter((s) => s.type === 'line').length, 2, 'two leaves crossing');
     });
 
-    it('REVOLVING_VERTICAL: the same circle and cross as REVOLVING', () => {
+    // IFC4.3 audit: REVOLVING_VERTICAL is one panel revolving about a vertical axis, not the four-leaf drum REVOLVING names.
+    it('REVOLVING_VERTICAL: one leaf across the opening through its middle and the two quarter arcs its halves sweep, no drum', () => {
       const { thin, heavy } = plan('REVOLVING_VERTICAL');
-      assert.ok(thin.some((s) => s.type === 'circle'));
-      assert.equal(heavy.filter((s) => s.type === 'line').length, 2);
+      assert.ok(!thin.some((s) => s.type === 'circle'), 'no drum');
+      assert.equal(heavy.length, 1, 'one leaf');
+      const leaf = bounds(heavy);
+      near(leaf.y1 - leaf.y0, 0.9, 'the leaf spans the opening, open across the wall');
+      near((leaf.x0 + leaf.x1) / 2, 5, 'through the middle of the opening');
+      const arcs = thin.filter((s) => s.type === 'arc');
+      assert.equal(arcs.length, 2);
+      for (const a of arcs) if (a.type === 'arc') { near(a.c.x, 5, 'pivot x'); near(a.c.y, 2, 'pivot y'); near(a.r, 0.45, 'each half sweeps half the width'); }
     });
 
     it('LIFTING_*, ROLLINGUP: a bar per leaf and a dashed panel line, with no swing arc', () => {
