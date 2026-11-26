@@ -65,10 +65,9 @@ describe('a door or window with its own plan representation is drawn from it (#8
     const hinge = { x: 5.0, y: 4.04 }, r = 0.715;
     expect(near(lines, { x: 4.285, y: 4.04 }), 'the open leaf\'s tip').toBeLessThan(0.001);
     expect(near(lines, { x: 5.0, y: 3.325 }), 'the swing\'s end').toBeLessThan(0.001);
-    const composite = lines.find((l) => l.length > 4 && l.some((p) => Math.hypot(p.x - hinge.x, p.y - hinge.y) < 0.001));
-    expect(composite, 'one line from the hinge through the leaf into the swing').toBeDefined();
-    const arc = composite!.filter((p) => Math.hypot(p.x - hinge.x, p.y - hinge.y) > 0.01);
-    for (const p of arc) expect(Math.hypot(p.x - hinge.x, p.y - hinge.y), 'every point of the swing at the leaf\'s length from the hinge').toBeCloseTo(r, 3);
+    expect(near(lines, hinge), 'the leaf\'s line from the hinge').toBeLessThan(0.001);
+    const arc = lines.find((l) => l.length > 4 && l.every((p) => Math.abs(Math.hypot(p.x - hinge.x, p.y - hinge.y) - r) < 0.001));
+    expect(arc, 'the swing drawn as an arc about the hinge at the leaf\'s length, not a chord').toBeDefined();
   });
 
   it('draws W01 from its symbol along the oblique wall', () => {
