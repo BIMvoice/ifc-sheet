@@ -67,8 +67,9 @@ export function outlineLinesWithDepth(
   plane: SectionPlaneConfig,
   depths: ProjectionBandDepths,
   mesh: MeshData,
+  band?: 'visible' | 'overhead',
 ): DrawingLine[] {
-  return withOwnSurfaceDepth(outlineToProjectionLines(outline, meta, plane, depths), plane, mesh);
+  return withOwnSurfaceDepth(outlineToProjectionLines(outline, meta, plane, depths, band), plane, mesh);
 }
 
 /**
