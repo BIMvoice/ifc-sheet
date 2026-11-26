@@ -64,6 +64,11 @@ function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
   return { refs, storeys };
 }
 
+/** Whether the project in front holds a set: from its first sheet on, it is the person's to keep (#863). */
+function hasWork(project: { sheets: readonly unknown[] }): boolean {
+  return project.sheets.length > 0;
+}
+
 /** Mount once: follows model loads and autosaves the project. */
 export function useProjectSync(): void {
   useEffect(() => {
@@ -83,12 +88,16 @@ export function useProjectSync(): void {
         if (slot && !readOnlySlot) markSessionClosed(slot);
         slot = key;
         forgetRecoveryOffer();
-        const plan = planAutosave(key);
+        const current = useProjectStore.getState();
+        const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
+        // Models added to the models of the project in front (#863): once it holds a set, that project goes on,
+        // whatever these models left before; their earlier project is offered back, never put over it. Nothing is
+        // compared field by field, so no edit (a scale, a paper, an annotation) can be missed.
+        const carryOn = overlaps && hasWork(current);
+        const plan = planAutosave(key, undefined, carryOn);
         readOnlySlot = plan.tooNew;
         // No marker on a slot this session does not write: a crash here leaves nothing of ours to offer.
         if (!plan.tooNew) markSessionOpen(key);
-        const current = useProjectStore.getState();
-        const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
         else if (plan.restore) {
           loadProjectDocument(plan.restore.doc);
