@@ -158,14 +158,16 @@ export async function drawAxonometricView(
   view: ThreeDProjectView,
   levels: readonly ProjectLevel[] = [],
   onProgress?: (stage: string, progress: number) => void,
+  /** Called often while the drawing is made (`GeneratorOptions.onTick`): the drawing worker's heartbeat (#863). */
+  onTick?: () => void,
 ): Promise<Drawing2D> {
   const camera = axonometricCamera(view);
   const scaleFactor = view.scale ?? 100;
   const clip = cutawayClipOf(view, levels);
   if (!clip) {
-    const { drawing } = await generateCameraDrawing({ meshes, camera, scaleFactor, hiddenLineEdgeTolerancePx: AXONOMETRIC_EDGE_TOLERANCE_PX, includeFeatureEdges: true, onProgress });
+    const { drawing } = await generateCameraDrawing({ meshes, camera, scaleFactor, hiddenLineEdgeTolerancePx: AXONOMETRIC_EDGE_TOLERANCE_PX, includeFeatureEdges: true, onProgress, onTick });
     return asSheetDrawing(drawing);
   }
-  const drawing = await generateCutawayDrawing({ meshes, camera, clip, scaleFactor, hiddenLineEdgeTolerancePx: AXONOMETRIC_EDGE_TOLERANCE_PX, onProgress });
+  const drawing = await generateCutawayDrawing({ meshes, camera, clip, scaleFactor, hiddenLineEdgeTolerancePx: AXONOMETRIC_EDGE_TOLERANCE_PX, onProgress, onTick });
   return asSheetDrawing(scaledDrawing(drawing, nominalScaleFactor(camera)));
 }
