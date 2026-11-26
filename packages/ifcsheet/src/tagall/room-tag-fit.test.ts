@@ -38,9 +38,10 @@ function run(w: number, h: number, el: LabelElement) {
   const elements: ViewElement[] = [...walls, ...columns].map((ring, i) => ({ renderId: i + 10, anchor: ring[0]!, ring, cut: true }));
   const [mark, roomType] = TAGALL_TYPES;
   let n = 0;
+  // 1:100: a 2.5 mm text is 0.25 m, a paper millimetre 0.1 m (the leader's 12 mm cap is read at that scale).
   const out = tagAllDrafts({
     elements, targets: [], rooms: [{ ring: rect(0, 0, w, h), at: 'cut', renderId: 1, guid: 'g' }], existing: [],
-    placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.01, locale: 'en' },
+    placement: { viewId: 'v', layerId: 'l', textHeight: 0.25, textStyle: 'Standard', dimStyle: 'Standard', paperUnit: 0.1, locale: 'en' },
     types: { mark: mark!, room: roomType! }, env: { read: () => el, up: 1, styled: () => ({}), newId: () => `t${++n}` },
     reader: { sectionLink: () => null, measure }, rectsOf, parts: { doors: false, windows: false, rooms: true },
   });
