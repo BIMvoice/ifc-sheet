@@ -4,7 +4,7 @@
 
 /**
  * Where a plan's room tag goes when it fits in its room neither whole nor cut down (a shaft, a WC): just outside the room, at the
- * nearest place clear of the cut, the door swings and the annotations, with a short leader to the room's deepest point. Searched on a grid round the
+ * nearest place clear of the cut, the door swings and the annotations, with a short leader to the room's deepest point (and whatever else the caller asks of a place: `accept`). Searched on a grid round the
  * room, no farther than twice the tag's size from its box; nearest the box first, ties to the lower y, then the lower x. Null when there is no such place. Pure and deterministic.
  */
 
@@ -19,6 +19,8 @@ export interface BesideScene {
   annotations: RectIndex;
   /** A detail's area: the whole tag stands inside it. */
   crop?: { min: Pt; max: Pt };
+  /** What else a place must satisfy (its leader short and clear); absent: nothing. */
+  accept?: (centre: Pt) => boolean;
 }
 
 export function roomLabelBeside(ring: readonly Pt[], w: number, h: number, clear: number, scene: BesideScene): Pt | null {
@@ -38,7 +40,7 @@ export function roomLabelBeside(ring: readonly Pt[], w: number, h: number, clear
     if (scene.annotations.any(r)) return false;
     let hit = false;
     scene.solid.query(r, (_, s) => (hit = rectHitsRing(r, s)));
-    return !hit;
+    return !hit && (!scene.accept || scene.accept(p));
   };
   let best: { p: Pt; d: number } | null = null;
   for (let j = -last; j <= last; j++) {

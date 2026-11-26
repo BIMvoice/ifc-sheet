@@ -31,7 +31,7 @@ import { parseFieldRef } from '../labels/label-template.js';
 import type { ViewElement } from '../labels/view-elements.js';
 
 import { ringArea, type RoomOfPlan } from './footprint.js';
-import { fitRoomTags, type PlacedRoomTag } from './room-fit.js';
+import { fitRoomTags, ROOM_LEADER_MAX_MM, type PlacedRoomTag } from './room-fit.js';
 import { roomLabelPoint } from './room-point.js';
 import { roomLabelPointLeast } from './room-point-least.js';
 import { roomLabelOutside } from './room-outside.js';
@@ -142,6 +142,8 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
   // What a room tag that does not fit moves clear of: real texts only (the notes, tags and labels drawn, never a door swing or a frame), and not over a cut wall.
   const textIndex = new RectIndex(4 * at.textHeight);
   for (const r of base) textIndex.add(r);
+  // The same texts as a list: what a room tag must not lie over (`room-fit.ts`).
+  const roomTexts: Rect[] = [...base];
   const walls = new RectIndex<readonly Pt[]>(4 * at.textHeight);
   for (const t of input.targets) if (/^ifc(wall|curtainwall|column)/i.test(t.className)) walls.add(ringBounds(t.ring), t.ring);
   for (const t of todo) {
@@ -153,6 +155,7 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     roomIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
     roomObstacles.push(rectAround(spot.centre, ...sizeOf(items, t)));
     textIndex.add(rectAround(spot.centre, ...sizeOf(items, t)));
+    roomTexts.push(rectAround(spot.centre, ...sizeOf(items, t)));
     summary.marks++;
     if (extras.numbered !== undefined) summary.numbered++;
   }
@@ -235,14 +238,18 @@ export function tagAllDrafts(input: TagAllDrafts): { drafts: DraftEntity[]; summ
     // The leader stays as it is drawn: the tag is not on the room, so `settleLeader` must not take it for a label with none (`leaderFixed`).
     const draft = placed && tip && placed.shape.type === 'text' ? { ...placed, shape: { ...placed.shape, leader: tip }, params: { ...placed.params, leaderFixed: true } } : placed;
     if (!draft) continue;
-    roomTags.push({ guid: room.guid, shown, extras, centre: spot.centre, ...size, draft, over: drawnOverCut(draft), fits: spot.fits });
+    roomTags.push({ guid: room.guid, shown, extras, centre: spot.centre, ...size, draft, over: drawnOverCut(draft), fits: spot.fits, ...(tip ? { tip } : {}) });
     roomIndex.add(growRect(rectAround(spot.centre, size.w, size.h), 0));
     textIndex.add(rectAround(spot.centre, size.w, size.h));
     summary.rooms++;
     if (fromModel) summary.areaFromModel++; else summary.areaFromFootprint++;
   }
-  // A tag still over the cut, its room too small for it: compact inside, else beside the room with a leader, else as it is (`room-fit.ts`).
-  const fitted = fitRoomTags(roomTags, { env, type: input.types.room, at, clear, obstacles: roomObstacles, solid: offCut, crop: input.crop });
+  // A tag still over the cut or over another text, or with a long or crossing leader: inside whole or compact, else beside the room
+  // with a short leader, else its number alone, else as it is (`room-fit.ts`).
+  const fitted = fitRoomTags(roomTags, {
+    env, type: input.types.room, at, clear, obstacles: roomObstacles, texts: roomTexts, solid: [...offCut, ringsOn(pieces)], cut, overCut: drawnOverCut,
+    leaderMax: ROOM_LEADER_MAX_MM * at.paperUnit, crop: input.crop,
+  });
   if (fitted.compact) summary.roomsCompact = fitted.compact;
   if (fitted.leader) summary.roomsLeader = fitted.leader;
   for (const t of roomTags) {
