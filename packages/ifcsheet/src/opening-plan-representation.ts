@@ -24,7 +24,7 @@ import { flattenShape } from './symbols.js';
 import { readPlanSymbols, type PlanSymbol } from './plan-symbols.js';
 import { symbolShapes, type OpeningSymbol } from './opening-symbols.js';
 import type { Pt } from './draft-types.js';
-import { leafStrokes } from './opening-plan-rep-pens.js';
+import { doorStrokePens } from './opening-plan-rep-pens.js';
 
 /** Each store's door and window plan symbols for the frame they were read in, held weakly. */
 const reads = new WeakMap<IfcDataStore, { frame: RenderFrameInfo | null; symbols: Map<number, PlanSymbol> }>();
@@ -66,7 +66,7 @@ export function usableRepresentation(lines: readonly Pt[][], made: OpeningSymbol
 
 /**
  * `symbols` (`openingSymbols`' for a plan cut at `plane`) with each element that has its own plan representation (`own`, by the id the
- * symbols carry) and no configured type (`configured`) drawn from it instead: its curves in the generated symbol's pens (`leafStrokes`). `fellBack` lists the ids whose
+ * symbols carry) and no configured type (`configured`) drawn from it instead: its curves in the generated symbol's pens, per segment (`doorStrokePens`). `fellBack` lists the ids whose
  * representation was unusable (`usableRepresentation`), which keep the generated symbol.
  */
 export function withOwnPlanRepresentations(
@@ -83,10 +83,10 @@ export function withOwnPlanRepresentations(
     }
     // A door's leaf and frame in the generated leaf's heavy pen, its swing and the rest thin; a window thin throughout (`opening-plan-rep-pens.ts`).
     const drawn = lines.filter((l) => l.length >= 2);
-    const leaf = made.kind === 'door' ? leafStrokes(drawn) : new Set<number>();
+    const pens = made.kind === 'door' ? doorStrokePens(drawn) : { heavy: [], thin: drawn };
     const polyline = (pts: Pt[]) => ({ type: 'polyline' as const, closed: false, pts });
-    const heavy = drawn.filter((_, i) => leaf.has(i)).map(polyline);
-    return { id: made.id, kind: made.kind, shapes: drawn.filter((_, i) => !leaf.has(i)).map(polyline), ...(heavy.length > 0 ? { heavy } : {}) };
+    const heavy = pens.heavy.map(polyline);
+    return { id: made.id, kind: made.kind, shapes: pens.thin.map(polyline), ...(heavy.length > 0 ? { heavy } : {}) };
   });
   return { symbols: out, fellBack };
 }
