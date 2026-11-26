@@ -18,19 +18,23 @@ import { useViewerStore } from '@/store';
 import { toGlobalIdFromModels } from '@/store/globalId';
 import type { ProjectView, ViewGraphics } from './types';
 
+type Which = 'elements' | 'openings';
 /** Each store's symbols for the frame they were read in, held weakly so an unloaded model's go with it. */
-const reads = new WeakMap<IfcDataStore, { frame: CoordinateInfo | null; symbols: Map<number, PlanSymbol> }>();
+const reads: Record<Which, WeakMap<IfcDataStore, { frame: CoordinateInfo | null; symbols: Map<number, PlanSymbol> }>> = { elements: new WeakMap(), openings: new WeakMap() };
 
-function symbolsOf(store: IfcDataStore, frame: CoordinateInfo | null): Map<number, PlanSymbol> {
-  const known = reads.get(store);
+function symbolsOf(store: IfcDataStore, frame: CoordinateInfo | null, which: Which): Map<number, PlanSymbol> {
+  const known = reads[which].get(store);
   if (known && known.frame === frame) return known.symbols;
-  const symbols = readPlanSymbols(store, frame).symbols;
-  reads.set(store, { frame, symbols });
+  const symbols = readPlanSymbols(store, frame, which).symbols;
+  reads[which].set(store, { frame, symbols });
   return symbols;
 }
 
-/** The loaded models' plan symbols by renderer id, the id a drawing's lines and faces carry. */
-export function loadedPlanSymbols(): Map<number, PlanSymbol> {
+/**
+ * The loaded models' plan symbols by renderer id, the id a drawing's lines and faces carry: of every element but the doors and
+ * windows, or (`which: 'openings'`) of the doors and windows only, which `viewOpeningSymbols` draws in place of their generated symbols (#831).
+ */
+export function loadedPlanSymbols(which: Which = 'elements'): Map<number, PlanSymbol> {
   const s = useViewerStore.getState();
   const frame = federationFrameInfo(s.models.values(), s.geometryResult);
   const out = new Map<number, PlanSymbol>();
@@ -39,7 +43,7 @@ export function loadedPlanSymbols(): Map<number, PlanSymbol> {
     : [['legacy', s.ifcDataStore]];
   for (const [modelId, store] of entries) {
     if (!store) continue;
-    for (const symbol of symbolsOf(store, frame).values()) {
+    for (const symbol of symbolsOf(store, frame, which).values()) {
       const id = toGlobalIdFromModels(s.models, modelId, symbol.expressId);
       out.set(id, { ...symbol, expressId: id });
     }

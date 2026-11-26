@@ -103,7 +103,7 @@ export async function sheetGraphics(set: DefaultSet, model: Pick<OpenedModel, 'b
   for (const view of dataStore ? doc.views : []) {
     const drawing = drawings.get(view.id);
     if (!drawing || (view.kind !== 'plan' && view.kind !== 'elevation' && view.kind !== 'section')) continue;
-    const sources = { live: { dataStore: dataStore!, view: null }, project: options.joinery ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING } };
+    const sources = { live: { dataStore: dataStore!, view: null }, project: options.joinery ?? { joineryTypes: [], joineryMapping: DEFAULT_JOINERY_MAPPING }, frame: model.coordinateInfo };
     const graphics = resolveViewGraphics(view, doc.viewTemplates);
     // An elevation or section keeps its drawing, cut included, and the symbols go over it (`elevation-openings.ts`).
     openings.set(view.id, view.kind === 'plan' ? planOpeningSymbols(model.buildingMeshes, drawing.config.plane, sources, graphics, view.level) : viewOpeningSymbols(model.buildingMeshes, drawing.config.plane, drawing, sources, graphics));

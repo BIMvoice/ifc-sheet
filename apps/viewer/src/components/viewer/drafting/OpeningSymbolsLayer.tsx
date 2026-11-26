@@ -23,6 +23,7 @@ import type { ViewGraphics } from '@/project/types';
 import type { PhaseView } from '@/project/view-graphics';
 import { shapePath } from './DraftOverlay';
 import { DoorFlipButtons } from './DoorFlipButtons';
+import { planSymbolsOn } from '@bimvoice/ifcsheet/plan-symbols';
 
 const NO_FLIPS: Record<string, number> = {};
 
@@ -57,7 +58,7 @@ export const OpeningSymbolsLayer = memo(function OpeningSymbolsLayer({ plane, dr
     () => {
       if (!plane || !geometryResult?.meshes) return [];
       const meshes = withoutHiddenElementMeshes(phaseMeshes(geometryResult.meshes, phases ?? null), graphics, renderIdGlobalId) ?? geometryResult.meshes;
-      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail, level);
+      if (plane.axis === 'y') return viewOpeningSymbols(meshes, plane, flips, hidden, detail, level, planSymbolsOn(graphics));
       return drawing ? viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail) : [];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogue / mapping / convention are read through the project store
