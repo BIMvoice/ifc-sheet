@@ -143,8 +143,13 @@ function keepAsRecoverable(key: string, storage: Store, doc: ProjectDocument): b
   return true;
 }
 
-/** What the start of a session on slot `key` finds. Read before `markSessionOpen` for this session. */
-export function planAutosave(key: string, storage: Store | undefined = safeStorage()): AutosavePlan {
+/**
+ * What the start of a session on slot `key` finds. Read before `markSessionOpen` for this session.
+ *
+ * `carryOn`: a project is already in front and goes on in this slot (a model was added to the models it is drawn from,
+ * #863), so the slot's autosave is never put back over it: it is kept in the recoverable slot and offered instead.
+ */
+export function planAutosave(key: string, storage: Store | undefined = safeStorage(), carryOn = false): AutosavePlan {
   if (!storage) return { restore: null, recoverable: null, tooNew: false };
   const slot = readSlot(key, storage);
   const kept = readSlot(recoverableKey(key), storage);
@@ -152,6 +157,11 @@ export function planAutosave(key: string, storage: Store | undefined = safeStora
   // A newer build's autosave: nothing is restored from it, moved, or written over it.
   if (slot.tooNew) return { restore: null, recoverable, tooNew: true };
   const autosave = slot.autosave;
+  if (carryOn) {
+    if (autosave && !recoverable && !kept.tooNew && keepAsRecoverable(key, storage, autosave.doc)) return { restore: null, recoverable: autosave, tooNew: false };
+    if (autosave) console.warn('[project] the project in front goes on over an earlier autosave of these models; a session is already kept, so that autosave is not');
+    return { restore: null, recoverable, tooNew: false };
+  }
   // A newer build's kept session counts as kept: it is not replaced, only not offered.
   if (!recoverable && !kept.tooNew && autosave && lastSessionDied(key, storage) && isUnsavedWork(key, autosave, storage)) {
     // No copy kept, no offer: the work is put back in front rather than left for the next autosave to replace.
