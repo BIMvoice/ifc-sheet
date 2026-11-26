@@ -5,14 +5,16 @@
 /**
  * A section of the viewport card: the graphics of the drawing (#44). What shows (categories) and at which line weight, the view
  * template the drawing follows (pick one, name this drawing's graphics as a new one, detach, reset its overrides), and the layers it
- * hides on this sheet. A drawing that follows a template writes its changes as overrides over it; changing the template itself for
+ * hides on this sheet; a plan also says whether it draws the plan symbols the model carries (#831, the same write as the Model
+ * workspace's Visibility / Graphics dialog). A drawing that follows a template writes its changes as overrides over it; changing the template itself for
  * every drawing that uses it is in the project drawer's View templates. The rules are the engine's (`resolveViewGraphics`).
  */
 
 import { useState } from 'react';
 import { resolveViewGraphics, templateKindOf } from '@bimvoice/ifcsheet';
+import { planSymbolsOn } from '@bimvoice/ifcsheet/plan-symbols';
 import { useTranslation } from '@/i18n';
-import { useProjectStore } from '@/project/project-store';
+import { updateProjectView, useProjectStore } from '@/project/project-store';
 import { applyViewTemplate, detachViewTemplate, overrideCount, resetViewOverrides, saveViewAsTemplate, setViewCategory, setViewColouredSurfaces, templatesFor, usersOf } from '@/project/view-template-actions';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
 import { CardSection } from './CardSection';
@@ -92,6 +94,13 @@ export function GraphicsCard({ sheet, slot, view }: { sheet: ProjectSheet; slot:
           </>
         ) : null}
         <ViewDetailLevel view={view} />
+        {view.kind === 'plan' ? (
+          <label className="mt-3 flex items-start gap-2 text-xs text-sky-200">
+            <input type="checkbox" className="mt-0.5" checked={planSymbolsOn(view.graphics)}
+              onChange={(e) => updateProjectView(view.id, { graphics: { ...view.graphics, usePlanSymbols: e.target.checked ? undefined : false } })} />
+            <span>{t('viewGraphics.planSymbols')}</span>
+          </label>
+        ) : null}
         <p className="m-0 mt-4 text-2xs font-medium uppercase tracking-widest text-sky-200/70">{t('wall.gfx.layers')}</p>
         <ViewportHiddenLayers sheetId={sheet.id} viewport={slot} view={view} />
       </div>
