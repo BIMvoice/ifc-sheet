@@ -41,7 +41,7 @@ import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } fr
 import { meshSilhouetteLines } from './silhouette-lines.js';
 import { roofBands, roofCreaseLines } from './roof-plan.js';
 import { isFeatureElementType } from './feature-elements.js';
-import { projectionBandPieces, clipMeshToProjectionWindow } from './projection-clip.js';
+import { projectionBandPieces, clipMeshToProjectionWindow, type ProjectionBandPiece } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
 import { dropInsideCutFaces } from './cut-face-occlusion.js';
 import { dropOutlierProjectionLines } from './projection-outliers.js';
@@ -227,11 +227,8 @@ export class Drawing2DGenerator {
         for (const source of meshesForSilhouette) {
           tick?.();
           const reach = roofBands(source, config.plane, bands); // a roof the plan sees is drawn to its eaves (#490)
-          // A clipped piece carries its band: its f32 outline range cannot tell which side of the cut it is on.
-          const pieces = config.clipProjectionBands
-            ? projectionBandPieces(source, config.plane, reach.below, reach.above)
-            : [{ mesh: source, band: undefined }];
-          for (const { mesh, band } of pieces) {
+          const pieces: { mesh: MeshData; band?: ProjectionBandPiece['band'] }[] = config.clipProjectionBands ? projectionBandPieces(source, config.plane, reach.below, reach.above) : [{ mesh: source }];
+          for (const { mesh, band } of pieces) { // each piece says its band: its f32 outline range cannot (#917)
             const outline = outlineProvider
               ? outlineProvider(mesh, config.plane.axis, config.plane.flipped)
               : null;

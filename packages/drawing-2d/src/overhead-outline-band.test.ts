@@ -6,9 +6,9 @@
  * A wall over a wide opening, cut by a plan: the part above the opening is overhead, and its outline must come out
  * dashed, never as a solid line across the room below.
  *
- * Found on the skolebygg sample (QA, 2026-11-26): on Plan 02 a folding-wall opening (IfcWallStandardCase
- * 1uxIuVLVrB_gwNX$qzDdR_) and a glazed wall (00_W9xoqb05PPDE73B2ftL) printed solid lines 9 to 21 m long through the
- * rooms. The overhead piece of each wall (clipped to the band above the cut) has its lowest vertex ON the cut plane,
+ * Found on the skolebygg sample (QA, 2026-11-26): on Plan 02 the walls over two folding walls (IfcWallStandardCase
+ * 3vd1UdIAvDjRJYlTsnj8bl, 8 m, and 1uxIuVLVrB_gwNX$qzDdR_, 9.7 m) printed as two solid lines through the rooms, like a
+ * cut wall, and a glazed wall (00_W9xoqb05PPDE73B2ftL) as a 21 m one. The overhead piece of each wall (clipped to the band above the cut) has its lowest vertex ON the cut plane,
  * and the Rust outline reads it back in f32: 136.39999 for a 136.4 cut, 6 micrometres below it. Classified by that
  * axis range the piece "spans" the cut and its contour was drawn solid.
  *
