@@ -5,12 +5,12 @@ Issues are for users: bugs and requests that people report. Our own planned and 
 ## Directions
 
 - **A modern interaction model, not an AutoCAD clone** (#168). Done: AutoCAD mode is opt-in (#224, #762, #772), and many tools are direct (#750, #755, #760 to #765, #770, #776, #778, #781, #803). Left: a short UX principles page in `docs/`; an audit of the remaining AutoCAD habits on the Wall; arranging views on a sheet by direct manipulation, with a live preview and the palette (#750 drags a view onto the paper).
-- **Milestone 1: IFC in, drawings out** (#557). The order of work is done except joined cut faces (#349) and plans above and below the cut (#490). Left: the acceptance set has 4 models of the planned ten (`docs/guide/acceptance-set.md`), and the milestone's outcome (correct PDF and DXF across the set) has not been checked as a whole. Open product decisions:
+- **Milestone 1: IFC in, drawings out** (#557). The order of work is done, including joined cut faces (#349: #813, #815) and plans above and below the cut (#490: #811, #824, #847). Left: the acceptance set has 4 models of the planned ten (`docs/guide/acceptance-set.md`), and the milestone's outcome (correct PDF and DXF across the set) has not been checked as a whole. Open product decisions:
   - A window whose IFC states no size: a measured size marked `≈` (#524), or `—` once its type is configured (#481)?
   - A schedule cell typed before sizes were measured: applies to every measured row of its kind (built), or reported as orphaned (#524)?
   - REVOLVING_VERTICAL is drawn as a four-leaf revolving door (#522); the IFC4.3 text probably means a single pivoting leaf.
   - Printed captions and number formats: the project's language (engine today) or the interface language (app today) (#534)?
-  - Door handedness in Bonsai models.
+  - Door handedness in Bonsai models: a door or window carrying its own 2D plan symbol is now drawn from it (#903, #905), so Bonsai's own hand is kept; doors without one still get the generated symbol.
 - **Every written rule enforced by a check, or rewritten** (#563). Done: the ruleset, the house-rules ratchet, the wired gates, one PR per area, the licence header, unique ids, fixture skips. Left: see the last comment on #563.
 
 ## Parked until a user asks
