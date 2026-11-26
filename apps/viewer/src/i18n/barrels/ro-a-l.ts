@@ -43,6 +43,7 @@ import { exportToastsRo } from '../catalogues/export-toasts.ro';
 import { faceRo } from '../catalogues/face.ro';
 import { featuresRo } from '../catalogues/features.ro';
 import { feedbackRo } from '../catalogues/feedback.ro';
+import { federationFallbackRo } from '../catalogues/federation-fallback.ro';
 import { fillMaskRo } from '../catalogues/fill-mask.ro';
 import { geometryExportDialogsRo } from '../catalogues/geometry-export-dialogs.ro';
 import { germanyRo } from '../catalogues/germany.ro';
@@ -110,6 +111,7 @@ export const roAL = {
   ...faceRo,
   ...featuresRo,
   ...feedbackRo,
+  ...federationFallbackRo,
   ...ifcClassRo,
   ...fillMaskRo,
   ...geometryExportDialogsRo,

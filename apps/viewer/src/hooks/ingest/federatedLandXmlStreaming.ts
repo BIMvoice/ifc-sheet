@@ -39,7 +39,8 @@ export function retainHighestFederationAlignmentStatus(
     identity: 1,
     'same-crs': 2,
     reprojected: 3,
-    failed: 4,
+    'map-conversion': 4,
+    failed: 5,
   } as const;
   return severity[candidate] > severity[previous] ? candidate : previous;
 }

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { localViewerToProjected, projectedToLocalViewer, resolveSpatialPlacement,
-  type CoordinateInfo, type ModelSpatialReference } from '@ifc-lite/geometry';
+  type CoordinateInfo, type ModelSpatialReference, type SpatialPlacementResult } from '@ifc-lite/geometry';
 import proj4 from 'proj4';
 import { totalYupOffset } from '../../lib/geo/coordinate-frame.js';
 import { resolveProjectionId } from '../../lib/geo/reproject.js';
@@ -12,11 +12,67 @@ import { projectedUnitToMetres } from './projected-units.js';
 
 export interface PlacementInput { spatialReference: ModelSpatialReference; coordinateInfo?: CoordinateInfo }
 
-export function buildSpatialAlignmentTransform(source: PlacementInput, reference: PlacementInput): AffineTransform3D | null {
-  const resolved = resolveSpatialPlacement(source.spatialReference, reference.spatialReference, {
+/**
+ * Place a source in the reference's frame by the two map conversions. IFC
+ * leaves IfcProjectedCRS.VerticalDatum optional, and most files omit it: two
+ * models in one projected CRS that BOTH omit it state their heights the same
+ * way, so the omission is no reason to refuse. Refusing it was why the
+ * BIMcollab Architecture + Structural pair (both EPSG:32760, no datum) failed.
+ * One datum stated and the other absent, or two different datums, still refuse.
+ */
+function resolveByMapConversions(source: PlacementInput, reference: PlacementInput): SpatialPlacementResult {
+  const neitherVertical = !source.spatialReference.vertical && !reference.spatialReference.vertical;
+  return resolveSpatialPlacement(source.spatialReference, reference.spatialReference, {
     sourceFrameOffset: totalYupOffset(source.coordinateInfo), targetFrameOffset: totalYupOffset(reference.coordinateInfo),
+    unknownVertical: neitherVertical ? 'assume-compatible' : 'refuse',
   });
+}
+
+export function buildSpatialAlignmentTransform(source: PlacementInput, reference: PlacementInput): AffineTransform3D | null {
+  const resolved = resolveByMapConversions(source, reference);
   return resolved.ok ? resolved.placement.sourceToFederation : null;
+}
+
+/** Why two models in one CRS could not be placed together, in words for a notice. */
+export function sameCrsRefusalText(source: PlacementInput, reference: PlacementInput): string {
+  const resolved = resolveByMapConversions(source, reference);
+  if (resolved.ok) return 'their map conversions could not be applied to the geometry';
+  switch (resolved.refusal) {
+    case 'vertical-crs-mismatch':
+      return `their vertical datums differ (${source.spatialReference.vertical?.id} and ${reference.spatialReference.vertical?.id})`;
+    case 'vertical-crs-unknown':
+      return 'one states a vertical datum and the other does not';
+    default:
+      return 'their map conversions could not be combined';
+  }
+}
+
+/**
+ * The CRS of the pair that has no projection definition here, or null when
+ * both resolve. Without one there is no reprojection to run at all.
+ */
+export async function missingProjectionDefinition(source: PlacementInput, reference: PlacementInput): Promise<string | null> {
+  for (const id of [source.spatialReference.horizontal?.id, reference.spatialReference.horizontal?.id]) {
+    if (id && !(await resolveProjectionId(id))) return id;
+  }
+  return null;
+}
+
+/**
+ * The fallback when a CRS has no definition: read the source's map conversion
+ * as if it were stated in the reference's CRS. Exact when the two systems
+ * coincide near the site, off by their difference otherwise; the caller says so.
+ */
+export function buildMapConversionFallbackTransform(source: PlacementInput, reference: PlacementInput): AffineTransform3D | null {
+  const asReferenceCrs: PlacementInput = {
+    coordinateInfo: source.coordinateInfo,
+    spatialReference: {
+      ...source.spatialReference,
+      horizontal: reference.spatialReference.horizontal,
+      vertical: reference.spatialReference.vertical,
+    },
+  };
+  return buildSpatialAlignmentTransform(asReferenceCrs, reference);
 }
 
 export function isIdentitySpatialTransform(transform: AffineTransform3D): boolean {

@@ -587,7 +587,7 @@ export interface FederatedModel extends ModelLoadReportFields {
    *                        model that could not take part in the last
    *                        federation re-align (no geometry, or no georeference)
    */
-  federationAlignmentStatus?: 'anchor' | 'same-crs' | 'reprojected' | 'identity' | 'failed' | 'none';
+  federationAlignmentStatus?: 'anchor' | 'same-crs' | 'reprojected' | 'identity' | 'map-conversion' | 'failed' | 'none';
 }
 
 /**
