@@ -19,7 +19,23 @@ export function clipMeshToProjectionWindow(
   return clipMeshToHalfSpace(far, { x: -view.x, y: -view.y, z: -view.z }, -offset - minDepth).mesh;
 }
 
-export function projectionBandMeshes(mesh: MeshData, plane: SectionPlaneConfig, below: number, above: number): MeshData[] {
-  return [clipMeshToProjectionWindow(mesh, plane, 0, below),
-    clipMeshToProjectionWindow(mesh, plane, -above, 0)].filter((m): m is MeshData => m !== null);
+/** A piece of a mesh clipped to one projection band, and which band: what it draws is solid below the cut, dashed above. */
+export interface ProjectionBandPiece {
+  mesh: MeshData;
+  band: 'visible' | 'overhead';
+}
+
+/**
+ * `mesh` clipped to the band below the cut and to the band above it. Each piece says which band it is, because its own
+ * extent cannot: a piece above the cut has its lowest vertex ON the cut, and read back in f32 (the Rust outline's
+ * `axisMin`, 136.39999 for a 136.4 m cut) it lies a few micrometres below, so a classification by extent called the
+ * wall over an opening "spanning" and drew it solid across the room (skolebygg Plan 02, 2026-11-26).
+ */
+export function projectionBandPieces(mesh: MeshData, plane: SectionPlaneConfig, below: number, above: number): ProjectionBandPiece[] {
+  const pieces: ProjectionBandPiece[] = [];
+  const under = clipMeshToProjectionWindow(mesh, plane, 0, below);
+  if (under) pieces.push({ mesh: under, band: 'visible' });
+  const over = clipMeshToProjectionWindow(mesh, plane, -above, 0);
+  if (over) pieces.push({ mesh: over, band: 'overhead' });
+  return pieces;
 }

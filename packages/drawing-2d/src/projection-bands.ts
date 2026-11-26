@@ -271,6 +271,13 @@ export function outlineToProjectionLines(
   meta: { entityId: number; ifcType: string; modelIndex: number },
   plane: SectionPlaneConfig,
   depths: ProjectionBandDepths,
+  /**
+   * The band the outlined mesh was clipped to, when it was (`projectionBandPieces`). A piece of the band above the cut
+   * is dashed: its axis range comes back from the outline in f32 and puts its lowest vertex, ON the cut, a few
+   * micrometres below it, so the wall over an opening read as spanning the cut and was drawn solid across the room
+   * (skolebygg Plan 02, 2026-11-26).
+   */
+  band?: 'visible' | 'overhead',
 ): DrawingLine[] {
   // The outline provider itself is cardinal-only: `axisMin`/`axisMax` are
   // coordinates along the cardinal cut axis, and the contours are in cardinal
@@ -283,7 +290,11 @@ export function outlineToProjectionLines(
   const pos = plane.customPlane ? plane.customPlane.distance : plane.position;
   const dMin = signedAxisDepth(outline.axisMin, pos, looksUp(plane));
   const dMax = signedAxisDepth(outline.axisMax, pos, looksUp(plane));
-  const visibility = bandVisibility(classifyDepthRange(dMin, dMax, depths));
+  const classified = classifyDepthRange(dMin, dMax, depths);
+  // A piece clipped above the cut is dashed whatever its rounded range says; whether a piece is drawn at all is still
+  // its range's call, so a piece below keeps the classification it always had (a slab top read in f32 just past the
+  // band's bottom stays out: drawing it would draw every joint between two slabs across the rooms).
+  const visibility = band === 'overhead' && classified !== 'cull' ? 'hidden' : bandVisibility(classified);
   if (visibility === null) return [];
 
   // Contours are 2D-only, so a scalar depth is all the geometry supports:

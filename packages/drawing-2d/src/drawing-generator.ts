@@ -41,7 +41,7 @@ import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } fr
 import { meshSilhouetteLines } from './silhouette-lines.js';
 import { roofBands, roofCreaseLines } from './roof-plan.js';
 import { isFeatureElementType } from './feature-elements.js';
-import { projectionBandMeshes, clipMeshToProjectionWindow } from './projection-clip.js';
+import { projectionBandPieces, clipMeshToProjectionWindow } from './projection-clip.js';
 import { removeCoveredOverhead } from './projection-overlap.js';
 import { dropInsideCutFaces } from './cut-face-occlusion.js';
 import { dropOutlierProjectionLines } from './projection-outliers.js';
@@ -227,14 +227,17 @@ export class Drawing2DGenerator {
         for (const source of meshesForSilhouette) {
           tick?.();
           const reach = roofBands(source, config.plane, bands); // a roof the plan sees is drawn to its eaves (#490)
-          const clipped = config.clipProjectionBands ? projectionBandMeshes(source, config.plane, reach.below, reach.above) : [source];
-          for (const mesh of clipped) {
+          // A clipped piece carries its band: its f32 outline range cannot tell which side of the cut it is on.
+          const pieces = config.clipProjectionBands
+            ? projectionBandPieces(source, config.plane, reach.below, reach.above)
+            : [{ mesh: source, band: undefined }];
+          for (const { mesh, band } of pieces) {
             const outline = outlineProvider
               ? outlineProvider(mesh, config.plane.axis, config.plane.flipped)
               : null;
             if (outline && outline.contours.length > 0) {
               const owner = { entityId: mesh.expressId, ifcType: mesh.ifcType ?? 'Unknown', modelIndex: mesh.modelIndex ?? 0 };
-              projectionLines.push(...outlineLinesWithDepth(outline, owner, config.plane, reach, mesh));
+              projectionLines.push(...outlineLinesWithDepth(outline, owner, config.plane, reach, mesh, band));
             } else {
               projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, reach, viewDir, {
                 includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView,
