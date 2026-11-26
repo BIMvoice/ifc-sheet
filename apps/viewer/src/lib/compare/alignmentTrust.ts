@@ -19,7 +19,7 @@ import type { FederatedModel } from '@/store/types';
  * Do a model's proved volumes (#1993) still describe its geometry after
  * federation alignment put it where it now is?
  *
- * `'same-crs'` and `'reprojected'` re-bake every vertex through a map that
+ * `'same-crs'`, `'reprojected'` and `'map-conversion'` re-bake every vertex through a map that
  * carries a SCALE, so a volume measured before it is a volume of geometry at a
  * size that is no longer on screen — and unlike the world box, it cannot be
  * re-measured on this side. Every other status left the vertices alone:
@@ -32,5 +32,5 @@ import type { FederatedModel } from '@/store/types';
 export function geometryVolumesSurviveAlignment(
   status: FederatedModel['federationAlignmentStatus'],
 ): boolean {
-  return status !== 'same-crs' && status !== 'reprojected';
+  return status !== 'same-crs' && status !== 'reprojected' && status !== 'map-conversion';
 }

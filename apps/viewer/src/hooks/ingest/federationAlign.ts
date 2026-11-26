@@ -17,7 +17,10 @@ import { type CoordinateInfo, type ModelSpatialReference } from '@ifc-lite/geome
 import { useViewerStore, type FederatedModel } from '../../store/index.js';
 import { getEffectiveGeoreference, hasStandardGeoreferencing, type GeorefMutationDataLike } from '../../lib/geo/effective-georef.js';
 import { totalYupOffset } from '../../lib/geo/coordinate-frame.js';
-import { buildCrossCrsPointMap, buildSpatialAlignmentTransform, isIdentitySpatialTransform } from './federationSpatialTransform.js';
+import {
+  buildCrossCrsPointMap, buildMapConversionFallbackTransform, buildSpatialAlignmentTransform,
+  isIdentitySpatialTransform, missingProjectionDefinition,
+} from './federationSpatialTransform.js';
 import { spatialReferenceFromIfc } from '../../lib/geo/ifc-spatial-reference.js';
 import {
   alignEntityWorldAabbs,
@@ -457,7 +460,11 @@ async function alignGeometryAcrossCrs(geometry: FederatedGeometryResult, source:
   }
 }
 
-export type FederationAlignmentStatus = 'same-crs' | 'reprojected' | 'identity' | 'failed';
+/**
+ * `'map-conversion'`: the CRSs differ but one has no projection definition, so
+ * the model was placed by its map conversion alone, as if in the anchor's CRS.
+ */
+export type FederationAlignmentStatus = 'same-crs' | 'reprojected' | 'identity' | 'map-conversion' | 'failed';
 
 /**
  * Route alignment to the right strategy based on whether the source and
@@ -481,6 +488,13 @@ export async function alignGeometryToReference(
       reference.coordinateInfo,
     );
     return applied ? 'same-crs' : 'failed';
+  }
+  if (await missingProjectionDefinition(source, reference)) {
+    const transform = buildMapConversionFallbackTransform(source, reference);
+    if (!transform) return 'failed';
+    return applyAlignmentTransformAndUpdateBounds(geometry, transform, source.coordinateInfo, reference.coordinateInfo)
+      ? 'map-conversion'
+      : 'failed';
   }
   const ok = await alignGeometryAcrossCrs(geometry, source, reference, options.allowEmptyGeometry === true);
   return ok ? 'reprojected' : 'failed';

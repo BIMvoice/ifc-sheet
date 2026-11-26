@@ -50,6 +50,7 @@ const STATUS_COLOUR: Record<NonNullable<FederatedModel['federationAlignmentStatu
   'same-crs': '#10b981', // emerald
   reprojected: '#10b981', // emerald
   identity: '#10b981', // emerald
+  'map-conversion': '#f97316', // orange: placed, but not reprojected
   failed: '#ef4444', // red
   none: '#a1a1aa', // zinc
 };

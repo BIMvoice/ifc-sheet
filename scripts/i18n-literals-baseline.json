@@ -25,7 +25,7 @@
   "apps/viewer/src/hooks/bcf/useSectionViewpointCapture.ts": 4,
   "apps/viewer/src/hooks/dxfDownload.ts": 1,
   "apps/viewer/src/hooks/ingest/dxfIngest.ts": 8,
-  "apps/viewer/src/hooks/ingest/federatedSpatialFinalize.ts": 7,
+  "apps/viewer/src/hooks/ingest/federatedSpatialFinalize.ts": 11,
   "apps/viewer/src/hooks/ingest/pointCloudSpatialLoad.ts": 1,
   "apps/viewer/src/hooks/ingest/terrainImageryDrape.ts": 5,
   "apps/viewer/src/hooks/useBCF.ts": 1,

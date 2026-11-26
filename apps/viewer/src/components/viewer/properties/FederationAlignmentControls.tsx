@@ -38,6 +38,8 @@ function statusLabelKey(status: FederatedModel['federationAlignmentStatus']): {
       return { textKey: 'properties.federationAlignment.reprojected', tone: 'ok', icon: Check };
     case 'identity':
       return { textKey: 'properties.federationAlignment.identity', tone: 'ok', icon: Check };
+    case 'map-conversion':
+      return { textKey: 'properties.federationAlignment.mapConversion', tone: 'warn', icon: AlertTriangle };
     case 'failed':
       return { textKey: 'properties.federationAlignment.failed', tone: 'warn', icon: AlertTriangle };
     case 'none':

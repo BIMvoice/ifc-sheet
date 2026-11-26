@@ -12,6 +12,7 @@ import type { LandXmlTinDocument } from './landXmlSemantics';
 import { reframeLandXmlGeometry } from './landXmlLoad';
 import { alignGeometryToReference, extractModelSpatialPlacement, findReferenceSpatialModel, type ModelSpatialPlacement } from './federationAlign';
 import { capturePreAlignment } from './federationRealign';
+import { sameCrsRefusalText } from './federationSpatialTransform';
 import { applyLandXmlRenderedLineUpdates, buildLandXmlRenderedLineUpdates } from './landXmlSpatialLines';
 import type { FederatedLandXmlStreamingFinalization } from './federatedLandXmlStreaming';
 
@@ -75,8 +76,15 @@ function reportFederationAlignmentOutcome(
   const targetCrs = reference.spatialReference.horizontal?.id ?? 'unknown CRS';
   if (status === 'reprojected') {
     toast.info(`Reprojected "${fileName}" from ${sourceCrs} to ${targetCrs} for federation alignment.`);
+  } else if (status === 'map-conversion') {
+    toast.error(`No projection definition is available for ${sourceCrs} → ${targetCrs}, so "${fileName}" was placed by its map conversion as if it were in ${targetCrs}. Expect it to be off by the difference between the two systems.`);
   } else if (status === 'failed') {
-    toast.error(`Could not align "${fileName}" with the federation anchor — ${sourceCrs} → ${targetCrs} reprojection failed. The model is shown in its own local frame and may appear at the wrong real-world position.`);
+    // One CRS needs no reprojection; saying one failed sent the reader after
+    // the wrong cause.
+    const cause = sourceCrs === targetCrs
+      ? `both state ${sourceCrs}, but ${sameCrsRefusalText(source, reference)}`
+      : `${sourceCrs} → ${targetCrs} reprojection failed`;
+    toast.error(`Could not align "${fileName}" with the federation anchor — ${cause}. The model is shown in its own local frame and may appear at the wrong real-world position.`);
   }
 }
 
@@ -151,7 +159,7 @@ export async function finalizeFederatedSpatialPlacement(options: {
     if (status === 'identity' && reference.coordinateInfo) {
       adoptIdentityFrame(options.geometry, reference.coordinateInfo);
     }
-    if (options.landXmlDocument && (status === 'same-crs' || status === 'reprojected' || status === 'identity')) {
+    if (options.landXmlDocument && (status === 'same-crs' || status === 'reprojected' || status === 'identity' || status === 'map-conversion')) {
       const renderedLines = await buildLandXmlRenderedLineUpdates(
         options.landXmlDocument,
         parsed.spatialReference, reference.spatialReference, reference.coordinateInfo,
