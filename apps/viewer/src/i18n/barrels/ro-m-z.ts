@@ -86,6 +86,7 @@ import { wallCompareRo } from '../catalogues/wall-compare.ro';
 import { starRo } from '../catalogues/star.ro';
 import { wallIntroActionsRo } from '../catalogues/wall-intro-actions.ro';
 import { wallIntroSheetsRo } from '../catalogues/wall-intro-sheets.ro';
+import { wallBatchRo } from '../catalogues/wall-batch.ro';
 import { wallStartRo } from '../catalogues/wall-start.ro';
 import { wallRo } from '../catalogues/wall.ro';
 import { plainHintsRo } from '../catalogues/plain-hints.ro';
@@ -176,6 +177,7 @@ export const roMZ = {
   ...wallCompareRo,
   ...wallIntroActionsRo,
   ...wallIntroSheetsRo,
+  ...wallBatchRo,
   ...wallStartRo,
   ...wallRo,
   ...whatChangedRo,
