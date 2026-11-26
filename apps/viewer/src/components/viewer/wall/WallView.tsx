@@ -20,12 +20,14 @@ import { wallExtent } from '@/project/wall-extent';
 import { publishSetExtent } from '@/project/set-extent';
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
+import { batchHolds, useLoadBatch } from '@/hooks/ingest/load-batch';
 import { EVENT_WALL_HUNG, emitWallHung } from '@/lib/tours/events';
 import { SteppedSheet } from './SteppedSheet';
 import { WallGrid } from './WallGrid';
 import { WallCompare } from './WallCompare';
 import { WallIntro } from './WallIntro';
 import { WallStart } from './WallStart';
+import { WallBatch } from './WallBatch';
 import { ProjectDrawer } from './ProjectDrawer';
 import { IssuePanel, MissingPanel } from './SetPanels';
 import { SubReportReview } from './SubReportReview';
@@ -43,10 +45,13 @@ export function WallView() {
   const sheets = useProjectStore((s) => s.sheets);
   const views = useProjectStore((s) => s.views);
   const levels = useProjectStore((s) => s.levels);
+  // Files opened together are one batch (#863): until the last is in, no set is laid out and nothing is drawn.
+  const batch = useLoadBatch((s) => s.batch);
+  const held = batchHolds(batch);
   // Measured in a task of its own (#154): framing the building reads every element's box (about 40 ms on a large model),
   // and the model's arrival lands in the same render that finishes the 3D, which made one long task of it. The set is laid
   // out from the same settled meshes as the extent, so it always starts from a matching pair.
-  const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy }), [levels, meshes, models, legacy]));
+  const settled = useNextTaskValue(useMemo(() => ({ levels, meshes, models, legacy, held }), [levels, meshes, models, legacy, held]));
   // Measured on the building, not on the site around it; the main body of the model when no storey holds geometry.
   const extent = useMemo(() => wallExtent(settled), [settled]);
   // The sheets frame a plan on the part of its drawing inside the room this extent gives it (`boundsInRoom`), as the engine's sheet does.
@@ -58,7 +63,12 @@ export function WallView() {
   const loaded = [...models.values()].filter((m) => m.loadState !== 'error');
   const allFailed = failed.length > 0 && loaded.length === 0;
   const noGeometry = loaded.length > 0 && !loading && !streaming && (settledMeshes?.length ?? 0) === 0;
-  const failures = failed.map((m) => (m.loadError ? t('wall.intro.loadFailedWhy', { name: m.name, error: m.loadError }) : t('wall.intro.loadFailed', { name: m.name })));
+  // A file of the batch that never became a model is still named once the set is laid out from the others.
+  const unread = models.size > 0 && batch?.done ? batch.files.filter((f) => f.state === 'failed' && !failed.some((m) => m.name === f.name)) : [];
+  const failures = [
+    ...failed.map((m) => (m.loadError ? t('wall.intro.loadFailedWhy', { name: m.name, error: m.loadError }) : t('wall.intro.loadFailed', { name: m.name }))),
+    ...unread.map((f) => t('wall.batch.failedNamed', { name: f.name })),
+  ];
   const [intro, setIntro] = useState(false);
   const { stepped, focus, visit, panel, review } = useWallNav();
 
@@ -66,10 +76,13 @@ export function WallView() {
   const hasSet = sheets.some(isSetSheet);
   // Models opened together load one after the other (#863): once every one of them is in, a starting set still untouched is laid out again for them all.
   const allIn = [...settled.models.values()].every((m) => !m.loadState || m.loadState === 'complete' || m.loadState === 'error');
+  // The snapshot carries the hold, so the set is laid out from the models and meshes of the task the batch ended in.
+  const waiting = settled.held;
   useEffect(() => {
+    if (waiting) return;
     if (!hasSet && settledMeshes && settledMeshes.length > 0 && startSet(settledMeshes, extent)) setIntro(true);
     else if (hasSet && allIn && restartDrawingSet(settledMeshes, extent)) setIntro(true);
-  }, [hasSet, allIn, settledMeshes, extent]);
+  }, [waiting, hasSet, allIn, settledMeshes, extent]);
 
   // The proposals read the lowest plan's rooms; they change only with the model or the plans.
   const proposals = useMemo(() => sectionProposals(settledMeshes, extent), [settledMeshes, extent, views]);
@@ -86,7 +99,9 @@ export function WallView() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_top,#0c2a52,#061a36_60%)] text-sky-50">
-      {models.size === 0 && !legacy ? (
+      {held && !hasSet && batch ? (
+        <WallBatch batch={batch} />
+      ) : models.size === 0 && !legacy ? (
         <WallStart />
       ) : sheets.length === 0 ? (
         <output className="flex h-full items-center justify-center px-6 text-center text-base text-sky-200/80">
@@ -99,7 +114,7 @@ export function WallView() {
       ) : (
         <WallGrid extent={extent} onStep={(id) => stepInto(id)} />
       )}
-      {failed.length > 0 && !(allFailed && sheets.length === 0) ? (
+      {failures.length > 0 && !(allFailed && sheets.length === 0) && !(held && !hasSet) ? (
         <p role="alert" className="absolute inset-x-0 top-0 z-10 m-0 bg-red-950/90 px-4 py-2 text-center text-sm text-red-100">{failures.join(' ')}</p>
       ) : null}
       <WallCompare />

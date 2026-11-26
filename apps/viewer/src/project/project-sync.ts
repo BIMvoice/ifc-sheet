@@ -27,6 +27,7 @@ import { forgetRecoveryOffer, offerRecovery, restoreModelState } from './recover
 import { restoreRasters } from './autosave-rasters';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 import { startingMaterials } from './demo-project';
+import { batchHolds, useLoadBatch } from '@/hooks/ingest/load-batch';
 
 interface StoreySource {
   spatialHierarchy?: { byStorey: ReadonlyMap<number, unknown>; storeyElevations: ReadonlyMap<number, number> } | null;
@@ -71,6 +72,9 @@ export function useProjectSync(): void {
     let readOnlySlot = false;
 
     const onModels = () => {
+      // Files opened together are one batch (#863): the project follows them once, when the last is in, so it gets the
+      // levels and the autosave of all of them, as if they had been opened at once, not those of the first alone.
+      if (batchHolds(useLoadBatch.getState().batch)) return;
       const { refs, storeys } = loadedModels();
       if (refs.length === 0) return;
       const key = autosaveKey(refs);
@@ -107,6 +111,9 @@ export function useProjectSync(): void {
     const unsubModels = useViewerStore.subscribe((state, prev) => {
       if (state.models !== prev.models || state.ifcDataStore !== prev.ifcDataStore || state.mutationVersion !== prev.mutationVersion) onModels();
     });
+    const unsubBatch = useLoadBatch.subscribe((state, prev) => {
+      if (batchHolds(prev.batch) && !batchHolds(state.batch)) onModels();
+    });
     const stopAutosave = watchProjectForAutosave(() => (readOnlySlot ? null : slot));
     // The page closing as a page does is a clean end; coming back from the back-forward cache reopens it.
     const closed = () => { if (slot && !readOnlySlot) markSessionClosed(slot); };
@@ -115,6 +122,7 @@ export function useProjectSync(): void {
     window.addEventListener('pageshow', reopened);
     return () => {
       unsubModels();
+      unsubBatch();
       stopAutosave();
       window.removeEventListener('pagehide', closed);
       window.removeEventListener('pageshow', reopened);

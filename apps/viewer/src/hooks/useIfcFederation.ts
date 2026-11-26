@@ -23,6 +23,7 @@ import { chooseSharedRtcOffset } from '@ifc-lite/geometry/world-frame';
 import { IfcQuery } from '@ifc-lite/query';
 import { calculateMeshBounds, createCoordinateInfo } from '../utils/localParsingUtils.js';
 import { buildIfcxDataStore, convertIfcxMeshes } from './ingest/viewerModelIngest.js';
+import { loadAsBatch } from './ingest/load-batch.js';
 import { extractModelSpatialPlacement, findReferenceSpatialModel } from './ingest/federationAlign.js';
 import { realignFederationModels } from './ingest/federationRealign.js';
 import { withModelRotationsUnbaked } from '../components/viewer/useModelRotationSync.js';
@@ -329,9 +330,8 @@ export function useIfcFederation(
     files: File[],
     handles?: (FileSystemFileHandle | undefined)[],
   ): Promise<void> => {
-    for (let i = 0; i < files.length; i++) {
-      await addModel(files[i], { sourceHandle: handles?.[i] });
-    }
+    // Two files or more are one batch (#863): the Wall waits for the last before it lays the set out.
+    await loadAsBatch(files, (file, i) => addModel(file, { sourceHandle: handles?.[i] }));
   }, [addModel]);
 
   /**
