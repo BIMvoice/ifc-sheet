@@ -20,6 +20,7 @@ import { selectionTurnEn } from '../catalogues/selection-turn.en';
 import { semanticIdentityEn } from '../catalogues/semantic-identity.en';
 import { semanticResultsEn } from '../catalogues/semantic-results.en';
 import { semanticEn } from '../catalogues/semantic.en';
+import { setCoarseScaleEn } from '../catalogues/set-coarse-scale.en';
 import { setTemplateEn } from '../catalogues/set-template.en';
 import { settingsEn } from '../catalogues/settings.en';
 import { sharedCommandsEn } from '../catalogues/shared-commands.en';
@@ -106,6 +107,7 @@ export const enSZ = {
   ...semanticIdentityEn,
   ...semanticResultsEn,
   ...semanticEn,
+  ...setCoarseScaleEn,
   ...setTemplateEn,
   ...settingsEn,
   ...sharedCommandsEn,

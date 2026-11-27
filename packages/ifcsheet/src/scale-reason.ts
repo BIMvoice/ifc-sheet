@@ -6,11 +6,12 @@
 
 import { paperLabel } from './paper.js';
 import { SET_PAPER, SET_SCALES, drawingArea, fittingScale, fitsScale, sheetGroup, viewExtent, type ModelExtent } from './drawing-set.js';
+import { SHEET_SCALES } from './viewport-fit.js';
 import type { ProjectSheet, ProjectView } from './document.js';
 
 /** A sentence kept as data: a catalogue key and its parameters, translated where it is shown. */
 export interface Reason {
-  key: 'wall.reason.noFit' | 'wall.reason.fits' | 'wall.reason.shared' | 'wall.reason.chosen';
+  key: 'wall.reason.noFit' | 'wall.reason.fits' | 'wall.reason.coarse' | 'wall.reason.shared' | 'wall.reason.chosen';
   params: Record<string, string | number>;
 }
 
@@ -18,7 +19,8 @@ export interface Reason {
  * Why a sheet is at its scale, in one line (concept B's reason, #20): the
  * most detailed scale its drawings fit at on its paper, one somebody chose,
  * or the smallest scale there is when the drawings are still larger than
- * the paper. The Wall and the DRAFTSET command both say this one line.
+ * the paper. A fitting scale coarser than the set's (1:200) says the drawings
+ * are larger than the paper at 1:200, the reason it is that coarse. The Wall and the DRAFTSET command both say this one line.
  * A scale coarser than the sheet's own fit, that another sheet of its group is
  * drawn at too, is the group's shared one (a starter set draws a kind at one
  * scale, #634). `null` for a sheet whose drawings do not share one scale.
@@ -35,8 +37,10 @@ export function sheetScaleReason(sheet: ProjectSheet, views: readonly ProjectVie
   const sizes = members.map((v) => viewExtent(v, extent));
   const area = drawingArea(sheet);
   const fits = fittingScale(sizes, area) === scale;
-  const reason: Reason = !fitsScale(sizes, area, scale) && scale === SET_SCALES[SET_SCALES.length - 1]
+  const setScale = SET_SCALES[SET_SCALES.length - 1];
+  const reason: Reason = !fitsScale(sizes, area, scale) && scale === SHEET_SCALES[SHEET_SCALES.length - 1]
     ? { key: 'wall.reason.noFit', params: { scale, paper } }
+    : fits && scale > setScale ? { key: 'wall.reason.coarse', params: { scale, paper, set: setScale } }
     : fits ? { key: 'wall.reason.fits', params: { scale, paper } }
       : sharedWith(sheet, scale, others) ? { key: 'wall.reason.shared', params: { scale } } : { key: 'wall.reason.chosen', params: { scale } };
   return { scale, fits, reason };

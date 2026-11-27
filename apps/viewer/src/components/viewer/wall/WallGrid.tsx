@@ -58,10 +58,12 @@ const SCALE_LABELS: Partial<Record<SetGroup, TranslationKey>> = {
 export function ScaleChips({ group, extent, labelFromWide = false }: { group: SetGroup; extent: ModelExtent | null; labelFromWide?: boolean }) {
   const { t } = useTranslation();
   const current = useProjectStore((s) => groupScale(group, s.sheets));
+  // A group the set had to draw coarser than 1:200 (a large site) shows that scale too, pressed.
+  const scales: readonly number[] = current !== null && !(SET_SCALES as readonly number[]).includes(current) ? [...SET_SCALES, current] : SET_SCALES;
   return (
     <fieldset className="m-0 flex shrink-0 items-center gap-2 border-0 p-0">
       <legend className={cn('float-left mr-2 p-0 text-2xs font-medium uppercase tracking-widest text-sky-200/70', labelFromWide && 'sr-only 2xl:not-sr-only')}>{t(SCALE_LABELS[group] ?? 'wall.planScale')}</legend>
-      {SET_SCALES.map((scale) => (
+      {scales.map((scale) => (
         <button
           key={scale}
           type="button"

@@ -28,6 +28,12 @@ import type { ElevationDirection, NumberingScheme, Paper, PaperSize, ProjectShee
 
 /** The scales a set chooses among, most detailed first. */
 export const SET_SCALES = [50, 100, 200] as const;
+/**
+ * The scales a set falls back to, most detailed first, when its drawings are larger than the largest paper at the
+ * last set scale: the offered scales coarser than it (1:250 … 1:10000), so a large site is drawn whole on its sheet
+ * instead of overrunning it at 1:200.
+ */
+const FALLBACK_SCALES: readonly number[] = SHEET_SCALES.filter((s) => s > SET_SCALES[SET_SCALES.length - 1]);
 /** The paper a sheet is read on when it names none. */
 export const SET_PAPER: PaperSize = 'A2';
 /** The papers a set is made on, smallest first (A4 is too small for a set). */
@@ -135,16 +141,21 @@ export function detailedScaleThatFits(bounds: Bounds, layout: SheetLayout = SET_
   return SHEET_SCALES.find((scale) => !overrun(fitViewportBox(bounds, scale), layout)) ?? null;
 }
 
-/** The most detailed set scale at which `sizes` (metres) fit side by side in `area`; the least detailed when none does. */
+/**
+ * The most detailed set scale at which `sizes` (metres) fit side by side in `area`. When none does, the most detailed
+ * coarser offered scale that does (1:250 … 1:10000), and the coarsest offered scale when even that is too large.
+ */
 export function fittingScale(sizes: readonly { w: number; h: number }[], area: { w: number; h: number }): number {
-  return SET_SCALES.find((scale) => fitsScale(sizes, area, scale)) ?? SET_SCALES[SET_SCALES.length - 1];
+  return SET_SCALES.find((scale) => fitsScale(sizes, area, scale))
+    ?? FALLBACK_SCALES.find((scale) => fitsScale(sizes, area, scale))
+    ?? FALLBACK_SCALES[FALLBACK_SCALES.length - 1];
 }
 
 /**
  * The paper a group of sheets is made on: the smallest of A3..A0 on which
  * every row of drawings reaches 1:100 or a more detailed scale. When none
  * does, the largest paper, and `fits` says whether the drawings are still
- * larger than it at the smallest scale.
+ * larger than it at the coarsest offered scale.
  */
 export function choosePaper(rows: readonly (readonly { w: number; h: number }[])[]): { paper: PaperSize; fits: boolean } {
   for (const paper of SET_PAPERS) {
@@ -257,7 +268,7 @@ function papersOf(rows: readonly SetRow[], extent: ModelExtent): Map<SetGroup, {
   return out;
 }
 
-/** The groups of the set whose drawings are still larger than their sheet at the smallest scale on the largest paper. */
+/** The groups of the set whose drawings are still larger than their sheet at the coarsest offered scale on the largest paper. */
 export function groupsThatDoNotFit(views: readonly ProjectView[], extent: ModelExtent): SetGroup[] {
   return [...papersOf(setRows(views), extent)].filter(([, p]) => !p.fits).map(([group]) => group);
 }
@@ -278,7 +289,7 @@ export function buildDrawingSet({ views, extent, now = Date.now(), templates = {
     const sizes = row.members.map((v) => viewExtent(v, extent));
     return { ...row, start, sizes, own: scaleOn(sizes, start) };
   });
-  // SET_SCALES counts up as the scale gets coarser, so the largest number is the worst case.
+  // Scales count up as they get coarser, so the largest number is the worst case.
   const shared = new Map<SetGroup, number>();
   for (const { group, own } of laid) shared.set(group, Math.max(shared.get(group) ?? 0, own));
   const sheets = laid.map(({ group, name, members, start, sizes }) => ({
