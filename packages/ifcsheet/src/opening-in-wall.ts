@@ -175,6 +175,43 @@ function wallsAround(bands: readonly WallBand[], rect: OpeningRect): MeshData[] 
 }
 
 /**
+ * Of `meshes` (the walls an unhosted door read as `rect` stands in), those of the leaf that holds the door's middle line: the run of
+ * wall across the door, at the plan's cut, that no gap breaks. A wall built as layers with a cavity that has no geometry is two leaves
+ * on a plan, and the door stands in one of them. In a large Dutch housing model a 205 mm partition is an IfcWall of six layer meshes,
+ * two 100 mm leaves 5 mm apart, and the door stands in a 70 mm IfcWall in one leaf: with every mesh taken, the door was fitted to the
+ * whole 205 mm and its hinge drawn on the far leaf's face, 105 mm off the face of the leaf it stands in (#831). The meshes the cut misses
+ * (a piece over the door) are kept only when they lie inside that leaf. All of `meshes` when they make one leaf, or when the door's
+ * middle line lies in no leaf.
+ */
+function leafHolding(meshes: readonly MeshData[], rect: OpeningRect, plane: SectionPlaneConfig): readonly MeshData[] {
+  const project = drawingProjector(plane);
+  const reach = rect.width / 2 + READ_BEYOND;
+  const read = meshes.map((mesh) => {
+    const [ox, oy, oz] = mesh.origin ?? [0, 0, 0];
+    const p = mesh.positions;
+    let t0 = Infinity, t1 = -Infinity, h0 = Infinity, h1 = -Infinity;
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      const { x, y } = project(ox + p[i], oy + p[i + 1], oz + p[i + 2]);
+      const dx = x - rect.c.x, dy = y - rect.c.y;
+      if (Math.abs(dx * rect.u.x + dy * rect.u.y) > reach) continue;
+      const t = dx * rect.n.x + dy * rect.n.y;
+      t0 = Math.min(t0, t); t1 = Math.max(t1, t); h0 = Math.min(h0, oy + p[i + 1]); h1 = Math.max(h1, oy + p[i + 1]);
+    }
+    return { mesh, t0, t1, cut: t0 <= t1 && h0 <= plane.position && h1 >= plane.position };
+  });
+  // The leaves: the cut meshes' extents across the door, joined where they touch or overlap.
+  const leaves: { t0: number; t1: number }[] = [];
+  for (const r of read.filter((r) => r.cut).sort((a, b) => a.t0 - b.t0)) {
+    const last = leaves[leaves.length - 1];
+    if (last && r.t0 <= last.t1 + EPS) last.t1 = Math.max(last.t1, r.t1); else leaves.push({ t0: r.t0, t1: r.t1 });
+  }
+  const leaf = leaves.find((l) => l.t0 - EPS <= 0 && l.t1 + EPS >= 0);
+  if (leaves.length < 2 || !leaf) return meshes;
+  // A mesh far along the wall (no vertex near the door) does not touch the fit; it is kept as it was.
+  return read.filter((r) => r.t0 > r.t1 || (r.t0 >= leaf.t0 - EPS && r.t1 <= leaf.t1 + EPS)).map((r) => r.mesh);
+}
+
+/**
  * The meshes of the wall each door stands in, for `openingSymbols`: `hostOf` names the wall (`openingHostsOf`) and `all` is every mesh
  * of the model, the walls among them (a plan's symbols are made from the doors' and windows' meshes alone, which hold no wall). For a
  * door the model hosts in no wall, `read` (its footprint on the plan cut at `plane`) finds the walls it stands in (`wallsAround`).
@@ -192,6 +229,6 @@ export function hostWallMeshes(all: readonly MeshData[], hostOf: (id: number) =>
     if (!read || !plane) return [];
     let cut = bands.get(plane);
     if (!cut) bands.set(plane, (cut = wallBands(byId, plane)));
-    return wallsAround(cut, read);
+    return leafHolding(wallsAround(cut, read), read, plane);
   };
 }
