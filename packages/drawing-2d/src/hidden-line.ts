@@ -20,7 +20,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
 import { buildDepthRaster, ownerKey, type DepthRaster } from './hidden-line-raster.js';
-import { PIXEL, hiddenByItself, ownSurfaceBeside, rasterPixel } from './hidden-line-own.js';
+import { PIXEL, hiddenByItself, ownSurfaceBeside, surfaceDepthAt, rasterPixel } from './hidden-line-own.js';
 import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -356,9 +356,12 @@ export class HiddenLineClassifier {
     // to half a pixel off the edge that was sampled, and across a sloped face
     // that is a depth step larger than the bias, which would hide the inner
     // corner of a wall and a slab. Without a tolerance a covered sample is still
-    // visible when its own element shows at its depth in a pixel beside it (`ownSurfaceBeside`).
+    // visible when its own element shows at its depth in a pixel beside it (`ownSurfaceBeside`). The depth it is tested
+    // against is the covering surface's at the sample, not at the pixel's centre (`surfaceDepthAt`): a line lying on a
+    // surface seen at a glancing angle is not behind it (#831).
     const reach = this.edgeTolerancePx;
-    if (reach === 0) return lineDepth <= buffer[iy * width + ix] + depthBias || ownSurfaceBeside(raster, ix, iy, lineDepth, owner, depthBias);
+    const i = iy * width + ix;
+    if (reach === 0) return lineDepth <= surfaceDepthAt(raster, i) + depthBias || ownSurfaceBeside(raster, ix, iy, lineDepth, owner, depthBias);
     const pixel = Math.max((bounds.max.x - bounds.min.x) / (width - 1), (bounds.max.y - bounds.min.y) / (height - 1));
     const slack = depthBias + reach * pixel;
     for (let y = iy - reach; y <= iy + reach; y++) {
