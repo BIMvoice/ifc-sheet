@@ -145,6 +145,20 @@ export function clipMeshToHalfSpace(
   const hasNormals = normals.length >= positions.length;
 
   const triangleCount = Math.floor(indices.length / 3);
+
+  // Most meshes lie wholly on one side: read the distances of the corners first, by the same test as below, and give
+  // back the mesh itself, or nothing, without building a corner per triangle (#863: a whole-model elevation clips
+  // every mesh twice, and the corners were a quarter of its time on skolebygg).
+  let kept = 0, dropped = 0;
+  for (let i = 0; i < triangleCount * 3; i++) {
+    const base = indices[i] * 3;
+    if (positions[base] * nx + positions[base + 1] * ny + positions[base + 2] * nz - localOffset <= planeEps) kept++;
+    else dropped++;
+    if (kept > 0 && dropped > 0) break;
+  }
+  if (dropped === 0) return { mesh, rimSegments: [] };
+  if (kept === 0) return { mesh: null, rimSegments: [] };
+
   let modified = false;
 
   const poly: ClipVertex[] = [];

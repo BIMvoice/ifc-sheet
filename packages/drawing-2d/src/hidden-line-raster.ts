@@ -112,11 +112,14 @@ export function buildDepthRaster(
 
   for (const mesh of meshes) {
     tick?.();
-    rasterizeMesh(raster, mesh, plane, occluderDepth, depthBias);
+    rasterizeMesh(raster, mesh, plane, occluderDepth, depthBias, tick);
   }
 
   return raster;
 }
+
+/** Triangles rasterized between two ticks within one mesh: a power of two. */
+const TICK_TRIANGLES = 64;
 
 function rasterizeMesh(
   raster: DepthRaster,
@@ -124,6 +127,7 @@ function rasterizeMesh(
   plane: SectionPlaneConfig,
   occluderDepth: number,
   depthBias: number,
+  tick?: () => void,
 ): void {
   const { positions, indices, origin } = mesh;
   const triangleCount = indices.length / 3;
@@ -132,6 +136,9 @@ function rasterizeMesh(
   const inWindow = (viewDepth: number) => viewDepth >= 0 && viewDepth <= occluderDepth;
 
   for (let t = 0; t < triangleCount; t++) {
+    // One mesh's triangles can each fill most of the raster (long slivers across a whole elevation), so the worker
+    // hears from here within a mesh too, not only between meshes (#863).
+    if ((t & (TICK_TRIANGLES - 1)) === TICK_TRIANGLES - 1) tick?.();
     const v0 = getVertex(positions, indices[t * 3], origin);
     const v1 = getVertex(positions, indices[t * 3 + 1], origin);
     const v2 = getVertex(positions, indices[t * 3 + 2], origin);
@@ -158,6 +165,33 @@ function rasterizeMesh(
       owner,
     );
   }
+}
+
+/** Pixels around a row's centre within which the triangle is looked for (`rowExtent`): far more than its test rounds by. */
+const ROW_REACH = 1;
+/** The last `rowExtent`: least and greatest x. */
+const ROW = new Float64Array(2);
+
+/** The x extent of the triangle within `lo <= y <= hi`, in `ROW`; false when no part of it is there. */
+function rowExtent(a: RasterVertex, b: RasterVertex, c: RasterVertex, lo: number, hi: number): boolean {
+  ROW[0] = Infinity; ROW[1] = -Infinity;
+  if (a.y >= lo && a.y <= hi) take(a.x);
+  if (b.y >= lo && b.y <= hi) take(b.x);
+  if (c.y >= lo && c.y <= hi) take(c.x);
+  edgeAt(a, b, lo); edgeAt(a, b, hi);
+  edgeAt(b, c, lo); edgeAt(b, c, hi);
+  edgeAt(c, a, lo); edgeAt(c, a, hi);
+  return ROW[0] <= ROW[1];
+}
+
+function take(x: number): void {
+  if (x < ROW[0]) ROW[0] = x;
+  if (x > ROW[1]) ROW[1] = x;
+}
+
+/** Where edge `p`-`q` crosses the row `y`, if it does between its ends. */
+function edgeAt(p: RasterVertex, q: RasterVertex, y: number): void {
+  if ((p.y - y) * (q.y - y) < 0) take(p.x + ((q.x - p.x) * (y - p.y)) / (q.y - p.y));
 }
 
 function rasterizeTriangle(
@@ -196,7 +230,14 @@ function rasterizeTriangle(
   const maxY = Math.min(height - 1, Math.ceil(Math.max(px0.y, px1.y, px2.y)));
 
   for (let py = minY; py <= maxY; py++) {
-    for (let px = minX; px <= maxX; px++) {
+    // Only the pixels near the triangle on this row are tested, not its whole bounding box: a long sliver across an
+    // elevation filled a box of most of the raster for a few pixels of area, and one mesh of 6,907 of them (the size of
+    // the largest mesh in #863) took 103 s. A centre the test accepts lies on the triangle up to its rounding, so the
+    // row takes the triangle's extent within a pixel above and below the centre, a pixel and a half wider each side.
+    if (!rowExtent(px0, px1, px2, py + 0.5 - ROW_REACH, py + 0.5 + ROW_REACH)) continue;
+    const fromX = Math.max(minX, Math.floor(ROW[0] - ROW_REACH - 0.5));
+    const toX = Math.min(maxX, Math.ceil(ROW[1] + ROW_REACH - 0.5));
+    for (let px = fromX; px <= toX; px++) {
       const bary = barycentricCoords(px + 0.5, py + 0.5, px0, px1, px2);
 
       if (bary.u >= 0 && bary.v >= 0 && bary.w >= 0) {

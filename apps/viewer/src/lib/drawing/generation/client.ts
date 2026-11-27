@@ -66,8 +66,8 @@ function poolSize(): number {
  * without a word from it (#863). A worker at work says so: when it starts a
  * job, at most every 2 s from inside the generator's loops (per mesh, per
  * element, per line) and while it awaits. So silence means one call that does
- * not come back to the loops for this long: the outline of one mesh in wasm,
- * or one mesh rasterized. Measured in the production build with two models
+ * not come back to the loops for this long: the outline of one mesh in wasm
+ * (the raster ticks every 64 triangles within a mesh). Measured in the production build with two models
  * (the worker reports it with each drawing, `quietMs`): at most 0.07 s on the
  * 343 MB O-S1 model, 0.5 s on skolebygg (56 MB), 1.4 s on Holter (177 MB),
  * and 7.1 s on skolebygg with the machine loaded ten times over. The limit is
