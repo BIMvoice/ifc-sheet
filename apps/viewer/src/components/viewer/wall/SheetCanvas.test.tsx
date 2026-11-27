@@ -8,7 +8,8 @@ installLayout();
 import { act } from 'react';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanup, press, render } from '@/test/render.js';
+import { advance, cleanup, press, render } from '@/test/render.js';
+import { SETTLE_MS } from './usePaperZoom.js';
 import { rebindAction, resetAllBindings, unbindAction } from '@/lib/commands/key-bindings';
 import { resetProject, useProjectStore } from '@/project/project-store';
 import type { ProjectSheet, ProjectView, SheetViewport } from '@/project/types';
@@ -78,14 +79,40 @@ describe('SheetCanvas', () => {
     assert.ok(moved && Math.abs(moved.x - 170) < 1e-6 && Math.abs(moved.y - 160) < 1e-6, `${moved?.x}, ${moved?.y}`);
   });
 
-  it('zooms about the cursor with the wheel, and leaves the drawings where they are', () => {
+  it('zooms about the cursor with the wheel, and leaves the drawings where they are', async () => {
     const ui = render(<Harness />);
     const el = canvas(ui);
     const width = () => Number(ui.querySelector('svg')?.getAttribute('width'));
     const before = width();
     wheel(el, at({ x: 300, y: 200 }), -400);
+    await advance(SETTLE_MS + 20);
     assert.ok(width() > before * 1.5, `${width()} after ${before}`);
     assert.equal(sheetOf().viewports?.[0]?.x, 150);
+  });
+
+  // #913: a heavy sheet stuttered because every wheel tick resized the paper SVG, and the browser re-rasterised every
+  // path of every drawing for each frame. During the gesture the paper keeps its drawn size and its layer is scaled;
+  // the point under the cursor stays put; the paper is drawn again at the new zoom once the wheel has held still.
+  it('scales the drawn paper during a zoom and draws it again only when the zoom settles (#913)', async () => {
+    const ui = render(<Harness />);
+    const el = canvas(ui);
+    const paper = () => ui.querySelector<SVGSVGElement>('[data-sheet-canvas] svg[data-sheet-id]');
+    const layer = () => ui.querySelector<HTMLElement>('[data-paper-layer]');
+    const drawn = paper();
+    const before = Number(drawn?.getAttribute('width'));
+    const cursor = at({ x: 300, y: 200 });
+    for (let i = 0; i < 5; i++) wheel(el, cursor, -80);
+    assert.equal(Number(paper()?.getAttribute('width')), before, 'the paper is not resized while the wheel turns');
+    assert.equal(paper(), drawn, 'the paper element is the same one');
+    const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\) scale\(([-\d.e]+)\)/.exec(layer()?.style.transform ?? '');
+    assert.ok(m, `layer transform: ${layer()?.style.transform}`);
+    const [tx, ty, s] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    assert.ok(s > 1.5, `scale ${s}`);
+    // The paper point that was under the cursor is still under it on screen.
+    assert.ok(Math.abs(tx + 300 * K * s - cursor.clientX) < 1e-6 && Math.abs(ty + 200 * K * s - cursor.clientY) < 1e-6, `${tx}, ${ty}, ${s}`);
+    await advance(SETTLE_MS + 20);
+    assert.ok(Math.abs(Number(paper()?.getAttribute('width')) - before * s) < 1e-6, `${paper()?.getAttribute('width')} vs ${before * s}`);
+    assert.ok(!/scale/.test(layer()?.style.transform ?? ''), `after the settle: ${layer()?.style.transform}`);
   });
 
   it('steps a plan\'s cut with Alt and the wheel over it', () => {
