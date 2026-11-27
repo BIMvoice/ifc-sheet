@@ -17,7 +17,7 @@ import type { SectionPlaneConfig } from '@ifc-lite/drawing-2d';
 import type { DraftShape, Pt } from '@/drafting/types';
 import { PEN } from '@/components/viewer/sheets/viewport-pens';
 import type { GraphicStandard } from '@/drafting/graphic-standard';
-import type { DetailLevel, ProjectLevel } from '@bimvoice/ifcsheet';
+import { OPENING_CLASS, openingPens, type DetailLevel, type ProjectLevel } from '@bimvoice/ifcsheet';
 import type { ProjectView } from './types';
 import { planRoofs } from './roof-plan';
 import { viewElevationSymbols, viewOpeningSymbols, visibleEntities } from './view-symbols';
@@ -35,6 +35,8 @@ export interface PlanOverlay {
   dashed?: boolean;
   /** A line type of its own (the grid's dash-dot); wins over `dashed`. */
   lineType?: LineType;
+  /** The IFC class of what it draws, for the CAD layer standard: a door's symbol `IfcDoor`, a window's `IfcWindow` (#831). */
+  ifcType?: string;
   shapes: DraftShape[];
   /** Labels, drawing coordinates, drawn in a small paper size: level, or turned `angle` degrees clockwise on the screen (a contour's height). */
   texts?: { at: Pt; text: string; angle?: number }[];
@@ -80,22 +82,18 @@ export function roofOverlays(view: ProjectView, plane: SectionPlaneConfig, hidde
   return [...byPen.values()].filter((o) => o.shapes.length);
 }
 
-/** The door and window symbols of a plan (or, given its drawing, an elevation / section) as overlays, by weight. */
+/**
+ * The door and window symbols of a plan (or, given its drawing, an elevation / section) as overlays, by kind and weight (`openingPens`):
+ * each pen carries its kind's class, so a DXF by element puts a door's symbol on A-DOOR-SYMB and a window's on A-GLAZ-SYMB (#831).
+ */
 export function symbolOverlays(
   meshes: readonly MeshData[], plane: SectionPlaneConfig, flips: Record<string, number> | undefined, hidden: ReadonlySet<string>, drawing?: Drawing2D | null, pens: Pens = PEN, detail: DetailLevel = 'fine', level?: Pick<ProjectLevel, 'storeyGlobalIds'>, planSymbols = true,
 ): PlanOverlay[] {
-  const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
   const symbols = plane.axis === 'y' ? viewOpeningSymbols(meshes, plane, flips, hidden, detail, level, planSymbols) : viewElevationSymbols(meshes, plane, visibleEntities(drawing), hidden, flips, detail);
-  for (const s of symbols) {
-    thin.push(...s.shapes);
-    if (s.heavy) heavy.push(...s.heavy);
-    if (s.dashed) dashed.push(...s.dashed);
-  }
-  return [
-    { layer: 'SYMBOLS', width: pens.hatch, shapes: thin },
-    { layer: 'SYMBOLS', width: pens.cut, shapes: heavy },
-    { layer: 'SYMBOLS', width: pens.hatch, dashed: true, shapes: dashed },
-  ].filter((o) => o.shapes.length);
+  return openingPens(symbols, true).map((pen) => ({
+    layer: 'SYMBOLS', width: pen.weight === 'heavy' ? pens.cut : pens.hatch, ...(pen.dashed ? { dashed: true } : {}), shapes: pen.shapes,
+    ...(pen.kind ? { ifcType: OPENING_CLASS[pen.kind] } : {}),
+  }));
 }
 
 /** Everything a plan view overlays: its symbols, roofs and grid; an elevation or section, its door and window symbols and the grid axes it cuts. */

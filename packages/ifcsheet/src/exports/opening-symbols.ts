@@ -25,7 +25,7 @@ export { DEFAULT_SEGMENTAL_RISE, archPoints, headArch, type HeadArch } from '../
 export { glazingBarStrokes, type BarClip } from '../joinery-glazing-bars.js';
 // What a plan draws of its doors and windows: the symbols of a view, by pen, with the bodies they replace left out
 export {
-  drawnBySymbol, openingPens, openingReads, openingSheetPens, planOpeningSymbols, simplifyOpeningSymbol, viewOpeningSymbols, withoutOpeningBodies,
+  OPENING_CLASS, drawnBySymbol, openingPens, openingReads, openingSheetPens, planOpeningSymbols, simplifyOpeningSymbol, symbolOverhangs, symbolsClipped, viewOpeningSymbols, withoutOpeningBodies,
   type OpeningPen, type OpeningSources,
 } from '../plan-openings.js';
 // A door's or window's own plan representation in place of its generated symbol (#831)

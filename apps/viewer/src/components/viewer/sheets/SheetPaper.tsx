@@ -39,7 +39,7 @@ import { dxfIgnore, SchemeHatchDxf } from './SchemeHatchDxf';
 import { appViewStyler } from '@/project/view-styler';
 import { useViewerStore } from '@/store';
 import { memoOn, sharedMemo } from './shared-memo';
-import { AXIS_NAME, resolveViewGraphics, sheetNoteLines, viewportHiddenLayers, viewTitleLayout, type ViewTitleLayout } from '@bimvoice/ifcsheet';
+import { AXIS_NAME, flattenShape, resolveViewGraphics, sheetNoteLines, symbolOverhangs, symbolsClipped, viewportHiddenLayers, viewTitleLayout, type ViewTitleLayout } from '@bimvoice/ifcsheet';
 import { useGraphicStandard } from '@/project/graphic-standard-actions';
 import { cadPenContext } from '@/project/cad-layer-material';
 import { dxfCadRules } from '@bimvoice/ifcsheet/dxf';
@@ -207,7 +207,12 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, con
   const marks = viewportMarkShapes({ vp, view, drawing, drawingArea, north, locale: sheetLocale, ...(content.site ? { site: { drafts, toPaper: (p) => drawingToScreen(p, t, axis), labels: siteLabels } } : {}) });
   const titleText = keyPlan ? tr('site.keyPlan.label') : hasTrueScale(view) ? tr('sheets.viewportLabel', { name: view?.name ?? '?', scale: vp.scale }) : tr('sheets.viewportLabelNoScale', { name: view?.name ?? '?' });
   // The title stands under the drawing and under the marks that stand there, as the engine's PDF places it (`viewTitleLayout`).
-  const markBoxes = (content.markBoxes ?? []).map((b) => paperBox(drawingToScreen(b.min, t, axis), drawingToScreen(b.max, t, axis)));
+  // A plan's door and window symbols are drawn whole, past its box too, and the title keeps clear of what reaches out (`symbolsClipped`, #831): a door
+  // that opens out of the building keeps its leaf and swing. The rest of the overlays stay clipped.
+  const overlays = keyPlan ? [] : content.overlays ?? [];
+  const whole = symbolsClipped(view) ? [] : overlays.filter((o) => o.layer === 'SYMBOLS');
+  const overhangs = whole.flatMap((o) => symbolOverhangs(o.shapes.map((s) => { const f = flattenShape(s); return (f.closed ? [...f.pts, f.pts[0]] : f.pts).map((p) => drawingToScreen(p, t, axis)); }), { x: left, y: top, w: box.width, h: box.height }));
+  const markBoxes = [...(content.markBoxes ?? []).map((b) => paperBox(drawingToScreen(b.min, t, axis), drawingToScreen(b.max, t, axis))), ...overhangs];
   const title = viewTitleLayout({ x: left, y: top, w: box.width, h: box.height }, standard.type.viewTitle, content.drawingNumber, { text: titleText, marks: markBoxes, areaBottom: drawingArea.y + drawingArea.h });
   return (
     <g data-viewport-id={vp.id} data-dxf-frame={dxfFrame}>
@@ -222,7 +227,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, con
             <SchemeHatchDxf pen={p} />
           </Fragment>
         ))}
-        {content.overlays?.length && !keyPlan ? <OverlayPaths overlays={content.overlays} transform={t} axis={axis} /> : null}
+        {overlays.length > whole.length ? <OverlayPaths overlays={overlays.filter((o) => !whole.includes(o))} transform={t} axis={axis} /> : null}
         {content.site ? <SiteOverlay site={content.site} transform={t} axis={axis} scale={vp.scale} /> : null}
         {highlight ? <KeyPlanHighlight rect={highlight} /> : null}
         {(keyPlan ? [] : drafts).map((e) => {
@@ -233,6 +238,7 @@ const ViewportGraphic = memo(function ViewportGraphic({ sheetId, lookup, vp, con
             : <g key={e.id} {...layerTags(layerById.get(e.layerId), cadKindOf(e.shape))} {...printOnly(layerById.get(e.layerId))}><AnnotationGraphics shape={annotationAtFactor(e.shape, factor)} color={color ?? '#000'} selected={false} transform={t} axis={axis} extraPatterns={extraPatterns} strokeScale={0.25} look={lookOf(book, e.params)} paperUnit={paperUnit} symbols={live} /></g>;
         })}
       </g>
+      {whole.length ? <OverlayPaths overlays={whole} transform={t} axis={axis} /> : null}
       {marks ? <ViewportMarks shapes={marks} /> : null}
       {selected ? (
         <rect x={left} y={top} width={box.width} height={box.height} fill="none" stroke="#2563eb"
