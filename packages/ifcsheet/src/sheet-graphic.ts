@@ -46,7 +46,7 @@ import { crossRefAnnotations } from './sheet-cross-refs.js';
 import type { DxfTags } from './dxf-pen-tags.js';
 import { viewportAnnotations, type SheetAnnotations, type SheetStroke } from './sheet-annotations.js';
 import { placedListSchedule, scheduleGraphics, type SheetSchedules } from './sheet-schedules.js';
-import { openingSheetPens, withoutOpeningBodies } from './plan-openings.js';
+import { openingSheetPens, symbolOverhangs, symbolsClipped, withoutOpeningBodies } from './plan-openings.js';
 import type { OpeningSymbol } from './opening-symbols.js';
 import { materialDrawing, materialFaces, type MaterialResolver } from './material-drawing.js';
 import { joinLikeCuts, likeCutKey } from './cut-join-drawing.js';
@@ -264,7 +264,7 @@ export function sheetGraphic(
     const graphics = resolveViewGraphics(view, doc.viewTemplates);
     // The detail level (#444): the viewport's scale decides it unless the view's graphics (or its template's) name one; the app's sheets call the same function.
     const detail = resolveDetailLevel(graphics, vp.scale);
-    const symbols = openings.get(vp.viewId);
+    const symbols = openings.get(vp.viewId), overhangs: PaperBox[] = [];
     const detailed = made && atDetailLevel(made, detail);
     // A plan draws its doors and windows from their symbols, not their cut (a roof plan keeps them: its skylights have no symbol).
     const plain = detailed && symbols && view?.kind === 'plan' && view.discipline !== 'roof' ? withoutOpeningBodies(detailed) : detailed;
@@ -319,7 +319,7 @@ export function sheetGraphic(
         if (regions.length || runs.length) out.pens.push({ layer: g.layer, stroke: g.stroke, width: g.width, fill: g.fill, ...(g.dash ? { dash: g.dash.split(' ').map(Number) } : {}), runs, regions, ...element.tags(g.lines[0]) });
       }
       out.pens.push(...materialPens(faces, styler, at, box, pens, patterns));
-      if (symbols) out.pens.push(...openingSheetPens(symbols, detail, pens, at, box).filter((p) => p.runs.length > 0));
+      for (const p of symbols ? openingSheetPens(symbols, detail, pens, at, symbolsClipped(view) ? box : null, dxf.byElement).filter((q) => q.runs.length > 0) : []) { out.pens.push(p); overhangs.push(...symbolOverhangs(p.runs, box)); } // A plan's whole, the title clear of them (#831).
       if (dxf.modelFrames) for (const p of out.pens.slice(firstPen)) p.frame = { ...at({ x: 0, y: 0 }), s: 1000 / vp.scale };
       for (const label of contoured?.texts ?? []) {
         const p = at(label.at);
@@ -328,7 +328,7 @@ export function sheetGraphic(
     }
     // The view's drafts and dimensions, by the sheet's own transform (`placer`) and layout (`sheet-annotations.ts`).
     // The section references and elevation marks are made here from the sheets (`cross-ref/`), as the app's sheet makes them: never stored.
-    const markBoxes: PaperBox[] = [];
+    const markBoxes: PaperBox[] = [...overhangs];
     const crossRefs = drawing && made ? crossRefAnnotations(project?.annotations, { doc, vp, drawing: made, symbols, locale: marks.locale, extent }) : null;
     if (drawing && (noted || crossRefs) && Number.isFinite(drawing.bounds.min.x)) {
       const at = placer(drawing, vp, view && extent ? viewCentre(view, extent) : null);
