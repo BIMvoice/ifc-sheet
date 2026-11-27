@@ -62,6 +62,7 @@ export function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, li
       if (owners[i] !== owner) continue;
       // A line's depth is its own surface's lowered by that surface's slope over one pixel (`outline-depth.ts`), so the
       // surface may lie that much deeper than the line, never nearer.
+      if (Math.abs(raster.buffer[i] - lineDepth) <= depthBias) return true;
       const behind = surfaceDepthAt(raster, i) - lineDepth;
       if (behind >= -depthBias && behind <= depthBias + Math.hypot(raster.gradX[i], raster.gradY[i])) return true;
     }
