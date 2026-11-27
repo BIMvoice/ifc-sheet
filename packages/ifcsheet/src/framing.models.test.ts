@@ -214,9 +214,10 @@ describe.skipIf(noWasm !== null || !existsSync(SKOLEBYGG))('Skolebygg', () => {
     const before = generateDefaultSet(all)!;
     const scales = (d: DefaultSet) => [...new Set(d.document.sheets.flatMap((s) => (s.viewports ?? []).map((v) => v.scale)))];
     expect(scales(set)).toEqual([200]);
-    expect(scales(before)).toEqual([200]);
+    // The old frame (200 x 206 m, the survey cube with it) overran A0 at 1:200; the set now goes on to 1:400, where it fits.
+    expect(scales(before)).toEqual([400]);
     expect(set.notes.filter((n) => n.key === 'draftSet.note.noFit')).toEqual([]);
-    expect(before.notes.filter((n) => n.key === 'draftSet.note.noFit').map((n) => n.params.kind)).toEqual(['plans', 'elevations', 'sections']);
+    expect(before.notes.filter((n) => n.key === 'draftSet.note.noFit')).toEqual([]);
     expect(set.document.sheets.filter((s) => s.number === 'A-101' || s.number === 'A-102').map((s) => [s.paper, s.viewports?.length])).toEqual([['A0', 2], ['A0', 2]]);
   });
 
