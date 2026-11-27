@@ -44,6 +44,13 @@ export interface DepthRaster {
   buffer: Float32Array;
   /** The element nearest in each pixel (`ownerKey` of its mesh), -1 where nothing rasterized: whose surface a pixel shows. */
   owners: Float64Array;
+  /**
+   * Per pixel, how the depth of the surface it shows changes from one pixel to the next along x (`gradX`) and y
+   * (`gradY`): 0 for a face seen square on, large for one seen at a glancing angle. The buffer holds the depth at the
+   * pixel's centre; with these, the depth of the same surface anywhere in the pixel (#831).
+   */
+  gradX: Float32Array;
+  gradY: Float32Array;
   width: number;
   height: number;
   bounds: Bounds2D;
@@ -107,8 +114,10 @@ export function buildDepthRaster(
   const buffer = new Float32Array(width * height);
   buffer.fill(Infinity);
   const owners = new Float64Array(width * height).fill(-1);
+  const gradX = new Float32Array(width * height);
+  const gradY = new Float32Array(width * height);
 
-  const raster: DepthRaster = { buffer, owners, width, height, bounds: b };
+  const raster: DepthRaster = { buffer, owners, gradX, gradY, width, height, bounds: b };
 
   for (const mesh of meshes) {
     tick?.();
@@ -168,7 +177,7 @@ function rasterizeTriangle(
   depthBias: number,
   owner: number,
 ): void {
-  const { buffer, owners, width, height, bounds } = raster;
+  const { buffer, owners, gradX, gradY, width, height, bounds } = raster;
 
   const toPixelX = (x: number) => ((x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
   const toPixelY = (y: number) =>
@@ -189,6 +198,11 @@ function rasterizeTriangle(
   if (Math.abs(cross) <= 1e-6 * span * span) {
     return;
   }
+
+  // The face's depth gradient over the pixel grid: depth = a·x + b·y + c.
+  const e1 = px1.depth - px0.depth, e2 = px2.depth - px0.depth;
+  const gx = (e1 * (px2.y - px0.y) - e2 * (px1.y - px0.y)) / cross;
+  const gy = (e2 * (px1.x - px0.x) - e1 * (px2.x - px0.x)) / cross;
 
   const minX = Math.max(0, Math.floor(Math.min(px0.x, px1.x, px2.x)));
   const maxX = Math.min(width - 1, Math.ceil(Math.max(px0.x, px1.x, px2.x)));
@@ -212,6 +226,8 @@ function rasterizeTriangle(
         if (depth < buffer[idx]) {
           buffer[idx] = depth;
           owners[idx] = owner;
+          gradX[idx] = gx;
+          gradY[idx] = gy;
         }
       }
     }
