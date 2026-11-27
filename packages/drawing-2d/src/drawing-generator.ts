@@ -294,7 +294,7 @@ export class Drawing2DGenerator {
       const toClassify = classifiable.filter((l) => l.visibility === 'visible');
       const passthrough = classifiable.filter((l) => l.visibility !== 'visible');
       // A cut face hides what lies behind it, though it is not in the depth buffer: the pieces inside one are left out (#749).
-      const classified = dropInsideCutFaces(this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l), tick), tick), cutPolygons, undefined, tick);
+      const classified = dropInsideCutFaces(this.hiddenLineClassifier.applyVisibility(refineOutlineDepths(toClassify, bounds, (l) => this.hiddenLineClassifier.coveredByItself(l), tick, (l, floor) => this.hiddenLineClassifier.hiddenAtOrBehind(l, floor)), tick), cutPolygons, undefined, tick);
       // SDK hidden-output filtering applies to occlusion results. Existing
       // overhead outlines keep their dashed convention even with HLR off.
       const classifiedLines = config.clipProjectionBands && !opts.includeHiddenLines

@@ -20,7 +20,7 @@ import type { MeshData } from '@ifc-lite/geometry';
 import type { Point2D, DrawingLine, Bounds2D, VisibilityState, SectionPlaneConfig } from './types.js';
 import { point2DLerp, point2DDistance, EPSILON } from './math.js';
 import { buildDepthRaster, ownerKey, type DepthRaster } from './hidden-line-raster.js';
-import { PIXEL, hiddenByItself, ownSurfaceBeside, rasterPixel } from './hidden-line-own.js';
+import { PIXEL, hiddenBehindOthers, hiddenByItself, ownSurfaceBeside, rasterPixel } from './hidden-line-own.js';
 import type { ClipPlane } from './clip-rim.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -177,6 +177,11 @@ export class HiddenLineClassifier {
   /** Whether `line` is hidden somewhere by its own element's surface (`hiddenByItself`): only then does own depth matter. */
   coveredByItself(line: DrawingLine): boolean {
     return this.raster !== null && hiddenByItself(this.raster, line, Math.max(2, this.options.samplesPerLine), this.options.depthBias);
+  }
+
+  /** Whether `line` reads hidden behind other elements all along at any depth of `floor` or more (`hiddenBehindOthers`). */
+  hiddenAtOrBehind(line: DrawingLine, floor: number): boolean {
+    return this.raster !== null && this.edgeTolerancePx === 0 && hiddenBehindOthers(this.raster, line, floor, this.options.depthBias);
   }
 
   /**
