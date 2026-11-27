@@ -42,6 +42,7 @@ import { SheetHints } from '@/onboarding/SheetHints';
 import { dismissHint } from '@/onboarding/hints';
 import { CommentLayer } from './CommentLayer';
 import { WallSheet } from './WallSheet';
+import { usePaperZoom } from './usePaperZoom';
 import { keysBelongElsewhere } from './wall-key-bus';
 import { isDraftingKey } from '../drafting/drafting-key-match';
 import { openKeyboardOverlay } from '@/lib/commands/dispatcher';
@@ -79,6 +80,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0, k: 1 });
   const paper = paperOf(sheet);
   const views = useProjectStore((s) => s.views);
+  // The paper is drawn at the zoom it last settled at; a pan or a zoom in progress moves and scales that picture (#913).
+  const { drawnK, layerStyle, drawAt } = usePaperZoom(pan);
 
   // Fit the whole sheet on arrival, when the paper changes, and on request.
   useLayoutEffect(() => {
@@ -88,7 +91,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
     const width = fitWidth(el);
     const k = Math.max(ZOOM.min, Math.min((width - 24) / paper.w, (height - 24) / paper.h));
     setPan({ k, x: (width - paper.w * k) / 2, y: (height - paper.h * k) / 2 });
-  }, [paper.w, paper.h, fitKey]);
+    drawAt(k);
+  }, [paper.w, paper.h, fitKey, drawAt]);
 
   const drafting = useSheetDrafting(sheet.id, pan, extraPatterns);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -202,6 +206,12 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
   // AutoCAD mode (#168) keeps the command line showing, for typed commands while nothing runs.
   const autocad = useAutocadMode((s) => s.on);
   const showPrompt = drafting.drafting || draftSelection.size > 0 || autocad;
+  // A pan or a zoom in progress re-renders this canvas each frame; the paper itself is not rebuilt for it.
+  const paperWidth = paper.w * drawnK;
+  const paperSheet = useMemo(
+    () => <WallSheet ref={paperRef} sheet={sheet} width={paperWidth} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />,
+    [paperRef, sheet, paperWidth, chosenId, sheetContent],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -269,8 +279,8 @@ export const SheetCanvas = forwardRef<SVGSVGElement, SheetCanvasProps>(function 
           }
         }}
       >
-        <div className="absolute left-0 top-0" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
-          <WallSheet ref={paperRef} sheet={sheet} width={paper.w * pan.k} selectedViewportId={chosenId} sheetContent={sheetContent} pinned={false} />
+        <div data-paper-layer className="absolute left-0 top-0" style={layerStyle}>
+          {paperSheet}
         </div>
         {shownGuides.length > 0 || dropping || several ? (
           <svg data-snap-guides className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }} width={paper.w * pan.k} height={paper.h * pan.k} viewBox={`0 0 ${paper.w} ${paper.h}`} aria-hidden="true">

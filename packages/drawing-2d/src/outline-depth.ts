@@ -44,6 +44,15 @@ export const HIDDEN_LINE_RESOLUTION = 1024;
 const T_EPS = 1e-9;
 /** A curved line's depth is kept within this of its sampled own surface (metres) when its breakpoints are thinned. */
 const NEAR_TOLERANCE = 5e-4;
+/**
+ * How far (in `reach`) from either end of a line a face that reaches no further along it is left out of its depth. Such a
+ * face does not run beside the line; the line ends on it or by it. In an oblique elevation the reveal edge behind a window
+ * ends on the head of the opening, and the wall face above the head is a pixel from its end and nearer: read off that
+ * face, the edge's last pixel at each end came out in front of the window that hides the rest, two stubs at the window's
+ * corners (#831). Left out, the end may lose part of a pixel to its own element instead. 1.5: a face edge crossing the
+ * line at 45° reaches √2 `reach` along it.
+ */
+const END_REACH = 1.5;
 
 interface OutlineSource {
   mesh: MeshData;
@@ -137,6 +146,9 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
   const ax = line.line.start.x, ay = line.line.start.y;
   const dx = line.line.end.x - ax, dy = line.line.end.y - ay;
   const fallback = line.depth;
+  // A line longer than two end zones takes no depth from a face that reaches it only within one of them.
+  const length = Math.hypot(dx, dy);
+  const endZone = length > 2 * END_REACH * reach ? (END_REACH * reach) / length : -Infinity;
 
   if (source.near) return simplify(clampToCut(localDepth(source.mesh, source.near, reach, line)), NEAR_TOLERANCE);
 
@@ -163,6 +175,7 @@ function depthAlong(source: OutlineSource, reach: number, line: DrawingLine): Ar
     }
     if (!(faces[o + 9] === EDGE ? clipToEdge(faces, o, ax, ay, dx, dy, reach) : clipToFace(faces, o, ax, ay, dx, dy, reach))) continue;
     const t0 = SPAN[0], t1 = SPAN[1], alpha = SPAN[2], beta = SPAN[3];
+    if (t1 <= endZone || t0 >= 1 - endZone) continue; // only touches an end (`END_REACH`)
     if (i < taken) { spans[ns++] = t0; spans[ns++] = t1; spans[ns++] = alpha; spans[ns++] = beta; spans[ns++] = floor; }
     ts[nt++] = t0;
     ts[nt++] = t1;
