@@ -6,7 +6,7 @@
  * What a DXF is written for (#831): a print (the default, today's file: layers by pen, paper millimetres) or a CAD working file, with two
  * independent choices.
  * - Layers: `pen` (CUT, SEEN, HIDDEN...) or `element` (AIA-style names from the IFC class: A-WALL-EXTR, A-WALL-INTR, A-DOOR, A-GLAZ...,
- *   and A-ANNO-DIMS for dimensions). The element names are an ordinary CAD layer standard (`elementLayerRules`), so a project's own rules, when it
+ *   the door symbols on A-DOOR-SYMB and the window symbols on A-GLAZ-SYMB, and A-ANNO-DIMS for dimensions). The element names are an ordinary CAD layer standard (`elementLayerRules`), so a project's own rules, when it
  *   has any, still win over them.
  * - Units: `paper` (millimetres on the sheet) or `model` (each viewport's drawing at its true size, in metres, at its model coordinates; the
  *   sheet's frame, title block and notes are left out, they are not the building).
@@ -54,8 +54,11 @@ export function elementLayerRules(): CadLayerRule[] {
     rule('wall-extr', 'A-WALL-EXTR', { ifcClasses: WALLS, external: true }),
     rule('wall-intr', 'A-WALL-INTR', { ifcClasses: WALLS, external: false }),
     rule('wall', 'A-WALL', { ifcClasses: WALLS }),
+    // The plan's door and window symbols, each kind on its own layer (#831); before the class layers, which they would otherwise match.
+    rule('door-symb', 'A-DOOR-SYMB', { source: 'SYMBOLS', ifcClasses: ['IfcDoor', 'IfcDoorStandardCase'] }),
+    rule('glaz-symb', 'A-GLAZ-SYMB', { source: 'SYMBOLS', ifcClasses: ['IfcWindow', 'IfcWindowStandardCase'] }),
     ...ELEMENT_LAYERS.map(([layer, classes]) => rule(layer.toLowerCase(), layer, { ifcClasses: classes })),
-    // What the plan draws for an opening that no class names (its swing symbols), and the drafted annotations.
+    // A symbol no class names, and the drafted annotations.
     rule('symbols', 'A-DOOR-SYMB', { source: 'SYMBOLS' }),
     rule('dims', 'A-ANNO-DIMS', { kind: 'dimension' }),
     rule('text', 'A-ANNO-TEXT', { kind: 'text' }),

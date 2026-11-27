@@ -9,6 +9,19 @@ import { ownerKey, type DepthRaster } from './hidden-line-raster.js';
 
 /** The pixel `rasterPixel` found last: column, row. */
 export const PIXEL = new Int32Array(2);
+/** Where in the raster `rasterPixel` found the point last, in pixels (a pixel's centre is its column or row plus 0.5). */
+export const AT = new Float64Array(2);
+
+/**
+ * The depth of the surface pixel `i` shows at the point `rasterPixel` found last (`AT`), not at the pixel's centre: the
+ * face's own plane carried from the centre to the point (`DepthRaster.gradX`, `gradY`). A face seen at a glancing angle
+ * changes depth fast across a pixel, and a line lying on it (a window's edge against the reveal of an oblique wall, #831)
+ * read as behind the depth at the centre and was hidden. A face seen square on has the same depth across the pixel.
+ */
+export function surfaceDepthAt(raster: DepthRaster, i: number): number {
+  const x = i % raster.width, y = (i - x) / raster.width;
+  return raster.buffer[i] + raster.gradX[i] * (AT[0] - (x + 0.5)) + raster.gradY[i] * (AT[1] - (y + 0.5));
+}
 
 /**
  * Put the pixel of `point` in `PIXEL`; false when the point is outside the raster. A sample outside the raster bounds
@@ -23,6 +36,7 @@ export function rasterPixel(raster: DepthRaster, point: Point2D): boolean {
   const px = ((point.x - bounds.min.x) / (bounds.max.x - bounds.min.x)) * (width - 1);
   const py = ((point.y - bounds.min.y) / (bounds.max.y - bounds.min.y)) * (height - 1);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+  AT[0] = px; AT[1] = py;
   // Clamp to guard the floating-point edge at bounds.max. A pixel holds the depth at its centre, half a pixel past its
   // corner, so the last column and row are centred outside the bounds and nothing inside them ever fills them: a point
   // on the far edge reads the pixel before (Refs #557, a purlin ending at the verge of FZK's roof showed through).
@@ -32,24 +46,32 @@ export function rasterPixel(raster: DepthRaster, point: Point2D): boolean {
 }
 
 /**
- * Whether a pixel next to (`ix`, `iy`) shows the line's own element (`owner`) at the line's depth (within `depthBias`): the
- * line is then on the edge of its own surface where that surface is seen, even though its own pixel is covered by something
- * in front. A gable wall's top edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge
+ * Whether a pixel next to (`ix`, `iy`) shows the line's own element (`owner`) at the line's depth (`surfaceDepthAt`, within `depthBias`):
+ * the line is then on the edge of its own surface where that surface is seen, even though its own pixel is covered by
+ * something in front. A gable wall's top edge lies on the bottom of the edge-on verge of its roof; a point sample landed in a verge
  * pixel about half the time and the edge printed as dashes along the roof of an elevation. A neighbour that is merely
  * deeper does not count: above a wall top tucked under a roof that slopes away from the viewer every pixel is deeper than
  * the wall, and the wall top stays hidden. Nor does another element's surface at the same depth: the top of a wall under a
  * cut wall is level with the floor beside it, and with any surface counting its edge was drawn along every cut wall's foot.
  */
 export function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, lineDepth: number, owner: number, depthBias: number): boolean {
-  const { buffer, owners, width, height } = raster;
+  const { owners, width, height } = raster;
   for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
     for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) {
       const i = y * width + x;
-      if (owners[i] === owner && Math.abs(buffer[i] - lineDepth) <= depthBias) return true;
+      if (owners[i] !== owner) continue;
+      // A line's depth is its own surface's lowered by that surface's slope over one pixel (`outline-depth.ts`), so the
+      // surface may lie that much deeper than the line, never nearer.
+      if (Math.abs(raster.buffer[i] - lineDepth) <= depthBias) return true;
+      const behind = surfaceDepthAt(raster, i) - lineDepth;
+      if (behind >= -depthBias && behind <= depthBias + Math.hypot(raster.gradX[i], raster.gradY[i])) return true;
     }
   }
   return false;
 }
+
+/** Half a pixel, and a hair more for the rounding of where a sample falls in it. */
+const HALF_PIXEL = 0.5 + 1e-6;
 
 /**
  * Whether `line` is hidden behind other elements all along, at any depth of `floor` or more: every pixel any point of
@@ -61,7 +83,7 @@ export function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, li
  * pixel edge is read in either pixel.
  */
 export function hiddenBehindOthers(raster: DepthRaster, line: DrawingLine, floor: number, depthBias: number): boolean {
-  const { bounds, buffer, owners, width, height } = raster;
+  const { bounds, buffer, owners, gradX, gradY, width, height } = raster;
   const owner = ownerKey(line.entityId, line.modelIndex ?? 0);
   const { start, end } = line.line;
   const sx = (width - 1) / (bounds.max.x - bounds.min.x), sy = (height - 1) / (bounds.max.y - bounds.min.y);
@@ -71,7 +93,10 @@ export function hiddenBehindOthers(raster: DepthRaster, line: DrawingLine, floor
   if (!(Math.min(x0, x1) >= margin && Math.max(x0, x1) <= width - 1 - margin && Math.min(y0, y1) >= margin && Math.max(y0, y1) <= height - 1 - margin)) return false;
   const level = floor - depthBias;
   const cell = (ix: number, iy: number): boolean => {
-    if (!(buffer[iy * width + ix] < level)) return false;
+    // The classifier reads the covering surface at the sample, which is within half a pixel of the centre each way
+    // (`surfaceDepthAt`, #831): the farthest that surface comes in the pixel must still be nearer than the floor.
+    const i = iy * width + ix;
+    if (!(buffer[i] + HALF_PIXEL * (Math.abs(gradX[i]) + Math.abs(gradY[i])) < level)) return false;
     for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
       for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) if (owners[y * width + x] === owner) return false;
     }

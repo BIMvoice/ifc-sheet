@@ -8,6 +8,7 @@ ElevationReads: type (type-only)
 HeadArch: type (type-only)
 JoineryStroke: type (type-only)
 ModelDiscipline: type (type-only)
+OPENING_CLASS: value
 OpeningConvention: type (type-only)
 OpeningPen: type (type-only)
 OpeningRect: type (type-only)
@@ -47,7 +48,9 @@ statedDoorElevationSymbol: value
 storeyMembersOf: value
 strokeBounds: value
 symbolMeshes: value
+symbolOverhangs: value
 symbolShapes: value
+symbolsClipped: value
 typedElevationSymbol: value
 typedPlanSymbol: value
 viewOpeningSymbols: value

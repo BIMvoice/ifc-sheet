@@ -26,7 +26,7 @@ export function OverlayPaths({ overlays, transform, axis, textScale = 1, ink = '
         const lineType = o.lineType ?? (o.dashed ? 'dashed' : 'continuous');
         const dash = dashOf(lineType).map((d) => d * textScale).join(' ');
         return (
-        <g key={i} {...penTags(o.layer, o.width, lineType)}>
+        <g key={i} {...penTags(o.layer, o.width, lineType, undefined, o.ifcType ? { ifcType: o.ifcType } : {})}>
           <path d={o.shapes.map((s) => shapePath(s, transform, axis)).join('')} stroke={ink} strokeWidth={o.width * textScale} strokeDasharray={dash || undefined} fill="none" />
           {o.texts?.map((l, k) => {
             const p = drawingToScreen(l.at, transform, axis);

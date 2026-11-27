@@ -59,8 +59,15 @@ describe.skipIf(missing !== null)('the spiral stair in Section A-A of AC20-FZK-H
     // One side of the column, its pieces bottom to top. The upper floor slab is cut solid in front of the column (#749: a cut
     // face hides what lies behind it), so the column is broken there and only there: every gap lies inside a cut slab.
     const xs = [...new Set(vertical.map((l) => Math.round(l.line.start.x * 1000)))];
-    const sides = xs.map((x) => vertical.filter((l) => Math.round(l.line.start.x * 1000) === x)
-      .map((l) => [Math.min(l.line.start.y, l.line.end.y), Math.max(l.line.start.y, l.line.end.y)]).sort((a, b) => a[0] - b[0]));
+    // Pieces that overlap are one stretch of line: a tread's end edge against the column lies on the column's own line
+    // (#831), and is no gap in it.
+    const union = (pieces: number[][]) => pieces.reduce((out, [lo, hi]) => {
+      const last = out[out.length - 1];
+      if (last && lo <= last[1]) last[1] = Math.max(last[1], hi); else out.push([lo, hi]);
+      return out;
+    }, [] as number[][]);
+    const sides = xs.map((x) => union(vertical.filter((l) => Math.round(l.line.start.x * 1000) === x)
+      .map((l) => [Math.min(l.line.start.y, l.line.end.y), Math.max(l.line.start.y, l.line.end.y)]).sort((a, b) => a[0] - b[0])));
     const drawn = (pieces: number[][]) => pieces.reduce((sum, [lo, hi]) => sum + hi - lo, 0);
     const side = sides.reduce((a, b) => (drawn(b) > drawn(a) ? b : a), [] as number[][]);
     expect(drawn(side)).toBeGreaterThan(3);

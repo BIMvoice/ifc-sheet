@@ -19,6 +19,7 @@ function raster(): DepthRaster {
   return {
     buffer: new Float32Array(width * height).fill(1),
     owners: new Float64Array(width * height).fill(ownerKey(2, 0)),
+    gradX: new Float32Array(width * height), gradY: new Float32Array(width * height),
     width, height, bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } },
   };
 }
@@ -34,6 +35,15 @@ describe('hiddenBehindOthers (#863)', () => {
 
   it('is false when the floor is not behind the nearer surface by more than the bias', () => {
     expect(hiddenBehindOthers(raster(), line(10.5, 20.2, 80.3, 60.7), 1.0005, 0.001)).toBe(false);
+  });
+
+  it('is false when a surface seen at a glancing angle comes, within a pixel it crosses, as far as the floor (#831)', () => {
+    const r = raster();
+    // Depth 1 at the centre, 9 per pixel along x: half a pixel off the centre the surface is at 5.5, behind the floor of 5.
+    r.gradX[30 * r.width + 50] = 9;
+    expect(hiddenBehindOthers(r, line(10, 30.4, 90, 30.4), 5, 0.001)).toBe(false);
+    r.gradX[30 * r.width + 50] = 7; // at most 4.5 within the pixel: still in front of the floor
+    expect(hiddenBehindOthers(r, line(10, 30.4, 90, 30.4), 5, 0.001)).toBe(true);
   });
 
   it('is false when one pixel the line crosses lets it through', () => {

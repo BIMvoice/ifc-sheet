@@ -33,6 +33,7 @@ import { planSymbolsOn } from './plan-symbols.js';
 import { openingPlanSymbolsOf, withOwnPlanRepresentations } from './opening-plan-representation.js';
 import type { RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
 import type { ViewGraphics } from './view-graphics-types.js';
+import { runsPaperBox, type PaperBox } from './title-clear.js';
 
 /** Whether a plan draws an element from its symbol, not its cut: every door and window. */
 export const drawnBySymbol = (ifcType: string | undefined): boolean => /^IFC(DOOR|WINDOW)/i.test(ifcType ?? '');
@@ -120,11 +121,15 @@ export function viewOpeningSymbols(
   return elevationOpeningSymbols(meshes, plane, visibleEntities(drawing), hiddenClassesOf(graphics), openingReads(sources), sources.project.openingLines);
 }
 
-/** One pen of the symbols: its weight, whether it is dashed, and the shapes drawn with it. */
-export interface OpeningPen { weight: 'thin' | 'heavy'; dashed: boolean; shapes: DraftShape[] }
+/** One pen of the symbols: its weight, whether it is dashed, the shapes drawn with it, and with `byKind` the kind of opening they are of. */
+export interface OpeningPen { weight: 'thin' | 'heavy'; dashed: boolean; shapes: DraftShape[]; kind?: 'door' | 'window' }
 
-/** The symbols' shapes by pen, in the app's order: thin, heavy, dashed (`symbolOverlays`); an empty pen is left out. */
-export function openingPens(symbols: readonly OpeningSymbol[]): OpeningPen[] {
+/**
+ * The symbols' shapes by pen, in the app's order: thin, heavy, dashed (`symbolOverlays`); an empty pen is left out. With `byKind`, the
+ * doors' pens and then the windows', each tagged with its kind, so a DXF by element puts a window's symbol on a layer of its own (#831).
+ */
+export function openingPens(symbols: readonly OpeningSymbol[], byKind = false): OpeningPen[] {
+  if (byKind) return (['door', 'window'] as const).flatMap((kind) => openingPens(symbols.filter((s) => s.kind === kind)).map((pen) => ({ ...pen, kind })));
   const thin: DraftShape[] = [], heavy: DraftShape[] = [], dashed: DraftShape[] = [];
   for (const s of symbols) {
     thin.push(...s.shapes);
@@ -133,6 +138,9 @@ export function openingPens(symbols: readonly OpeningSymbol[]): OpeningPen[] {
   }
   return ([{ weight: 'thin', dashed: false, shapes: thin }, { weight: 'heavy', dashed: false, shapes: heavy }, { weight: 'thin', dashed: true, shapes: dashed }] as OpeningPen[]).filter((p) => p.shapes.length > 0);
 }
+
+/** The IFC class a symbol pen of a kind is tagged with: the class the element layer standard names its symbol layer by. */
+export const OPENING_CLASS = { door: 'IfcDoor', window: 'IfcWindow' } as const;
 
 /** `drawing` without the faces and lines of the doors and windows: a plan draws them from their symbols. */
 export function withoutOpeningBodies<D extends Drawing2D>(drawing: D): D {
@@ -146,16 +154,36 @@ export function withoutOpeningBodies<D extends Drawing2D>(drawing: D): D {
 
 /**
  * The symbols as the sheet's pens, as the app's sheet draws its `SYMBOLS` overlays: black, the thin pen the hatch pen, a configured
- * type's cut parts the cut pen, the parts above the cut dashed. `at` puts a drawing point on the paper and the runs are clipped to `box`.
+ * type's cut parts the cut pen, the parts above the cut dashed. `at` puts a drawing point on the paper and the runs are clipped to `box`;
+ * a `box` of null leaves them whole (a plan's: `symbolsClipped`). `byKind` tags each pen with its kind's class (`openingPens`).
  */
-export function openingSheetPens(symbols: readonly OpeningSymbol[], detail: DetailLevel, pens: PenTable, at: (p: Point2D) => Point2D, box: Rect): SheetPen[] {
-  return openingPens(symbols.map((s) => simplifyOpeningSymbol(s, detail))).map((pen) => ({
+export function openingSheetPens(symbols: readonly OpeningSymbol[], detail: DetailLevel, pens: PenTable, at: (p: Point2D) => Point2D, box: Rect | null, byKind = false): SheetPen[] {
+  return openingPens(symbols.map((s) => simplifyOpeningSymbol(s, detail)), byKind).map((pen) => ({
     layer: 'SYMBOLS' as const, stroke: '#000000', fill: null, regions: [], width: pen.weight === 'heavy' ? pens.pens.cut : pens.pens.hatch,
     ...(pen.dashed ? { dash: DASH_MM } : {}),
+    ...(pen.kind ? { ifcType: OPENING_CLASS[pen.kind] } : {}),
     runs: pen.shapes.flatMap((shape) => {
       const flat = flattenShape(shape);
       const pts = flat.pts.map(at);
-      return clipPolyline(flat.closed ? [...pts, pts[0]] : pts, box);
+      const run = flat.closed ? [...pts, pts[0]] : pts;
+      return box ? clipPolyline(run, box) : [run];
     }),
   }));
+}
+
+/**
+ * Whether a view's door and window symbols are clipped to its viewport's box (#831). A plan's box is the model's extent, and a door
+ * that swings out of the building (a door flipped to open outwards) draws its leaf and swing past it: they are kept whole, and the title
+ * moves under them (`symbolOverhangs`). A detail shows exactly its area, and an elevation or a section its own, so theirs are clipped.
+ */
+export const symbolsClipped = (view: { kind: string; detail?: unknown } | undefined): boolean => view?.kind !== 'plan' || view.detail !== undefined;
+
+/** The paper boxes of the symbol runs that reach past `box` (paper mm, y down): what a view's title keeps clear of (`viewTitleLayout`). */
+export function symbolOverhangs(runs: readonly (readonly Point2D[])[], box: Rect): PaperBox[] {
+  const out: PaperBox[] = [];
+  for (const run of runs) {
+    const b = runsPaperBox([run]);
+    if (b && (b.x0 < box.x || b.y0 < box.y || b.x1 > box.x + box.w || b.y1 > box.y + box.h)) out.push(b);
+  }
+  return out;
 }

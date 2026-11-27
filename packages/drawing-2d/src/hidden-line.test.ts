@@ -503,17 +503,20 @@ describe('HiddenLineClassifier edge tolerance (axonometric outlines, issue #49)'
   const bounds = { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } };
   const plane = { axis: 'z', position: 0, flipped: false } as const;
 
-  it('without a tolerance the outline edge of a tilted face is partly read as hidden (the default, unchanged)', () => {
+  it('without a tolerance the outline edge of a tilted face is read against the face at the sample, not at the pixel centre (#831)', () => {
     const classifier = new HiddenLineClassifier({ resolution: 16, samplesPerLine: 20, depthBias: 0.001 });
     classifier.buildDepthBuffer([tiltedOccluder()], plane, 20, bounds);
     // Pixel centres sit 0.5 px in; the face is farther there, so this edge is not hidden by it.
     const [result] = classifier.classifyLines([edgeAtX0]);
     expect(result.overallVisibility).toBe('visible');
-    // Mirror the plane so the face comes NEARER away from the edge: the point sample reads hidden.
+    // Mirror the plane so the face comes NEARER away from the edge: read at the pixel centre the edge was hidden by the
+    // face it lies on; read at the sample, the face is at the edge's own depth.
     const nearer: MeshData = { ...tiltedOccluder(), positions: new Float32Array([0, 0, -10, 10, 0, -5, 10, 10, -5, 0, 10, -10]) };
     const flat = new HiddenLineClassifier({ resolution: 16, samplesPerLine: 20, depthBias: 0.001 });
     flat.buildDepthBuffer([nearer], plane, 20, bounds);
-    expect(flat.classifyLines([{ ...edgeAtX0, depth: 10 }])[0].overallVisibility).not.toBe('visible');
+    expect(flat.classifyLines([{ ...edgeAtX0, depth: 10 }])[0].overallVisibility).toBe('visible');
+    // A line behind that face by more than the bias is still hidden.
+    expect(flat.classifyLines([{ ...edgeAtX0, line: { start: { x: 2, y: 1 }, end: { x: 2, y: 9 } }, depth: 9.1 }])[0].overallVisibility).toBe('hidden');
   });
 
   it('with one pixel of tolerance the same edge stays whole', () => {

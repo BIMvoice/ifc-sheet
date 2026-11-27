@@ -346,8 +346,10 @@ describe('a model without a grid', () => {
     assert.ok(p.every((o) => o.layer !== 'GRID'));
     const sec = planOverlays(section(), sectionPlane, meshes, undefined, hidden, BOUNDS);
     assert.ok(sec.every((o) => o.layer !== 'GRID'));
-    // Shape counts as origin/main produces them for this model (measured on main): the symbols alone, nothing added.
-    assert.deepEqual(p.map((o) => [o.layer, o.shapes.length]), [['SYMBOLS', 33], ['SYMBOLS', 6]]);
+    // The symbols alone, nothing added: 39 shapes as on main. Since #918 (Refs #831) the
+    // 33 door and window symbols come as two overlays, one per kind, so a DXF can layer them apart.
+    assert.deepEqual(p.map((o) => [o.layer, o.shapes.length]), [['SYMBOLS', 6], ['SYMBOLS', 6], ['SYMBOLS', 27]]);
+    assert.equal(p.reduce((n, o) => n + o.shapes.length, 0), 39);
     assert.deepEqual(sec, []);
   });
 });
