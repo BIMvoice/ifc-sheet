@@ -39,6 +39,7 @@ import { projectProfiles } from './profile-projector.js';
 import { bandsWithEdgeTolerance, getViewDirectionForPlane } from './projection-bands.js';
 import { HIDDEN_LINE_RESOLUTION, outlineLinesWithDepth, refineOutlineDepths } from './outline-depth.js';
 import { meshSilhouetteLines } from './silhouette-lines.js';
+import { obliqueCreaseLines } from './oblique-creases.js';
 import { roofBands, roofCreaseLines } from './roof-plan.js';
 import { isFeatureElementType } from './feature-elements.js';
 import { projectionBandPieces, clipMeshToProjectionWindow, type ProjectionBandPiece } from './projection-clip.js';
@@ -232,14 +233,12 @@ export class Drawing2DGenerator {
             const outline = outlineProvider
               ? outlineProvider(mesh, config.plane.axis, config.plane.flipped)
               : null;
-            if (outline && outline.contours.length > 0) {
-              const owner = { entityId: mesh.expressId, ifcType: mesh.ifcType ?? 'Unknown', modelIndex: mesh.modelIndex ?? 0 };
-              projectionLines.push(...outlineLinesWithDepth(outline, owner, config.plane, reach, mesh, band));
-            } else {
-              projectionLines.push(...meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, reach, viewDir, {
-                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView,
-              }));
-            }
+            const owner = { entityId: mesh.expressId, ifcType: mesh.ifcType ?? 'Unknown', modelIndex: mesh.modelIndex ?? 0 };
+            const drawn = outline && outline.contours.length > 0 ? outlineLinesWithDepth(outline, owner, config.plane, reach, mesh, band)
+              : meshSilhouetteLines(this.edgeExtractor, mesh, config.plane, reach, viewDir, {
+                includeFeatureEdges: opts.includeFeatureEdges, clipPlanes: opts.clipPlanes, curvedOutlines: !opts.cameraView });
+            // A wall's corners seen at an angle are inside its outline (#831); a view drawing every crease has them already.
+            projectionLines.push(...drawn, ...(opts.includeFeatureEdges ? [] : obliqueCreaseLines(this.edgeExtractor, mesh, config.plane, reach, viewDir, drawn)));
             projectionLines.push(...roofCreaseLines(mesh, config.plane, reach)); // a roof's ridges, hips and valleys (#490)
           }
         }

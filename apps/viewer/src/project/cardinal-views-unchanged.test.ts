@@ -40,6 +40,12 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
  *    line takes its depth from the faces it lies on only, so one behind its own element's front stays hidden.
  *  - #812 (hidden-line.ts), the point where an edge stops being hidden is bisected instead of taken halfway between two samples:
  *    plan 1969, 974, 229 became 1971, 971, 229; section 1290, 1064, 64 became 1290, 1070, 64; elevation 494, 464, 0 became 495, 465, 0.
+ *  - #831 (hidden-line.ts, outline-depth.ts, oblique-creases.ts), a line is tested against the surface in front of it at its
+ *    own sample as well as at the pixel centre, a face touching only one end of a line no longer sets its depth, and a wall's
+ *    corners seen at an angle are drawn: lines lying on a surface (spaces on their floor slab in the plan, slab edges on the
+ *    site in the section) are no longer hidden by it, and edges that came out as visible and hidden pieces along a slab come
+ *    out whole (the elevation's slab edges: 18 pieces, 4.3 m visible, became 4 pieces, 6.9 m). plan 1971, 971, 229 became
+ *    1965, 964, 229; section 1290, 1070, 64 became 1306, 1068, 64; elevation 495, 465, 0 became 472, 456, 0.
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -50,9 +56,9 @@ const WASM = join(ROOT, 'packages', 'wasm', 'pkg', 'ifc-lite_bg.wasm');
 const ON_MAIN = {
   // plan and section re-recorded for #749 (were 2332/1097 and 2863/2554): a line behind the plane is left out where it lies inside
   // a cut face, so the pieces under cut walls, slabs and roofs are gone and a line that crosses a cut wall is split there. The cut faces are the same.
-  plan: { axis: 'y', position: 1.2, lines: 1971, hidden: 971, polygons: 229 },
-  section: { axis: 'z', position: 0, lines: 1290, hidden: 1070, polygons: 64 },
-  elevation: { axis: 'z', position: 20, lines: 495, hidden: 465, polygons: 0 },
+  plan: { axis: 'y', position: 1.2, lines: 1965, hidden: 964, polygons: 229 },
+  section: { axis: 'z', position: 0, lines: 1306, hidden: 1068, polygons: 64 },
+  elevation: { axis: 'z', position: 20, lines: 472, hidden: 456, polygons: 0 },
 } as const;
 
 describe('plans, sections and elevations of FZK-Haus draw what they drew on main', () => {
