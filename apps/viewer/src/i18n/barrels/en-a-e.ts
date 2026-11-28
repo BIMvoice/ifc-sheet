@@ -82,6 +82,7 @@ import { dxfViewEn } from '../catalogues/dxf-view.en';
 import { dxfWorkingFileEn } from '../catalogues/dxf-working-file.en';
 import { dxfSiteEn } from '../catalogues/dxf-site.en';
 import { doorFlipButtonsEn } from '../catalogues/door-flip-buttons.en';
+import { earlierProjectEn } from '../catalogues/earlier-project.en';
 import { elementGraphicsEn } from '../catalogues/element-graphics.en';
 import { elementTypesEn } from '../catalogues/element-types.en';
 import { exportDialogEn } from '../catalogues/export-dialog.en';
@@ -171,6 +172,7 @@ export const enAE = {
   ...dxfWorkingFileEn,
   ...dxfSiteEn,
   ...doorFlipButtonsEn,
+  ...earlierProjectEn,
   ...elementGraphicsEn,
   ...elementTypesEn,
   ...exportDialogEn,

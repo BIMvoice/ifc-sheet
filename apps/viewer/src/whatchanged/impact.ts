@@ -32,6 +32,14 @@ function elementsOf(d: DraftEntity): string[] {
   return [...new Set(anchorsOf(d).map(({ anchor }) => anchor.g))];
 }
 
+/**
+ * The annotations naming an element that `has` does not know: those that lost their element, found without a reference
+ * to compare with (#922: the project of an earlier version continued on this one, whose model state was never recorded).
+ */
+export function annotationsWithoutElement(drafts: readonly DraftEntity[], has: (guid: string) => boolean): string[] {
+  return drafts.filter((d) => elementsOf(d).some((guid) => !has(guid))).map((d) => d.id);
+}
+
 export function annotationImpacts(drafts: readonly DraftEntity[], changes: readonly ModelChange[]): AnnotationImpact[] {
   const byGuid = new Map(changes.map((c) => [c.guid, c]));
   return drafts.flatMap((d): AnnotationImpact[] => elementsOf(d).flatMap((guid): AnnotationImpact[] => {

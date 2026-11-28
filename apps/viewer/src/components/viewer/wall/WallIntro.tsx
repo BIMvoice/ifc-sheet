@@ -15,6 +15,7 @@ import { paperOf } from '@/project/sheets';
 import type { ProjectSheet } from '@/project/types';
 import { useProjectStore } from '@/project/project-store';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+import { EarlierProjectOffer } from './EarlierProjectOffer';
 import { RecoveryOffer } from './RecoveryOffer';
 import { TemplateReport } from './SetTemplate';
 import { ReadinessList } from '../sheets/ReadinessList';
@@ -111,6 +112,7 @@ export function WallIntro({ modelName, extent, onHang, onOpenSheet }: { modelNam
       <div className="flex min-h-full flex-wrap items-center gap-x-16 gap-y-8 py-8">
       <div className="max-w-2xl">
         <RecoveryOffer onRestored={onHang} />
+        <EarlierProjectOffer onContinued={onHang} />
         <p className="mb-4 text-2xs font-medium uppercase tracking-widest text-sky-400">{t('wall.intro.read', { name: modelName })}</p>
         <h1 className="m-0 text-5xl font-light leading-tight text-white">
           {t('wall.intro.titleStart')}

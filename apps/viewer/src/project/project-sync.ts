@@ -28,6 +28,7 @@ import { restoreRasters } from './autosave-rasters';
 import { keepProjectForNewVersion, modelVersionSwapActive } from './model-version';
 import { startingMaterials } from './demo-project';
 import { batchHolds, useLoadBatch } from '@/hooks/ingest/load-batch';
+import { forgetEarlierProject, noteLoadedIdentity, offerEarlierProject } from './earlier-project-store';
 
 interface StoreySource {
   spatialHierarchy?: { byStorey: ReadonlyMap<number, unknown>; storeyElevations: ReadonlyMap<number, number> } | null;
@@ -48,7 +49,8 @@ export function modelRef(model: Pick<FederatedModel, 'id' | 'name' | 'sourceCont
   return { key: model.sourceContentHash ?? model.name, name: model.name };
 }
 
-function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
+/** The loaded models as the project refers to them, and their storeys. */
+export function loadedModels(): { refs: ProjectModelRef[]; storeys: StoreyInput[] } {
   const { models, ifcDataStore } = useViewerStore.getState();
   if (models.size === 0) {
     return ifcDataStore ? { refs: [{ key: 'legacy', name: 'Model' }], storeys: storeysOf(ifcDataStore) } : { refs: [], storeys: [] };
@@ -88,6 +90,7 @@ export function useProjectSync(): void {
         if (slot && !readOnlySlot) markSessionClosed(slot);
         slot = key;
         forgetRecoveryOffer();
+        forgetEarlierProject();
         const current = useProjectStore.getState();
         const overlaps = current.models.some((m) => refs.some((r) => r.key === m.key));
         // Models added to the models of the project in front (#863): once it holds a set, that project goes on,
@@ -98,6 +101,8 @@ export function useProjectSync(): void {
         readOnlySlot = plan.tooNew;
         // No marker on a slot this session does not write: a crash here leaves nothing of ours to offer.
         if (!plan.tooNew) markSessionOpen(key);
+        // Which models the slot is for, so the next version of them, under another hash, can find it (#922).
+        if (!plan.tooNew) noteLoadedIdentity(key);
         if (modelVersionSwapActive()) keepProjectForNewVersion(refs);
         else if (plan.restore) {
           loadProjectDocument(plan.restore.doc);
@@ -108,6 +113,8 @@ export function useProjectSync(): void {
           // The demo project starts with the materials its model is built of, hatched (`demo-project.ts`).
           const materials = startingMaterials(refs);
           if (materials) useProjectStore.setState({ materials });
+          // These models have no autosave of their own: one of an earlier version of them is offered, never put in front (#922).
+          if (!plan.recoverable && !plan.tooNew) offerEarlierProject(key, new Set(storeys.flatMap((s) => (s.globalId ? [s.globalId] : []))));
         }
         // The last session on these models died with work no project file holds: the intro and the drawer offer it back.
         if (plan.recoverable) offerRecovery({ key, doc: plan.recoverable.doc, savedAt: plan.recoverable.savedAt, modelName: refs.map((r) => r.name).join(', ') });
