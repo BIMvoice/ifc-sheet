@@ -25,7 +25,28 @@ export const textLines = (text: string): string[] => text.split('\n');
 
 export type FrameShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; radius: number }
-  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number };
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
+  /** A closed outline through its corners, in order (the hexagon, #924); the first corner is not repeated. */
+  | { kind: 'polygon'; points: { x: number; y: number }[] };
+
+/**
+ * How far a hexagon's left and right points stand out from its flat top and bottom, for a hexagon `h` high: its slanted
+ * sides at 60 degrees to the text, so a short tag's is regular (#924). The leader of a hexagon starts on these sides.
+ */
+export const hexagonInset = (h: number): number => h / (2 * Math.sqrt(3));
+
+/** The hexagon round a padded text box `outer`: regular round a short tag (`round`), else as high as the box, its points beyond the text's ends. */
+function hexagonOf(outer: { x0: number; y0: number; x1: number; y1: number }, round: boolean): { x: number; y: number }[] {
+  const w = outer.x1 - outer.x0, h = outer.y1 - outer.y0;
+  const cx = (outer.x0 + outer.x1) / 2, cy = (outer.y0 + outer.y1) / 2;
+  // Regular: the circumradius that keeps the box's corners inside its flat sides and its slanted ones.
+  const r = Math.max(h / Math.sqrt(3), w / 2 + hexagonInset(h));
+  const [half, k, top] = round ? [r / 2, r / 2, (Math.sqrt(3) / 2) * r] : [w / 2, hexagonInset(h), h / 2];
+  return [
+    { x: cx - half - k, y: cy }, { x: cx - half, y: cy - top }, { x: cx + half, y: cy - top },
+    { x: cx + half + k, y: cy }, { x: cx + half, y: cy + top }, { x: cx - half, y: cy + top },
+  ];
+}
 
 export interface TextBlock {
   lines: { text: string; y: number }[];
@@ -47,13 +68,20 @@ export function textBlock(text: string, height: number, frame?: TextFrame, face?
   const pad = PAD * height;
   const outer = { x0: box.x0 - pad, y0: -GLYPH_ASCENT * height - pad, x1: box.x1 + pad, y1: last + GLYPH_DESCENT * height + pad };
   const w = outer.x1 - outer.x0, h = outer.y1 - outer.y0;
-  if (frame === 'bubble') {
-    // A short tag is a circle round its text; a longer one an ellipse with the same proportions.
+  // A short tag is round (a circle, a regular hexagon); a longer bubble an ellipse with the same proportions, a longer hexagon as high as the text.
+  const round = w <= 3 * height;
+  if (frame === 'bubble' || frame === 'circle') {
+    // A circle stays a circle however long its text (#924).
     const cx = (outer.x0 + outer.x1) / 2, cy = (outer.y0 + outer.y1) / 2;
     const r = Math.hypot(w, h) / 2;
-    const round = w <= 3 * height;
-    const rx = round ? r : (w / 2) * Math.SQRT2, ry = round ? r : (h / 2) * Math.SQRT2;
+    const circle = round || frame === 'circle';
+    const rx = circle ? r : (w / 2) * Math.SQRT2, ry = circle ? r : (h / 2) * Math.SQRT2;
     return { lines: placed, box, frame: { kind: 'ellipse', cx, cy, rx, ry }, outer: { x0: cx - rx, y0: cy - ry, x1: cx + rx, y1: cy + ry } };
+  }
+  if (frame === 'hexagon') {
+    const points = hexagonOf(outer, round);
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    return { lines: placed, box, frame: { kind: 'polygon', points }, outer: { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) } };
   }
   return { lines: placed, box, frame: { kind: 'rect', x: outer.x0, y: outer.y0, w, h, radius: frame === 'rounded' ? Math.min(w, h) * 0.25 : 0 }, outer };
 }

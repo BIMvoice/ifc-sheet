@@ -1,6 +1,9 @@
 ATTRIBUTE_FIELDS: value
 AttributeField: type (type-only)
+ClassFrame: type (type-only)
+FRAMED_CLASSES: value
 FieldRef: type (type-only)
+FramedClass: type (type-only)
 LABEL_CLEAR_MM: value
 LABEL_GAP_MAX_MM: value
 LABEL_GAP_MM: value
@@ -11,7 +14,9 @@ TemplateField: type (type-only)
 ViewElement: type (type-only)
 fieldPath: value
 formatValue: value
+framedClassOf: value
 growRect: value
+labelFrameOf: value
 labelTemplateFields: value
 layoutElementOf: value
 layoutLabels: value

@@ -26,6 +26,7 @@ const ELLIPSE_STEPS = 48;
 
 /** The outline of a frame shape, in the text's own frame (x along the text, y down the page), as a closed run of points. */
 export function frameOutline(shape: FrameShape): Pt[] {
+  if (shape.kind === 'polygon') return [...shape.points, shape.points[0]];
   if (shape.kind === 'ellipse') {
     const ring = Array.from({ length: ELLIPSE_STEPS }, (_, i) => {
       const t = (2 * Math.PI * i) / ELLIPSE_STEPS;

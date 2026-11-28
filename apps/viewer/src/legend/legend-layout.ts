@@ -249,7 +249,9 @@ function annotationSwatch(out: LegendPrim[], type: AnnotationType, b: Box, ctx: 
     case 'label': {
       const frame = type.label?.frame;
       const [cx, hw, hh] = [x + w * 0.5, Math.min(w * 0.3, 7), Math.min(h * 0.38, 2.6)];
-      if (frame === 'bubble') out.push({ kind: 'path', pts: Array.from({ length: 24 }, (_, i) => ({ x: cx + hw * 1.2 * Math.cos((i / 24) * Math.PI * 2), y: midY + hh * 1.2 * Math.sin((i / 24) * Math.PI * 2) })), closed: true, w: 0.18, color: INK });
+      if (frame === 'circle') out.push({ kind: 'path', pts: Array.from({ length: 24 }, (_, i) => ({ x: cx + hh * 1.3 * Math.cos((i / 24) * Math.PI * 2), y: midY + hh * 1.3 * Math.sin((i / 24) * Math.PI * 2) })), closed: true, w: 0.18, color: INK });
+      else if (frame === 'hexagon') out.push({ kind: 'path', pts: [{ x: cx - hw - hh * 0.58, y: midY }, { x: cx - hw, y: midY - hh }, { x: cx + hw, y: midY - hh }, { x: cx + hw + hh * 0.58, y: midY }, { x: cx + hw, y: midY + hh }, { x: cx - hw, y: midY + hh }], closed: true, w: 0.18, color: INK });
+      else if (frame === 'bubble') out.push({ kind: 'path', pts: Array.from({ length: 24 }, (_, i) => ({ x: cx + hw * 1.2 * Math.cos((i / 24) * Math.PI * 2), y: midY + hh * 1.2 * Math.sin((i / 24) * Math.PI * 2) })), closed: true, w: 0.18, color: INK });
       else if (frame) out.push({ kind: 'path', pts: [{ x: cx - hw, y: midY - hh }, { x: cx + hw, y: midY - hh }, { x: cx + hw, y: midY + hh }, { x: cx - hw, y: midY + hh }], closed: true, w: 0.18, color: INK });
       text(cx, midY + small * 0.35, ctx.labels.sampleText, 'middle');
       break;

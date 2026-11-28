@@ -12,7 +12,8 @@
 import { useMemo, useRef } from 'react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import type { LabelSpec } from '@/catalogue/types';
-import { TEXT_FRAMES } from '@/drafting/text-block';
+import { TEXT_FRAMES, asTextFrame } from '@/drafting/text-block';
+import { FRAMED_CLASSES, type FramedClass } from '@bimvoice/ifcsheet';
 import { listFields } from '@/labels/label-fields';
 import { DEFAULT_LEADER, LABEL_GAP_MAX_MM, LABEL_GAP_MM, LEADER_ENDS, LEADER_MODES, type LeaderEnd, type LeaderMode } from '@bimvoice/ifcsheet';
 import { labelElementOf } from '@/labels/label-element';
@@ -28,6 +29,15 @@ function gapOf(typed: string, was: number | undefined): number | undefined {
   if (typed.trim() === '' || !Number.isFinite(n)) return was;
   const gap = Math.min(LABEL_GAP_MAX_MM, Math.max(0, n));
   return gap === LABEL_GAP_MM ? undefined : gap;
+}
+
+/** `label` with a door's or a window's own frame set to `chosen` ('' clears it); a label left with no class frame stores none. */
+function withClassFrame(label: LabelSpec, c: FramedClass, chosen: string): LabelSpec {
+  const { classFrames: was, ...rest } = label;
+  const { [c]: _old, ...others } = was ?? {};
+  const frame = chosen === 'none' ? 'none' : asTextFrame(chosen);
+  const next: NonNullable<LabelSpec['classFrames']> = frame ? { ...others, [c]: frame } : others;
+  return Object.keys(next).length ? { ...rest, classFrames: next } : rest;
 }
 
 export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChange: (next: LabelSpec) => void }) {
@@ -63,6 +73,17 @@ export function LabelTypeFields({ label, onChange }: { label: LabelSpec; onChang
           {TEXT_FRAMES.map((f) => <option key={f} value={f}>{t(`label.frame.${f}` as TranslationKey)}</option>)}
         </select>
       </div>
+      {/* A door's and a window's own frame (#924): absent, the frame above, so a type that never chose draws what it drew. */}
+      {FRAMED_CLASSES.map((c) => (
+        <div key={c} className="flex min-h-8 items-center justify-between gap-3">
+          <span className="text-zinc-500" title={t('label.classFrame.hint')}>{t(`label.classFrame.${c}`)}</span>
+          <select aria-label={t(`label.classFrame.${c}`)} title={t('label.classFrame.hint')} className={INPUT} value={label.classFrames?.[c] ?? ''} onChange={(e) => onChange(withClassFrame(label, c, e.target.value))}>
+            <option value="">{t('label.classFrame.same')}</option>
+            <option value="none">{t('label.frame.none')}</option>
+            {TEXT_FRAMES.map((f) => <option key={f} value={f}>{t(`label.frame.${f}` as TranslationKey)}</option>)}
+          </select>
+        </div>
+      ))}
       <div className="flex min-h-8 items-center justify-between gap-3">
         <span className="text-zinc-500">{t('label.leader')}</span>
         <select aria-label={t('label.leader')} className={INPUT} value={label.leader ?? DEFAULT_LEADER} onChange={(e) => onChange({ ...label, leader: e.target.value as LeaderMode })}>

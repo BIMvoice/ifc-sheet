@@ -17,8 +17,8 @@
  * An arc runs counter-clockwise from `start` to `end`.
  */
 
-/** The outlines a text may have, as drawing practice has it; none is the absence of the field. */
-export const TEXT_FRAMES = ['box', 'rounded', 'bubble'] as const;
+/** The outlines a text may have, as drawing practice has it; none is the absence of the field. A circle and a hexagon are the door and the window tag of many offices (#924). */
+export const TEXT_FRAMES = ['box', 'rounded', 'bubble', 'circle', 'hexagon'] as const;
 /** The outline around a text, as drawing practice has it; none is the absence of the field. */
 export type TextFrame = (typeof TEXT_FRAMES)[number];
 

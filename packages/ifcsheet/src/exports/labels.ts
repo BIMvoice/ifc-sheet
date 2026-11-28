@@ -10,6 +10,8 @@ export {
 export { RectIndex } from '../labels/rect-index.js';
 export { LABEL_CLEAR_MM, LABEL_GAP_MAX_MM, LABEL_GAP_MM, layoutElementOf, layoutLabels, type LayoutElement } from '../labels/label-layout.js';
 export { readLabelSpec } from '../labels/label-spec-read.js';
+export { framedClassOf, labelFrameOf } from '../labels/label-frame.js';
+export { FRAMED_CLASSES, type ClassFrame, type FramedClass } from '../annotation-type.js';
 export {
   ATTRIBUTE_FIELDS, fieldPath, parseFieldRef, parseTemplate, templateFields as labelTemplateFields,
   type AttributeField, type FieldRef, type ParsedTemplate, type TemplateField,
