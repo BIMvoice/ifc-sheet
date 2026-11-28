@@ -25,8 +25,8 @@ describe('the project drawer sections', () => {
     assert.deepEqual(places.filter((p, i) => places.indexOf(p) !== i), []);
   });
 
-  it('keeps the drawer as it was: the library and comments above the list, then the list top to bottom', () => {
-    assert.deepEqual(sectionsOf('top').map((s) => s.id), ['library', 'comments']);
+  it('keeps the drawer as it was: Reload the IFC model (#922), the library and comments above the list, then the list top to bottom', () => {
+    assert.deepEqual(sectionsOf('top').map((s) => s.id), ['reload-model', 'library', 'comments']);
     assert.deepEqual(sectionsOf('body').map((s) => s.id), [
       'sheets', 'standards', 'opening-lines', 'permit-pack', 'pac', 'norway', 'germany', 'readiness', 'numbering', 'units', 'title-block', 'tag-fields', 'materials', 'classification', 'view-templates', 'drawings', 'schedules', 'legends',
     ]);

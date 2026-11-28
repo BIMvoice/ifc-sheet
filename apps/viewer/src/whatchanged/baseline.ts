@@ -20,6 +20,8 @@ export interface WhatChangedResult {
   unread: number;
   /** Revision clouds drawn. */
   clouds: number;
+  /** Annotations, in any view, whose element is no longer in the model (#922); absent: none. */
+  lost?: number;
 }
 
 interface WhatChangedState {

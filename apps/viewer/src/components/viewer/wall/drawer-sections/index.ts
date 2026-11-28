@@ -21,6 +21,7 @@ import { openingLinesSection } from './opening-lines';
 import { pacSection } from './pac';
 import { permitPackSection } from './permit-pack';
 import { readinessSection } from './readiness';
+import { reloadModelSection } from './reload-model';
 import { schedulesSection } from './schedules';
 import { sheetsSection } from './sheets';
 import { standardsSection } from './standards';
@@ -44,6 +45,7 @@ export const DRAWER_SECTIONS: readonly DrawerSection[] = [
   pacSection,
   permitPackSection,
   readinessSection,
+  reloadModelSection,
   schedulesSection,
   sheetsSection,
   standardsSection,

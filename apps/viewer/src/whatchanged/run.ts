@@ -136,7 +136,9 @@ export async function runWhatChanged(mode: Mode, say: (text: string) => void, re
   const clouds = cloudsFor(changes, bands, latestRevisionId(useProjectStore.getState()));
   const old = new Set(useProjectStore.getState().drafts.filter(isCloud).map((d) => d.id));
   editDrafts({ remove: old, add: clouds });
-  setResult({ changed: changes.length, sheets: report, unread: unread.length, clouds: clouds.length });
+  // Annotations whose element is gone are kept, and counted wherever they are drawn, on a sheet or not (#922).
+  const lost = new Set(annotationImpacts(drafts.filter((d) => !isCloud(d)), changes).filter((i) => i.how === 'lost').map((i) => i.draftId)).size;
+  setResult({ changed: changes.length, sheets: report, unread: unread.length, clouds: clouds.length, lost });
   say(t('clouds', { count: clouds.length }));
   if (unread.length > 0) say(t('unread', { count: unread.length }));
 }
