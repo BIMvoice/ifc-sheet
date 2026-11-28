@@ -77,7 +77,7 @@ describe('a stored frame', () => {
   it('is absent in an old project and refused when it names no frame', () => {
     const d = draft();
     assert.ok(d.shape.type === 'text' && !('frame' in d.shape));
-    assert.throws(() => draft('hexagon'), /frame/);
+    assert.throws(() => draft('star'), /frame/);
     assert.equal(asTextFrame('bubble'), 'bubble');
     assert.equal(asTextFrame('none'), undefined);
   });

@@ -7,7 +7,7 @@
  * malformed entry fails with its path, like the rest of `project-file.ts`.
  */
 
-import { asLeaderEnd, asTextFrame, type AnnotationShape, type DraftEntity, type DraftLayer, type LevelRef, type DraftParamValue, type DraftShape, type EntityShape, type Pt } from './draft-types.js';
+import { TEXT_FRAMES, asLeaderEnd, asTextFrame, type AnnotationShape, type DraftEntity, type DraftLayer, type LevelRef, type DraftParamValue, type DraftShape, type EntityShape, type Pt } from './draft-types.js';
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -49,7 +49,7 @@ function readAnnotation(v: Json, path: string): AnnotationShape | null {
       if (!isString(v.text)) fail(`${path}.text`, 'must be a string');
       {
       const frame = asTextFrame(v.frame);
-      if (v.frame !== undefined && !frame) fail(`${path}.frame`, 'must be box, rounded or bubble');
+      if (v.frame !== undefined && !frame) fail(`${path}.frame`, `must be ${TEXT_FRAMES.slice(0, -1).join(', ')} or ${TEXT_FRAMES[TEXT_FRAMES.length - 1]}`);
       return { type: 'text', p: pt('p'), text: v.text, height: readHeight(v, path), rotation: isNumber(v.rotation) ? v.rotation : 0, ...(frame ? { frame } : {}), ...(isObject(v.leader) ? { leader: readPt(v.leader, `${path}.leader`) } : {}), ...readLeaderEnd(v, path) };
     }
     case 'leader':

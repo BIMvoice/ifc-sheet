@@ -16,6 +16,12 @@ export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 export const TAG_FIELDS = ['mark', 'name', 'typeName', 'class', 'classification', 'classificationTitle', 'custom'] as const;
 export type TagFieldName = (typeof TAG_FIELDS)[number];
 
+/** The IFC classes a label type may frame on their own (#924): many offices ring a door's mark and put a window's in a hexagon. */
+export const FRAMED_CLASSES = ['IfcDoor', 'IfcWindow'] as const;
+export type FramedClass = (typeof FRAMED_CLASSES)[number];
+/** A class's own frame: one of the frames, or none where the type has one. */
+export type ClassFrame = TextFrame | 'none';
+
 /**
  * A parametric label: `template` is text with `{field}` placeholders read from
  * the labelled element (`labels/label-template.ts`), `frame` an outline round
@@ -24,6 +30,8 @@ export type TagFieldName = (typeof TAG_FIELDS)[number];
 export interface LabelSpec {
   template: string;
   frame?: TextFrame;
+  /** The frame of the labels of a door or a window, in place of `frame` (#924). Absent, or a class absent: `frame`. */
+  classFrames?: Partial<Record<FramedClass, ClassFrame>>;
   missing: MissingMode;
   /** Whether the label is joined to its element by a leader: never, once displaced, or always. Absent: once displaced. */
   leader?: LeaderMode;

@@ -148,7 +148,7 @@ const drafts: DraftEntity[] = SHAPES.map((shape, i) => ({
 const annotationType: Required<AnnotationType> = {
   id: 'at1', name: 'Grid axis', tool: 'axis', textStyle: 'big', dimStyle: 'arch', layer: 'L-pen',
   axis: { bubble: 'square', ends: 'start', size: 0.8, lineType: 'dashed' }, hatch: { pattern: 'ANSI31', scale: 2, angle: 45 }, tagField: 'class',
-  label: { template: 'Fire {Pset_WallCommon.FireRating}\n{Qto_WallBaseQuantities.Length:0.00 m|n/a}', frame: 'rounded', missing: 'field', leader: 'always', leaderEnd: 'dot', gap: 4 },
+  label: { template: 'Fire {Pset_WallCommon.FireRating}\n{Qto_WallBaseQuantities.Length:0.00 m|n/a}', frame: 'rounded', classFrames: { IfcDoor: 'circle', IfcWindow: 'none' }, missing: 'field', leader: 'always', leaderEnd: 'dot', gap: 4 },
 };
 const symbols: Required<DraftSymbol>[] = [
   { id: 'sym-paper', name: 'Mark', unit: 'paper', shapes: [{ type: 'circle', c: pt(0, 0), r: 4 }, { type: 'text', p: pt(0, 1), text: 'A', height: 2.5, rotation: 0.3 }, { type: 'line', a: pt(0, 0), b: pt(5, 0) }] },

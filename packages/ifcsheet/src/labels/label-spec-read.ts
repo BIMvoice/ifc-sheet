@@ -11,6 +11,7 @@
 import { DEFAULT_LABEL, type AnnotationType, type LabelSpec } from '../annotation-type.js';
 import { asLeaderEnd, asTextFrame } from '../draft-types.js';
 import { TAGALL_TYPES, upgradeTagAllTypes } from '../tagall/types.js';
+import { readClassFrames } from './label-frame.js';
 import { asLabelGap } from './label-layout.js';
 import { asLeaderMode } from './label-leader.js';
 import { MISSING_MODES, type MissingMode } from './label-resolve.js';
@@ -22,12 +23,13 @@ const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null 
 export function readLabelSpec(v: unknown): LabelSpec | undefined {
   if (!isObject(v) || typeof v.template !== 'string') return undefined;
   const frame = asTextFrame(v.frame);
+  const classFrames = readClassFrames(v.classFrames);
   const leader = asLeaderMode(v.leader);
   const leaderEnd = asLeaderEnd(v.leaderEnd);
   const gap = asLabelGap(v.gap);
   const missing = (MISSING_MODES as readonly unknown[]).includes(v.missing) ? (v.missing as MissingMode) : DEFAULT_LABEL.missing;
   return {
-    template: v.template, missing, ...(frame ? { frame } : {}), ...(leader ? { leader } : {}),
+    template: v.template, missing, ...(frame ? { frame } : {}), ...(classFrames ? { classFrames } : {}), ...(leader ? { leader } : {}),
     ...(leaderEnd && leaderEnd !== 'arrow' ? { leaderEnd } : {}), ...(gap !== undefined ? { gap } : {}),
   };
 }

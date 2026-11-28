@@ -317,6 +317,15 @@ export function svgToDxf(svg: SVGSVGElement, h: number, comment: string, pattern
       emit(el, [{ pts: [{ x, y }, { x: x + w, y }, { x: x + w, y: y + hh }, { x, y: y + hh }], closed: true }]);
       continue;
     }
+    if (el instanceof SVGPolygonElement) {
+      // Straight sides: its own corners, as they are (a hexagon tag frame, #924), not samples that cut them.
+      const n = (el.getAttribute('points') ?? '').trim().split(/[\s,]+/).map(Number);
+      const pts = Array.from({ length: Math.floor(n.length / 2) }, (_, i) => ({ x: n[2 * i], y: n[2 * i + 1] }));
+      if (pts.length >= 2 && pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+        emit(el, [{ pts, closed: true }]);
+        continue;
+      }
+    }
     const d = el instanceof SVGPathElement ? el.getAttribute('d') ?? '' : '';
     if (el instanceof SVGPathElement && STRAIGHT.test(d)) emit(el, straightSubpaths(d));
     else if (el instanceof SVGPathElement) emit(el, sampledSubpaths(el, d));

@@ -17,6 +17,7 @@ import { makeDraft } from '../make-draft.js';
 import type { SheetLocale } from '../names.js';
 import { textBlock } from '../text-block.js';
 import { withLeaderOf, type WidthOf } from './label-attach.js';
+import { labelFrameOf } from './label-frame.js';
 import { resolveWithExtras, type LabelExtras } from './label-extras.js';
 import { ringToRef } from './label-leader.js';
 import { centredAnchor } from './label-place.js';
@@ -61,7 +62,9 @@ export function labelDraft(env: LabelEnv, type: AnnotationType, guid: string, ce
   const spec = type.label;
   const text = labelText(env, type, guid, at.locale, extras);
   if (!spec || text === null) return null;
-  const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, spec.frame, env.up, env.widthOf), text, height: at.textHeight, rotation: 0, ...(spec.frame ? { frame: spec.frame } : {}), ...storedLeaderEnd(spec.leaderEnd) };
+  // A door's or a window's own frame where the type gives one (#924); `labelText` found the element.
+  const frame = labelFrameOf(spec, () => env.read(guid)?.className() ?? '');
+  const plain = { type: 'text' as const, p: centredAnchor(centre, text, at.textHeight, frame, env.up, env.widthOf), text, height: at.textHeight, rotation: 0, ...(frame ? { frame } : {}), ...storedLeaderEnd(spec.leaderEnd) };
   const shape = withLeaderOf(plain, ring ?? null, spec.leader, at.paperUnit, env.up, env.widthOf);
   const styled = env.styled(at.viewId, shape, { textStyle: at.textStyle, dimStyle: at.dimStyle });
   return makeDraft(shape, { id: env.newId(), viewId: at.viewId, layerId: at.layerId, params: { ...styled, labelOf: guid, atype: type.id, ...extras, ...(ring ? { labelRef: ringToRef(ring) } : {}) } });
@@ -70,7 +73,8 @@ export function labelDraft(env: LabelEnv, type: AnnotationType, guid: string, ce
 /** The size a label of `type` for `guid` fills; null as for `labelDraft`. */
 export function labelSize(env: LabelEnv, type: AnnotationType, guid: string, textHeight: number, locale: SheetLocale, extras: LabelExtras = {}): { w: number; h: number } | null {
   const text = labelText(env, type, guid, locale, extras);
-  if (text === null) return null;
-  const { outer } = textBlock(text, textHeight, type.label?.frame, undefined, env.widthOf);
+  if (text === null || !type.label) return null;
+  const frame = labelFrameOf(type.label, () => env.read(guid)?.className() ?? '');
+  const { outer } = textBlock(text, textHeight, frame, undefined, env.widthOf);
   return { w: outer.x1 - outer.x0, h: outer.y1 - outer.y0 };
 }

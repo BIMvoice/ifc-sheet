@@ -18,7 +18,7 @@ describe('label annotation type', () => {
     assert.deepEqual(t.label, { template: '{Name}', frame: 'box', missing: 'empty' });
   });
   it('defaults the placeholder and drops an unknown frame', () => {
-    const t = readAnnotationType({ ...base, label: { template: 'x', frame: 'hexagon', missing: 'sometimes' } }, '/t');
+    const t = readAnnotationType({ ...base, label: { template: 'x', frame: 'star', missing: 'sometimes' } }, '/t');
     assert.deepEqual(t.label, { template: 'x', missing: DEFAULT_LABEL.missing });
   });
   it('reads the leader\'s end and drops an unknown one (#842)', () => {

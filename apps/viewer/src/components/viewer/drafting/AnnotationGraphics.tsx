@@ -95,6 +95,7 @@ function Label({ at, text, px, deg, color, style, anchor = 'middle', shift = 0, 
       {mask ? <rect x={at.x - (anchor === 'middle' ? width / 2 : 0) - size * 0.2} y={at.y - size * 0.85} width={width + size * 0.4} height={size * 1.1} fill="#fff" /> : null}
       {shape?.kind === 'rect' ? <rect x={at.x + shape.x} y={at.y + shape.y} width={shape.w} height={shape.h} rx={shape.radius} {...stroke} /> : null}
       {shape?.kind === 'ellipse' ? <ellipse cx={at.x + shape.cx} cy={at.y + shape.cy} rx={shape.rx} ry={shape.ry} {...stroke} /> : null}
+      {shape?.kind === 'polygon' ? <polygon points={shape.points.map((p) => `${(at.x + p.x).toFixed(3)},${(at.y + p.y).toFixed(3)}`).join(' ')} {...stroke} /> : null}
       {block.lines.map((line, i) => (
         <text
           key={i}

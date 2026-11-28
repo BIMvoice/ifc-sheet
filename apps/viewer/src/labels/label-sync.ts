@@ -24,7 +24,7 @@ import { useViewerStore } from '@/store';
 import { refreshCeilingTags } from '@/rcp/ceiling-tag-sync';
 import { settleLeader } from './label-attach';
 import { labelElementByGlobalId } from './label-element';
-import { extrasOf, resolveWithExtras, withLeaderEnd } from '@bimvoice/ifcsheet';
+import { extrasOf, labelFrameOf, resolveWithExtras, withLeaderEnd } from '@bimvoice/ifcsheet';
 import type { LabelElement } from '@bimvoice/ifcsheet';
 import { parseTemplate, type ParsedTemplate } from '@bimvoice/ifcsheet';
 import type { SheetLocale } from '@bimvoice/ifcsheet/names';
@@ -55,9 +55,11 @@ export function settleLabels(drafts: DraftEntity[], types: readonly AnnotationTy
     if (el) {
       // A text the person wrote over the label (#542) stays; the frame still follows the type.
       const text = tagOverrideOf(d) ?? resolveWithExtras(templateOf(spec.template), el, locale, spec.missing, extrasOf(d.params));
-      if (text !== d.shape.text || spec.frame !== d.shape.frame) {
+      // A door's or a window's own frame where the type gives one (#924).
+      const frame = labelFrameOf(spec, () => el.className());
+      if (text !== d.shape.text || frame !== d.shape.frame) {
         const { frame: _old, ...rest } = d.shape;
-        out = { ...d, shape: { ...rest, text, ...(spec.frame ? { frame: spec.frame } : {}) } };
+        out = { ...d, shape: { ...rest, text, ...(frame ? { frame } : {}) } };
       }
     }
     // The end of its leader follows the type too (#842), whether or not the element is loaded.
