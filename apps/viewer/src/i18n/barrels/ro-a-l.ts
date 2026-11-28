@@ -36,6 +36,7 @@ import { dxfViewRo } from '../catalogues/dxf-view.ro';
 import { dxfWorkingFileRo } from '../catalogues/dxf-working-file.ro';
 import { dxfSiteRo } from '../catalogues/dxf-site.ro';
 import { doorFlipButtonsRo } from '../catalogues/door-flip-buttons.ro';
+import { earlierProjectRo } from '../catalogues/earlier-project.ro';
 import { elementGraphicsRo } from '../catalogues/element-graphics.ro';
 import { joineryDraftRo } from '../catalogues/joinery-draft.ro';
 import { exportChangesReviewRo } from '../catalogues/export-changes-review.ro';
@@ -105,6 +106,7 @@ export const roAL = {
   ...dxfWorkingFileRo,
   ...dxfSiteRo,
   ...doorFlipButtonsRo,
+  ...earlierProjectRo,
   ...elementGraphicsRo,
   ...joineryDraftRo,
   ...exportChangesReviewRo,
