@@ -15,7 +15,7 @@ import { applyAnnotationPreset, missingModel, runAnnotateSet, stopAnnotateSet, s
 import { useProjectStore } from '@/project/project-store';
 import { useViewerStore } from '@/store';
 import { closeFrontPanel, setPanel, useWallNav } from '../wall/wall-nav';
-import { WALL_PILL } from '../wall/wall-type';
+import { HEADER_PILL, WALL_PILL } from '../wall/wall-type';
 import { AnnotateProblem } from './AnnotateProblem';
 import { AnnotateSummary } from './AnnotateSummary';
 import { LabelPresets } from './LabelPresets';
@@ -108,7 +108,7 @@ export function AnnotateSet() {
   const open = useWallNav((s) => s.panel === 'annotate');
   return (
     <>
-      <button type="button" aria-pressed={open} className={WALL_PILL} onClick={() => setPanel(open ? null : 'annotate')}>{t('wall.annotate.open')}</button>
+      <button type="button" aria-pressed={open} className={HEADER_PILL} onClick={() => setPanel(open ? null : 'annotate')}>{t('wall.annotate.open')}</button>
       {open ? <AnnotatePanel /> : null}
     </>
   );

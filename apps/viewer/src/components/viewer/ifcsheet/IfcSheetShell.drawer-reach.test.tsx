@@ -40,7 +40,7 @@ afterEach(() => {
 
 const header = (ui: HTMLElement): HTMLElement => ui.querySelector<HTMLElement>('[data-ifcsheet-shell] header')!;
 const button = (root: ParentNode, text: string): HTMLButtonElement => {
-  const found = [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+  const found = [...root.querySelectorAll('button')].find((b) => (b.textContent?.trim() || b.getAttribute('aria-label')) === text);
   assert.ok(found, `a button "${text}" (buttons: ${[...root.querySelectorAll('button')].map((b) => b.textContent?.trim()).join(' | ')})`);
   return found;
 };
@@ -68,6 +68,8 @@ describe('the schedules and the title block, one click from the top bar (#923)',
     act(() => click(button(header(ui), 'Project')));
     assert.equal(panel(ui, 'Project'), null);
 
+    // An icon in the bar, so the bar keeps one row at 1280 px: named for a screen reader and in its tooltip.
+    for (const name of ['Schedules', 'Title block']) assert.equal(button(header(ui), name).getAttribute('title'), name);
     act(() => click(button(header(ui), 'Schedules')));
     const opened = panel(ui, 'Schedules');
     assert.ok(opened, 'the Schedules panel opens');
