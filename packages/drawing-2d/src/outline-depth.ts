@@ -37,6 +37,8 @@ import type { Bounds2D, DrawingLine, MeshOutline2D, SectionPlaneConfig } from '.
 import { outlineToProjectionLines, type ProjectionBandDepths } from './projection-bands.js';
 import { EDGE, FaceGrid, SPAN, STRIDE, clipToEdge, clipToFace, projectMesh } from './face-grid.js';
 import { localDepth, type LocalSurface } from './local-surface.js';
+import { getVertex } from './raster-core.js';
+import { signedDepth } from './projection-bands.js';
 
 /** Resolution (pixels on the longer side) of the generator's hidden-line raster. */
 export const HIDDEN_LINE_RESOLUTION = 1024;
@@ -61,6 +63,8 @@ interface OutlineSource {
   built?: { faces: Float64Array; grid: FaceGrid; reach: number };
   /** For a line along a curved surface: the faces that form it, the only ones its depth is read from. */
   near?: LocalSurface;
+  /** The view depth of the mesh's nearest vertex, worked out on first use (`nearestDepth`). */
+  nearest?: number;
 }
 
 /** Lines `outlineLinesWithDepth` produced, mapped to the mesh their depth is read from. */
@@ -110,7 +114,11 @@ export function rasterPixelSize(bounds: Bounds2D, resolution = HIDDEN_LINE_RESOL
  * and so does a curved line that `coveredByItself` says its own element
  * nowhere covers (`HiddenLineClassifier.coveredByItself`).
  */
-export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, coveredByItself?: (line: DrawingLine) => boolean, tick?: () => void): DrawingLine[] {
+export function refineOutlineDepths(
+  lines: DrawingLine[], bounds: Bounds2D, coveredByItself?: (line: DrawingLine) => boolean, tick?: () => void,
+  /** Whether a line reads hidden behind other elements all along at any depth of `floor` or more (`HiddenLineClassifier.hiddenAtOrBehind`). */
+  hiddenAtOrBehind?: (line: DrawingLine, floor: number) => boolean,
+): DrawingLine[] {
   const reach = rasterPixelSize(bounds);
   if (!(reach > 0)) return lines;
   const out: DrawingLine[] = [];
@@ -118,6 +126,10 @@ export function refineOutlineDepths(lines: DrawingLine[], bounds: Bounds2D, cove
     tick?.();
     const source = sources.get(line);
     if (!source || (source.near && coveredByItself && !coveredByItself(line))) { out.push(line); continue; }
+    // No piece of the line can come nearer than its element's nearest vertex, nor than its own depth where no face
+    // meets it, nor than the cut: hidden behind other elements at that depth all along, it is hidden whatever depth its
+    // own surface gives it, and passes through to be classified hidden as it is (#863).
+    if (!source.near && hiddenAtOrBehind && hiddenAtOrBehind(line, Math.max(0, Math.min(line.depth, line.depthEnd ?? line.depth, nearestDepth(source))))) { out.push(line); continue; }
     const pieces = depthAlong(source, reach, line);
     const { start, end } = line.line;
     const at = (t: number) => (t === 0 ? start : t === 1 ? end : { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t });
@@ -330,6 +342,16 @@ function chordKeeps(points: Array<[number, number]>, i: number, j: number, toler
     if (tolerance === undefined ? chord > dk + CHORD_SLACK : Math.abs(chord - dk) > tolerance) return false;
   }
   return true;
+}
+
+/** The view depth of `source`'s nearest vertex: at or in front of the floor of every face `projectMesh` takes from it. */
+function nearestDepth(source: OutlineSource): number {
+  if (source.nearest !== undefined) return source.nearest;
+  const { positions, indices, origin } = source.mesh;
+  let nearest = Infinity;
+  for (let i = 0; i < indices.length; i++) nearest = Math.min(nearest, -signedDepth(getVertex(positions, indices[i], origin), source.plane));
+  source.nearest = nearest;
+  return nearest;
 }
 
 /** Project the mesh's faces once per source, nearest first (`projectMesh`). */

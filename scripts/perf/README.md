@@ -3664,3 +3664,28 @@ and cut faces hash the same as main on all four models in all runs. Lessons:
   does not bend still changes where it splits the line, and the classifier then
   samples the pieces differently. Keep every face's breakpoints.
 - The hash of every view per run caught that 6 cm draft; timing alone did not.
+
+## Whole-model elevations: lines hidden behind others skip their own depth (IfcSheet #863)
+
+A whole-model elevation spent most of its time in the hidden-line stage, and most of that in `refineOutlineDepths`
+(`depthAlong` and `facesOf`: the depth of each outline line along its own element's faces), for lines that end up
+hidden: on the skolebygg and ISSUE_098 elevations about 97% of all lines are hidden behind the facade. A line's
+refined depth is never nearer than its element's nearest vertex, its own depth or the cut, so a line whose every
+pixel in the raster is nearer than that, with no pixel of its own element beside one, reads hidden whatever depth it
+gets (`hiddenBehindOthers`, `hidden-line-own.ts`), and now passes through unrefined. Two more cuts in the same views:
+`clipMeshToHalfSpace` returns a mesh wholly on one side before building a corner object per triangle (every mesh is
+clipped twice, to its band and as an occluder), and the depth raster tests each row only near its triangle instead of
+the whole bounding box. Measured with `generate` over the default set's elevations and sections (built packages, Node,
+efficiency cores, interleaved, the machine loaded by other agents, so the spread is wide); numbers in PR #920. Every
+view's visible lines hash the same as base; hidden lines keep their number and length, a few split elsewhere along
+them (the FZK golden's HIDDEN pen hash, same paths and points). Lessons:
+
+- Ask which lines the output keeps before making a per-line step cheaper: the costliest step served lines the view
+  then drops. A lower bound on what the step can return, checked against the raster, decides most of them exactly.
+- `scripts/perf/probe.sh` cannot see drawing generation; time `Drawing2DGenerator.generate` per view and hash its
+  visible lines, its hidden lines sorted, and count both.
+- A raster that scans a triangle's bounding box costs the box, not the triangle: one mesh of long diagonal slivers the
+  size of #863's largest mesh (20,722 vertices) took 103 s in one call, without a tick. Walk the rows near the
+  triangle; the same per-pixel test keeps the same pixels.
+- Not reproduced: the user's 62 s silence. On our fixtures the longest stretch without a tick is under 3 s, also on
+  Holter (4.5 M vertices); the sliver mesh is the one measured way a single step outlasts the watchdog.

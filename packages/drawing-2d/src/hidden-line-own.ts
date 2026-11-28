@@ -70,6 +70,56 @@ export function ownSurfaceBeside(raster: DepthRaster, ix: number, iy: number, li
   return false;
 }
 
+/** Half a pixel, and a hair more for the rounding of where a sample falls in it. */
+const HALF_PIXEL = 0.5 + 1e-6;
+
+/**
+ * Whether `line` is hidden behind other elements all along, at any depth of `floor` or more: every pixel any point of
+ * it can be read in (`rasterPixel`) is inside the raster, nearer than `floor` by more than `depthBias`, and shows no
+ * pixel of its own element beside it (`ownSurfaceBeside`). Then every sample of any piece the line is split into, at
+ * any depth no nearer than `floor`, reads hidden, so its own surface's depth (`outline-depth.ts`) need not be read
+ * (#863: on a large elevation most outline lines are behind the facade, and reading that depth was most of the time).
+ * The pixels are those the segment passes through, each column's rows widened by a rounding margin, so a sample on a
+ * pixel edge is read in either pixel.
+ */
+export function hiddenBehindOthers(raster: DepthRaster, line: DrawingLine, floor: number, depthBias: number): boolean {
+  const { bounds, buffer, owners, gradX, gradY, width, height } = raster;
+  const owner = ownerKey(line.entityId, line.modelIndex ?? 0);
+  const { start, end } = line.line;
+  const sx = (width - 1) / (bounds.max.x - bounds.min.x), sy = (height - 1) / (bounds.max.y - bounds.min.y);
+  const x0 = (start.x - bounds.min.x) * sx, y0 = (start.y - bounds.min.y) * sy;
+  const x1 = (end.x - bounds.min.x) * sx, y1 = (end.y - bounds.min.y) * sy;
+  const margin = 1e-6;
+  if (!(Math.min(x0, x1) >= margin && Math.max(x0, x1) <= width - 1 - margin && Math.min(y0, y1) >= margin && Math.max(y0, y1) <= height - 1 - margin)) return false;
+  const level = floor - depthBias;
+  const cell = (ix: number, iy: number): boolean => {
+    // The classifier reads the covering surface at the sample, which is within half a pixel of the centre each way
+    // (`surfaceDepthAt`, #831): the farthest that surface comes in the pixel must still be nearer than the floor.
+    const i = iy * width + ix;
+    if (!(buffer[i] + HALF_PIXEL * (Math.abs(gradX[i]) + Math.abs(gradY[i])) < level)) return false;
+    for (let y = Math.max(0, iy - 1); y <= Math.min(height - 1, iy + 1); y++) {
+      for (let x = Math.max(0, ix - 1); x <= Math.min(width - 1, ix + 1); x++) if (owners[y * width + x] === owner) return false;
+    }
+    return true;
+  };
+  const clampX = (v: number) => Math.max(0, Math.min(width - 2, Math.floor(v)));
+  const clampY = (v: number) => Math.max(0, Math.min(height - 2, Math.floor(v)));
+  const xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  const dx = x1 - x0, dy = y1 - y0;
+  for (let cx = clampX(xa - margin), last = clampX(xb + margin); cx <= last; cx++) {
+    // The rows the segment takes within this column, widened by the margin.
+    let ya: number, yb: number;
+    if (Math.abs(dx) <= margin) { ya = Math.min(y0, y1); yb = Math.max(y0, y1); }
+    else {
+      const ta = Math.max(0, Math.min(1, (Math.max(xa, cx - margin) - x0) / dx));
+      const tb = Math.max(0, Math.min(1, (Math.min(xb, cx + 1 + margin) - x0) / dx));
+      ya = Math.min(y0 + dy * ta, y0 + dy * tb); yb = Math.max(y0 + dy * ta, y0 + dy * tb);
+    }
+    for (let cy = clampY(ya - margin), lastY = clampY(yb + margin); cy <= lastY; cy++) if (!cell(cx, cy)) return false;
+  }
+  return true;
+}
+
 /**
  * Whether one of `samples + 1` even samples along `line` is covered at its raw depth while its own element shows in
  * the pixel or one beside it. Only there can the depth of its own surface (`outline-depth.ts`) change what the line
