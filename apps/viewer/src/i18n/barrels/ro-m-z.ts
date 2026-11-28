@@ -33,6 +33,7 @@ import { scheduleExportRo } from '../catalogues/schedule-export.ro';
 import { scaleFieldRo } from '../catalogues/scale-field.ro';
 import { selectionBarRo } from '../catalogues/selection-bar.ro';
 import { selectionTurnRo } from '../catalogues/selection-turn.ro';
+import { setCoarseScaleRo } from '../catalogues/set-coarse-scale.ro';
 import { setTemplateRo } from '../catalogues/set-template.ro';
 import { settingsRo } from '../catalogues/settings.ro';
 import { sharedCommandsRo } from '../catalogues/shared-commands.ro';
@@ -124,6 +125,7 @@ export const roMZ = {
   ...selectionBarRo,
   ...selectionTurnRo,
   ...repeatToolRo,
+  ...setCoarseScaleRo,
   ...setTemplateRo,
   ...settingsRo,
   ...sharedCommandsRo,

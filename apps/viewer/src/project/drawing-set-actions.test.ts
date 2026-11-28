@@ -210,9 +210,15 @@ describe('ensureDrawingSet', () => {
   });
 
   it('says so when a group is larger than the largest paper at the smallest scale', () => {
-    const report = ensureDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 2500, y: 20, z: 2000 } });
+    // 25 km: larger than A0 even at 1:10000, the coarsest scale the set goes to (#927).
+    const report = ensureDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 25000, y: 20, z: 20000 } });
     assert.ok(report.notes.some((n) => n.key === 'draftSet.note.noFit' && n.params.kind === 'plans'));
     assert.deepEqual(new Set(state().sheets.filter((s) => s.number.startsWith('A-1')).map((s) => s.paper)), new Set(['A0']));
+  });
+
+  it('fits a site too large for A0 at 1:200 at a coarser scale, with no note that it does not fit (#927)', () => {
+    const report = ensureDrawingSet(null, { min: { x: 0, y: 0, z: 0 }, max: { x: 2500, y: 20, z: 2000 } });
+    assert.ok(!report.notes.some((n) => n.key === 'draftSet.note.noFit'));
   });
 
   it('everything it made survives save and open', () => {

@@ -68,9 +68,11 @@ describe('buildDrawingSet', () => {
     assert.equal(choosePaper([[{ w: 12, h: 10 }, { w: 12, h: 10 }]]).paper, 'A3');
   });
 
-  it('takes the largest paper and says when the drawings are still larger than it', () => {
-    assert.deepEqual(choosePaper([[{ w: 2500, h: 2000 }]]), { paper: 'A0', fits: false });
-    const huge: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 2500, y: 20, z: 2000 } };
+  it('takes the largest paper and says when the drawings are still larger than it at the coarsest scale', () => {
+    // 2.5 km x 2 km fits A0 at a scale coarser than 1:200; 25 km x 20 km does not fit it even at 1:10000.
+    assert.deepEqual(choosePaper([[{ w: 2500, h: 2000 }]]), { paper: 'A0', fits: true });
+    assert.deepEqual(choosePaper([[{ w: 25_000, h: 20_000 }]]), { paper: 'A0', fits: false });
+    const huge: ModelExtent = { min: { x: 0, y: 0, z: 0 }, max: { x: 25_000, y: 20, z: 20_000 } };
     assert.deepEqual(groupsThatDoNotFit(views, huge), ['plans', 'elevations', 'sections'].filter((g) => g !== 'sections' || views.some((v) => v.kind === 'section')));
     assert.deepEqual(groupsThatDoNotFit(views, HOUSE), []);
   });
@@ -104,7 +106,9 @@ describe('fittingScale', () => {
   it('steps down to 1:100 and 1:200 as the building grows', () => {
     assert.equal(fittingScale([{ w: 10, h: 7 }, { w: 10, h: 7 }], area), 50);
     assert.equal(fittingScale([{ w: 22, h: 15 }, { w: 22, h: 15 }], area), 100);
-    assert.equal(fittingScale([{ w: 50, h: 30 }, { w: 50, h: 30 }], area), 200);
+    assert.equal(fittingScale([{ w: 45, h: 30 }, { w: 45, h: 30 }], area), 200);
+    // Two 50 m plans are 575 mm at 1:200, wider than the A2 area: the set goes on to 1:250, it does not stop at 1:200 and overrun.
+    assert.equal(fittingScale([{ w: 50, h: 30 }, { w: 50, h: 30 }], area), 250);
     assert.ok(area.w < PAPER_MM.A2.w);
   });
 });
