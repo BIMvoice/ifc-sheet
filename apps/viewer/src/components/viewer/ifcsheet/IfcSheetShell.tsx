@@ -66,6 +66,8 @@ export function IfcSheetShell() {
         {sheets.length > 0 ? <span className="hidden whitespace-nowrap text-xs text-sky-200/80 2xl:inline">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         {sheets.length > 0 ? (
           <>
+            <button type="button" aria-pressed={panel === 'schedules'} className={quiet} onClick={() => setPanel(panel === 'schedules' ? null : 'schedules')}>{t('wall.group.schedules')}</button>
+            <button type="button" aria-pressed={panel === 'title-block'} className={quiet} onClick={() => setPanel(panel === 'title-block' ? null : 'title-block')}>{t('wall.tb.title')}</button>
             <button type="button" aria-pressed={panel === 'missing'} className={quiet} onClick={() => setPanel(panel === 'missing' ? null : 'missing')}>{t('check.section')}</button>
             <button type="button" {...tourAnchor(TOUR_ANCHORS.wallIssue)} aria-pressed={panel === 'issue'} className={quiet} onClick={() => setPanel(panel === 'issue' ? null : 'issue')}>{t('issue.section')}</button>
           </>

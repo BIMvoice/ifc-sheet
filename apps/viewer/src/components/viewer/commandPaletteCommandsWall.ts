@@ -6,16 +6,17 @@
  * The palette's rows for the Wall: its actions on a stepped-in sheet (the rows
  * of the keymap, run through the same bus as the keys, with the key written
  * beside them) and, on IfcSheet's own face, the project's sheets by number and
- * name. Choosing a sheet steps into it.
+ * name, its schedules and its title block (#923). Choosing a sheet steps into it; the schedules and the title block
+ * open the same panels as the top bar.
  */
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceBetween, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceBetween, ArrowLeft, Download, Eye, FileText, History, Maximize, MessageSquare, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceBetween, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceBetween, ArrowLeft, ClipboardList, Download, Eye, FileText, History, Maximize, MessageSquare, PencilRuler, Plus, Printer, StepBack, StepForward } from 'lucide-react';
 import { isDocsEdition } from '@/edition';
 import { resolveEnglish } from '@/i18n/registry';
 import { WALL_KEY_COMMANDS, type WallKeyId } from '@/lib/commands/wall-key-commands';
 import type { ProjectSheet } from '@/project/types';
 import { availableWallCommands, runWallCommand } from './wall/wall-key-bus';
-import { stepInto } from './wall/wall-nav';
+import { setPanel, stepInto } from './wall/wall-nav';
 import type { Command } from './commandPaletteSearch';
 
 const ICONS: Record<WallKeyId, Command['icon']> = {
@@ -42,5 +43,12 @@ export function buildWallCommands(sheets: readonly ProjectSheet[], open: (sheetI
     id: `sheet:${s.id}`, label: `${s.number} ${s.name}`, runtimeSource: 'sheet', keywords: 'sheet drawing open',
     category: 'Sheets', icon: FileText, action: () => open(s.id),
   })) : [];
-  return [...rows, ...actions];
+  const panels = isDocsEdition() && sheets.length > 0 ? ([
+    ['schedules', 'wall.group.schedules', 'schedule table list', ClipboardList],
+    ['title-block', 'wall.tb.title', 'title block cartouche layout dxf svg', FileText],
+  ] as const).map(([panel, labelKey, keywords, icon]): Command => ({
+    id: `wall-panel:${panel}`, label: resolveEnglish(labelKey), labelKey,
+    runtimeSource: 'wall-action', keywords, category: 'Wall', icon, action: () => setPanel(panel),
+  })) : [];
+  return [...rows, ...panels, ...actions];
 }

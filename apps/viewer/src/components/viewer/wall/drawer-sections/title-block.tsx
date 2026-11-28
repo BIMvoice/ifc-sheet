@@ -7,12 +7,22 @@ import { TitleBlockForm } from '../TitleBlockForm';
 import { Collapsible } from './parts';
 import type { DrawerSection } from './types';
 
+/** The project's title block form, every sheet's: the drawer's section and the top bar's panel (#923) show the same. */
+export function TitleBlockBody() {
+  const { t } = useTranslation();
+  return (
+    <>
+      <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
+      <TitleBlockForm />
+    </>
+  );
+}
+
 function TitleBlock() {
   const { t } = useTranslation();
   return (
     <Collapsible title={t('wall.tb.title')}>
-      <p className="m-0 mt-2 text-xs leading-relaxed text-sky-200">{t('wall.tb.everySheet')}</p>
-      <TitleBlockForm />
+      <TitleBlockBody />
     </Collapsible>
   );
 }
