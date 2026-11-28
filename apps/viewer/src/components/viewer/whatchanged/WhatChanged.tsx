@@ -7,11 +7,11 @@
 import { lazy, Suspense } from 'react';
 import { useTranslation } from '@/i18n';
 import { closeFrontPanel, setPanel, useWallNav } from '../wall/wall-nav';
-import { WALL_PILL } from '../wall/wall-type';
+import { HEADER_PILL } from '../wall/wall-type';
 
 const Panel = lazy(() => import('./WhatChangedPanel').then((m) => ({ default: m.WhatChangedPanel })));
 
-const quiet = WALL_PILL;
+const quiet = HEADER_PILL;
 
 export function WhatChanged() {
   const { t } = useTranslation();

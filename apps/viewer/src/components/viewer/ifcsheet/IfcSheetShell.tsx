@@ -11,6 +11,7 @@
  */
 
 import { useEffect } from 'react';
+import { PanelBottom, Table2 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { IFCLITE_URL } from '@/lib/credits';
 import { STAR_URL } from '@/lib/star';
@@ -31,10 +32,11 @@ import { LanguagePicker } from './LanguagePicker';
 import { HelpMenu } from '@/onboarding/HelpMenu';
 import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { useIfcSheetTour } from './useIfcSheetTour';
-import { WALL_PILL } from '../wall/wall-type';
+import { HEADER_ICON_PILL, HEADER_PILL } from '../wall/wall-type';
 
-// Tighter than the Wall's pill: the header carries about fifteen of them and, measured at 1280 and 1400 px, they added up to more than the window, which put Feedback, Tour and Help out of reach. The model's name and the sheet count (information, not controls) show from 1536 px; below that they were squeezed to nothing anyway.
-const quiet = WALL_PILL.replace('px-3', 'px-1.5');
+// Tighter than the Wall's pill (`HEADER_PILL`): the header carries about fifteen of them and, measured at 1280 and 1400 px, they added up to more than the window, which put Feedback, Tour and Help out of reach. The model's name and the sheet count (information, not controls) show from 1536 px; below that they were squeezed to nothing anyway.
+const quiet = HEADER_PILL;
+const icon = HEADER_ICON_PILL;
 
 export function IfcSheetShell() {
   const { t } = useTranslation();
@@ -66,6 +68,9 @@ export function IfcSheetShell() {
         {sheets.length > 0 ? <span className="hidden whitespace-nowrap text-xs text-sky-200/80 2xl:inline">{t('wall.shell.sheetsViews', { sheets: sheets.length, views })}</span> : null}
         {sheets.length > 0 ? (
           <>
+            {/* The drawer's schedules and title block, one click away (#923): icons with their name as label and tooltip, so the bar stays one row at 1280 px. */}
+            <button type="button" aria-label={t('wall.group.schedules')} title={t('wall.group.schedules')} aria-pressed={panel === 'schedules'} className={icon} onClick={() => setPanel(panel === 'schedules' ? null : 'schedules')}><Table2 aria-hidden className="size-4" /></button>
+            <button type="button" aria-label={t('wall.tb.title')} title={t('wall.tb.title')} aria-pressed={panel === 'title-block'} className={icon} onClick={() => setPanel(panel === 'title-block' ? null : 'title-block')}><PanelBottom aria-hidden className="size-4" /></button>
             <button type="button" aria-pressed={panel === 'missing'} className={quiet} onClick={() => setPanel(panel === 'missing' ? null : 'missing')}>{t('check.section')}</button>
             <button type="button" {...tourAnchor(TOUR_ANCHORS.wallIssue)} aria-pressed={panel === 'issue'} className={quiet} onClick={() => setPanel(panel === 'issue' ? null : 'issue')}>{t('issue.section')}</button>
           </>

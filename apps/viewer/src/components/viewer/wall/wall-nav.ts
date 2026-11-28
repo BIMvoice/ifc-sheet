@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import { emitWallStepped } from '@/lib/tours/events';
 
-export type WallPanel = 'drawer' | 'missing' | 'issue' | 'changed' | 'annotate';
+export type WallPanel = 'drawer' | 'missing' | 'issue' | 'changed' | 'annotate' | 'schedules' | 'title-block';
 
 interface WallNav {
   /** The sheet stepped into, or null on the wall. */
@@ -22,7 +22,7 @@ interface WallNav {
   visit: number;
   /**
    * The ONE panel open on the right of the Wall, or null: the project drawer, what is missing from the set, issuing
-   * it, or what changed in the model. They share one place, so opening one replaces the one in front (#296).
+   * it, what changed in the model, or the drawer's schedules or title block opened from the top bar (#923). They share one place, so opening one replaces the one in front (#296).
    */
   panel: WallPanel | null;
   /** The split schedule whose parts are being reviewed element by element (#186), or null. */

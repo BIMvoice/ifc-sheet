@@ -29,7 +29,7 @@ import { WallIntro } from './WallIntro';
 import { WallStart } from './WallStart';
 import { WallBatch } from './WallBatch';
 import { ProjectDrawer } from './ProjectDrawer';
-import { IssuePanel, MissingPanel } from './SetPanels';
+import { IssuePanel, MissingPanel, SchedulesPanel, TitleBlockPanel } from './SetPanels';
 import { SubReportReview } from './SubReportReview';
 import { closeFrontPanel, setReview, stepInto, useWallNav } from './wall-nav';
 
@@ -121,6 +121,7 @@ export function WallView() {
       {panel === 'drawer' ? <ProjectDrawer extent={extent} onClose={closeFrontPanel} /> : null}
       {review ? <SubReportReview scheduleId={review} onClose={() => setReview(null)} /> : null}
       {panel === 'missing' ? <MissingPanel /> : panel === 'issue' ? <IssuePanel /> : null}
+      {panel === 'schedules' ? <SchedulesPanel extent={extent} /> : panel === 'title-block' ? <TitleBlockPanel /> : null}
     </div>
   );
 }

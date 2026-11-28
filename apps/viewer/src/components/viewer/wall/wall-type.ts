@@ -18,6 +18,14 @@
 /** A rounded text button (header, toolbars, cards). Never wraps; a long label is the container's to wrap around. */
 export const WALL_PILL = 'whitespace-nowrap rounded-full border border-sky-300/30 px-3 py-1 text-xs text-sky-100 hover:border-sky-300/70';
 
+/**
+ * The pill of IfcSheet's top bar: tighter than the Wall's. The bar carries about fifteen of them and, measured at 1280 px,
+ * the Wall's padding put the last ones on a second row, in Romanian too (#923). Every pill of the bar uses it, those of other files too.
+ */
+export const HEADER_PILL = WALL_PILL.replace('px-3', 'px-1');
+/** A top-bar pill holding only an icon, named by its `aria-label` and `title`. */
+export const HEADER_ICON_PILL = `${HEADER_PILL} inline-flex items-center`;
+
 /** A text input or select inside a card. */
 export const WALL_FIELD = 'mt-1 w-full rounded-md border border-sky-300/30 bg-[#061a36] px-2 py-1 text-sm text-white';
 
