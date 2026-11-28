@@ -125,6 +125,16 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     return { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
   };
 
+  /** The object snap near `raw`: on the drafted lines and the drawing's own (the model's), the one target set a placed point and a dragged grip both use (#925). */
+  const objectSnap = useCallback((raw: Pt, from: Pt | null): SnapHit | null => {
+    const tolerance = SNAP_PX / transform.scale;
+    const hit = findSnap(raw, entityShapes, null, { tolerance, modes: ALL_MODES, from });
+    if (!references) return hit;
+    const min = { x: raw.x - tolerance, y: raw.y - tolerance };
+    const max = { x: raw.x + tolerance, y: raw.y + tolerance };
+    return better(hit, findSnap(raw, referencesIn(references, min, max), null, { tolerance, modes: ALL_MODES, from }), raw);
+  }, [transform.scale, entityShapes, references]);
+
   const resolve = useCallback((raw: Pt): { point: Pt; snap: SnapHit | null } => {
     const command = runningCommand();
     const wantsPoint = command?.input() === 'point';
@@ -134,12 +144,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     }
     const tolerance = SNAP_PX / transform.scale;
     const from = command?.basePoint() ?? null;
-    let hit = findSnap(raw, entityShapes, null, { tolerance, modes: ALL_MODES, from });
-    if (references) {
-      const min = { x: raw.x - tolerance, y: raw.y - tolerance };
-      const max = { x: raw.x + tolerance, y: raw.y + tolerance };
-      hit = better(hit, findSnap(raw, referencesIn(references, min, max), null, { tolerance, modes: ALL_MODES, from }), raw);
-    }
+    const hit = objectSnap(raw, from);
     // An object snap wins; 'nearest' (anywhere on a curve) gives way to a tracking line, which is the more deliberate aim (#667).
     if (hit && hit.mode !== 'nearest') return { point: hit.point, snap: hit };
     if (!trackOn) track.current = EMPTY_TRACK;
@@ -147,7 +152,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     const tracked = trackOn ? trackSnap(raw, track.current.acquired, tolerance, { base: from, ortho: ortho || orthoHeld }) : null;
     if (tracked) return { point: tracked.point, snap: null };
     return hit ? { point: hit.point, snap: hit } : { point: constrainPoint(raw), snap: null };
-  }, [snapOn, trackOn, transform.scale, entityShapes, references]);
+  }, [snapOn, trackOn, transform.scale, objectSnap]);
 
   /** How a dragged selection's point lands (#168): on the drafted lines and the drawing's own, as a tool's point does. */
   const aimAt = useCallback((raw: Pt, shapes: readonly DraftShape[]): DragAim => {
@@ -226,10 +231,10 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     }
     const held = d?.kind === 'grip' ? d.grip : carry.current;
     if (held) {
-      // A dragged grip snaps like a point does, and keeps to horizontal / vertical under the ortho lock (from the opposite end of a line, else from where it started)
+      // A dragged grip snaps like a point does, to the same drafted and model lines (#925), and keeps to horizontal / vertical under the ortho lock (from the opposite end of a line, else from where it started)
       // (a detail's crop corner moves freely on both axes, and a section's depth is measured along the section's normal,
       // which a horizontal / vertical hold would only project onto, so neither is held).
-      const hit = snapOn ? findSnap(raw, entityShapes, null, { tolerance: SNAP_PX / transform.scale, modes: ALL_MODES, from: null }) : null;
+      const hit = snapOn ? objectSnap(raw, null) : null;
       const free = hit?.point ?? raw;
       const at = held.detail || held.section ? free : alignedDragPoint(held, constrainFrom(orthoPivot(held), free));
       setState({ tracking: NO_TRACKING, cursor: at, snap: hit, hoverId: null, window: null, lasso: null, gripDrag: { grip: held, at }, gripHover: null, selectionDrag: null });
@@ -243,7 +248,7 @@ export function useDraftingPointer({ containerRef, transform, setTransform, axis
     const gripHover = !command && !d ? gripAt(grips, raw, GRIP_PX / transform.scale) : null;
     const tracking = trackingView(point, snap, wantsPointNow(command));
     setState({ tracking, cursor: point, snap, hoverId, window, lasso, gripDrag: null, gripHover, selectionDrag: null });
-  }, [transform, axis, resolve, setTransform, snapOn, entityShapes, grips, trackingView, aimAt]);
+  }, [transform, axis, resolve, setTransform, snapOn, objectSnap, entityShapes, grips, trackingView, aimAt]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     setOrthoHeld(e.ctrlKey || e.shiftKey);
