@@ -16,7 +16,7 @@
   "apps/viewer/src/components/viewer/chat/ByokCredentialForm.tsx": 2,
   "apps/viewer/src/components/viewer/measurementDoubleClick.ts": 3,
   "apps/viewer/src/components/viewer/schedule/useScheduleFileImport.ts": 3,
-  "apps/viewer/src/components/viewer/toolbar/useFileCommands.tsx": 7,
+  "apps/viewer/src/components/viewer/toolbar/useFileCommands.tsx": 6,
   "apps/viewer/src/components/viewer/useAppearanceReferences.ts": 1,
   "apps/viewer/src/components/viewer/useDuplicateShortcut.ts": 3,
   "apps/viewer/src/components/viewer/useGeometryStreaming.ts": 2,

@@ -7,6 +7,7 @@ import { penRo } from '../catalogues/pen.ro';
 import { repeatToolRo } from '../catalogues/repeat-tool.ro';
 import { manualValidationRo } from '../catalogues/manual-validation.ro';
 import { measuredQuantitiesRo } from '../catalogues/measured-quantities.ro';
+import { modelReloadRo } from '../catalogues/model-reload.ro';
 import { miscPanelsBRo } from '../catalogues/misc-panels-b.ro';
 import { miscReachableRo } from '../catalogues/misc-reachable.ro';
 import { mutationPermissionRo } from '../catalogues/mutation-permission.ro';
@@ -98,6 +99,7 @@ export const roMZ = {
   ...manualValidationRo,
   ...plainHintsRo,
   ...measuredQuantitiesRo,
+  ...modelReloadRo,
   ...miscPanelsBRo,
   ...miscReachableRo,
   ...mutationPermissionRo,

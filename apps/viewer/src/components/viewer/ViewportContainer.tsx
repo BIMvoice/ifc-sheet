@@ -67,6 +67,7 @@ import { toast, Toaster } from '@/components/ui/toast';
 import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
 import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
 import { createBlankIfcFile } from '@/utils/createBlankIfc';
+import { offerReload } from './toolbar/useReloadModel';
 import { launchModelCommand } from '@/lib/commands/modeling/keys-workspace';
 import type { PointCloudAsset } from '@ifc-lite/geometry';
 import { type IfcDataStore, type MapConversion } from '@ifc-lite/parser';
@@ -335,8 +336,9 @@ export function ViewportContainer() {
     const current = viewerStoreApi.getState();
     const hasModelsLoaded = current.models.size > 0 || (current.geometryResult?.meshes?.length ?? 0) > 0;
     if (hasModelsLoaded) {
-      // Models already loaded - add new files sequentially (federate).
-      void loadFilesSequentially(files, handles);
+      // Models already loaded: the next version of the one model is offered as its reload (#922), anything else federates.
+      if (files.length === 1) void offerReload(files[0], handles?.[0], loadFile, () => loadFilesSequentially(files, handles));
+      else void loadFilesSequentially(files, handles);
     } else if (files.length === 1) {
       // Single file, no models loaded - primary single-model load.
       void loadFile(files[0], { kind: 'primary' }, { sourceHandle: handles?.[0] });

@@ -29,8 +29,7 @@ import { FederationSetupControls } from '../FederationSetupControls';
 
 import { FILE_ACCEPT, isModelSidecarFile, isSupportedModelFile } from '@/services/supported-model-files';
 import { captureModelTags, restoreModelTags } from '@/lib/model-tags/carry-over';
-import { askInDialog, openFileForProject } from '@/project/open-file';
-import { setPanel } from '../wall/wall-nav';
+import { offerReload, useReloadModel } from './useReloadModel';
 
 // FILE_ACCEPT offers `.dxf` while `isSupportedModelFile` rejects it: DXF
 // files are 2D reference underlays, not models, and split off to the DXF
@@ -141,18 +140,8 @@ export function useFileCommands(): FileCommands {
   const routeOpenedFiles = useCallback((supportedFiles: File[], handles?: (FileSystemFileHandle | undefined)[]) => {
     if (supportedFiles.length === 1) {
       const sourceHandle = handles?.[0];
-      // The next version of the model the open project is drawn from is offered as an update of that project (#50).
-      void openFileForProject(supportedFiles[0], {
-        models: () => Array.from(useViewerStore.getState().models.values()),
-        ask: askInDialog,
-        open: (file) => loadFile(file, { kind: 'primary' }, { sourceHandle }),
-        update: async (file) => {
-          const { loadNewVersion } = await import('@/whatchanged/version');
-          await loadNewVersion(file, (f) => loadFile(f, { kind: 'primary' }, { sourceHandle }), () => {});
-        },
-        updated: () => setPanel('changed'),
-        failed: (reason) => toast.error(t('whatchanged.offer.failed', { reason })),
-      });
+      // The next version of the model the open project is drawn from is offered as a reload of that project (#50, #922).
+      void offerReload(supportedFiles[0], sourceHandle, loadFile, (file) => loadFile(file, { kind: 'primary' }, { sourceHandle }));
       return;
     }
     const allIfcx = supportedFiles.every(isIfcxModelFile);
@@ -160,7 +149,7 @@ export function useFileCommands(): FileCommands {
     clearAllModels();
     if (allIfcx) void loadFederatedIfcx(supportedFiles);
     else void loadFilesSequentially(supportedFiles, handles);
-  }, [loadFile, loadFilesSequentially, loadFederatedIfcx, resetViewerState, clearAllModels, t]);
+  }, [loadFile, loadFilesSequentially, loadFederatedIfcx, resetViewerState, clearAllModels]);
 
   const prepareAndOpen = usePreparedModelFileRoute(routeOpenedFiles);
 
@@ -272,11 +261,15 @@ export function useFileCommands(): FileCommands {
   // handle-less models during the rebuild.
   const canRefresh = useViewerStore(selectCanRefreshModels);
 
+  // One model is reloaded with the open project kept (#922); a federation is rebuilt from fresh bytes.
+  const reloadModel = useReloadModel(loadFile);
+
   const handleRefresh = useCallback(async () => {
     const targets = (Array.from(useViewerStore.getState().models.values()) as FederatedModel[])
       .filter((m): m is FederatedModel & { sourceHandle: FileSystemFileHandle } => Boolean(m.sourceHandle))
       .sort((a, b) => (a.loadedAt ?? 0) - (b.loadedAt ?? 0));
     if (targets.length === 0) return;
+    if (targets.length === 1 && useViewerStore.getState().models.size === 1) { await reloadModel(); return; }
 
     // Re-read every handle BEFORE clearing anything, so a failed read never
     // leaves the viewer empty.
@@ -294,7 +287,7 @@ export function useFileCommands(): FileCommands {
     // A federation rebuild starts with clearAllModels(), so a partial read
     // would silently drop every failed model from the scene. Refuse instead:
     // the user keeps the loaded (stale) federation and gets told why.
-    if (targets.length > 1 && failedNames.length > 0) {
+    if (failedNames.length > 0) {
       toast.error(`Refresh cancelled: couldn't re-read ${failedNames.join(', ')}. Keeping the loaded models.`);
       return;
     }
@@ -304,34 +297,27 @@ export function useFileCommands(): FileCommands {
     recordRecentFiles(ok.map((r) => ({ name: r.fresh.name, size: r.fresh.size })));
     void cacheFileBlobs(ok.map((r) => r.fresh));
 
-    if (targets.length === 1) {
-      // Await so the success toast only fires once the reload has completed.
-      await loadFile(ok[0].fresh, { kind: 'primary' }, { sourceHandle: ok[0].model.sourceHandle });
-      const reloadedId = useViewerStore.getState().activeModelId;
-      if (reloadedId) restoreModelTags(useViewerStore.getState(), carry, ok[0].model.id, reloadedId);
-    } else {
-      // Rebuild the federation from fresh bytes, preserving id + order + state.
-      clearAllModels();
-      for (const r of ok) {
-        const reloadedId = await addModel(r.fresh, {
-          name: r.model.name,
-          modelId: r.model.id,
-          loadedAt: r.model.loadedAt,
-          visible: r.model.visible,
-          collapsed: r.model.collapsed,
-          sourceHandle: r.model.sourceHandle,
-        });
-        if (reloadedId) restoreModelTags(useViewerStore.getState(), carry, r.model.id, reloadedId);
-        if (reloadedId && r.model.visible === false) {
-          useViewerStore.getState().setModelVisibility(r.model.id, false);
-        }
+    // Rebuild the federation from fresh bytes, preserving id + order + state.
+    clearAllModels();
+    for (const r of ok) {
+      const reloadedId = await addModel(r.fresh, {
+        name: r.model.name,
+        modelId: r.model.id,
+        loadedAt: r.model.loadedAt,
+        visible: r.model.visible,
+        collapsed: r.model.collapsed,
+        sourceHandle: r.model.sourceHandle,
+      });
+      if (reloadedId) restoreModelTags(useViewerStore.getState(), carry, r.model.id, reloadedId);
+      if (reloadedId && r.model.visible === false) {
+        useViewerStore.getState().setModelVisibility(r.model.id, false);
       }
     }
 
     // Any failed read returned early above, so reaching here means every
     // targeted model was re-read and reloaded.
-    toast.success(ok.length === 1 ? `Refreshed "${ok[0].fresh.name}"` : `Refreshed ${ok.length} models`);
-  }, [loadFile, addModel, clearAllModels]);
+    toast.success(`Refreshed ${ok.length} models`);
+  }, [addModel, clearAllModels, reloadModel]);
 
   // The command palette dispatches this (synchronously, inside the click) so the
   // toolbar's handle-capturing open path runs while user activation is still

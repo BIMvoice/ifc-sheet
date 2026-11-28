@@ -20,6 +20,7 @@ import { miscPanelsBEn } from '../catalogues/misc-panels-b.en';
 import { modelAuthoringEn } from '../catalogues/model-authoring.en';
 import { modelChangesEn } from '../catalogues/model-changes.en';
 import { modelInspectorEn } from '../catalogues/model-inspector.en';
+import { modelReloadEn } from '../catalogues/model-reload.en';
 import { modelWorkspaceEn } from '../catalogues/model-workspace.en';
 import { modelingCommandEn } from '../catalogues/modeling-command.en';
 import { moveRotateEn } from '../catalogues/move-rotate.en';
@@ -78,6 +79,7 @@ export const enMR = {
   ...modelAuthoringEn,
   ...modelChangesEn,
   ...modelInspectorEn,
+  ...modelReloadEn,
   ...modelWorkspaceEn,
   ...modelingCommandEn,
   ...moveRotateEn,
